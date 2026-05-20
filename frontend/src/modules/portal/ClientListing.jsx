@@ -1,176 +1,248 @@
-import React, { useState } from 'react';
-import { motion } from 'framer-motion';
+﻿import React, { useState } from "react";
+import { motion } from "framer-motion";
 import {
-    MapPin, Calendar, ArrowLeft, Star,
-    CheckCircle, Shield, Share2, Heart,
-    BedDouble, Bath, Maximize, Home
-} from 'lucide-react';
-import { useNavigate } from 'react-router-dom';
+  ArrowLeft,
+  Bath,
+  BedDouble,
+  Calendar,
+  CheckCircle,
+  Heart,
+  MapPin,
+  Maximize,
+  Share2,
+  Shield,
+  Star,
+} from "lucide-react";
+import { useNavigate } from "react-router-dom";
+
+const PROPERTY = {
+  title: "Skyline Lux Penthouse",
+  price: "INR 3.5 Cr",
+  location: "Green Avenue, Sector 42",
+  specs: { beds: 4, baths: 5, area: "3,200 sq.ft" },
+  desc: "Experience refined city living with a private terrace, marble finish, full-height glazing, and premium automation. Located in a secure gated cluster with concierge support and fast arterial access.",
+  images: [
+    "https://images.unsplash.com/photo-1600607687939-ce8a6c25118c?auto=format&fit=crop&q=80&w=1400",
+    "https://images.unsplash.com/photo-1600566753086-00f18fb6b3ea?auto=format&fit=crop&q=80&w=900",
+    "https://images.unsplash.com/photo-1600585154340-be6161a56a0c?auto=format&fit=crop&q=80&w=900",
+    "https://images.unsplash.com/photo-1600210492486-724fe5c67fb0?auto=format&fit=crop&q=80&w=900",
+  ],
+};
+
+const AMENITIES = [
+  "Power Backup",
+  "Gated Security",
+  "Swimming Pool",
+  "Gymnasium",
+  "Private Terrace",
+  "Smart Home",
+];
+
+const TRUST_POINTS = [
+  "Verified title and records before handover",
+  "End-to-end legal and agreement support",
+  "Transparent milestone-based closure workflow",
+];
 
 const ClientListing = () => {
-    const navigate = useNavigate();
-    const [booked, setBooked] = useState(false);
+  const navigate = useNavigate();
+  const [booked, setBooked] = useState(false);
 
-    // MOCK DATA (Simulating a specific property)
-    const PROPERTY = {
-        title: "Skyline Lux Penthouse",
-        price: "₹ 3.5 Cr",
-        location: "Green Avenue, Sector 42",
-        specs: { beds: 4, baths: 5, area: "3,200 Sq.Ft" },
-        desc: "Experience the pinnacle of luxury living. This north-facing penthouse features a private terrace, Italian marble flooring, and smart-home automation. Located in a secure, gated community with 24/7 power backup.",
-        images: [
-            "https://images.unsplash.com/photo-1600607687939-ce8a6c25118c?auto=format&fit=crop&q=80&w=1200",
-            "https://images.unsplash.com/photo-1600566753086-00f18fb6b3ea?auto=format&fit=crop&q=80&w=600",
-            "https://images.unsplash.com/photo-1600585154340-be6161a56a0c?auto=format&fit=crop&q=80&w=600",
-            "https://images.unsplash.com/photo-1600210492486-724fe5c67fb0?auto=format&fit=crop&q=80&w=600",
-        ]
-    };
+  return (
+    <div className="ui-page-shell min-h-screen text-slate-900">
+      <div className="mx-auto w-full max-w-7xl space-y-6">
+        <header className="ui-hero-card flex flex-wrap items-center justify-between gap-3 px-4 py-4 sm:px-6">
+          <button
+            onClick={() => navigate("/portal")}
+            className="inline-flex items-center gap-2 rounded-xl border border-slate-300 bg-white/80 px-3 py-2 text-xs font-semibold uppercase tracking-[0.16em] text-slate-700 hover:border-cyan-400 hover:text-cyan-700"
+          >
+            <ArrowLeft size={14} />
+            Back To Search
+          </button>
 
-    return (
-        <div className="w-full min-h-screen bg-white font-sans text-slate-900 pb-20">
+          <div className="flex items-center gap-2">
+            <button className="rounded-xl border border-slate-300 bg-white/80 p-2 text-slate-500 hover:border-rose-300 hover:text-rose-600">
+              <Heart size={18} />
+            </button>
+            <button className="rounded-xl border border-slate-300 bg-white/80 p-2 text-slate-500 hover:border-cyan-400 hover:text-cyan-700">
+              <Share2 size={18} />
+            </button>
+          </div>
+        </header>
 
-            {/* 1. NAVIGATION */}
-            <nav className="sticky top-0 z-40 bg-white/80 backdrop-blur-md border-b border-slate-100">
-                <div className="max-w-7xl mx-auto px-4 sm:px-6 h-16 flex justify-between items-center">
-                    <button onClick={() => navigate('/portal')} className="flex items-center gap-2 text-sm font-bold uppercase tracking-widest text-slate-500 hover:text-emerald-600 transition-colors">
-                        <ArrowLeft size={16} /> Back to Search
-                    </button>
-                    <div className="flex gap-4">
-                        <button className="p-2 hover:bg-slate-50 rounded-full text-slate-400 hover:text-rose-500 transition-colors"><Heart size={20} /></button>
-                        <button className="p-2 hover:bg-slate-50 rounded-full text-slate-400 hover:text-emerald-600 transition-colors"><Share2 size={20} /></button>
-                    </div>
+        <section className="grid grid-cols-1 gap-5 xl:grid-cols-[1.45fr_0.9fr]">
+          <div className="ui-soft-panel overflow-hidden rounded-3xl p-3 sm:p-4">
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 sm:grid-rows-[minmax(0,1fr)_minmax(0,1fr)]">
+              <div className="relative overflow-hidden rounded-2xl sm:col-span-2">
+                <img
+                  src={PROPERTY.images[0]}
+                  alt={PROPERTY.title}
+                  className="h-[260px] w-full object-cover sm:h-[380px]"
+                />
+                <div className="absolute left-3 top-3 inline-flex items-center gap-1 rounded-full bg-slate-950/80 px-3 py-1 text-[10px] font-semibold uppercase tracking-[0.16em] text-cyan-200">
+                  <Star size={11} /> Premium Asset
                 </div>
-            </nav>
+              </div>
+              <img
+                src={PROPERTY.images[1]}
+                alt="Interior"
+                className="h-[170px] w-full rounded-2xl object-cover sm:h-[190px]"
+              />
+              <img
+                src={PROPERTY.images[2]}
+                alt="Living area"
+                className="h-[170px] w-full rounded-2xl object-cover sm:h-[190px]"
+              />
+            </div>
+          </div>
 
-            <div className="max-w-7xl mx-auto px-4 sm:px-6 pt-6 sm:pt-8">
-
-                {/* 2. IMAGE GALLERY (BENTO GRID) */}
-                <div className="grid grid-cols-1 sm:grid-cols-2 sm:grid-rows-2 gap-3 sm:gap-4 sm:h-[500px] rounded-3xl overflow-hidden mb-10">
-                    <div className="sm:col-span-2 sm:row-span-2 relative group min-h-[240px] sm:min-h-0">
-                        <img src={PROPERTY.images[0]} className="w-full h-full object-cover transition-transform duration-700 group-hover:scale-105" />
-                        <div className="absolute top-4 left-4 bg-emerald-600 text-white px-3 py-1 rounded-full text-[10px] font-bold uppercase tracking-widest">Verified Asset</div>
-                    </div>
-                    <div className="relative group min-h-[180px] sm:min-h-0"><img src={PROPERTY.images[1]} className="w-full h-full object-cover transition-transform duration-700 group-hover:scale-105" /></div>
-                    <div className="relative group min-h-[180px] sm:min-h-0"><img src={PROPERTY.images[2]} className="w-full h-full object-cover transition-transform duration-700 group-hover:scale-105" /></div>
-                    <div className="sm:col-span-2 relative group min-h-[200px] sm:min-h-0">
-                        <img src={PROPERTY.images[3]} className="w-full h-full object-cover transition-transform duration-700 group-hover:scale-105" />
-                        <button className="absolute bottom-4 right-4 bg-white/90 backdrop-blur text-slate-900 px-4 py-2 rounded-lg text-xs font-bold uppercase tracking-widest hover:bg-white transition-colors">View All Photos</button>
-                    </div>
-                </div>
-
-                <div className="grid grid-cols-1 lg:grid-cols-3 gap-12">
-
-                    {/* 3. PROPERTY DETAILS (LEFT) */}
-                    <div className="lg:col-span-2 space-y-8">
-                        <div>
-                            <div className="flex items-center gap-2 text-emerald-600 text-xs font-bold uppercase tracking-widest mb-2"><Star size={12} fill="currentColor" /> Premium Collection</div>
-                            <h1 className="text-4xl font-display text-slate-900 mb-2">{PROPERTY.title}</h1>
-                            <p className="text-slate-500 flex items-center gap-2 text-lg"><MapPin size={18} /> {PROPERTY.location}</p>
-                        </div>
-
-                        {/* Specs Bar */}
-                        <div className="flex flex-col sm:flex-row gap-4 sm:gap-8 py-6 border-y border-slate-100">
-                            <div className="flex items-center gap-3">
-                                <div className="p-3 bg-slate-50 rounded-full text-slate-400"><BedDouble size={20} /></div>
-                                <div><div className="font-bold text-slate-900">{PROPERTY.specs.beds} Beds</div><div className="text-xs text-slate-400">Bedroom</div></div>
-                            </div>
-                            <div className="flex items-center gap-3">
-                                <div className="p-3 bg-slate-50 rounded-full text-slate-400"><Bath size={20} /></div>
-                                <div><div className="font-bold text-slate-900">{PROPERTY.specs.baths} Baths</div><div className="text-xs text-slate-400">Bathroom</div></div>
-                            </div>
-                            <div className="flex items-center gap-3">
-                                <div className="p-3 bg-slate-50 rounded-full text-slate-400"><Maximize size={20} /></div>
-                                <div><div className="font-bold text-slate-900">{PROPERTY.specs.area}</div><div className="text-xs text-slate-400">Super Area</div></div>
-                            </div>
-                        </div>
-
-                        <div>
-                            <h3 className="text-lg font-bold text-slate-900 mb-4">About this home</h3>
-                            <p className="text-slate-600 leading-relaxed">{PROPERTY.desc}</p>
-                        </div>
-
-                        <div>
-                            <h3 className="text-lg font-bold text-slate-900 mb-4">Amenities</h3>
-                            <div className="grid grid-cols-2 gap-3">
-                                {['Power Backup', 'Gated Security', 'Swimming Pool', 'Gymnasium', 'Private Terrace', 'Smart Home'].map(amenity => (
-                                    <div key={amenity} className="flex items-center gap-2 text-slate-600 text-sm">
-                                        <CheckCircle size={14} className="text-emerald-500" /> {amenity}
-                                    </div>
-                                ))}
-                            </div>
-                        </div>
-                    </div>
-
-                    {/* 4. BOOKING CARD (RIGHT STICKY) */}
-                    <div className="relative">
-                        <div className="sticky top-24 border border-slate-200 rounded-2xl p-6 shadow-xl shadow-slate-200/50 bg-white">
-                            <div className="flex justify-between items-end mb-6">
-                                <div>
-                                    <div className="text-xs text-slate-400 font-bold uppercase tracking-widest">Asking Price</div>
-                                    <div className="text-3xl font-display text-slate-900">{PROPERTY.price}</div>
-                                </div>
-                                <div className="text-right">
-                                    <div className="text-xs text-emerald-600 font-bold uppercase bg-emerald-50 px-2 py-1 rounded">Available</div>
-                                </div>
-                            </div>
-
-                            {!booked ? (
-                                <div className="space-y-4">
-                                    <div className="p-4 bg-slate-50 rounded-xl border border-slate-100">
-                                        <div className="text-xs font-bold text-slate-500 uppercase tracking-widest mb-3">Schedule a Tour</div>
-                                        <div className="flex gap-2 mb-2">
-                                            <button className="flex-1 py-2 bg-white border border-slate-200 rounded-lg text-xs font-bold hover:border-emerald-500 transition-colors">Today</button>
-                                            <button className="flex-1 py-2 bg-white border border-slate-200 rounded-lg text-xs font-bold hover:border-emerald-500 transition-colors">Tomorrow</button>
-                                        </div>
-                                        <div className="relative">
-                                            <Calendar className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={14} />
-                                            <input type="text" placeholder="Select Date" className="w-full bg-white border border-slate-200 rounded-lg py-2 pl-9 text-xs font-bold focus:outline-none focus:border-emerald-500" />
-                                        </div>
-                                    </div>
-                                    <button onClick={() => setBooked(true)} className="w-full py-4 bg-slate-900 text-white rounded-xl font-bold uppercase tracking-widest hover:bg-emerald-600 transition-colors shadow-lg">
-                                        Request Site Visit
-                                    </button>
-                                    <p className="text-[10px] text-center text-slate-400 flex items-center justify-center gap-1">
-                                        <Shield size={10} /> Zero-Spam Guarantee
-                                    </p>
-                                </div>
-                            ) : (
-                                <motion.div initial={{ opacity: 0, scale: 0.9 }} animate={{ opacity: 1, scale: 1 }} className="text-center py-8">
-                                    <div className="w-16 h-16 bg-emerald-100 text-emerald-600 rounded-full flex items-center justify-center mx-auto mb-4">
-                                        <CheckCircle size={32} />
-                                    </div>
-                                    <h3 className="font-display text-xl text-slate-900">Request Sent!</h3>
-                                    <p className="text-xs text-slate-500 mt-2">Agent <span className="font-bold">R. Sharma</span> will contact you shortly to confirm the slot.</p>
-                                    <button onClick={() => setBooked(false)} className="mt-6 text-xs font-bold text-slate-400 hover:text-slate-600 uppercase tracking-widest">Book Another</button>
-                                </motion.div>
-                            )}
-                        </div>
-                    </div>
-
-                </div>
+          <aside className="ui-soft-panel rounded-3xl p-5 sm:p-6 xl:sticky xl:top-6 xl:self-start">
+            <div className="flex items-start justify-between gap-3">
+              <div>
+                <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-cyan-700">Asking Price</p>
+                <p className="mt-1 font-display text-3xl text-slate-900">{PROPERTY.price}</p>
+              </div>
+              <span className="rounded-full bg-emerald-100 px-2.5 py-1 text-[10px] font-semibold uppercase tracking-[0.1em] text-emerald-700">
+                Available
+              </span>
             </div>
 
-            <footer className="mt-14 border-t border-slate-200 pt-6">
-                <div className="flex flex-col gap-2 text-xs text-slate-500 sm:flex-row sm:items-center sm:justify-between">
-                    <p>Samvid Legal Center</p>
-                    <div className="flex items-center gap-4">
-                        <button
-                            onClick={() => navigate('/privacy-policy')}
-                            className="font-semibold text-slate-600 hover:text-emerald-600"
-                        >
-                            Privacy Policy
-                        </button>
-                        <button
-                            onClick={() => navigate('/terms-and-conditions')}
-                            className="font-semibold text-slate-600 hover:text-emerald-600"
-                        >
-                            Terms & Conditions
-                        </button>
-                    </div>
+            {!booked ? (
+              <div className="mt-5 space-y-4">
+                <div className="rounded-2xl border border-slate-200 bg-slate-50/85 p-4">
+                  <p className="mb-3 text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-600">Schedule A Tour</p>
+                  <div className="mb-2 grid grid-cols-2 gap-2">
+                    <button className="rounded-lg border border-slate-200 bg-white py-2 text-xs font-semibold hover:border-cyan-400 hover:text-cyan-700">
+                      Today
+                    </button>
+                    <button className="rounded-lg border border-slate-200 bg-white py-2 text-xs font-semibold hover:border-cyan-400 hover:text-cyan-700">
+                      Tomorrow
+                    </button>
+                  </div>
+                  <div className="relative">
+                    <Calendar className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={14} />
+                    <input
+                      type="text"
+                      placeholder="Select Date"
+                      className="w-full rounded-lg border border-slate-200 bg-white py-2 pl-9 text-xs font-semibold outline-none focus:border-cyan-400"
+                    />
+                  </div>
                 </div>
-            </footer>
-        </div>
-    );
+
+                <button
+                  onClick={() => setBooked(true)}
+                  className="w-full rounded-xl bg-slate-900 px-4 py-3 text-xs font-semibold uppercase tracking-[0.14em] text-white hover:bg-cyan-700"
+                >
+                  Request Site Visit
+                </button>
+
+                <p className="inline-flex w-full items-center justify-center gap-1 text-[10px] text-slate-500">
+                  <Shield size={11} /> Zero-Spam Guarantee
+                </p>
+              </div>
+            ) : (
+              <motion.div
+                initial={{ opacity: 0, scale: 0.95 }}
+                animate={{ opacity: 1, scale: 1 }}
+                className="mt-6 rounded-2xl border border-emerald-200 bg-emerald-50 p-5 text-center"
+              >
+                <div className="mx-auto mb-3 flex h-14 w-14 items-center justify-center rounded-full bg-emerald-100 text-emerald-700">
+                  <CheckCircle size={28} />
+                </div>
+                <h3 className="font-display text-xl text-slate-900">Request Sent</h3>
+                <p className="mt-1 text-xs text-slate-600">Your relationship manager will confirm the visit slot shortly.</p>
+                <button
+                  onClick={() => setBooked(false)}
+                  className="mt-4 text-[11px] font-semibold uppercase tracking-[0.12em] text-cyan-700 hover:text-cyan-800"
+                >
+                  Book Another
+                </button>
+              </motion.div>
+            )}
+          </aside>
+        </section>
+
+        <section className="grid grid-cols-1 gap-5 lg:grid-cols-[1.45fr_0.9fr]">
+          <div className="ui-soft-panel rounded-3xl p-5 sm:p-6">
+            <p className="text-[11px] font-semibold uppercase tracking-[0.2em] text-cyan-700">Lead Property</p>
+            <h1 className="mt-2 font-display text-3xl text-slate-900 sm:text-4xl">{PROPERTY.title}</h1>
+            <p className="mt-2 inline-flex items-center gap-2 text-sm text-slate-600">
+              <MapPin size={15} /> {PROPERTY.location}
+            </p>
+
+            <div className="mt-5 grid grid-cols-1 gap-3 sm:grid-cols-3">
+              <div className="rounded-xl border border-slate-200 bg-slate-50 p-3">
+                <p className="mb-1 text-[10px] uppercase tracking-[0.14em] text-slate-500">Bedrooms</p>
+                <p className="inline-flex items-center gap-2 text-sm font-semibold text-slate-800">
+                  <BedDouble size={15} /> {PROPERTY.specs.beds}
+                </p>
+              </div>
+              <div className="rounded-xl border border-slate-200 bg-slate-50 p-3">
+                <p className="mb-1 text-[10px] uppercase tracking-[0.14em] text-slate-500">Bathrooms</p>
+                <p className="inline-flex items-center gap-2 text-sm font-semibold text-slate-800">
+                  <Bath size={15} /> {PROPERTY.specs.baths}
+                </p>
+              </div>
+              <div className="rounded-xl border border-slate-200 bg-slate-50 p-3">
+                <p className="mb-1 text-[10px] uppercase tracking-[0.14em] text-slate-500">Super Area</p>
+                <p className="inline-flex items-center gap-2 text-sm font-semibold text-slate-800">
+                  <Maximize size={15} /> {PROPERTY.specs.area}
+                </p>
+              </div>
+            </div>
+
+            <div className="mt-5">
+              <h2 className="text-sm font-semibold uppercase tracking-[0.16em] text-slate-700">About This Home</h2>
+              <p className="mt-2 text-sm leading-relaxed text-slate-600">{PROPERTY.desc}</p>
+            </div>
+          </div>
+
+          <div className="space-y-5">
+            <div className="ui-soft-panel rounded-3xl p-5 sm:p-6">
+              <h3 className="text-sm font-semibold uppercase tracking-[0.16em] text-slate-700">Amenities</h3>
+              <div className="mt-3 grid grid-cols-1 gap-2">
+                {AMENITIES.map((amenity) => (
+                  <div key={amenity} className="inline-flex items-center gap-2 text-sm text-slate-700">
+                    <CheckCircle size={14} className="text-emerald-600" />
+                    {amenity}
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            <div className="ui-soft-panel rounded-3xl p-5 sm:p-6">
+              <h3 className="text-sm font-semibold uppercase tracking-[0.16em] text-slate-700">Why Clients Choose Us</h3>
+              <div className="mt-3 space-y-2">
+                {TRUST_POINTS.map((point) => (
+                  <p key={point} className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-600">
+                    {point}
+                  </p>
+                ))}
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <footer className="ui-soft-panel mt-1 flex flex-col gap-3 rounded-2xl px-4 py-4 text-xs text-slate-500 sm:flex-row sm:items-center sm:justify-between sm:px-6">
+          <p>Samvid Legal Center</p>
+          <div className="flex items-center gap-4">
+            <button
+              onClick={() => navigate("/privacy-policy")}
+              className="font-semibold text-slate-600 hover:text-cyan-700"
+            >
+              Privacy Policy
+            </button>
+            <button
+              onClick={() => navigate("/terms-and-conditions")}
+              className="font-semibold text-slate-600 hover:text-cyan-700"
+            >
+              Terms & Conditions
+            </button>
+          </div>
+        </footer>
+      </div>
+    </div>
+  );
 };
 
 export default ClientListing;

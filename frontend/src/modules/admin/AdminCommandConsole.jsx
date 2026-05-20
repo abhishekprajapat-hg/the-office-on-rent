@@ -3581,9 +3581,9 @@ const AdminCommandConsole = () => {
   };
 
   return (
-    <div className="px-3 pb-6 sm:px-6 lg:px-8">
-      <section className="flex max-h-[calc(100dvh-210px)] flex-col overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
-        <div className="border-b border-slate-200 bg-slate-50 px-4 py-3 sm:px-6">
+    <div className="ui-page-shell custom-scrollbar space-y-4 pt-20 md:pt-24">
+      <section className="ui-soft-panel flex max-h-[calc(100dvh-210px)] flex-col overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
+        <div className="border-b border-slate-200 bg-slate-50/90 px-4 py-3 sm:px-6">
           <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
             <div className="inline-flex items-center gap-2 text-sm font-semibold text-slate-800">
               <MessageSquare size={16} className="text-cyan-600" />
@@ -3597,7 +3597,7 @@ const AdminCommandConsole = () => {
                 type="button"
                 onClick={() => handleAsk("refresh")}
                 disabled={running || loadingSnapshot}
-                className="inline-flex h-8 items-center gap-1 rounded-lg border border-slate-300 bg-white px-2.5 text-[11px] font-semibold text-slate-700 transition hover:border-slate-400 disabled:cursor-not-allowed disabled:opacity-60"
+                className="inline-flex h-8 items-center gap-1 rounded-lg border border-slate-300 bg-white px-2.5 text-[11px] font-semibold text-slate-700 transition hover:border-cyan-400 hover:text-cyan-700 disabled:cursor-not-allowed disabled:opacity-60"
               >
                 <RefreshCw size={12} className={loadingSnapshot ? "animate-spin" : ""} />
                 Refresh
@@ -3606,7 +3606,7 @@ const AdminCommandConsole = () => {
           </div>
         </div>
 
-        <div className="min-h-0 flex flex-1 flex-col bg-slate-100/70">
+        <div className="min-h-0 flex flex-1 flex-col bg-slate-100/75">
           <div
             ref={chatRef}
             className="min-h-0 flex-1 space-y-3 overflow-y-auto px-3 py-4 custom-scrollbar sm:px-4"
@@ -3621,7 +3621,7 @@ const AdminCommandConsole = () => {
                   <div
                     className={`max-w-[92%] rounded-2xl px-3 py-2 text-sm leading-6 whitespace-pre-wrap sm:max-w-[80%] ${
                       isUser
-                        ? "bg-slate-900 text-white"
+                        ? "bg-cyan-700 text-white"
                         : "border border-slate-200 bg-white text-slate-700"
                     }`}
                   >
@@ -3687,7 +3687,7 @@ const AdminCommandConsole = () => {
                 <button
                   type="submit"
                   disabled={running || !input.trim()}
-                  className="inline-flex h-8 shrink-0 items-center rounded-lg border border-slate-300 bg-slate-50 px-3 text-xs font-semibold text-slate-700 transition hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-60"
+                  className="inline-flex h-8 shrink-0 items-center rounded-lg border border-slate-300 bg-slate-50 px-3 text-xs font-semibold text-slate-700 transition hover:border-cyan-400 hover:bg-cyan-50 disabled:cursor-not-allowed disabled:opacity-60"
                 >
                   Send
                 </button>

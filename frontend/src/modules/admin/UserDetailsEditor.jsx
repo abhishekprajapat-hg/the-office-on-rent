@@ -312,7 +312,7 @@ const UserDetailsEditor = ({ theme = "light" }) => {
 
   if (loading) {
     return (
-      <div className={`w-full h-full px-4 sm:px-6 md:px-10 pt-20 md:pt-24 pb-8 ${isDarkTheme ? "bg-slate-950/40" : "bg-slate-50/70"}`}>
+      <div className={`ui-page-shell custom-scrollbar ${isDarkTheme ? "bg-slate-950/40" : "bg-slate-50/70"}`}>
         <div className={`rounded-xl border p-4 text-sm flex items-center gap-2 ${isDarkTheme ? "border-slate-700 bg-slate-900/70 text-slate-200" : "border-slate-200 bg-white text-slate-700"}`}>
           <Loader2 size={16} className="animate-spin" />
           Loading user details...
@@ -323,7 +323,7 @@ const UserDetailsEditor = ({ theme = "light" }) => {
 
   if (!profile) {
     return (
-      <div className={`w-full h-full px-4 sm:px-6 md:px-10 pt-20 md:pt-24 pb-8 ${isDarkTheme ? "bg-slate-950/40" : "bg-slate-50/70"}`}>
+      <div className={`ui-page-shell custom-scrollbar ${isDarkTheme ? "bg-slate-950/40" : "bg-slate-50/70"}`}>
         <button
           type="button"
           onClick={() => navigate("/admin/users")}
@@ -342,7 +342,7 @@ const UserDetailsEditor = ({ theme = "light" }) => {
   }
 
   return (
-    <div className={`w-full h-full overflow-y-auto custom-scrollbar px-4 sm:px-6 md:px-10 pt-20 md:pt-24 pb-8 flex flex-col gap-5 ${isDarkTheme ? "bg-slate-950/40" : "bg-slate-50/70"}`}>
+    <div className={`ui-page-shell custom-scrollbar flex flex-col gap-5 ${isDarkTheme ? "bg-slate-950/40" : "bg-slate-50/70"}`}>
       <div className="flex flex-wrap items-center justify-between gap-2">
         <button
           type="button"
@@ -384,7 +384,7 @@ const UserDetailsEditor = ({ theme = "light" }) => {
         </div>
       ) : null}
 
-      <section className={`rounded-xl border p-4 ${isDarkTheme ? "border-slate-700 bg-slate-900/75" : "border-slate-200 bg-white"}`}>
+      <section className={`ui-soft-panel rounded-xl border p-4 ${isDarkTheme ? "border-slate-700 bg-slate-900/75" : "border-slate-200 bg-white"}`}>
         <h2 className={`text-lg font-bold ${isDarkTheme ? "text-slate-100" : "text-slate-900"}`}>
           {profile.name}
         </h2>

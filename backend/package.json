@@ -4,6 +4,9 @@
   "main": "src/server.js",
   "scripts": {
     "dev": "nodemon src/server.js",
+    "dev:plain": "nodemon src/server.js",
+    "dev:vps": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/dev-with-vps-mongo.ps1",
+    "sync:vps-to-local": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/sync-vps-to-local.ps1",
     "start": "node src/server.js",
     "seed:super-admin": "node src/seeder/createSuperAdmin.cjs",
     "seed:admin": "node src/seeder/createAdmin.cjs",

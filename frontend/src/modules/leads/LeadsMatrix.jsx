@@ -1879,14 +1879,14 @@ const LeadsMatrix = () => {
 
   return (
     <div
-      className={`relative w-full h-full px-2.5 sm:px-6 lg:px-10 pt-2 sm:pt-8 md:pt-10 pb-6 flex flex-col overflow-x-hidden overflow-y-auto custom-scrollbar ${
-        isDark ? "bg-slate-950" : "bg-slate-50/80"
+      className={`ui-page-shell relative h-full w-full overflow-x-hidden overflow-y-auto px-2.5 pb-6 pt-3 custom-scrollbar sm:px-6 sm:pt-8 md:pt-10 lg:px-10 ${
+        isDark ? "bg-slate-950" : ""
       }`}
     >
       <div className={`pointer-events-none absolute inset-0 ${
         isDark
-          ? "bg-[radial-gradient(circle_at_10%_10%,rgba(6,182,212,0.14),transparent_38%),radial-gradient(circle_at_88%_12%,rgba(16,185,129,0.1),transparent_32%)]"
-          : "bg-[radial-gradient(circle_at_12%_8%,rgba(14,165,233,0.1),transparent_40%),radial-gradient(circle_at_86%_10%,rgba(16,185,129,0.12),transparent_34%)]"
+          ? "bg-[radial-gradient(circle_at_9%_10%,rgba(56,189,248,0.18),transparent_35%),radial-gradient(circle_at_93%_16%,rgba(16,185,129,0.16),transparent_30%),radial-gradient(circle_at_50%_105%,rgba(30,41,59,0.65),transparent_50%)]"
+          : "bg-[radial-gradient(circle_at_10%_9%,rgba(14,165,233,0.16),transparent_35%),radial-gradient(circle_at_90%_14%,rgba(16,185,129,0.14),transparent_30%),linear-gradient(180deg,rgba(255,255,255,0.45),rgba(241,245,249,0.82))]"
       }`} />
       <div className={`relative z-10 flex flex-col ${isRouteDetailsView ? "" : "flex-1"}`}>
         {isRouteDetailsView ? (
@@ -1894,7 +1894,7 @@ const LeadsMatrix = () => {
             <LeadsMatrixAlerts isDark={isDark} error={error} success={success} />
 
             {loading && !selectedLead ? (
-              <div className={`flex min-h-[220px] items-center justify-center rounded-2xl border text-sm ${
+              <div className={`ui-soft-panel flex min-h-[220px] items-center justify-center rounded-2xl text-sm ${
                 isDark
                   ? "border-slate-700 bg-slate-900/75 text-slate-400"
                   : "border-slate-200 bg-white text-slate-500"
@@ -1904,7 +1904,7 @@ const LeadsMatrix = () => {
             ) : null}
 
             {!loading && !selectedLead ? (
-              <div className={`rounded-2xl border p-4 text-sm ${
+              <div className={`ui-soft-panel rounded-2xl p-4 text-sm ${
                 isDark
                   ? "border-rose-500/35 bg-rose-500/10 text-rose-100"
                   : "border-rose-200 bg-rose-50 text-rose-700"

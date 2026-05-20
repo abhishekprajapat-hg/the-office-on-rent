@@ -6,7 +6,6 @@ import ErrorBoundary from "./components/ErrorBoundary";
 import { ChatNotificationProvider } from "./context/chatNotificationProvider";
 import { updateMyLiveLocation } from "./services/userService";
 import AdminRequestAlertToast from "./components/layout/AdminRequestAlertToast";
-import AppPageHeader from "./components/layout/AppPageHeader";
 import {
   applySystemSettingsToDocument,
   getSessionTimeoutMs,
@@ -44,6 +43,7 @@ const FieldOps = lazy(() => import("./modules/field/FieldOps"));
 const IntelligenceReports = lazy(() => import("./modules/reports/IntelligenceReports"));
 const RoleLeaderboard = lazy(() => import("./modules/reports/RoleLeaderboard"));
 const MasterSchedule = lazy(() => import("./modules/calendar/MasterSchedule"));
+const AttendanceHub = lazy(() => import("./modules/attendance/AttendanceHub"));
 const SystemSettings = lazy(() => import("./modules/admin/SystemSettings"));
 const DataUseNotice = lazy(() => import("./modules/legal/DataUseNotice"));
 const ServiceTermsNotice = lazy(() => import("./modules/legal/ServiceTermsNotice"));
@@ -188,6 +188,14 @@ const resolvePageHeader = (pathname, userRole) => {
     };
   }
 
+  if (pathname.startsWith("/attendance")) {
+    return {
+      title: "Attendance Command Center",
+      subtitle: "Daily check-in, work-hour tracking and team attendance visibility",
+      scopeLabel: "Attendance",
+    };
+  }
+
   if (pathname.startsWith("/admin/notifications")) {
     return {
       title: "Alerts Command Center",
@@ -306,16 +314,9 @@ export default function App() {
   const canChannelPartnerViewInventory =
     userRole === "CHANNEL_PARTNER" && Boolean(authUser?.canViewInventory);
   const shouldLockDocumentScroll = isLoggedIn && !isPublicPage;
-  const pageHeader = useMemo(
-    () => resolvePageHeader(location.pathname, userRole),
-    [location.pathname, userRole],
-  );
-  const showUnifiedHeader = !isPublicPage && !isChatPage && location.pathname !== "/map" && !!pageHeader;
   const routeViewportClass = shouldLockDocumentScroll
-    ? `min-h-0 flex-1 overflow-hidden ${showUnifiedHeader ? "mt-1.5 sm:mt-2" : ""}`
-    : showUnifiedHeader
-      ? "mt-1.5 sm:mt-2"
-      : "";
+    ? "min-h-0 flex-1 overflow-hidden"
+    : "";
 
   useEffect(() => {
     if (!shouldLockDocumentScroll) {
@@ -691,7 +692,11 @@ export default function App() {
   }
 
   return (
-    <div className={`flex relative bg-void overflow-x-hidden ${isChatPage ? "h-dvh overflow-hidden" : "min-h-screen"}`}>
+    <div
+      className={`workspace-app flex relative bg-void overflow-x-hidden ${
+        isChatPage ? "h-dvh overflow-hidden" : "min-h-screen"
+      }`}
+    >
 
       <ChatNotificationProvider enabled={isLoggedIn && !isPublicPage}>
         <ErrorBoundary>
@@ -737,7 +742,9 @@ export default function App() {
                 <motion.div
                   initial={{ opacity: 0 }}
                   animate={{ opacity: 1 }}
-                  className={`flex w-full ${shouldLockDocumentScroll ? "h-dvh overflow-hidden" : "min-h-screen"}`}
+                  className={`workspace-shell flex w-full ${
+                    shouldLockDocumentScroll ? "h-dvh overflow-hidden" : "min-h-screen"
+                  }`}
                 >
                   {!isPublicPage && (
                     <>
@@ -754,18 +761,10 @@ export default function App() {
                   <main
                     className={
                       isChatPage
-                        ? "relative min-h-0 flex flex-1 flex-col overflow-hidden pt-16 app-page-bg"
-                        : "relative min-h-0 flex flex-1 flex-col pt-16 overflow-hidden app-page-bg"
+                        ? "workspace-main relative min-h-0 flex flex-1 flex-col overflow-hidden pt-16 app-page-bg"
+                        : "workspace-main relative min-h-0 flex flex-1 flex-col pt-16 overflow-hidden app-page-bg"
                     }
                   >
-                    {showUnifiedHeader ? (
-                      <AppPageHeader
-                        title={pageHeader.title}
-                        subtitle={pageHeader.subtitle}
-                        scopeLabel={pageHeader.scopeLabel}
-                        roleLabel={ROLE_LABELS[userRole] || ""}
-                      />
-                    ) : null}
                     <div className={routeViewportClass}>
                       <Routes>
                         <Route path="/" element={DashboardByRole} />
@@ -830,6 +829,10 @@ export default function App() {
                         <Route
                           path="/calendar"
                           element={canAccess(["ADMIN", ...MANAGEMENT_ROLES, "EXECUTIVE", "FIELD_EXECUTIVE"]) ? <MasterSchedule /> : <Navigate to="/" />}
+                        />
+                        <Route
+                          path="/attendance"
+                          element={canAccess(["ADMIN", ...MANAGEMENT_ROLES, "EXECUTIVE", "FIELD_EXECUTIVE", "CHANNEL_PARTNER"]) ? <AttendanceHub /> : <Navigate to="/" />}
                         />
                         <Route
                           path="/admin/notifications"

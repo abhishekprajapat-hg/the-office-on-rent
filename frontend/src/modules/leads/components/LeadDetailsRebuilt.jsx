@@ -404,13 +404,21 @@ const LeadDetailsRebuiltContent = ({
   toObjectIdString,
   WhatsAppIcon,
 }) => {
-  const card = isDark ? "border-slate-700 bg-slate-950/70" : "border-slate-200 bg-white";
-  const softCard = isDark ? "border-slate-700 bg-slate-900/80" : "border-slate-200 bg-slate-50";
-  const input = isDark ? "border-slate-700 bg-slate-950 text-slate-200" : "border-slate-300 bg-white text-slate-700";
+  const card = isDark
+    ? "ui-soft-panel border-slate-700/85 bg-slate-950/70 shadow-[inset_0_1px_0_rgba(148,163,184,0.08)]"
+    : "ui-soft-panel border-slate-200 bg-white shadow-[inset_0_1px_0_rgba(148,163,184,0.2)]";
+  const softCard = isDark
+    ? "ui-soft-panel border-slate-700/90 bg-slate-900/80"
+    : "ui-soft-panel border-slate-200 bg-slate-50/85";
+  const input = isDark
+    ? "border-slate-700 bg-slate-950/90 text-slate-100 placeholder:text-slate-500"
+    : "border-slate-300 bg-white text-slate-700 placeholder:text-slate-400";
   const button = isDark
-    ? "border-slate-600 bg-slate-900 text-slate-200 hover:border-emerald-400/45 hover:text-emerald-200"
-    : "border-slate-300 bg-white text-slate-700 hover:border-emerald-400 hover:text-emerald-700";
-  const primaryBtn = isDark ? "bg-emerald-600 hover:bg-emerald-500" : "bg-slate-900 hover:bg-emerald-600";
+    ? "border-slate-600 bg-slate-900 text-slate-100 hover:border-sky-300/55 hover:bg-slate-800 hover:text-sky-100"
+    : "border-slate-300 bg-white text-slate-700 hover:border-sky-300 hover:bg-sky-50 hover:text-sky-700";
+  const primaryBtn = isDark
+    ? "bg-gradient-to-r from-sky-600 to-emerald-600 hover:from-sky-500 hover:to-emerald-500"
+    : "bg-gradient-to-r from-slate-900 to-sky-700 hover:from-slate-800 hover:to-sky-600";
 
   const isClosedDealFlow =
     ["CLOSED", "REQUESTED"].includes(statusDraft)
@@ -1438,35 +1446,43 @@ const LeadDetailsRebuiltContent = ({
       initial={{ opacity: 0, y: 16 }}
       animate={{ opacity: 1, y: 0 }}
       exit={{ opacity: 0, y: 16 }}
-      className={`relative z-10 w-full overflow-x-hidden rounded-xl border shadow-2xl sm:rounded-3xl ${
-        isDark ? "border-slate-700 bg-slate-900" : "border-slate-200 bg-white"
+      className={`ui-soft-panel relative z-10 w-full overflow-x-hidden rounded-[26px] shadow-[0_28px_90px_-56px_rgba(15,23,42,0.75)] sm:rounded-[30px] ${
+        isDark ? "border-slate-700 bg-slate-900/95" : "border-slate-200 bg-white/95"
       }`}
     >
+      <div className="pointer-events-none absolute inset-0 overflow-hidden rounded-[inherit]">
+        <div className={`absolute -left-10 top-0 h-36 w-36 rounded-full blur-3xl ${
+          isDark ? "bg-sky-500/20" : "bg-sky-300/45"
+        }`} />
+        <div className={`absolute right-0 top-6 h-40 w-40 rounded-full blur-3xl ${
+          isDark ? "bg-emerald-500/15" : "bg-emerald-300/35"
+        }`} />
+      </div>
       <div
-        className={`border-b px-2.5 py-2.5 sm:px-6 sm:py-5 ${
-          isDark ? "border-slate-700 bg-slate-900/95" : "border-slate-200 bg-slate-50/95"
+        className={`ui-hero-card relative border-b px-3 py-3 sm:px-6 sm:py-5 ${
+          isDark ? "border-slate-700 bg-slate-900/90" : "border-slate-200 bg-slate-50/95"
         }`}
       >
         <div className="flex flex-wrap items-start justify-between gap-2">
           <div className="min-w-0">
-            <p className={`text-[10px] font-semibold uppercase tracking-[0.16em] ${
-              isDark ? "text-emerald-200" : "text-emerald-700"
+            <p className={`text-[10px] font-semibold uppercase tracking-[0.18em] ${
+              isDark ? "text-sky-200" : "text-sky-700"
             }`}>
               Lead Profile
             </p>
-            <h2 className={`truncate text-xl font-bold sm:text-2xl ${isDark ? "text-slate-100" : "text-slate-900"}`}>
+            <h2 className={`truncate text-2xl font-bold tracking-tight sm:text-3xl ${isDark ? "text-slate-100" : "text-slate-900"}`}>
               {String(nameDraft || "").trim() || selectedLead?.name || "Lead"}
             </h2>
-            <p className={`mt-1 truncate text-[11px] sm:text-xs ${isDark ? "text-slate-400" : "text-slate-500"}`}>
+            <p className={`mt-1 truncate text-xs sm:text-sm ${isDark ? "text-slate-300" : "text-slate-600"}`}>
               {String(projectInterestedDraft || "").trim() || selectedLead?.projectInterested || "Project not tagged yet"}
             </p>
-            <div className="mt-2 flex flex-wrap gap-1">
-              <span className={`rounded-full border px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-[0.1em] sm:px-2 sm:text-[10px] ${
-                isDark ? "border-cyan-400/45 bg-cyan-500/15 text-cyan-100" : "border-cyan-300 bg-cyan-50 text-cyan-700"
+            <div className="mt-2 flex flex-wrap gap-1.5">
+              <span className={`rounded-full border px-2 py-1 text-[9px] font-bold uppercase tracking-[0.12em] sm:px-2.5 sm:text-[10px] ${
+                isDark ? "border-sky-300/45 bg-sky-500/15 text-sky-100" : "border-sky-300 bg-sky-50 text-sky-700"
               }`}>
                 {statusLabel(statusDraft || selectedLead?.status || "NEW")}
               </span>
-              <span className={`rounded-full border px-1.5 py-0.5 text-[9px] font-semibold sm:px-2 sm:text-[10px] ${
+              <span className={`rounded-full border px-2 py-1 text-[9px] font-semibold sm:px-2.5 sm:text-[10px] ${
                 isDark ? "border-slate-700 bg-slate-800 text-slate-300" : "border-slate-300 bg-white text-slate-600"
               }`}>
                 ID: {String(selectedLead?._id || "").slice(-6).toUpperCase()}
@@ -1476,33 +1492,33 @@ const LeadDetailsRebuiltContent = ({
           <button
             type="button"
             onClick={onClose}
-            className={`inline-flex h-8 items-center gap-1 rounded-lg border px-2.5 text-[11px] font-semibold uppercase tracking-[0.08em] sm:h-9 sm:px-3 sm:text-xs sm:tracking-[0.12em] ${button}`}
+            className={`inline-flex h-9 items-center gap-1 rounded-xl border px-3 text-[11px] font-semibold uppercase tracking-[0.1em] sm:px-3.5 sm:text-xs sm:tracking-[0.12em] ${button}`}
           >
             <ArrowLeft size={12} />
             Back
           </button>
         </div>
 
-        <div className="mt-3 grid grid-cols-2 gap-1.5 xl:grid-cols-4">
-          <div className={`rounded-lg border px-2 py-1.5 sm:rounded-xl sm:px-3 sm:py-2 ${card}`}>
+        <div className="mt-4 grid grid-cols-2 gap-2 xl:grid-cols-4">
+          <div className={`rounded-2xl border px-2.5 py-2 sm:px-3 sm:py-2.5 ${card}`}>
             <p className={`text-[9px] uppercase tracking-[0.1em] sm:text-[10px] sm:tracking-[0.12em] ${isDark ? "text-slate-400" : "text-slate-500"}`}>Assigned</p>
             <p className={`mt-0.5 truncate text-[11px] font-semibold sm:mt-1 sm:text-xs ${isDark ? "text-slate-100" : "text-slate-800"}`}>
               {selectedLead?.assignedTo?.name || "Unassigned"}
             </p>
           </div>
-          <div className={`rounded-lg border px-2 py-1.5 sm:rounded-xl sm:px-3 sm:py-2 ${card}`}>
+          <div className={`rounded-2xl border px-2.5 py-2 sm:px-3 sm:py-2.5 ${card}`}>
             <p className={`text-[9px] uppercase tracking-[0.1em] sm:text-[10px] sm:tracking-[0.12em] ${isDark ? "text-slate-400" : "text-slate-500"}`}>Follow-up</p>
             <p className={`mt-0.5 truncate text-[11px] font-semibold sm:mt-1 sm:text-xs ${isDark ? "text-slate-100" : "text-slate-800"}`}>
               {formatDate(followUpDraft || selectedLead?.nextFollowUp)}
             </p>
           </div>
-          <div className={`rounded-lg border px-2 py-1.5 sm:rounded-xl sm:px-3 sm:py-2 ${card}`}>
+          <div className={`rounded-2xl border px-2.5 py-2 sm:px-3 sm:py-2.5 ${card}`}>
             <p className={`text-[9px] uppercase tracking-[0.1em] sm:text-[10px] sm:tracking-[0.12em] ${isDark ? "text-slate-400" : "text-slate-500"}`}>Approval</p>
             <p className={`mt-0.5 truncate text-[11px] font-semibold sm:mt-1 sm:text-xs ${isDark ? "text-slate-100" : "text-slate-800"}`}>
               {approvalLabel(currentApprovalStatus)}
             </p>
           </div>
-          <div className={`rounded-lg border px-2 py-1.5 sm:rounded-xl sm:px-3 sm:py-2 ${card}`}>
+          <div className={`rounded-2xl border px-2.5 py-2 sm:px-3 sm:py-2.5 ${card}`}>
             <p className={`text-[9px] uppercase tracking-[0.1em] sm:text-[10px] sm:tracking-[0.12em] ${isDark ? "text-slate-400" : "text-slate-500"}`}>Primary Property</p>
             <p className={`mt-0.5 truncate text-[11px] font-semibold sm:mt-1 sm:text-xs ${isDark ? "text-slate-100" : "text-slate-800"}`}>
               {activePropertyLabel}
@@ -1511,10 +1527,10 @@ const LeadDetailsRebuiltContent = ({
         </div>
       </div>
 
-      <div className="grid grid-cols-1 gap-3 p-2 sm:gap-4 sm:p-6 xl:grid-cols-12">
+      <div className="relative grid grid-cols-1 gap-3 p-2.5 sm:gap-4 sm:p-6 xl:grid-cols-12">
         <div className="space-y-4 xl:col-span-5">
           <section
-            className={`rounded-2xl border p-3 ${card}`}
+            className={`rounded-3xl border p-4 ${card}`}
             style={{ contentVisibility: "auto", containIntrinsicSize: "320px" }}
           >
             <div className={`text-xs font-bold uppercase tracking-widest ${isDark ? "text-slate-400" : "text-slate-500"}`}>Contact</div>
@@ -1605,7 +1621,7 @@ const LeadDetailsRebuiltContent = ({
             </div>
           </section>
 
-          <section className={`rounded-2xl border p-3 ${card}`}>
+          <section className={`rounded-3xl border p-4 ${card}`}>
             <div className={`text-xs font-bold uppercase tracking-widest ${isDark ? "text-slate-400" : "text-slate-500"}`}>
               Lead Requirements
             </div>
@@ -1810,7 +1826,7 @@ const LeadDetailsRebuiltContent = ({
             ) : null}
           </section>
 
-          <section className={`rounded-2xl border p-3 ${card}`}>
+          <section className={`rounded-3xl border p-4 ${card}`}>
             <div className="flex items-center justify-between">
               <div className={`text-xs font-bold uppercase tracking-widest ${isDark ? "text-slate-400" : "text-slate-500"}`}>Properties</div>
               <span className={`text-[11px] ${isDark ? "text-slate-400" : "text-slate-500"}`}>{relatedInventoryRows.length} linked</span>
@@ -1970,7 +1986,7 @@ const LeadDetailsRebuiltContent = ({
             ) : null}
           </section>
 
-          <section className={`rounded-2xl border p-3 ${card}`}>
+          <section className={`rounded-3xl border p-4 ${card}`}>
             <div className="flex items-center justify-between gap-2">
               <div className={`inline-flex items-center gap-1 text-xs font-bold uppercase tracking-widest ${isDark ? "text-slate-400" : "text-slate-500"}`}>
                 <FileText size={12} />
@@ -2227,7 +2243,7 @@ const LeadDetailsRebuiltContent = ({
           </section>
 
           {canAssignLead ? (
-            <section className={`rounded-2xl border p-3 ${card}`}>
+            <section className={`rounded-3xl border p-4 ${card}`}>
               <div className={`text-xs font-bold uppercase tracking-widest ${isDark ? "text-slate-400" : "text-slate-500"}`}>Assignment</div>
               <select value={executiveDraft} onChange={(event) => setExecutiveDraft(event.target.value)} className={`mt-2 h-10 w-full rounded-xl border px-3 text-sm ${input}`}>
                 <option value="">Select executive</option>
@@ -2241,7 +2257,7 @@ const LeadDetailsRebuiltContent = ({
         </div>
 
         <div className="space-y-4 xl:col-span-7">
-          <section className={`rounded-2xl border p-3 ${card}`}>
+          <section className={`rounded-3xl border p-4 ${card}`}>
             <div className={`text-xs font-bold uppercase tracking-widest ${isDark ? "text-slate-400" : "text-slate-500"}`}>Lead Controls</div>
             <div className="mt-2">
               <label className={`inline-flex items-center gap-1 text-[10px] uppercase tracking-wider font-bold ${isDark ? "text-slate-400" : "text-slate-500"}`}>
@@ -2500,7 +2516,7 @@ const LeadDetailsRebuiltContent = ({
           </section>
 
           <section
-            className={`rounded-2xl border p-3 ${card}`}
+            className={`rounded-3xl border p-4 ${card}`}
             style={{ contentVisibility: "auto", containIntrinsicSize: "280px" }}
           >
             <div className={`mb-2 flex items-center gap-1 text-xs font-bold uppercase tracking-widest ${isDark ? "text-slate-400" : "text-slate-500"}`}>
@@ -2544,3 +2560,4 @@ export const LeadDetailsRebuilt = (props) => {
   if (!props.selectedLead) return null;
   return <LeadDetailsRebuiltContent {...props} />;
 };
+

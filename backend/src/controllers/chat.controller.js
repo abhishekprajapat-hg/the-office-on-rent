@@ -16,9 +16,6 @@ const {
   listEscalationLogs,
   toPositiveInt,
 } = require("../services/chatRoom.service");
-const {
-  listConversationCallHistory,
-} = require("../services/chatCall.service");
 
 const emitRealtimeMessage = (io, payload) => {
   if (!io || !payload?.room || !payload?.message) return;
@@ -325,23 +322,6 @@ exports.getConversationMessages = async (req, res) => {
     });
   } catch (error) {
     return handleControllerError(res, error, "Failed to load messages");
-  }
-};
-
-exports.getConversationCalls = async (req, res) => {
-  try {
-    const calls = await listConversationCallHistory({
-      user: req.user,
-      roomId: req.params.conversationId,
-      limit: req.query?.limit,
-    });
-
-    return res.json({
-      count: calls.length,
-      calls,
-    });
-  } catch (error) {
-    return handleControllerError(res, error, "Failed to load call history");
   }
 };
 

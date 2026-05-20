@@ -94,15 +94,38 @@ const ExecutiveDashboard = () => {
   };
 
   return (
-    <div className="flex h-full w-full flex-col overflow-hidden bg-slate-50">
-      <div className="shrink-0 border-b border-slate-200 bg-white px-4 pb-4 pt-5 sm:px-6 lg:px-8">
-        <h2 className="font-display text-xl text-slate-900">
-          Executive Command Desk
+    <div className="ui-page-shell flex h-full w-full flex-col overflow-hidden">
+      <div className="ui-hero-card shrink-0 px-4 pb-4 pt-5 sm:px-6 lg:px-8">
+        <p className="text-[11px] uppercase tracking-[0.2em] text-cyan-700">
+          Executive Command Center
+        </p>
+        <h2 className="mt-1 font-display text-2xl text-slate-900">
+          Daily Sales Desk
         </h2>
-        <p className="mt-1 text-[11px] uppercase tracking-[0.18em] text-slate-500">
+        <p className="mt-1 text-[11px] uppercase tracking-[0.16em] text-slate-500">
           Active View: {tabLabel}
         </p>
-
+        <div className="mt-4 flex flex-wrap gap-2">
+          {TABS.map((tab) => {
+            const Icon = tab.icon;
+            const active = activeTab === tab.id;
+            return (
+              <button
+                key={tab.id}
+                type="button"
+                onClick={() => setActiveTab(tab.id)}
+                className={`inline-flex items-center gap-2 rounded-xl border px-3 py-2 text-xs font-semibold transition-colors ${
+                  active
+                    ? "border-cyan-300 bg-cyan-100/70 text-cyan-800"
+                    : "border-slate-200 bg-white/70 text-slate-600 hover:border-cyan-200 hover:text-cyan-700"
+                }`}
+              >
+                <Icon size={14} />
+                {tab.label}
+              </button>
+            );
+          })}
+        </div>
       </div>
 
       <div className="min-h-0 flex-1 overflow-hidden">
@@ -145,7 +168,7 @@ const ExecutiveOverview = ({ stats, leads, onOpen }) => (
       />
     </div>
 
-    <div className="mt-6">
+    <div className="ui-soft-panel mt-6 p-3 sm:p-4">
       <LeadPerformancePanel
         leads={leads}
         theme="light"
@@ -194,7 +217,7 @@ const StatCard = ({ title, value, hint, icon: Icon, onClick }) => (
   <button
     type="button"
     onClick={onClick}
-    className="rounded-2xl border border-slate-200 bg-white p-5 text-left shadow-sm transition-all hover:-translate-y-0.5 hover:border-emerald-300 hover:shadow-md"
+    className="ui-soft-panel rounded-2xl p-5 text-left transition-all hover:-translate-y-0.5 hover:border-cyan-300/70"
   >
     <div className="flex items-center justify-between">
       <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-500">
@@ -213,7 +236,7 @@ const QuickPageCard = ({ title, subtitle, icon: Icon, onClick }) => (
   <button
     type="button"
     onClick={onClick}
-    className="rounded-2xl border border-slate-200 bg-white p-5 text-left transition-all hover:-translate-y-0.5 hover:border-emerald-300 hover:shadow-md"
+    className="ui-soft-panel rounded-2xl p-5 text-left transition-all hover:-translate-y-0.5 hover:border-cyan-300/70"
   >
     <div className="mb-3 inline-flex rounded-lg bg-slate-100 p-2 text-slate-700">
       <Icon size={16} />

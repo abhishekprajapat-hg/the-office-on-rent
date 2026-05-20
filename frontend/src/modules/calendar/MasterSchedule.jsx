@@ -487,8 +487,8 @@ const MasterSchedule = () => {
   };
 
   return (
-	    <div className={`w-full h-full overflow-x-hidden px-4 sm:px-6 md:px-10 pt-20 md:pt-24 pb-8 overflow-y-auto custom-scrollbar ${isDark ? "bg-slate-950/35" : "bg-white/30"}`}>
-      <div className="flex flex-col md:flex-row md:items-end md:justify-between gap-4 mb-6">
+	    <div className={`ui-page-shell custom-scrollbar overflow-x-hidden ${isDark ? "bg-slate-950/35" : "bg-white/30"}`}>
+      <div className="ui-hero-card mb-6 flex flex-col gap-4 md:flex-row md:items-end md:justify-between">
         <div>
           <h1 className={`text-3xl font-bold ${isDark ? "text-slate-100" : "text-slate-900"}`}>Master Schedule</h1>
           <p className={`text-xs mt-1 uppercase tracking-widest ${isDark ? "text-slate-400" : "text-slate-500"}`}>

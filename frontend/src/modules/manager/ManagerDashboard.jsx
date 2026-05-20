@@ -381,12 +381,14 @@ const ManagerDashboard = ({ theme = "light" }) => {
   if (loading) {
     return (
       <div
-        className={`flex h-full w-full items-center justify-center gap-2 ${
-          isDark ? "text-slate-400" : "text-slate-500"
-        }`}
+        className="ui-page-shell flex h-full w-full items-center justify-center px-4"
       >
-        <Loader className="animate-spin" />
-        Loading dashboard...
+        <div className={`flex items-center gap-2 rounded-2xl border px-4 py-3 text-sm ${
+          isDark ? "border-slate-700 bg-slate-900" : "border-slate-200 bg-white"
+        }`}>
+          <Loader className="animate-spin" />
+          Loading home dashboard...
+        </div>
       </div>
     );
   }
@@ -396,75 +398,103 @@ const ManagerDashboard = ({ theme = "light" }) => {
       initial="hidden"
       animate="visible"
       variants={containerMotion}
-      className={`relative h-full w-full overflow-y-auto custom-scrollbar px-4 pt-20 pb-10 sm:px-6 md:pt-24 lg:px-10 ${
-        isDark ? "bg-slate-950/40" : "bg-slate-50/70"
+      className={`ui-page-shell relative h-full w-full overflow-y-auto custom-scrollbar pb-10 pt-5 ${
+        isDark ? "bg-slate-950" : "bg-slate-100"
       }`}
     >
       <div className="pointer-events-none absolute inset-0 -z-10 overflow-hidden">
-        <div className={`absolute -left-12 top-2 h-56 w-56 rounded-full blur-3xl ${isDark ? "bg-cyan-500/20" : "bg-cyan-300/35"}`} />
-        <div className={`absolute right-0 top-24 h-64 w-64 rounded-full blur-3xl ${isDark ? "bg-violet-500/20" : "bg-violet-300/30"}`} />
+        <div className={`absolute -left-16 top-6 h-64 w-64 rounded-full blur-3xl ${isDark ? "bg-sky-500/20" : "bg-sky-300/40"}`} />
+        <div className={`absolute right-2 top-24 h-72 w-72 rounded-full blur-3xl ${isDark ? "bg-amber-500/15" : "bg-amber-300/35"}`} />
+        <div className={`absolute bottom-0 left-1/3 h-56 w-56 rounded-full blur-3xl ${isDark ? "bg-emerald-500/10" : "bg-emerald-200/30"}`} />
       </div>
 
       <motion.section
         variants={itemMotion}
-        className={`rounded-3xl border px-5 py-6 sm:px-7 ${
+        className={`ui-hero-card rounded-[30px] px-4 py-5 sm:px-6 sm:py-6 ${
           isDark
-            ? "border-slate-700/70 bg-slate-900/75 shadow-[0_30px_80px_-55px_rgba(56,189,248,0.65)]"
-            : "border-slate-200 bg-white/90 shadow-[0_30px_80px_-55px_rgba(8,145,178,0.55)]"
+            ? "border-slate-700 bg-slate-900/90 shadow-[0_24px_70px_-40px_rgba(2,6,23,0.9)]"
+            : "border-slate-200 bg-white shadow-[0_20px_55px_-35px_rgba(15,23,42,0.35)]"
         }`}
       >
-        <div className="flex flex-wrap items-start justify-between gap-4">
+        <div className="grid grid-cols-1 gap-5 xl:grid-cols-[1.6fr_1fr]">
           <div>
-            <div className={`inline-flex items-center gap-2 rounded-full border px-3 py-1 text-[10px] uppercase tracking-[0.2em] ${
+            <div className={`inline-flex items-center gap-2 rounded-full border px-3 py-1 text-[10px] font-semibold uppercase tracking-[0.18em] ${
               isDark
-                ? "border-cyan-400/40 bg-cyan-500/10 text-cyan-200"
-                : "border-cyan-200 bg-cyan-50 text-cyan-700"
+                ? "border-sky-300/35 bg-sky-500/10 text-sky-100"
+                : "border-sky-200 bg-sky-50 text-sky-700"
             }`}>
               <Sparkles size={12} />
-              Command Deck
+              Operations Home
             </div>
-            <h1 className={`mt-4 font-display text-2xl sm:text-4xl ${isDark ? "text-slate-100" : "text-slate-900"}`}>
-              Control Home
+
+            <h1 className={`mt-3 font-display text-3xl tracking-tight sm:text-4xl ${isDark ? "text-slate-50" : "text-slate-900"}`}>
+              Revenue and Pipeline Radar
             </h1>
-            <p className={`mt-2 text-xs uppercase tracking-[0.24em] ${isDark ? "text-slate-400" : "text-slate-500"}`}>
-              Clean real-time snapshot
+
+            <p className={`mt-2 max-w-2xl text-sm ${isDark ? "text-slate-300" : "text-slate-600"}`}>
+              Team performance, closure health, and pipeline velocity in one clean tactical view.
             </p>
+
+            <div className="mt-5 grid grid-cols-1 gap-2 sm:grid-cols-3">
+              {deckChips.map((chip) => (
+                <button
+                  key={chip.label}
+                  type="button"
+                  onClick={() => navigate(chip.to)}
+                  className={`rounded-2xl border px-4 py-3 text-left transition-all hover:-translate-y-0.5 ${
+                    isDark
+                      ? "border-slate-700 bg-slate-950/70 hover:border-sky-300/40"
+                      : "border-slate-200 bg-slate-50 hover:border-sky-300"
+                  }`}
+                >
+                  <p className={`text-[10px] font-semibold uppercase tracking-[0.14em] ${isDark ? "text-slate-400" : "text-slate-500"}`}>
+                    {chip.label}
+                  </p>
+                  <p className={`mt-1 text-2xl font-display ${isDark ? "text-slate-100" : "text-slate-900"}`}>
+                    {chip.value}
+                  </p>
+                </button>
+              ))}
+            </div>
           </div>
 
-          <div className="space-y-2">
-            <div className={`inline-flex items-center gap-2 rounded-xl border px-3 py-2 text-[11px] uppercase tracking-[0.16em] ${
+          <div className={`rounded-3xl border p-4 ${
+            isDark ? "border-slate-700 bg-slate-950/70" : "border-slate-200 bg-slate-50/80"
+          }`}>
+            <div className={`inline-flex items-center gap-2 rounded-full border px-3 py-1 text-[10px] font-semibold uppercase tracking-[0.14em] ${
               isDark
-                ? "border-cyan-400/35 bg-cyan-500/10 text-cyan-200"
-                : "border-cyan-200 bg-cyan-50 text-cyan-700"
+                ? "border-emerald-300/35 bg-emerald-500/10 text-emerald-100"
+                : "border-emerald-200 bg-emerald-50 text-emerald-700"
             }`}>
               <BarChart3 size={14} />
-              Auto refreshed from leads and inventory
+              Live Intelligence
             </div>
-            <div className={`flex items-center justify-end gap-2 text-xs ${isDark ? "text-slate-400" : "text-slate-500"}`}>
-              <Clock3 size={12} />
-              Live sync active
+
+            <div className="mt-4 space-y-2">
+              <div className={`rounded-xl border px-3 py-2 ${isDark ? "border-slate-700 bg-slate-900/80" : "border-slate-200 bg-white"}`}>
+                <p className={`text-[10px] uppercase tracking-[0.14em] ${isDark ? "text-slate-400" : "text-slate-500"}`}>Close Efficiency</p>
+                <p className={`mt-1 text-2xl font-display ${isDark ? "text-emerald-100" : "text-emerald-700"}`}>
+                  {derived.conversionPercent}%
+                </p>
+              </div>
+              <div className={`rounded-xl border px-3 py-2 ${isDark ? "border-slate-700 bg-slate-900/80" : "border-slate-200 bg-white"}`}>
+                <p className={`text-[10px] uppercase tracking-[0.14em] ${isDark ? "text-slate-400" : "text-slate-500"}`}>Pipeline Volume</p>
+                <p className={`mt-1 text-2xl font-display ${isDark ? "text-sky-100" : "text-sky-700"}`}>
+                  {derived.activePipeline}
+                </p>
+              </div>
+              <div className={`rounded-xl border px-3 py-2 ${isDark ? "border-slate-700 bg-slate-900/80" : "border-slate-200 bg-white"}`}>
+                <p className={`text-[10px] uppercase tracking-[0.14em] ${isDark ? "text-slate-400" : "text-slate-500"}`}>Average Ticket</p>
+                <p className={`mt-1 text-2xl font-display ${isDark ? "text-amber-100" : "text-amber-700"}`}>
+                  {derived.avgTicket ? `Rs ${(derived.avgTicket / 1000).toFixed(1)}k` : "Rs 0"}
+                </p>
+              </div>
+            </div>
+
+            <div className={`mt-3 flex items-center justify-end gap-2 text-xs ${isDark ? "text-slate-400" : "text-slate-500"}`}>
+              <Clock3 size={12} /> Auto sync active
             </div>
           </div>
-        </div>
-
-        <div className="mt-6 grid grid-cols-1 gap-3 sm:grid-cols-3">
-          {deckChips.map((chip) => (
-            <button
-              key={chip.label}
-              type="button"
-              onClick={() => navigate(chip.to)}
-              className={`rounded-2xl border px-4 py-3 ${
-                isDark ? "border-slate-700 bg-slate-950/70" : "border-slate-200 bg-slate-50/80"
-              } text-left transition-all hover:-translate-y-0.5 hover:border-cyan-300 hover:shadow-sm`}
-            >
-              <p className={`text-[10px] uppercase tracking-[0.18em] ${isDark ? "text-slate-400" : "text-slate-500"}`}>
-                {chip.label}
-              </p>
-              <p className={`mt-2 text-2xl font-display ${isDark ? "text-slate-100" : "text-slate-900"}`}>
-                {chip.value}
-              </p>
-            </button>
-          ))}
         </div>
       </motion.section>
 
@@ -481,19 +511,26 @@ const ManagerDashboard = ({ theme = "light" }) => {
         </motion.div>
       )}
 
-      <motion.section variants={itemMotion} className="mt-5 grid grid-cols-1 gap-4 xl:grid-cols-3">
+      <motion.section variants={itemMotion} className="mt-5 grid grid-cols-1 gap-3 xl:grid-cols-3">
         {kpiCards.map((card) => (
           <button
             key={card.label}
             type="button"
             onClick={() => navigate(card.to)}
-            className={`group relative overflow-hidden rounded-2xl border bg-gradient-to-br p-5 ${
-              isDark ? "bg-slate-900/85" : "bg-white"
-            } ${card.accent} text-left transition-all hover:-translate-y-0.5 hover:shadow-md`}
+            className={`group relative overflow-hidden rounded-3xl border p-5 text-left transition-all hover:-translate-y-0.5 ${
+              isDark
+                ? "border-slate-700 bg-slate-900/85 hover:border-slate-500"
+                : "border-slate-200 bg-white hover:border-slate-300"
+            }`}
           >
-            <div className={`pointer-events-none absolute -right-10 -top-10 h-24 w-24 rounded-full blur-2xl ${
-              isDark ? "bg-white/10" : "bg-white/60"
+            <div className={`pointer-events-none absolute inset-x-0 top-0 h-1 bg-gradient-to-r ${
+              card.label === "Estimated Revenue"
+                ? "from-cyan-500 to-sky-500"
+                : card.label === "Total Leads"
+                  ? "from-slate-500 to-slate-700"
+                  : "from-emerald-500 to-teal-500"
             }`} />
+
             <div className="relative">
               <div className="flex items-center justify-between">
                 <p className={`text-[11px] uppercase tracking-[0.2em] ${isDark ? "text-slate-300" : "text-slate-500"}`}>
@@ -501,7 +538,7 @@ const ManagerDashboard = ({ theme = "light" }) => {
                 </p>
                 <card.icon size={16} className={card.tone} />
               </div>
-              <p className={`mt-3 text-3xl font-display ${isDark ? "text-slate-100" : "text-slate-900"}`}>
+              <p className={`mt-3 text-3xl font-display tracking-tight ${isDark ? "text-slate-100" : "text-slate-900"}`}>
                 {card.value}
               </p>
               <p className={`mt-2 text-xs ${isDark ? "text-slate-400" : "text-slate-500"}`}>
@@ -513,13 +550,17 @@ const ManagerDashboard = ({ theme = "light" }) => {
       </motion.section>
 
       <motion.div variants={itemMotion} className="mt-6">
-        <LeadPerformancePanel
-          leads={leadRows}
-          theme={theme}
-          accent={isDark ? "violet" : "cyan"}
-          title="Role Performance Graph"
-          subtitle="Live stage distribution for your accessible pipeline"
-        />
+        <div className={`rounded-3xl border p-3 sm:p-4 ${
+          isDark ? "border-slate-700 bg-slate-900/80" : "border-slate-200 bg-white"
+        }`}>
+          <LeadPerformancePanel
+            leads={leadRows}
+            theme={theme}
+            accent={isDark ? "violet" : "cyan"}
+            title="Role Performance Graph"
+            subtitle="Live stage distribution for your accessible pipeline"
+          />
+        </div>
       </motion.div>
 
       {subordinatePerformance.rows.length > 0 && (
@@ -535,7 +576,12 @@ const ManagerDashboard = ({ theme = "light" }) => {
 
           <div className="space-y-4">
             {subordinatePerformance.rows.map((row) => (
-              <div key={row.id}>
+              <div
+                key={row.id}
+                className={`rounded-3xl border p-3 ${
+                  isDark ? "border-slate-700 bg-slate-900/75" : "border-slate-200 bg-white"
+                }`}
+              >
                 <LeadPerformancePanel
                   leads={row.leads}
                   theme={theme}
@@ -553,8 +599,8 @@ const ManagerDashboard = ({ theme = "light" }) => {
 
       <motion.section variants={itemMotion} className="mt-6 grid grid-cols-1 gap-4 xl:grid-cols-[1.7fr_1fr]">
         <div
-          className={`rounded-2xl border p-4 sm:p-5 ${
-            isDark ? "border-slate-700/80 bg-slate-900/70" : "border-slate-200 bg-white/90"
+          className={`rounded-3xl border p-4 sm:p-5 ${
+            isDark ? "border-slate-700 bg-slate-900/80" : "border-slate-200 bg-white"
           }`}
         >
           <div className="mb-4 flex items-center justify-between gap-3">
@@ -572,7 +618,7 @@ const ManagerDashboard = ({ theme = "light" }) => {
                 key={card.label}
                 type="button"
                 onClick={() => navigate(card.to)}
-                className={`rounded-xl border p-4 ${
+                className={`rounded-2xl border p-4 ${
                   isDark ? "border-slate-700 bg-slate-950/70" : "border-slate-200 bg-slate-50"
                 } text-left transition-all hover:-translate-y-0.5 hover:border-cyan-300 hover:shadow-sm`}
               >
@@ -597,8 +643,8 @@ const ManagerDashboard = ({ theme = "light" }) => {
         </div>
 
         <div
-          className={`rounded-2xl border p-4 sm:p-5 ${
-            isDark ? "border-slate-700/80 bg-slate-900/70" : "border-slate-200 bg-white/90"
+          className={`rounded-3xl border p-4 sm:p-5 ${
+            isDark ? "border-slate-700 bg-slate-900/80" : "border-slate-200 bg-white"
           }`}
         >
           <div className="mb-4">

@@ -753,7 +753,7 @@ const FinancialCore = () => {
 
   if (loading) {
     return (
-      <div className="w-full h-full px-4 sm:px-6 lg:px-10 pt-20 md:pt-24 pb-8 flex items-center justify-center text-slate-500 gap-2">
+      <div className="ui-page-shell custom-scrollbar flex items-center justify-center text-slate-500 gap-2">
         <RefreshCw size={18} className="animate-spin" />
         Loading finance dashboard...
       </div>
@@ -761,10 +761,10 @@ const FinancialCore = () => {
   }
 
   return (
-    <div className="w-full h-full px-4 sm:px-6 lg:px-10 pt-20 md:pt-24 pb-8 space-y-6 overflow-y-auto custom-scrollbar">
-      <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
+    <div className="ui-page-shell custom-scrollbar space-y-6">
+      <div className="ui-hero-card flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
         <div>
-          <h1 className="text-3xl font-semibold text-slate-900">Finance Dashboard</h1>
+          <h1 className="font-display text-3xl font-semibold text-slate-900">Finance Dashboard</h1>
           <p className="mt-1 text-xs uppercase tracking-[0.16em] text-slate-500">
             Real-time view from lead pipeline, closures and broker payouts
           </p>
@@ -775,8 +775,8 @@ const FinancialCore = () => {
         </div>
 
         <div className="flex flex-col items-start gap-2 sm:items-end">
-          <div className="inline-flex flex-wrap items-center gap-2 rounded-2xl border border-slate-200 bg-white p-2 shadow-sm">
-            <div className="inline-flex flex-wrap items-center gap-1 rounded-xl bg-slate-100 p-1">
+          <div className="ui-soft-panel inline-flex flex-wrap items-center gap-2 rounded-2xl border border-slate-200 bg-white p-2 shadow-sm">
+            <div className="inline-flex flex-wrap items-center gap-1 rounded-xl bg-slate-100/90 p-1">
               {RANGE_OPTIONS.map((range) => (
                 <button
                   key={range.key}
@@ -784,8 +784,8 @@ const FinancialCore = () => {
                   onClick={() => setRangeKey(range.key)}
                   className={`h-9 rounded-lg px-3 text-xs font-semibold transition-all ${
                     rangeKey === range.key
-                      ? "bg-slate-900 text-white shadow-sm"
-                      : "bg-transparent text-slate-700 hover:bg-white hover:text-slate-900"
+                      ? "bg-cyan-600 text-white shadow-sm"
+                      : "bg-transparent text-slate-700 hover:bg-white hover:text-cyan-700"
                   }`}
                 >
                   {range.label}
@@ -796,7 +796,7 @@ const FinancialCore = () => {
               type="button"
               onClick={() => loadFinanceData(true)}
               disabled={refreshing}
-              className="h-9 rounded-xl border border-slate-300 bg-white px-3 text-xs font-semibold text-slate-700 hover:border-slate-400 disabled:opacity-60 inline-flex items-center gap-2"
+              className="h-9 rounded-xl border border-slate-300 bg-white px-3 text-xs font-semibold text-slate-700 hover:border-cyan-400 hover:text-cyan-700 disabled:opacity-60 inline-flex items-center gap-2"
             >
               <RefreshCw size={14} className={refreshing ? "animate-spin" : ""} />
               Refresh
@@ -804,7 +804,7 @@ const FinancialCore = () => {
           </div>
 
           {rangeKey === "CUSTOM" ? (
-            <div className="flex flex-wrap gap-2 rounded-xl border border-slate-200 bg-white p-2 shadow-sm">
+            <div className="ui-soft-panel flex flex-wrap gap-2 rounded-xl border border-slate-200 bg-white p-2 shadow-sm">
               <label className="inline-flex items-center gap-2 rounded-lg border border-slate-300 bg-white px-3 text-xs font-semibold text-slate-600">
                 From
                 <input
@@ -847,7 +847,7 @@ const FinancialCore = () => {
       </div>
 
       {error && (
-        <div className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700 flex items-center gap-2">
+        <div className="ui-soft-panel rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700 flex items-center gap-2">
           <AlertCircle size={16} />
           {error}
         </div>
@@ -867,7 +867,7 @@ const FinancialCore = () => {
       </div>
 
       <div className="grid grid-cols-1 gap-5 xl:grid-cols-[1.5fr_1fr]">
-        <section className="rounded-2xl border border-slate-200 bg-white p-4">
+        <section className="ui-soft-panel rounded-2xl border border-slate-200 bg-white p-4">
           <h2 className="text-sm font-semibold uppercase tracking-[0.14em] text-slate-600">
             Pipeline Breakdown
           </h2>
@@ -896,7 +896,7 @@ const FinancialCore = () => {
           </div>
         </section>
 
-        <section className="rounded-2xl border border-slate-200 bg-white p-4">
+        <section className="ui-soft-panel rounded-2xl border border-slate-200 bg-white p-4">
           <h2 className="text-sm font-semibold uppercase tracking-[0.14em] text-slate-600">
             Source Mix
           </h2>
@@ -924,7 +924,7 @@ const FinancialCore = () => {
       </div>
 
       <div className="grid grid-cols-1 gap-5 xl:grid-cols-[1.5fr_1fr]">
-        <section className="rounded-2xl border border-slate-200 bg-white p-4">
+        <section className="ui-soft-panel rounded-2xl border border-slate-200 bg-white p-4">
           <div className="flex items-center justify-between gap-2">
             <h2 className="text-sm font-semibold uppercase tracking-[0.14em] text-slate-600">
               Brokerage Management
@@ -998,7 +998,7 @@ const FinancialCore = () => {
           )}
         </section>
 
-        <section className="rounded-2xl border border-slate-200 bg-white p-4">
+        <section className="ui-soft-panel rounded-2xl border border-slate-200 bg-white p-4">
           <h2 className="text-sm font-semibold uppercase tracking-[0.14em] text-slate-600">
             Brokerage Overview
           </h2>
@@ -1057,7 +1057,7 @@ const FinancialCore = () => {
       </div>
 
       <div className="grid grid-cols-1 gap-5 xl:grid-cols-2">
-        <section className="rounded-2xl border border-slate-200 bg-white p-4">
+        <section className="ui-soft-panel rounded-2xl border border-slate-200 bg-white p-4">
           <div className="flex items-center justify-between gap-2">
             <h2 className="text-sm font-semibold uppercase tracking-[0.14em] text-slate-600">
               Recent Closed Deals
@@ -1111,7 +1111,7 @@ const FinancialCore = () => {
           )}
         </section>
 
-        <section className="rounded-2xl border border-slate-200 bg-white p-4">
+        <section className="ui-soft-panel rounded-2xl border border-slate-200 bg-white p-4">
           <div className="flex items-center justify-between gap-2">
             <h2 className="text-sm font-semibold uppercase tracking-[0.14em] text-slate-600">
               Follow-up Watchlist
@@ -1165,7 +1165,7 @@ const FinancialCore = () => {
         </section>
       </div>
 
-      <section className="rounded-2xl border border-slate-200 bg-white p-4">
+      <section className="ui-soft-panel rounded-2xl border border-slate-200 bg-white p-4">
         <h2 className="text-sm font-semibold uppercase tracking-[0.14em] text-slate-600">
           Quick Actions
         </h2>
@@ -1199,18 +1199,18 @@ const StatCard = (props) => {
     <button
       type="button"
       onClick={props.onClick}
-      className="group rounded-2xl border border-slate-200 bg-white p-4 text-left transition-all hover:border-slate-300 hover:shadow-sm"
+      className="group ui-soft-panel rounded-2xl border border-slate-200 bg-white p-4 text-left transition-all hover:border-cyan-300 hover:shadow-sm"
     >
       <div className="flex items-center justify-between gap-3">
         <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-500">{props.title}</p>
-        <div className="rounded-lg bg-slate-100 p-2 text-slate-700">
+        <div className="rounded-lg bg-cyan-50 p-2 text-cyan-700">
           <IconComponent size={14} />
         </div>
       </div>
       <p className="mt-3 text-2xl font-semibold text-slate-900">{props.value}</p>
       <div className="mt-1 flex items-center justify-between gap-2">
         <p className="text-xs text-slate-500">{props.helper}</p>
-        <ChevronRight size={14} className="text-slate-400 transition-transform group-hover:translate-x-0.5" />
+        <ChevronRight size={14} className="text-cyan-500 transition-transform group-hover:translate-x-0.5" />
       </div>
     </button>
   );
@@ -1223,7 +1223,7 @@ const SourceCard = ({ label, count, total, onClick }) => {
     <button
       type="button"
       onClick={onClick}
-      className="w-full rounded-lg border border-slate-200 bg-slate-50 p-3 text-left transition-colors hover:border-slate-300 hover:bg-slate-100/70"
+      className="w-full rounded-lg border border-slate-200 bg-slate-50 p-3 text-left transition-colors hover:border-cyan-300 hover:bg-cyan-50/60"
     >
       <div className="flex items-center justify-between text-sm">
         <span className="font-medium text-slate-700">{label}</span>
@@ -1232,7 +1232,7 @@ const SourceCard = ({ label, count, total, onClick }) => {
         </span>
       </div>
       <div className="mt-2 h-2 w-full rounded-full bg-slate-200">
-        <div className="h-full rounded-full bg-slate-700" style={{ width: `${Math.min(share, 100)}%` }} />
+        <div className="h-full rounded-full bg-gradient-to-r from-cyan-500 to-sky-500" style={{ width: `${Math.min(share, 100)}%` }} />
       </div>
     </button>
   );

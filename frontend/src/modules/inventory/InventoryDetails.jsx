@@ -276,7 +276,7 @@ const InventoryDetails = () => {
 
   if (loading) {
     return (
-      <div className="w-full h-full px-4 sm:px-6 lg:px-10 pt-20 md:pt-24 pb-8 flex items-center justify-center text-slate-400 gap-2">
+      <div className="ui-page-shell custom-scrollbar flex items-center justify-center text-slate-400 gap-2">
         <Loader className="animate-spin" size={22} />
         Loading property details...
       </div>
@@ -285,7 +285,7 @@ const InventoryDetails = () => {
 
   if (error) {
     return (
-      <div className="w-full h-full px-4 sm:px-6 lg:px-10 pt-20 md:pt-24 pb-8">
+      <div className="ui-page-shell custom-scrollbar">
         <button
           onClick={() => navigate(-1)}
           className="mb-4 inline-flex items-center gap-2 text-sm font-semibold text-slate-500 hover:text-slate-800"
@@ -302,8 +302,8 @@ const InventoryDetails = () => {
   }
 
   return (
-    <div className="w-full h-full px-4 sm:px-6 lg:px-10 pt-20 md:pt-24 pb-8 space-y-6 overflow-y-auto custom-scrollbar">
-      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+    <div className="ui-page-shell custom-scrollbar space-y-6">
+      <div className="ui-hero-card flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div>
           <button
             onClick={() => navigate(-1)}

@@ -536,7 +536,7 @@ const IntelligenceReports = () => {
 
   if (loading) {
     return (
-      <div className="w-full h-full px-4 sm:px-6 lg:px-10 pt-20 md:pt-24 pb-8 flex items-center justify-center text-slate-500 gap-2">
+      <div className="ui-page-shell custom-scrollbar flex items-center justify-center gap-2 text-slate-500">
         <RefreshCw size={18} className="animate-spin" />
         Loading reports...
       </div>
@@ -544,7 +544,7 @@ const IntelligenceReports = () => {
   }
 
   return (
-    <div className="w-full h-full px-4 sm:px-6 lg:px-10 pt-20 md:pt-24 pb-8 space-y-6 overflow-y-auto custom-scrollbar">
+    <div className="ui-page-shell custom-scrollbar space-y-6">
       <ReportsHeader
         rangeOptions={RANGE_OPTIONS}
         rangeKey={rangeKey}
@@ -557,7 +557,7 @@ const IntelligenceReports = () => {
       />
 
       {error && (
-        <div className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700 flex items-center gap-2">
+        <div className="ui-soft-panel rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700 flex items-center gap-2">
           <AlertCircle size={16} />
           {error}
         </div>

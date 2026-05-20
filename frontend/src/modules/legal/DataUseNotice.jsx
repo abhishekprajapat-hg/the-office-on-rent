@@ -58,19 +58,19 @@ const sections = [
 ];
 
 const DataUseNotice = () => (
-  <div className="min-h-screen bg-slate-50 text-slate-800">
+  <div className="ui-page-shell min-h-screen text-slate-900">
     <div className="mx-auto w-full max-w-5xl px-4 py-10 sm:px-6 sm:py-14">
       <Link
         to="/login"
-        className="inline-flex items-center gap-2 rounded-lg border border-slate-300 px-3 py-2 text-xs font-semibold uppercase tracking-[0.16em] text-slate-600 hover:border-cyan-500/60 hover:text-cyan-700"
+        className="inline-flex items-center gap-2 rounded-xl border border-slate-300 bg-white px-3 py-2 text-xs font-semibold uppercase tracking-[0.16em] text-slate-700 hover:border-cyan-400 hover:text-cyan-700"
       >
         <ArrowLeft size={14} />
         Back To Login
       </Link>
 
-      <div className="mt-6 rounded-2xl border border-slate-200 bg-white p-6 sm:p-8">
+      <div className="ui-soft-panel mt-6 rounded-3xl p-6 shadow-[0_26px_65px_-36px_rgba(2,6,23,0.2)] backdrop-blur-xl sm:p-8">
         <div className="flex items-start gap-3">
-          <div className="mt-0.5 rounded-lg bg-cyan-50 p-2 text-cyan-700">
+          <div className="mt-0.5 rounded-lg border border-cyan-300 bg-cyan-100 p-2 text-cyan-700">
             <ShieldCheck size={18} />
           </div>
           <div>
@@ -84,8 +84,8 @@ const DataUseNotice = () => (
 
         <div className="mt-7 space-y-5">
           {sections.map((section) => (
-            <section key={section.title} className="rounded-xl border border-slate-200 bg-slate-50 p-4">
-              <h2 className="text-sm font-semibold uppercase tracking-[0.14em] text-slate-800">
+            <section key={section.title} className="ui-soft-panel rounded-2xl p-4">
+              <h2 className="text-sm font-semibold uppercase tracking-[0.14em] text-slate-900">
                 {section.title}
               </h2>
               <p className="mt-2 text-sm leading-relaxed text-slate-600">{section.body}</p>

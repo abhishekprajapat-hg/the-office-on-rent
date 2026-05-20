@@ -66,7 +66,6 @@ const tenantSubscriptionSchema = new mongoose.Schema(
   { timestamps: true },
 );
 
-tenantSubscriptionSchema.index({ companyId: 1, isCurrent: 1 });
 tenantSubscriptionSchema.index(
   { companyId: 1, isCurrent: 1 },
   {
@@ -76,4 +75,3 @@ tenantSubscriptionSchema.index(
 );
 
 module.exports = mongoose.model("TenantSubscription", tenantSubscriptionSchema);
-

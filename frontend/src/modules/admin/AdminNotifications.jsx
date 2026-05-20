@@ -534,11 +534,11 @@ const AdminNotifications = () => {
 
   return (
     <div
-      className={`h-full w-full overflow-y-auto px-4 pb-8 pt-20 sm:px-6 lg:px-10 md:pt-24 custom-scrollbar ${
+      className={`ui-page-shell custom-scrollbar ${
         isDark ? "bg-slate-950/45" : "bg-slate-50/80"
       }`}
     >
-      <div className={`mb-5 rounded-2xl border p-5 ${
+      <div className={`ui-hero-card mb-5 rounded-2xl border p-5 ${
         isDark ? "border-slate-700 bg-slate-900/80" : "border-slate-200 bg-white"
       }`}>
         <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
@@ -548,7 +548,7 @@ const AdminNotifications = () => {
             }`}>
               Admin Desk
             </p>
-            <h1 className={`text-3xl font-bold ${isDark ? "text-slate-100" : "text-slate-900"}`}>
+            <h1 className={`font-display text-3xl font-bold ${isDark ? "text-slate-100" : "text-slate-900"}`}>
               Notification Center
             </h1>
             <p className={`mt-1 text-xs ${isDark ? "text-slate-400" : "text-slate-500"}`}>
@@ -579,7 +579,7 @@ const AdminNotifications = () => {
             setApprovalFilter("PENDING");
             scrollToSection("lead");
           }}
-          className={`rounded-xl border p-3 text-left transition-colors ${
+          className={`ui-soft-panel rounded-xl border p-3 text-left transition-colors ${
             isDark
               ? "border-slate-700 bg-slate-900/80 hover:border-amber-300/40"
               : "border-slate-200 bg-white hover:border-amber-300"
@@ -598,7 +598,7 @@ const AdminNotifications = () => {
             setApprovalFilter("APPROVED");
             scrollToSection("lead");
           }}
-          className={`rounded-xl border p-3 text-left transition-colors ${
+          className={`ui-soft-panel rounded-xl border p-3 text-left transition-colors ${
             isDark
               ? "border-slate-700 bg-slate-900/80 hover:border-emerald-300/40"
               : "border-slate-200 bg-white hover:border-emerald-300"
@@ -617,7 +617,7 @@ const AdminNotifications = () => {
             setApprovalFilter("REJECTED");
             scrollToSection("lead");
           }}
-          className={`rounded-xl border p-3 text-left transition-colors ${
+          className={`ui-soft-panel rounded-xl border p-3 text-left transition-colors ${
             isDark
               ? "border-slate-700 bg-slate-900/80 hover:border-rose-300/40"
               : "border-slate-200 bg-white hover:border-rose-300"
@@ -636,7 +636,7 @@ const AdminNotifications = () => {
             setApprovalFilter("ALL");
             scrollToSection("inventory");
           }}
-          className={`rounded-xl border p-3 text-left transition-colors ${
+          className={`ui-soft-panel rounded-xl border p-3 text-left transition-colors ${
             isDark
               ? "border-slate-700 bg-slate-900/80 hover:border-cyan-300/40"
               : "border-slate-200 bg-white hover:border-cyan-300"
@@ -651,7 +651,7 @@ const AdminNotifications = () => {
         </button>
       </div>
 
-      <div className={`mb-5 rounded-xl border p-3 ${isDark ? "border-slate-700 bg-slate-900/75" : "border-slate-200 bg-white"}`}>
+      <div className={`ui-soft-panel mb-5 rounded-xl border p-3 ${isDark ? "border-slate-700 bg-slate-900/75" : "border-slate-200 bg-white"}`}>
         <div className="grid grid-cols-1 gap-2 md:grid-cols-3">
           <div className="relative md:col-span-2">
             <Search size={14} className={`absolute left-3 top-1/2 -translate-y-1/2 ${isDark ? "text-slate-500" : "text-slate-400"}`} />
@@ -696,7 +696,7 @@ const AdminNotifications = () => {
         </div>
       )}
 
-      <section className={`mb-5 rounded-2xl border p-4 ${
+      <section className={`ui-soft-panel mb-5 rounded-2xl border p-4 ${
         isDark ? "border-slate-700 bg-slate-900/75" : "border-slate-200 bg-white"
       }`}>
         <div className="mb-3 flex items-center justify-between gap-2">
