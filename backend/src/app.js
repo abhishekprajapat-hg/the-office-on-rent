@@ -85,6 +85,7 @@ app.get("/api/metrics", async (req, res) => {
   return metricsHandler(req, res);
 });
 
+app.use("/api/public", require("./routes/publicInventory.routes"));
 app.use("/api", apiLimiter);
 app.use("/api/client", require("./routes/client.routes"));
 app.use("/api/leads", require("./routes/lead.routes"));

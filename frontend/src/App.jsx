@@ -21,7 +21,7 @@ import {
 /* =======================
    LAZY IMPORTS
 ======================= */
-const Navbar = lazy(() => import("./components/layout/Navbar"));
+const Sidebar = lazy(() => import("./components/layout/Sidebar"));
 const Login = lazy(() => import("./components/auth/Login"));
 
 const ManagerDashboard = lazy(() => import("./modules/manager/ManagerDashboard"));
@@ -49,6 +49,7 @@ const DataUseNotice = lazy(() => import("./modules/legal/DataUseNotice"));
 const ServiceTermsNotice = lazy(() => import("./modules/legal/ServiceTermsNotice"));
 const Performance = lazy(() => import("./modules/reports/Performance"));
 const UserProfile = lazy(() => import("./modules/profile/UserProfile"));
+const SharedInventoryView = lazy(() => import("./modules/inventory/SharedInventoryView"));
 
 const EARTH_RADIUS_METERS = 6371000;
 const LOCATION_SYNC_MIN_INTERVAL_MS = 30000;
@@ -58,6 +59,7 @@ const PUBLIC_ROUTE_PREFIXES = [
   "/terms-and-conditions",
   "/data-use-notice",
   "/service-terms",
+  "/shared",
 ];
 const FORCE_LIGHT_ROUTE_PREFIXES = [
   "/login",
@@ -65,6 +67,7 @@ const FORCE_LIGHT_ROUTE_PREFIXES = [
   "/terms-and-conditions",
   "/data-use-notice",
   "/service-terms",
+  "/shared",
 ];
 const MANAGEMENT_ROLES = ["MANAGER", "ASSISTANT_MANAGER", "TEAM_LEADER"];
 const CHAT_REFRESH_FALLBACK_ROLES = ["EXECUTIVE", "FIELD_EXECUTIVE"];
@@ -748,7 +751,7 @@ export default function App() {
                 >
                   {!isPublicPage && (
                     <>
-                      <Navbar
+                      <Sidebar
                         userRole={userRole}
                         onLogout={handleLogout}
                         theme={theme}
@@ -759,11 +762,9 @@ export default function App() {
                   )}
 
                   <main
-                    className={
-                      isChatPage
-                        ? "workspace-main relative min-h-0 flex flex-1 flex-col overflow-hidden pt-16 app-page-bg"
-                        : "workspace-main relative min-h-0 flex flex-1 flex-col pt-16 overflow-hidden app-page-bg"
-                    }
+                    className={`workspace-main relative min-h-0 flex flex-1 flex-col overflow-hidden app-page-bg ${
+                      !isPublicPage ? "pt-14 md:pl-12 md:pt-0" : ""
+                    }`}
                   >
                     <div className={routeViewportClass}>
                       <Routes>
@@ -888,6 +889,7 @@ export default function App() {
                         <Route path="/terms-and-conditions" element={<ServiceTermsNotice />} />
                         <Route path="/data-use-notice" element={<DataUseNotice />} />
                         <Route path="/service-terms" element={<ServiceTermsNotice />} />
+                        <Route path="/shared/inventory/:shareToken" element={<SharedInventoryView />} />
                         <Route path="/portal/*" element={<Navigate to="/" replace />} />
                       </Routes>
                     </div>

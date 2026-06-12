@@ -150,8 +150,8 @@ const Navbar = ({ userRole = "manager", onLogout, theme = "light", onToggleTheme
         transition={{ duration: 0.35 }}
         className={`fixed top-0 left-0 right-0 h-16 z-50 border-b backdrop-blur-2xl overflow-visible ${
           isDark
-            ? "bg-slate-950/82 border-cyan-200/20 shadow-[0_16px_48px_-28px_rgba(2,6,23,0.85)]"
-            : "bg-white/82 border-slate-300/60 shadow-[0_16px_44px_-30px_rgba(15,23,42,0.38)]"
+            ? "bg-slate-950/80 border-cyan-200/20 shadow-[0_16px_48px_-28px_rgba(2,6,23,0.85)]"
+            : "bg-white/80 border-slate-300/60 shadow-[0_16px_44px_-30px_rgba(15,23,42,0.38)]"
         }`}
       >
         <div className="h-full flex items-center gap-2 sm:gap-3 px-2 sm:px-4">

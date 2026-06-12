@@ -671,10 +671,15 @@ export const LeadsMatrixTable = ({
   loading,
   filteredLeads,
   onOpenLeadDetails,
+  onInlineStatusChange,
+  updatingInlineStatusId,
+  leadStatuses = [],
   getStatusColor,
   getStatusLabel,
   formatDate,
 }) => {
+  const [openStatusMenuId, setOpenStatusMenuId] = React.useState("");
+
   const isFollowUpDue = (lead) => {
     if (!lead?.nextFollowUp) return false;
     const followUpMs = new Date(lead.nextFollowUp).getTime();
@@ -688,6 +693,103 @@ export const LeadsMatrixTable = ({
       .slice(0, 2)
       .map((part) => part.charAt(0).toUpperCase())
       .join("") || "LD";
+
+  const handleRowKeyDown = (event, lead) => {
+    if (event.key !== "Enter" && event.key !== " ") return;
+    event.preventDefault();
+    onOpenLeadDetails(lead);
+  };
+
+  const StatusPicker = ({ lead, compact = false }) => {
+    const leadId = String(lead?._id || "");
+    const isUpdating = updatingInlineStatusId === leadId;
+    const currentStatus = String(lead?.status || "NEW").toUpperCase();
+    const isOpen = openStatusMenuId === leadId;
+
+    const handleStatusSelect = (status) => {
+      const nextStatus = String(status || "").trim().toUpperCase();
+      setOpenStatusMenuId("");
+
+      if (nextStatus === "CLOSED") {
+        onOpenLeadDetails(lead);
+        return;
+      }
+
+      onInlineStatusChange?.(lead, nextStatus);
+    };
+
+    return (
+      <div
+        className={`relative inline-flex ${isOpen ? "z-[90]" : "z-10"}`}
+        onClick={(event) => event.stopPropagation()}
+        onKeyDown={(event) => event.stopPropagation()}
+      >
+        <button
+          type="button"
+          disabled={isUpdating}
+          onClick={() => setOpenStatusMenuId((prev) => (prev === leadId ? "" : leadId))}
+          className={`inline-flex items-center gap-1.5 rounded-full border py-1 pl-2.5 pr-2 font-bold uppercase outline-none transition-all focus:ring-2 ${
+            compact ? "text-[10px]" : "text-[11px]"
+          } ${getStatusColor(lead?.status)} ${
+            isUpdating ? "cursor-wait opacity-60" : "cursor-pointer hover:shadow-sm"
+          } ${
+            isDark ? "focus:ring-cyan-300/20" : "focus:ring-blue-200"
+          }`}
+          title="Change lead status"
+          aria-label={`Change status for ${lead?.name || "lead"}`}
+          aria-expanded={isOpen}
+        >
+          <span>{isUpdating ? "Updating" : getStatusLabel(currentStatus)}</span>
+          <span className={`text-[9px] transition-transform ${isOpen ? "rotate-180" : ""}`}>
+            v
+          </span>
+        </button>
+
+        {isOpen ? (
+          <div
+            className={`absolute left-0 top-full z-[100] mt-1.5 w-44 overflow-hidden rounded-xl border p-1 text-left shadow-2xl backdrop-blur-xl ${
+              isDark
+                ? "border-slate-700 bg-slate-950/95"
+                : "border-slate-200 bg-white/95"
+            }`}
+          >
+            {leadStatuses.map((status) => {
+              const isCurrent = status === currentStatus;
+              const isClosed = status === "CLOSED";
+
+              return (
+                <button
+                  type="button"
+                  key={status}
+                  onClick={() => handleStatusSelect(status)}
+                  className={`flex w-full items-center justify-between gap-3 rounded-lg px-2.5 py-1.5 text-[11px] font-bold uppercase transition-colors ${
+                    isCurrent
+                      ? isDark
+                        ? "bg-cyan-400/15 text-cyan-100"
+                        : "bg-blue-50 text-blue-700"
+                      : isDark
+                        ? "text-slate-300 hover:bg-white/10 hover:text-white"
+                        : "text-slate-700 hover:bg-slate-100 hover:text-slate-950"
+                  }`}
+                >
+                  <span className="min-w-0 truncate">{getStatusLabel(status)}</span>
+                  {isClosed ? (
+                    <span className={isDark ? "shrink-0 text-[9px] text-amber-200" : "shrink-0 text-[9px] text-amber-700"}>
+                      OPEN
+                    </span>
+                  ) : isCurrent ? (
+                    <span className={isDark ? "shrink-0 text-[9px] text-cyan-200" : "shrink-0 text-[9px] text-blue-600"}>
+                      ACTIVE
+                    </span>
+                  ) : null}
+                </button>
+              );
+            })}
+          </div>
+        ) : null}
+      </div>
+    );
+  };
 
   return (
     <div className={`ui-soft-panel relative flex min-h-[420px] flex-1 flex-col overflow-hidden rounded-3xl shadow-sm ${
@@ -719,14 +821,19 @@ export const LeadsMatrixTable = ({
               {filteredLeads.map((lead) => {
                 const pendingAmount = getLeadPendingAmount(lead);
                 const followUpDue = isFollowUpDue(lead);
+                const isStatusMenuOpen = openStatusMenuId === String(lead._id || "");
                 return (
-                  <Motion.button
-                    type="button"
+                  <Motion.div
+                    role="button"
+                    tabIndex={0}
                     key={lead._id}
                     initial={{ opacity: 0, y: 6 }}
                     animate={{ opacity: 1, y: 0 }}
                     onClick={() => onOpenLeadDetails(lead)}
-                    className={`w-full rounded-2xl border p-3.5 text-left transition-all ${
+                    onKeyDown={(event) => handleRowKeyDown(event, lead)}
+                    className={`relative w-full rounded-2xl border p-3.5 text-left transition-all ${
+                      isStatusMenuOpen ? "z-50" : "z-0"
+                    } ${
                       isDark
                         ? "border-slate-700 bg-slate-950/70 hover:border-cyan-300/40"
                         : "border-slate-200 bg-white hover:border-cyan-300 hover:bg-slate-50"
@@ -752,9 +859,7 @@ export const LeadsMatrixTable = ({
                         </div>
                       </div>
 
-                      <span className={`rounded-full border px-2.5 py-1 text-[10px] font-bold uppercase ${getStatusColor(lead.status)}`}>
-                        {getStatusLabel(lead.status) || "-"}
-                      </span>
+                      <StatusPicker lead={lead} compact />
                     </div>
 
                     <div className={`mt-3 grid grid-cols-1 gap-1.5 text-xs ${isDark ? "text-slate-300" : "text-slate-600"}`}>
@@ -785,7 +890,7 @@ export const LeadsMatrixTable = ({
                       Open profile
                       <ArrowUpRight size={12} />
                     </div>
-                  </Motion.button>
+                  </Motion.div>
                 );
               })}
             </div>
@@ -807,14 +912,19 @@ export const LeadsMatrixTable = ({
                 {filteredLeads.map((lead) => {
                   const pendingAmount = getLeadPendingAmount(lead);
                   const followUpDue = isFollowUpDue(lead);
+                  const isStatusMenuOpen = openStatusMenuId === String(lead._id || "");
                   return (
-                    <Motion.button
-                      type="button"
+                    <Motion.div
+                      role="button"
+                      tabIndex={0}
                       key={lead._id}
                       initial={{ opacity: 0, y: 6 }}
                       animate={{ opacity: 1, y: 0 }}
                       onClick={() => onOpenLeadDetails(lead)}
-                      className={`group relative grid w-full grid-cols-12 items-center gap-3 overflow-hidden rounded-2xl border px-4 py-3 text-left transition-all ${
+                      onKeyDown={(event) => handleRowKeyDown(event, lead)}
+                      className={`group relative grid w-full grid-cols-12 items-center gap-3 overflow-visible rounded-2xl border px-4 py-3 text-left transition-all ${
+                        isStatusMenuOpen ? "z-50" : "z-0"
+                      } ${
                         isDark
                           ? "border-slate-700 bg-slate-950/65 hover:border-cyan-300/45 hover:bg-slate-900"
                           : "border-slate-200 bg-white hover:border-cyan-300 hover:bg-slate-50"
@@ -864,9 +974,7 @@ export const LeadsMatrixTable = ({
                       </div>
 
                       <div className="col-span-2">
-                        <span className={`rounded-full border px-2.5 py-1 text-[11px] font-bold uppercase ${getStatusColor(lead.status)}`}>
-                          {getStatusLabel(lead.status) || "-"}
-                        </span>
+                        <StatusPicker lead={lead} />
                       </div>
 
                       <div className={`col-span-2 text-xs ${isDark ? "text-slate-300" : "text-slate-600"}`}>
@@ -892,7 +1000,7 @@ export const LeadsMatrixTable = ({
                           <ArrowUpRight size={13} className={isDark ? "text-slate-500 group-hover:text-cyan-200" : "text-slate-400 group-hover:text-cyan-600"} />
                         </div>
                       </div>
-                    </Motion.button>
+                    </Motion.div>
                   );
                 })}
               </div>

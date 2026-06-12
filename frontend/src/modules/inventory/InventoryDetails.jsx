@@ -5,10 +5,13 @@ import {
   ArrowLeft,
   Building2,
   CalendarClock,
+  Check,
+  Copy,
   FileText,
   Hash,
   History,
   Image as ImageIcon,
+  Link,
   Loader,
   Share2,
   ShieldCheck,
@@ -17,6 +20,7 @@ import {
 import {
   getInventoryAssetActivity,
   getInventoryAssetById,
+  createInventoryShareLink,
 } from "../../services/inventoryService";
 import { toErrorMessage } from "../../utils/errorMessage";
 
@@ -274,6 +278,39 @@ const InventoryDetails = () => {
     });
   };
 
+  const [shareLoading, setShareLoading] = useState(false);
+  const [shareCopied, setShareCopied] = useState(false);
+  const [shareError, setShareError] = useState("");
+
+  const handleShareWithClient = async () => {
+    const inventoryId = inventory?._id || asset?._id;
+    if (!inventoryId) return;
+
+    try {
+      setShareLoading(true);
+      setShareError("");
+      setShareCopied(false);
+      const { shareToken } = await createInventoryShareLink(inventoryId);
+      if (!shareToken) {
+        setShareError("Failed to generate share link");
+        return;
+      }
+
+      const origin = window.location.origin;
+      const shareUrl = `${origin}/shared/inventory/${shareToken}`;
+
+      if (navigator.clipboard) {
+        await navigator.clipboard.writeText(shareUrl);
+      }
+      setShareCopied(true);
+      setTimeout(() => setShareCopied(false), 3000);
+    } catch (err) {
+      setShareError(toErrorMessage(err, "Failed to create share link"));
+    } finally {
+      setShareLoading(false);
+    }
+  };
+
   if (loading) {
     return (
       <div className="ui-page-shell custom-scrollbar flex items-center justify-center text-slate-400 gap-2">
@@ -335,6 +372,27 @@ const InventoryDetails = () => {
               <Share2 size={13} />
               Share to Chat
             </button>
+          )}
+          <button
+            onClick={handleShareWithClient}
+            disabled={shareLoading}
+            className={`inline-flex items-center gap-1.5 rounded-full border px-3 py-1.5 text-xs font-bold uppercase tracking-widest transition-all ${
+              shareCopied
+                ? "border-emerald-300 bg-emerald-50 text-emerald-700"
+                : "border-violet-200 bg-violet-50 text-violet-700 hover:bg-violet-100"
+            } disabled:opacity-50`}
+          >
+            {shareLoading ? (
+              <Loader size={13} className="animate-spin" />
+            ) : shareCopied ? (
+              <Check size={13} />
+            ) : (
+              <Link size={13} />
+            )}
+            {shareCopied ? "Link Copied!" : "Share with Client"}
+          </button>
+          {shareError && (
+            <span className="text-xs text-red-500 ml-1">{shareError}</span>
           )}
         </div>
       </div>

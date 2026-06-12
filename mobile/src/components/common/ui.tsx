@@ -1,6 +1,6 @@
 import React from "react";
 import { Pressable, StyleSheet, Text, TextInput, View } from "react-native";
-import { colors, radii } from "../../theme/tokens";
+import { clay, colors, radii } from "../../theme/tokens";
 
 export const AppCard = ({ children, style }: { children: React.ReactNode; style?: object }) => (
   <View style={[styles.card, style]}>{children}</View>
@@ -86,15 +86,17 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: colors.border,
     borderRadius: radii.lg,
-    backgroundColor: colors.surface,
+    backgroundColor: colors.surfaceRaised,
     padding: 12,
+    ...clay.shadow,
   },
   button: {
     height: 42,
-    borderRadius: radii.md,
+    borderRadius: radii.lg,
     alignItems: "center",
     justifyContent: "center",
     paddingHorizontal: 12,
+    ...clay.shadowSmall,
   },
   buttonPrimary: {
     backgroundColor: colors.primary,
@@ -102,7 +104,7 @@ const styles = StyleSheet.create({
   buttonGhost: {
     borderWidth: 1,
     borderColor: colors.borderStrong,
-    backgroundColor: colors.surface,
+    backgroundColor: colors.surfaceRaised,
   },
   buttonDisabled: {
     opacity: 0.6,
@@ -115,24 +117,29 @@ const styles = StyleSheet.create({
     color: colors.primaryText,
   },
   buttonTextGhost: {
-    color: "#334155",
+    color: colors.text,
   },
   chip: {
     borderWidth: 1,
-    borderColor: colors.borderStrong,
-    borderRadius: 16,
+    borderColor: colors.border,
+    borderRadius: radii.pill,
     height: 34,
     paddingHorizontal: 10,
     justifyContent: "center",
     alignSelf: "flex-start",
-    backgroundColor: colors.surface,
+    backgroundColor: colors.surfaceRaised,
+    shadowColor: colors.highlight,
+    shadowOffset: { width: -1, height: -1 },
+    shadowOpacity: 0.62,
+    shadowRadius: 2,
+    elevation: 0,
   },
   chipActive: {
-    borderColor: colors.primary,
+    borderColor: colors.accent,
     backgroundColor: colors.primary,
   },
   chipText: {
-    color: "#334155",
+    color: colors.text,
     fontSize: 12,
     fontWeight: "600",
   },
@@ -148,5 +155,10 @@ const styles = StyleSheet.create({
     height: 42,
     paddingHorizontal: 12,
     marginBottom: 10,
+    shadowColor: colors.shadow,
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.03,
+    shadowRadius: 2,
+    elevation: 0,
   },
 });

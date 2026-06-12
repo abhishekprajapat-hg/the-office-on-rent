@@ -35,11 +35,11 @@ export const TeamChatSidebar = ({
   chatFilter,
   setChatFilter,
 }) => (
-  <aside className={`${mobileSidebarVisible ? "flex" : "hidden md:flex"} ui-soft-panel min-h-0 flex-col overflow-hidden border-b p-2 pb-3 sm:p-3 md:border-b-0 md:border-r ${
+  <aside className={`${mobileSidebarVisible ? "flex" : "hidden md:flex"} ui-soft-panel chat-sidebar min-h-0 flex-col overflow-hidden border-b p-2 pb-3 sm:p-3 md:border-b-0 md:border-r ${
     isDark ? "border-slate-700 bg-slate-900/85" : "border-slate-200 bg-white/95"
   }`}>
     <div
-      className={`ui-hero-card rounded-xl px-2.5 py-2.5 sm:px-3 ${
+      className={`ui-hero-card chat-sidebar-hero rounded-xl px-2.5 py-2.5 sm:px-3 ${
         isDark
           ? "border-slate-700 bg-slate-950/60"
           : "border-cyan-200 bg-cyan-50/80"
@@ -84,7 +84,7 @@ export const TeamChatSidebar = ({
         </div>
       </div>
 
-      <div className={`mt-2 flex h-10 items-center gap-2 rounded-lg border px-2.5 ${
+      <div className={`chat-search-box mt-2 flex h-10 items-center gap-2 rounded-lg border px-2.5 ${
         isDark
           ? "border-slate-700 bg-slate-900/90 text-slate-300"
           : "border-cyan-200 bg-white text-slate-600"
@@ -100,7 +100,7 @@ export const TeamChatSidebar = ({
         />
       </div>
 
-      <div className={`mt-2 grid grid-cols-2 gap-1 rounded-lg p-1 ${
+      <div className={`chat-filter-tabs mt-2 grid grid-cols-2 gap-1 rounded-lg p-1 ${
         isDark ? "bg-slate-900/90" : "bg-slate-100"
       }`}>
         <button
@@ -136,7 +136,7 @@ export const TeamChatSidebar = ({
         </button>
       </div>
 
-      <div className={`mt-2 grid grid-cols-2 gap-1 rounded-lg p-1 md:hidden ${
+      <div className={`chat-filter-tabs mt-2 grid grid-cols-2 gap-1 rounded-lg p-1 md:hidden ${
         isDark ? "bg-slate-900/90" : "bg-slate-100"
       }`}>
         <button
@@ -207,7 +207,7 @@ export const TeamChatSidebar = ({
                 key={conversation._id}
                 type="button"
                 onClick={() => onPickConversation(conversation._id)}
-                className={`w-full rounded-2xl border p-2 text-left transition sm:p-2.5 ${
+                className={`chat-list-item w-full rounded-2xl border p-2 text-left transition sm:p-2.5 ${
                   active
                     ? isDark
                       ? "border-cyan-400/45 bg-cyan-500/12"
@@ -218,7 +218,7 @@ export const TeamChatSidebar = ({
                 }`}
               >
                 <div className="flex items-start gap-2.5">
-                  <div className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-[10px] font-semibold sm:h-10 sm:w-10 ${
+                  <div className={`chat-avatar flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-[10px] font-semibold sm:h-10 sm:w-10 ${
                     isDark ? "bg-slate-800 text-slate-200" : "bg-slate-200 text-slate-700"
                   }`}>
                     {getInitials(peer.name)}
@@ -278,7 +278,7 @@ export const TeamChatSidebar = ({
                 key={contact._id}
                 type="button"
                 onClick={() => onPickContact(contact._id)}
-                className={`w-full rounded-xl border px-2.5 py-2 text-left transition-colors sm:py-2.5 ${
+                className={`chat-list-item w-full rounded-xl border px-2.5 py-2 text-left transition-colors sm:py-2.5 ${
                   active
                     ? isDark
                       ? "border-cyan-400/35 bg-cyan-500/12"
@@ -290,7 +290,7 @@ export const TeamChatSidebar = ({
               >
                 <div className="flex items-center justify-between gap-1.5">
                   <div className="flex min-w-0 items-center gap-2">
-                    <div className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-[10px] font-semibold ${
+                    <div className={`chat-avatar flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-[10px] font-semibold ${
                       isDark ? "bg-slate-800 text-slate-200" : "bg-slate-200 text-slate-700"
                     }`}>
                       {getInitials(contact.name)}

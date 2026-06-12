@@ -7,6 +7,7 @@ const {
   bulkCreateInventoryDirect,
   getInventoryActivities,
 } = require("../services/inventoryWorkflow.service");
+const InventoryShareLink = require("../models/InventoryShareLink");
 const logger = require("../config/logger");
 const {
   parsePagination,
@@ -399,6 +400,61 @@ exports.getInventoryActivity = async (req, res) => {
     });
   } catch (error) {
     return handleControllerError(req, res, error, "Failed to load inventory activity");
+  }
+};
+
+exports.createShareLink = async (req, res) => {
+  try {
+    const inventoryId = req.params.id;
+    const user = req.user;
+
+    // Validate the inventory exists and belongs to user's company
+    const inventory = await getInventoryById({
+      user,
+      inventoryId,
+    });
+
+    if (!inventory) {
+      return res.status(404).json({ message: "Inventory not found" });
+    }
+
+    const companyId = user.companyId;
+
+    // Reuse existing active, non-expired link if one exists
+    const existingLink = await InventoryShareLink.findOne({
+      inventoryId: inventory._id,
+      companyId,
+      isActive: true,
+      expiresAt: { $gt: new Date() },
+    }).lean();
+
+    if (existingLink) {
+      return res.json({
+        message: "Share link retrieved",
+        shareToken: existingLink.token,
+        expiresAt: existingLink.expiresAt,
+      });
+    }
+
+    // Generate a new share link
+    const token = InventoryShareLink.generateToken();
+    const expiresAt = InventoryShareLink.defaultExpiresAt();
+
+    await InventoryShareLink.create({
+      token,
+      inventoryId: inventory._id,
+      companyId,
+      createdBy: user._id,
+      expiresAt,
+    });
+
+    return res.status(201).json({
+      message: "Share link created",
+      shareToken: token,
+      expiresAt,
+    });
+  } catch (error) {
+    return handleControllerError(req, res, error, "Failed to create share link");
   }
 };
 

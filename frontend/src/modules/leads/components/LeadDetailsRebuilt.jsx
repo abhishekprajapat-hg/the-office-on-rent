@@ -1,5 +1,6 @@
 import React from "react";
 import { motion as Motion } from "framer-motion";
+import { createInventoryShareLink } from "../../../services/inventoryService";
 import {
   ArrowLeft,
   Building2,
@@ -455,6 +456,51 @@ const LeadDetailsRebuiltContent = ({
   const [proposalValidityDays, setProposalValidityDays] = React.useState("7");
   const [proposalSpecialNote, setProposalSpecialNote] = React.useState("");
   const [proposalActionMessage, setProposalActionMessage] = React.useState("");
+  const [shareLinks, setShareLinks] = React.useState({});
+
+  React.useEffect(() => {
+    if (!Array.isArray(selectedLeadRelatedInventories) || !selectedLeadRelatedInventories.length) {
+      setShareLinks({});
+      return;
+    }
+
+    let isMounted = true;
+
+    const fetchLinks = async () => {
+      const links = {};
+      const origin = window.location.origin;
+
+      try {
+        await Promise.all(
+          selectedLeadRelatedInventories.map(async (inventory) => {
+            const inventoryId = String(inventory?._id || "").trim();
+            if (!inventoryId) return;
+
+            try {
+              const { shareToken } = await createInventoryShareLink(inventoryId);
+              if (shareToken && isMounted) {
+                links[inventoryId] = `${origin}/shared/inventory/${shareToken}`;
+              }
+            } catch (err) {
+              console.error(`Failed to fetch share link for inventory ${inventoryId}:`, err);
+            }
+          })
+        );
+
+        if (isMounted) {
+          setShareLinks(links);
+        }
+      } catch (err) {
+        console.error("Failed to fetch share links:", err);
+      }
+    };
+
+    fetchLinks();
+
+    return () => {
+      isMounted = false;
+    };
+  }, [selectedLeadRelatedInventories]);
   const [closureUploadMessage, setClosureUploadMessage] = React.useState("");
   const [uploadingClosureDocuments, setUploadingClosureDocuments] = React.useState(false);
   const [proposalSelectedPropertyIds, setProposalSelectedPropertyIds] = React.useState([]);
@@ -938,6 +984,9 @@ const LeadDetailsRebuiltContent = ({
       lines.push(`Inventory Category: ${toTitleCaseLabel(inventory?.inventoryType) || "-"}`);
       lines.push(`Category: ${String(inventory?.category || "Apartment").trim() || "-"}`);
       lines.push(`Price: ${formatCurrencyInr(inventory?.price)}`);
+      if (shareLinks[property.id]) {
+        lines.push(`Details Link: ${shareLinks[property.id]}`);
+      }
     });
 
     lines.push("");
@@ -964,6 +1013,7 @@ const LeadDetailsRebuiltContent = ({
     selectedLead?.projectInterested,
     selectedPropertyCount,
     selectedProposalProperties,
+    shareLinks,
   ]);
 
   const proposalWhatsAppHref = React.useMemo(() => {
@@ -1064,101 +1114,231 @@ const LeadDetailsRebuiltContent = ({
     const contentWidth = pageWidth - (margin * 2);
     let cursorY = margin;
 
-    const ensureSpace = (requiredHeight = 20) => {
-      if (cursorY + requiredHeight > pageHeight - margin) {
+    const validityDays = String(proposalValidityDays || "7").trim() || "7";
+    const clientName = String(selectedLead?.name || "Client").trim();
+    const now = new Date();
+    const proposalDate = `${now.getDate()}/${now.getMonth() + 1}/${now.getFullYear()}`;
+
+    const formatCurrencyPdf = (value) => {
+      const amount = Number(value);
+      if (!Number.isFinite(amount) || amount <= 0) return "On request";
+      return `Rs. ${amount.toLocaleString("en-IN")}`;
+    };
+
+    // Page 1 Header
+    doc.setFillColor(15, 118, 110); // Teal primary color
+    doc.rect(0, 0, 595, 100, "F");
+
+    doc.setFont("helvetica", "bold");
+    doc.setFontSize(18);
+    doc.setTextColor(255, 255, 255);
+    doc.text("SAMVID REALTY", 36, 45);
+
+    doc.setFont("helvetica", "normal");
+    doc.setFontSize(11);
+    doc.setTextColor(204, 251, 241); // Light teal text
+    doc.text("PROPERTY PROPOSAL SUMMARY", 36, 68);
+
+    // Client & Metadata details
+    doc.setFont("helvetica", "bold");
+    doc.setFontSize(10);
+    doc.setTextColor(100, 116, 139); // slate 500
+    doc.text("PREPARED FOR:", 36, 135);
+    doc.setFont("helvetica", "bold");
+    doc.setFontSize(13);
+    doc.setTextColor(15, 23, 42); // slate 900
+    doc.text(clientName.toUpperCase(), 36, 153);
+
+    doc.setFont("helvetica", "bold");
+    doc.setFontSize(10);
+    doc.setTextColor(100, 116, 139);
+    doc.text("PROPOSAL DATE:", 360, 135);
+    doc.setFont("helvetica", "normal");
+    doc.setFontSize(11);
+    doc.setTextColor(15, 23, 42);
+    doc.text(proposalDate, 360, 153);
+
+    doc.setFont("helvetica", "bold");
+    doc.setFontSize(10);
+    doc.setTextColor(100, 116, 139);
+    doc.text("VALIDITY:", 470, 135);
+    doc.setFont("helvetica", "normal");
+    doc.setFontSize(11);
+    doc.setTextColor(15, 23, 42);
+    doc.text(`${validityDays} Days`, 470, 153);
+
+    // Separator line
+    doc.setDrawColor(226, 232, 240); // slate 200
+    doc.setLineWidth(1);
+    doc.line(36, 175, 559, 175);
+
+    cursorY = 200;
+
+    for (let i = 0; i < selectedProposalProperties.length; i++) {
+      const property = selectedProposalProperties[i];
+      const inventory = property.inventory || {};
+      const hasImages = property.imageUrls.length > 0;
+      const spaceNeeded = hasImages ? 280 : 130;
+
+      // Add a page break if details + photos won't fit on this page
+      if (cursorY + spaceNeeded > pageHeight - margin) {
         doc.addPage();
-        cursorY = margin;
+        // Page header on subsequent pages
+        doc.setFillColor(15, 118, 110);
+        doc.rect(0, 0, 595, 35, "F");
+        doc.setFont("helvetica", "bold");
+        doc.setFontSize(9);
+        doc.setTextColor(255, 255, 255);
+        doc.text(`PROPERTY PROPOSAL FOR ${clientName.toUpperCase()}`, 36, 22);
+        cursorY = 60;
       }
-    };
 
-    const addText = (text, options = {}) => {
-      const {
-        fontSize = 11,
-        bold = false,
-        indent = 0,
-        spacing = 4,
-        color = [15, 23, 42],
-      } = options;
-      const safeText = String(text || "").trim() || "-";
-      const lines = doc.splitTextToSize(safeText, contentWidth - indent);
-      const lineHeight = fontSize + 3;
-      ensureSpace((lines.length * lineHeight) + spacing);
-      doc.setFont("helvetica", bold ? "bold" : "normal");
-      doc.setFontSize(fontSize);
-      doc.setTextColor(color[0], color[1], color[2]);
-      doc.text(lines, margin + indent, cursorY);
-      cursorY += (lines.length * lineHeight) + spacing;
-    };
+      // Property title
+      doc.setFont("helvetica", "bold");
+      doc.setFontSize(12);
+      doc.setTextColor(15, 118, 110); // Teal accent
+      doc.text(`PROPERTY ${i + 1}: ${property.label.toUpperCase()}`, 36, cursorY);
 
-    const lines = String(proposalText || "").split("\n");
-    lines.forEach((line) => {
-      const isTitle = line.trim() === "SAMVID REALTY - PROPERTY PROPOSAL";
-      addText(line, {
-        fontSize: isTitle ? 14 : 11,
-        bold: isTitle,
-        spacing: isTitle ? 8 : 4,
-      });
-    });
+      // Property card boundary box
+      const cardStart = cursorY + 10;
+      doc.setDrawColor(241, 245, 249); // slate 100
+      doc.setFillColor(248, 250, 252); // slate 50
+      doc.rect(36, cardStart, 523, 90, "FD");
 
-    if (proposalImageEntries.length > 0) {
-      addText("", { spacing: 2 });
-      addText("Property Photos", {
-        fontSize: 12,
-        bold: true,
-        spacing: 8,
-      });
+      // Key details column 1 (x=50)
+      doc.setFontSize(9);
+      doc.setFont("helvetica", "bold");
+      doc.setTextColor(100, 116, 139);
+      doc.text("Project:", 50, cardStart + 22);
+      doc.setFont("helvetica", "normal");
+      doc.setTextColor(15, 23, 42);
+      doc.text(String(inventory?.projectName || selectedLead?.projectInterested || "-").trim(), 125, cardStart + 22);
+
+      doc.setFont("helvetica", "bold");
+      doc.setTextColor(100, 116, 139);
+      doc.text("Location:", 50, cardStart + 42);
+      doc.setFont("helvetica", "normal");
+      doc.setTextColor(15, 23, 42);
+      doc.text(String(getInventoryLocationLabel(inventory) || selectedLead?.city || "-").trim(), 125, cardStart + 42);
+
+      doc.setFont("helvetica", "bold");
+      doc.setTextColor(100, 116, 139);
+      doc.text("Type:", 50, cardStart + 62);
+      doc.setFont("helvetica", "normal");
+      doc.setTextColor(15, 23, 42);
+      doc.text(String(inventory?.type || "Sale").trim(), 125, cardStart + 62);
+
+      // Key details column 2 (x=300)
+      doc.setFont("helvetica", "bold");
+      doc.setTextColor(100, 116, 139);
+      doc.text("Category:", 300, cardStart + 22);
+      doc.setFont("helvetica", "normal");
+      doc.setTextColor(15, 23, 42);
+      doc.text(String(inventory?.category || "Apartment").trim(), 370, cardStart + 22);
+
+      doc.setFont("helvetica", "bold");
+      doc.setTextColor(100, 116, 139);
+      doc.text("Asking Price:", 300, cardStart + 42);
+      doc.setFont("helvetica", "bold");
+      doc.setTextColor(16, 185, 129); // Emerald price tag
+      doc.text(formatCurrencyPdf(inventory?.price), 370, cardStart + 42);
+
+      // Clickable detail link inside PDF
+      const shareUrl = shareLinks[property.id];
+      if (shareUrl) {
+        doc.setFont("helvetica", "bold");
+        doc.setTextColor(3, 102, 214); // Blue link color
+        doc.text("CLICK TO VIEW DETAILS ONLINE", 300, cardStart + 62);
+        const linkWidth = doc.getTextWidth("CLICK TO VIEW DETAILS ONLINE");
+        // Draw underline
+        doc.setDrawColor(3, 102, 214);
+        doc.setLineWidth(0.5);
+        doc.line(300, cardStart + 64, 300 + linkWidth, cardStart + 64);
+        // Create actual PDF click link
+        doc.link(300, cardStart + 52, linkWidth, 12, { url: shareUrl });
+      }
+
+      cursorY = cardStart + 105;
+
+      // Draw property images if available
+      const images = property.imageUrls.slice(0, 2); // limit to 2 inline images side-by-side
+      if (images.length > 0) {
+        const imgWidth = 250;
+        const imgHeight = 140;
+
+        for (let imgIdx = 0; imgIdx < images.length; imgIdx++) {
+          const imgUrl = images[imgIdx];
+          const imgX = 36 + (imgIdx * (imgWidth + 23)); // 23pt gutter gap
+
+          try {
+            const source = await fetchPdfImageSource(imgUrl);
+            doc.addImage(
+              source.dataUrl,
+              source.format || "JPEG",
+              imgX,
+              cursorY,
+              imgWidth,
+              imgHeight,
+              undefined,
+              "FAST"
+            );
+          } catch {
+            // Draw placeholder card if load fails
+            doc.setDrawColor(226, 232, 240);
+            doc.setFillColor(248, 250, 252);
+            doc.rect(imgX, cursorY, imgWidth, imgHeight, "FD");
+            doc.setFont("helvetica", "normal");
+            doc.setFontSize(8);
+            doc.setTextColor(148, 163, 184);
+            doc.text("Photo preview unavailable", imgX + 70, cursorY + 75);
+          }
+        }
+        cursorY += imgHeight + 25;
+      } else {
+        cursorY += 15;
+      }
     }
 
-    const addProposalImage = async (imageEntry, index) => {
-      const imageLabel = String(imageEntry?.propertyLabel || `Property ${index + 1}`).trim();
-      const imageNumber = Number(imageEntry?.imageIndex || index + 1);
-      addText(`${imageLabel} - Image ${imageNumber}`, {
-        fontSize: 10,
-        bold: true,
-        spacing: 4,
-      });
+    // Special Note and Footer
+    const footerNeededSpace = proposalSpecialNote ? 100 : 50;
+    if (cursorY + footerNeededSpace > pageHeight - margin) {
+      doc.addPage();
+      doc.setFillColor(15, 118, 110);
+      doc.rect(0, 0, 595, 35, "F");
+      cursorY = 60;
+    }
 
-      try {
-        const source = await fetchPdfImageSource(imageEntry?.url);
-        const imageProps = doc.getImageProperties(source.dataUrl);
-        const rawWidth = Number(imageProps?.width) || 1;
-        const rawHeight = Number(imageProps?.height) || 1;
-        const safeRatio = rawHeight / rawWidth;
-        const maxRenderWidth = contentWidth;
-        const maxRenderHeight = Math.max(160, pageHeight - (margin * 2) - 90);
-        let renderWidth = maxRenderWidth;
-        let renderHeight = renderWidth * safeRatio;
+    if (proposalSpecialNote) {
+      doc.setFont("helvetica", "bold");
+      doc.setFontSize(10);
+      doc.setTextColor(15, 23, 42);
+      doc.text("SPECIAL NOTE:", 36, cursorY);
 
-        if (renderHeight > maxRenderHeight) {
-          renderHeight = maxRenderHeight;
-          renderWidth = renderHeight / safeRatio;
-        }
+      doc.setFont("helvetica", "normal");
+      doc.setFontSize(9);
+      doc.setTextColor(71, 85, 105);
+      const noteLines = doc.splitTextToSize(proposalSpecialNote, 523);
+      doc.text(noteLines, 36, cursorY + 15);
+      cursorY += (noteLines.length * 12) + 25;
+    }
 
-        ensureSpace(renderHeight + 14);
-        doc.addImage(
-          source.dataUrl,
-          source.format || "JPEG",
-          margin,
-          cursorY,
-          renderWidth,
-          renderHeight,
-          undefined,
-          "FAST",
-        );
-        cursorY += renderHeight + 10;
-      } catch {
-        addText("Image unavailable in PDF", {
-          fontSize: 10,
-          color: [148, 163, 184],
-          spacing: 10,
-        });
-      }
-    };
+    doc.setFont("helvetica", "normal");
+    doc.setFontSize(10);
+    doc.setTextColor(71, 85, 105);
+    doc.text("Regards,", 36, cursorY);
+    doc.setFont("helvetica", "bold");
+    doc.setTextColor(15, 118, 110);
+    doc.text("Samvid Realty", 36, cursorY + 15);
 
-    for (let index = 0; index < proposalImageEntries.length; index += 1) {
-      // Keep image rendering sequential for predictable PDF layout and memory usage.
-      // eslint-disable-next-line no-await-in-loop
-      await addProposalImage(proposalImageEntries[index], index);
+    // Apply Page Numbers on all pages
+    const totalPages = doc.internal.getNumberOfPages();
+    for (let p = 1; p <= totalPages; p++) {
+      doc.setPage(p);
+      doc.setFont("helvetica", "normal");
+      doc.setFontSize(8);
+      doc.setTextColor(148, 163, 184);
+      doc.text(`Page ${p} of ${totalPages}`, 500, 815);
+      doc.text("Generated by Samvid OS", 36, 815);
     }
 
     return doc.output("blob");

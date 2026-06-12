@@ -639,6 +639,7 @@ const LeadsMatrix = () => {
   const [isDiaryMicSupported, setIsDiaryMicSupported] = useState(false);
   const [isDiaryListening, setIsDiaryListening] = useState(false);
   const [savingUpdates, setSavingUpdates] = useState(false);
+  const [updatingInlineStatusId, setUpdatingInlineStatusId] = useState("");
   const [assigning, setAssigning] = useState(false);
   const [linkingProperty, setLinkingProperty] = useState(false);
   const [propertyActionInventoryId, setPropertyActionInventoryId] = useState("");
@@ -1187,6 +1188,48 @@ const LeadsMatrix = () => {
     setPaymentApprovalNoteDraft(String(updatedLead?.dealPayment?.approvalNote || ""));
     setClosureDocumentsDraft(sanitizeClosureDocumentList(updatedLead?.closureDocuments));
     setRequirementsDraft(mapLeadRequirementsToDraft(updatedLead?.requirements));
+  };
+
+  const applyInlineUpdatedLeadState = (updatedLead) => {
+    if (!updatedLead?._id) return;
+
+    setLeads((prev) =>
+      prev.map((lead) => (lead._id === updatedLead._id ? updatedLead : lead)),
+    );
+
+    if (String(selectedLead?._id || "") === String(updatedLead._id)) {
+      setSelectedLead(updatedLead);
+      setStatusDraft(String(updatedLead.status || "NEW"));
+    }
+  };
+
+  const handleInlineStatusChange = async (lead, nextStatus) => {
+    const leadId = String(lead?._id || "").trim();
+    const normalizedStatus = String(nextStatus || "").trim().toUpperCase();
+    if (!leadId || !normalizedStatus || normalizedStatus === String(lead?.status || "").toUpperCase()) {
+      return;
+    }
+
+    try {
+      setUpdatingInlineStatusId(leadId);
+      setError("");
+
+      const updatedLead = await updateLeadStatus(leadId, { status: normalizedStatus });
+
+      if (!updatedLead) {
+        await fetchLeads(true);
+      } else {
+        applyInlineUpdatedLeadState(updatedLead);
+      }
+
+      setSuccess(`Lead status updated to ${getStatusLabel(normalizedStatus)}`);
+    } catch (statusError) {
+      const message = toErrorMessage(statusError, "Failed to update lead status");
+      console.error(`Inline lead status update failed: ${message}`);
+      setError(message);
+    } finally {
+      setUpdatingInlineStatusId("");
+    }
   };
 
   const handleInventorySelection = (inventoryId) => {
@@ -1958,6 +2001,9 @@ const LeadsMatrix = () => {
               loading={loading}
               filteredLeads={filteredLeads}
               onOpenLeadDetails={handleOpenLeadDetailsPage}
+              onInlineStatusChange={handleInlineStatusChange}
+              updatingInlineStatusId={updatingInlineStatusId}
+              leadStatuses={LEAD_STATUSES}
               getStatusColor={getStatusColor}
               getStatusLabel={getStatusLabel}
               formatDate={formatDate}

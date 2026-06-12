@@ -8,9 +8,30 @@ html {
 }
 
 :root {
-  --bg-body: #f8fafc;
+  --bg-body: #f6f8fb;
   --text-body: #0f172a;
-  --bg-root: radial-gradient(circle at 12% 10%, #eef2ff 0%, #f8fafc 45%, #ffffff 100%);
+  --bg-root:
+    radial-gradient(circle at 10% 0%, rgba(37, 99, 235, 0.07), transparent 28%),
+    linear-gradient(180deg, #ffffff 0%, #f6f8fb 42%, #eef2f7 100%);
+  --clay-bg: #f6f8fb;
+  --clay-surface: #ffffff;
+  --clay-surface-strong: #ffffff;
+  --clay-surface-muted: #f1f5f9;
+  --clay-border: #e2e8f0;
+  --clay-border-strong: #cbd5e1;
+  --clay-text: #0f172a;
+  --clay-muted: #64748b;
+  --clay-accent: #2563eb;
+  --clay-accent-strong: #1d4ed8;
+  --clay-green: #059669;
+  --clay-rose: #e11d48;
+  --clay-gold: #d97706;
+  --clay-shadow: 0 18px 42px -34px rgba(15, 23, 42, 0.45);
+  --clay-shadow-sm: 0 10px 24px -20px rgba(15, 23, 42, 0.36);
+  --clay-shadow-inset: inset 1px 1px 2px rgba(148, 163, 184, 0.18), inset -1px -1px 2px rgba(255, 255, 255, 0.72);
+  --glass-surface: rgba(255, 255, 255, 0.72);
+  --glass-border: rgba(255, 255, 255, 0.62);
+  --flat-shadow: 0 1px 2px rgba(15, 23, 42, 0.06), 0 10px 30px -24px rgba(15, 23, 42, 0.3);
   --scroll-track: rgba(15, 23, 42, 0.08);
   --scroll-thumb: rgba(51, 65, 85, 0.35);
   --scroll-thumb-hover: rgba(30, 41, 59, 0.55);
@@ -22,9 +43,30 @@ html.theme-light {
 
 html.theme-dark {
   color-scheme: dark;
-  --bg-body: #020617;
+  --bg-body: #0f172a;
   --text-body: #e2e8f0;
-  --bg-root: radial-gradient(circle at 12% 10%, #0f172a 0%, #020617 45%, #000000 100%);
+  --bg-root:
+    radial-gradient(circle at 10% 0%, rgba(37, 99, 235, 0.22), transparent 30%),
+    linear-gradient(180deg, #111827 0%, #0f172a 50%, #020617 100%);
+  --clay-bg: #0f172a;
+  --clay-surface: #111827;
+  --clay-surface-strong: #1e293b;
+  --clay-surface-muted: #0b1220;
+  --clay-border: rgba(148, 163, 184, 0.22);
+  --clay-border-strong: rgba(148, 163, 184, 0.34);
+  --clay-text: #e2e8f0;
+  --clay-muted: #94a3b8;
+  --clay-accent: #60a5fa;
+  --clay-accent-strong: #93c5fd;
+  --clay-green: #34d399;
+  --clay-rose: #fb7185;
+  --clay-gold: #fbbf24;
+  --clay-shadow: 0 20px 50px -34px rgba(0, 0, 0, 0.75);
+  --clay-shadow-sm: 0 14px 32px -24px rgba(0, 0, 0, 0.72);
+  --clay-shadow-inset: inset 1px 1px 2px rgba(2, 6, 23, 0.36), inset -1px -1px 2px rgba(148, 163, 184, 0.12);
+  --glass-surface: rgba(15, 23, 42, 0.72);
+  --glass-border: rgba(148, 163, 184, 0.2);
+  --flat-shadow: 0 1px 2px rgba(0, 0, 0, 0.24), 0 14px 36px -28px rgba(0, 0, 0, 0.75);
   --scroll-track: rgba(148, 163, 184, 0.12);
   --scroll-thumb: rgba(100, 116, 139, 0.6);
   --scroll-thumb-hover: rgba(148, 163, 184, 0.75);
@@ -34,6 +76,7 @@ body {
   background: var(--bg-body);
   color: var(--text-body);
   font-family: system-ui, -apple-system, "Segoe UI", Roboto, Arial, sans-serif;
+  font-size: 14px;
   overflow-x: hidden;
   overflow-y: auto;
   transition: background-color 0.22s ease, color 0.22s ease;
@@ -57,20 +100,18 @@ body,
 }
 
 html.theme-light .app-page-bg {
-  background-color: #f4f7fb;
+  background-color: var(--clay-bg);
   background-image:
-    radial-gradient(circle at 12% 2%, rgba(56, 189, 248, 0.18), transparent 32%),
-    radial-gradient(circle at 88% 6%, rgba(52, 211, 153, 0.12), transparent 34%),
-    linear-gradient(145deg, rgba(255, 255, 255, 0.9), rgba(238, 246, 255, 0.86));
+    radial-gradient(circle at 6% 0%, rgba(37, 99, 235, 0.06), transparent 26%),
+    linear-gradient(180deg, #ffffff 0%, #f6f8fb 38%, #eef2f7 100%);
   background-size: cover;
 }
 
 html.theme-dark .app-page-bg {
-  background-color: #040816;
+  background-color: var(--clay-bg);
   background-image:
-    radial-gradient(circle at 14% 4%, rgba(34, 211, 238, 0.18), transparent 36%),
-    radial-gradient(circle at 82% 8%, rgba(59, 130, 246, 0.16), transparent 38%),
-    linear-gradient(150deg, rgba(15, 23, 42, 0.88), rgba(2, 6, 23, 0.95));
+    radial-gradient(circle at 10% 0%, rgba(37, 99, 235, 0.18), transparent 32%),
+    linear-gradient(180deg, rgba(17, 24, 39, 0.98), rgba(2, 6, 23, 0.98));
   background-size: cover;
 }
 
@@ -90,6 +131,15 @@ html.theme-dark .app-page-bg {
 
 .custom-scrollbar::-webkit-scrollbar-thumb:hover {
   background: var(--scroll-thumb-hover);
+}
+
+.scrollbar-hide {
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+
+.scrollbar-hide::-webkit-scrollbar {
+  display: none;
 }
 
 /* Dark mode utility override layer for existing Tailwind-heavy UI */
@@ -182,12 +232,12 @@ html.ui-high-contrast #root {
 :root {
   --font-display: "Sora", "Avenir Next", "Segoe UI", sans-serif;
   --font-body: "Manrope", "Avenir", "Segoe UI", sans-serif;
-  --workspace-surface-light: rgba(255, 255, 255, 0.78);
-  --workspace-surface-light-solid: rgba(255, 255, 255, 0.94);
-  --workspace-surface-dark: rgba(15, 23, 42, 0.72);
-  --workspace-surface-dark-solid: rgba(2, 6, 23, 0.88);
-  --workspace-border-light: rgba(71, 85, 105, 0.2);
-  --workspace-border-dark: rgba(148, 163, 184, 0.26);
+  --workspace-surface-light: rgba(255, 255, 255, 0.74);
+  --workspace-surface-light-solid: #ffffff;
+  --workspace-surface-dark: rgba(15, 23, 42, 0.76);
+  --workspace-surface-dark-solid: #111827;
+  --workspace-border-light: var(--clay-border);
+  --workspace-border-dark: var(--clay-border-strong);
 }
 
 body {
@@ -215,24 +265,22 @@ body {
 .workspace-shell::before {
   inset: 0;
   background:
-    radial-gradient(circle at 8% 14%, rgba(34, 197, 94, 0.12), transparent 34%),
-    radial-gradient(circle at 88% 12%, rgba(14, 165, 233, 0.14), transparent 36%),
-    radial-gradient(circle at 58% 86%, rgba(249, 115, 22, 0.09), transparent 42%);
+    radial-gradient(circle at 8% 8%, rgba(37, 99, 235, 0.06), transparent 28%),
+    radial-gradient(circle at 92% 4%, rgba(14, 165, 233, 0.05), transparent 30%);
 }
 
 .workspace-shell::after {
   inset: 0;
-  background-image: linear-gradient(rgba(71, 85, 105, 0.06) 1px, transparent 1px),
-    linear-gradient(90deg, rgba(71, 85, 105, 0.06) 1px, transparent 1px);
-  background-size: 28px 28px;
-  opacity: 0.45;
+  background-image: linear-gradient(rgba(122, 145, 173, 0.05) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(122, 145, 173, 0.05) 1px, transparent 1px);
+  background-size: 32px 32px;
+  opacity: 0.24;
 }
 
 html.theme-dark .workspace-shell::before {
   background:
-    radial-gradient(circle at 9% 12%, rgba(34, 211, 238, 0.15), transparent 38%),
-    radial-gradient(circle at 92% 16%, rgba(56, 189, 248, 0.12), transparent 40%),
-    radial-gradient(circle at 52% 88%, rgba(59, 130, 246, 0.1), transparent 44%);
+    radial-gradient(circle at 10% 8%, rgba(37, 99, 235, 0.16), transparent 34%),
+    radial-gradient(circle at 92% 6%, rgba(14, 165, 233, 0.1), transparent 34%);
 }
 
 html.theme-dark .workspace-shell::after {
@@ -255,7 +303,7 @@ html.theme-light .workspace-shell .bg-slate-50\/80,
 html.theme-light .workspace-shell .bg-slate-50\/85,
 html.theme-light .workspace-shell .bg-slate-100 {
   background-color: var(--workspace-surface-light-solid) !important;
-  backdrop-filter: blur(9px);
+  backdrop-filter: none;
 }
 
 html.theme-dark .workspace-shell .bg-white,
@@ -267,7 +315,7 @@ html.theme-dark .workspace-shell .bg-slate-50\/80,
 html.theme-dark .workspace-shell .bg-slate-50\/85,
 html.theme-dark .workspace-shell .bg-slate-100 {
   background-color: var(--workspace-surface-dark-solid) !important;
-  backdrop-filter: blur(9px);
+  backdrop-filter: none;
 }
 
 html.theme-light .workspace-shell .border-slate-200,
@@ -292,13 +340,13 @@ html.theme-dark .workspace-shell .border-slate-300 {
 html.theme-light .workspace-shell .shadow-sm,
 html.theme-light .workspace-shell .shadow,
 html.theme-light .workspace-shell .shadow-md {
-  box-shadow: 0 14px 34px -28px rgba(15, 23, 42, 0.42) !important;
+  box-shadow: var(--clay-shadow-sm) !important;
 }
 
 html.theme-dark .workspace-shell .shadow-sm,
 html.theme-dark .workspace-shell .shadow,
 html.theme-dark .workspace-shell .shadow-md {
-  box-shadow: 0 24px 48px -34px rgba(2, 6, 23, 0.85) !important;
+  box-shadow: var(--clay-shadow-sm) !important;
 }
 
 .workspace-shell input,
@@ -344,20 +392,20 @@ html.theme-dark .workspace-shell .custom-scrollbar::-webkit-scrollbar-thumb {
   width: 100%;
   height: 100%;
   overflow-y: auto;
-  padding: 5rem 1rem 2rem;
+  padding: 1rem 0.75rem 1.25rem;
 }
 
 @media (min-width: 640px) {
   .ui-page-shell {
-    padding-left: 1.5rem;
-    padding-right: 1.5rem;
+    padding-left: 1rem;
+    padding-right: 1rem;
   }
 }
 
 @media (min-width: 1024px) {
   .ui-page-shell {
-    padding-left: 2.5rem;
-    padding-right: 2.5rem;
+    padding-left: 1.5rem;
+    padding-right: 1.5rem;
   }
 }
 
@@ -370,9 +418,9 @@ html.theme-dark .ui-page-shell {
 }
 
 .ui-hero-card {
-  border-radius: 1.4rem;
+  border-radius: 1rem;
   border-width: 1px;
-  padding: 1.2rem 1.25rem;
+  padding: 0.9rem 1rem;
   backdrop-filter: blur(10px);
 }
 
@@ -391,7 +439,7 @@ html.theme-dark .ui-hero-card {
 }
 
 .ui-soft-panel {
-  border-radius: 1.1rem;
+  border-radius: 0.9rem;
   border-width: 1px;
   backdrop-filter: blur(8px);
 }
@@ -409,9 +457,701 @@ html.theme-dark .ui-soft-panel {
 .ui-chip {
   border-radius: 999px;
   border-width: 1px;
-  padding: 0.3rem 0.7rem;
-  font-size: 0.68rem;
+  padding: 0.22rem 0.55rem;
+  font-size: 0.64rem;
   font-weight: 600;
   letter-spacing: 0.12em;
   text-transform: uppercase;
+}
+
+/* App-wide density pass: smaller type, tighter cards, less wasted dashboard space. */
+.workspace-shell {
+  font-size: 0.88rem;
+  line-height: 1.42;
+}
+
+.workspace-shell .font-display {
+  letter-spacing: 0;
+}
+
+.workspace-shell .text-5xl {
+  font-size: 2.35rem !important;
+  line-height: 1.08 !important;
+}
+
+.workspace-shell .text-4xl {
+  font-size: 1.9rem !important;
+  line-height: 1.12 !important;
+}
+
+.workspace-shell .text-3xl {
+  font-size: 1.55rem !important;
+  line-height: 1.18 !important;
+}
+
+.workspace-shell .text-2xl {
+  font-size: 1.28rem !important;
+  line-height: 1.22 !important;
+}
+
+.workspace-shell .text-xl {
+  font-size: 1.05rem !important;
+  line-height: 1.28 !important;
+}
+
+.workspace-shell .text-lg {
+  font-size: 0.98rem !important;
+  line-height: 1.35 !important;
+}
+
+.workspace-shell .text-base {
+  font-size: 0.9rem !important;
+}
+
+.workspace-shell .text-sm {
+  font-size: 0.78rem !important;
+}
+
+.workspace-shell .text-xs {
+  font-size: 0.68rem !important;
+}
+
+.workspace-shell .rounded-3xl {
+  border-radius: 1rem !important;
+}
+
+.workspace-shell .rounded-2xl {
+  border-radius: 0.85rem !important;
+}
+
+.workspace-shell .rounded-xl {
+  border-radius: 0.7rem !important;
+}
+
+.workspace-shell .p-8 {
+  padding: 1.5rem !important;
+}
+
+.workspace-shell .p-6 {
+  padding: 1rem !important;
+}
+
+.workspace-shell .p-5 {
+  padding: 0.9rem !important;
+}
+
+.workspace-shell .p-4 {
+  padding: 0.75rem !important;
+}
+
+.workspace-shell .px-8 {
+  padding-left: 1.5rem !important;
+  padding-right: 1.5rem !important;
+}
+
+.workspace-shell .px-6 {
+  padding-left: 1rem !important;
+  padding-right: 1rem !important;
+}
+
+.workspace-shell .px-5 {
+  padding-left: 0.9rem !important;
+  padding-right: 0.9rem !important;
+}
+
+.workspace-shell .px-4 {
+  padding-left: 0.75rem !important;
+  padding-right: 0.75rem !important;
+}
+
+.workspace-shell .py-8 {
+  padding-top: 1.5rem !important;
+  padding-bottom: 1.5rem !important;
+}
+
+.workspace-shell .py-6 {
+  padding-top: 1rem !important;
+  padding-bottom: 1rem !important;
+}
+
+.workspace-shell .py-5 {
+  padding-top: 0.9rem !important;
+  padding-bottom: 0.9rem !important;
+}
+
+.workspace-shell .py-4 {
+  padding-top: 0.75rem !important;
+  padding-bottom: 0.75rem !important;
+}
+
+.workspace-shell .gap-8 {
+  gap: 1.25rem !important;
+}
+
+.workspace-shell .gap-6 {
+  gap: 1rem !important;
+}
+
+.workspace-shell .gap-5 {
+  gap: 0.9rem !important;
+}
+
+.workspace-shell .gap-4 {
+  gap: 0.75rem !important;
+}
+
+.workspace-shell .space-y-8 > :not([hidden]) ~ :not([hidden]) {
+  margin-top: 1.25rem !important;
+}
+
+.workspace-shell .space-y-6 > :not([hidden]) ~ :not([hidden]) {
+  margin-top: 1rem !important;
+}
+
+.workspace-shell .space-y-5 > :not([hidden]) ~ :not([hidden]) {
+  margin-top: 0.9rem !important;
+}
+
+.workspace-shell .mt-8 {
+  margin-top: 1.25rem !important;
+}
+
+.workspace-shell .mt-6 {
+  margin-top: 1rem !important;
+}
+
+.workspace-shell .mt-5 {
+  margin-top: 0.9rem !important;
+}
+
+.workspace-shell .mb-6 {
+  margin-bottom: 1rem !important;
+}
+
+.workspace-shell input,
+.workspace-shell select,
+.workspace-shell textarea,
+.workspace-shell button {
+  font-size: 0.78rem;
+}
+
+.workspace-shell input,
+.workspace-shell select {
+  min-height: 2.15rem;
+}
+
+.workspace-shell .h-12 {
+  height: 2.5rem !important;
+}
+
+.workspace-shell .h-11 {
+  height: 2.35rem !important;
+}
+
+.workspace-shell .h-10 {
+  height: 2.15rem !important;
+}
+
+.workspace-shell .h-9 {
+  height: 2rem !important;
+}
+
+.workspace-shell table {
+  font-size: 0.78rem;
+}
+
+.workspace-shell table th,
+.workspace-shell table td {
+  padding-top: 0.55rem !important;
+  padding-bottom: 0.55rem !important;
+}
+
+@media (max-width: 639px) {
+  .workspace-shell {
+    font-size: 0.84rem;
+  }
+
+  .workspace-shell .text-4xl {
+    font-size: 1.65rem !important;
+  }
+
+  .workspace-shell .text-3xl {
+    font-size: 1.38rem !important;
+  }
+}
+
+/* Modern SaaS design layer: flat by default, glass accents, tiny clay lift on controls. */
+.workspace-shell {
+  color: var(--clay-text);
+}
+
+.workspace-shell .bg-white,
+.workspace-shell .bg-white\/50,
+.workspace-shell .bg-white\/60,
+.workspace-shell .bg-white\/70,
+.workspace-shell .bg-white\/80,
+.workspace-shell .bg-white\/85,
+.workspace-shell .bg-white\/90,
+.workspace-shell .bg-white\/95,
+.workspace-shell .bg-slate-50,
+.workspace-shell .bg-slate-50\/50,
+.workspace-shell .bg-slate-50\/70,
+.workspace-shell .bg-slate-50\/80,
+.workspace-shell .bg-slate-50\/85,
+.workspace-shell .bg-slate-100 {
+  background: var(--clay-surface) !important;
+  border-color: var(--clay-border) !important;
+  box-shadow: var(--flat-shadow);
+}
+
+.workspace-shell section.bg-white,
+.workspace-shell section.bg-slate-50,
+.workspace-shell div[class*="rounded"][class*="border"][class*="bg-white"],
+.workspace-shell div[class*="rounded"][class*="border"][class*="bg-slate-50"],
+.workspace-shell div[class*="rounded"][class*="border"][class*="bg-slate-100"] {
+  box-shadow: var(--flat-shadow);
+}
+
+.workspace-shell .bg-slate-200,
+.workspace-shell .bg-slate-200\/50,
+.workspace-shell .bg-slate-200\/70 {
+  background: var(--clay-surface-muted) !important;
+  box-shadow: none;
+}
+
+.workspace-shell .border-slate-100,
+.workspace-shell .border-slate-200,
+.workspace-shell .border-slate-300,
+.workspace-shell .border-white\/30,
+.workspace-shell .border-white\/40 {
+  border-color: var(--clay-border) !important;
+}
+
+.workspace-shell .text-slate-900,
+.workspace-shell .text-slate-800,
+.workspace-shell .text-slate-700,
+.workspace-shell .text-text-primary {
+  color: var(--clay-text) !important;
+}
+
+.workspace-shell .text-slate-600,
+.workspace-shell .text-slate-500,
+.workspace-shell .text-slate-400,
+.workspace-shell .text-text-secondary,
+.workspace-shell .text-text-tertiary {
+  color: var(--clay-muted) !important;
+}
+
+.workspace-shell input,
+.workspace-shell select,
+.workspace-shell textarea {
+  background: var(--clay-surface) !important;
+  border-color: var(--clay-border) !important;
+  box-shadow: none;
+  color: var(--clay-text) !important;
+}
+
+.workspace-shell input:focus,
+.workspace-shell select:focus,
+.workspace-shell textarea:focus {
+  border-color: color-mix(in srgb, var(--clay-accent) 68%, white 32%) !important;
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--clay-accent) 16%, transparent) !important;
+}
+
+.workspace-shell select:not([multiple]) {
+  appearance: none;
+  -webkit-appearance: none;
+  min-width: 0;
+  padding-right: 2.35rem !important;
+  background-color: color-mix(in srgb, var(--clay-surface) 92%, var(--clay-surface-muted) 8%) !important;
+  background-image:
+    linear-gradient(135deg, transparent 50%, var(--clay-accent) 50%),
+    linear-gradient(45deg, var(--clay-accent) 50%, transparent 50%),
+    linear-gradient(135deg, color-mix(in srgb, var(--clay-accent) 12%, transparent), color-mix(in srgb, var(--clay-accent) 4%, transparent));
+  background-position:
+    calc(100% - 1.05rem) calc(50% + 0.05rem),
+    calc(100% - 0.78rem) calc(50% + 0.05rem),
+    calc(100% - 1.78rem) 50%;
+  background-size: 0.28rem 0.28rem, 0.28rem 0.28rem, 1.45rem 1.45rem;
+  background-repeat: no-repeat;
+  border: 1px solid color-mix(in srgb, var(--clay-border) 78%, var(--clay-accent) 22%) !important;
+  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.05), inset 0 1px 0 rgba(255, 255, 255, 0.55) !important;
+  cursor: pointer;
+  font-weight: 700;
+  letter-spacing: 0.01em;
+  transition:
+    border-color 0.18s ease,
+    box-shadow 0.18s ease,
+    background-color 0.18s ease,
+    transform 0.18s ease;
+}
+
+.workspace-shell select:not([multiple]):hover {
+  background-color: color-mix(in srgb, var(--clay-surface) 84%, var(--clay-accent) 7%) !important;
+  border-color: color-mix(in srgb, var(--clay-accent) 52%, var(--clay-border) 48%) !important;
+  box-shadow: 0 10px 26px -22px rgba(37, 99, 235, 0.55), inset 0 1px 0 rgba(255, 255, 255, 0.62) !important;
+  transform: translateY(-1px);
+}
+
+.workspace-shell select:not([multiple]):focus {
+  background-color: var(--clay-surface) !important;
+  outline: none;
+}
+
+.workspace-shell select:disabled {
+  cursor: not-allowed;
+  opacity: 0.58;
+  transform: none;
+}
+
+.workspace-shell select option {
+  background: var(--clay-surface-strong);
+  color: var(--clay-text);
+  font-weight: 650;
+}
+
+html.theme-dark .workspace-shell select:not([multiple]) {
+  background-color: color-mix(in srgb, var(--clay-surface) 88%, #020617 12%) !important;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.28), inset 0 1px 0 rgba(148, 163, 184, 0.08) !important;
+}
+
+html.theme-dark .workspace-shell select:not([multiple]):hover {
+  background-color: color-mix(in srgb, var(--clay-surface) 78%, var(--clay-accent) 10%) !important;
+  box-shadow: 0 14px 34px -26px rgba(96, 165, 250, 0.48), inset 0 1px 0 rgba(148, 163, 184, 0.12) !important;
+}
+
+.workspace-shell button,
+.workspace-shell a[role="button"],
+.workspace-shell .ui-chip {
+  transition: transform 0.18s ease, box-shadow 0.18s ease, background-color 0.18s ease;
+}
+
+.workspace-shell button:not(:disabled):hover,
+.workspace-shell a[role="button"]:hover {
+  transform: translateY(-1px);
+}
+
+.workspace-shell .bg-slate-900,
+.workspace-shell .bg-slate-800,
+.workspace-shell .from-slate-900,
+.workspace-shell .via-slate-800,
+.workspace-shell .to-cyan-900 {
+  background-color: var(--clay-accent-strong) !important;
+}
+
+.workspace-shell .bg-gradient-to-r.from-slate-900,
+.workspace-shell .bg-gradient-to-br.from-slate-900,
+.workspace-shell .bg-gradient-to-r.from-slate-800,
+.workspace-shell .bg-gradient-to-br.from-slate-800 {
+  background-image: linear-gradient(135deg, rgba(15, 23, 42, 0.94), rgba(30, 64, 175, 0.9) 58%, rgba(14, 165, 233, 0.84)) !important;
+  color: #ffffff !important;
+  border-color: var(--glass-border) !important;
+  box-shadow: 0 18px 48px -36px rgba(37, 99, 235, 0.65);
+  backdrop-filter: blur(14px);
+}
+
+.workspace-shell .bg-cyan-50,
+.workspace-shell .bg-sky-50,
+.workspace-shell .bg-blue-50,
+.workspace-shell .bg-indigo-50 {
+  background: color-mix(in srgb, var(--clay-accent) 9%, var(--clay-surface) 91%) !important;
+  color: var(--clay-accent-strong) !important;
+}
+
+.workspace-shell .bg-emerald-50,
+.workspace-shell .bg-green-50 {
+  background: color-mix(in srgb, var(--clay-green) 9%, var(--clay-surface) 91%) !important;
+}
+
+.workspace-shell .bg-amber-50,
+.workspace-shell .bg-yellow-50,
+.workspace-shell .bg-orange-50 {
+  background: color-mix(in srgb, var(--clay-gold) 11%, var(--clay-surface) 89%) !important;
+}
+
+.workspace-shell .bg-rose-50,
+.workspace-shell .bg-red-50,
+.workspace-shell .bg-pink-50 {
+  background: color-mix(in srgb, var(--clay-rose) 10%, var(--clay-surface) 90%) !important;
+}
+
+.workspace-shell table {
+  border-collapse: separate;
+  border-spacing: 0;
+}
+
+.workspace-shell table thead,
+.workspace-shell table tbody tr {
+  filter: none;
+}
+
+.workspace-shell table tbody tr td:first-child {
+  border-top-left-radius: 0.75rem;
+  border-bottom-left-radius: 0.75rem;
+}
+
+.workspace-shell table tbody tr td:last-child {
+  border-top-right-radius: 0.75rem;
+  border-bottom-right-radius: 0.75rem;
+}
+
+.workspace-shell .ui-hero-card,
+.workspace-shell .ui-soft-panel {
+  background: var(--glass-surface) !important;
+  border-color: var(--glass-border) !important;
+  box-shadow: var(--flat-shadow) !important;
+  backdrop-filter: blur(14px);
+}
+
+.workspace-shell .ui-chip {
+  background: color-mix(in srgb, var(--clay-surface) 86%, var(--clay-surface-muted) 14%);
+  box-shadow: var(--clay-shadow-inset);
+}
+
+html.theme-dark .workspace-shell .bg-white,
+html.theme-dark .workspace-shell .bg-white\/50,
+html.theme-dark .workspace-shell .bg-white\/60,
+html.theme-dark .workspace-shell .bg-white\/70,
+html.theme-dark .workspace-shell .bg-white\/80,
+html.theme-dark .workspace-shell .bg-white\/85,
+html.theme-dark .workspace-shell .bg-white\/90,
+html.theme-dark .workspace-shell .bg-white\/95,
+html.theme-dark .workspace-shell .bg-slate-50,
+html.theme-dark .workspace-shell .bg-slate-50\/50,
+html.theme-dark .workspace-shell .bg-slate-50\/70,
+html.theme-dark .workspace-shell .bg-slate-50\/80,
+html.theme-dark .workspace-shell .bg-slate-50\/85,
+html.theme-dark .workspace-shell .bg-slate-100 {
+  background: var(--clay-surface) !important;
+  border-color: var(--clay-border-strong) !important;
+}
+
+/* Chat workspace polish */
+.chat-page {
+  background:
+    radial-gradient(circle at 12% 4%, color-mix(in srgb, var(--clay-accent) 14%, transparent), transparent 34%),
+    radial-gradient(circle at 92% 8%, color-mix(in srgb, var(--clay-green) 12%, transparent), transparent 30%),
+    linear-gradient(145deg, color-mix(in srgb, var(--clay-surface) 18%, transparent), transparent);
+}
+
+.chat-workspace {
+  min-height: 0;
+  box-shadow:
+    0 24px 70px -44px rgba(15, 23, 42, 0.58),
+    inset 0 1px 0 rgba(255, 255, 255, 0.56) !important;
+}
+
+html.theme-dark .chat-workspace {
+  box-shadow:
+    0 26px 78px -48px rgba(0, 0, 0, 0.9),
+    inset 0 1px 0 rgba(148, 163, 184, 0.16) !important;
+}
+
+.chat-sidebar {
+  background:
+    linear-gradient(180deg, color-mix(in srgb, var(--clay-surface) 92%, white 8%), color-mix(in srgb, var(--clay-surface-muted) 64%, var(--clay-surface) 36%)) !important;
+}
+
+html.theme-dark .chat-sidebar {
+  background:
+    linear-gradient(180deg, rgba(15, 23, 42, 0.94), rgba(2, 6, 23, 0.9)) !important;
+}
+
+.chat-sidebar-hero {
+  position: relative;
+  overflow: hidden;
+}
+
+.chat-sidebar-hero::after {
+  content: "";
+  position: absolute;
+  inset: auto -18% -50% 24%;
+  height: 5.5rem;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--clay-accent) 18%, transparent);
+  filter: blur(24px);
+  pointer-events: none;
+}
+
+.chat-search-box,
+.chat-filter-tabs {
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.55);
+}
+
+html.theme-dark .chat-search-box,
+html.theme-dark .chat-filter-tabs {
+  box-shadow: inset 0 1px 0 rgba(148, 163, 184, 0.12);
+}
+
+.chat-list-item {
+  position: relative;
+  overflow: hidden;
+}
+
+.chat-list-item::before {
+  content: "";
+  position: absolute;
+  inset: 0 auto 0 0;
+  width: 3px;
+  border-radius: 999px;
+  background: transparent;
+  transition: background 0.18s ease, opacity 0.18s ease;
+}
+
+.chat-list-item:hover {
+  box-shadow: 0 12px 28px -24px rgba(37, 99, 235, 0.42);
+}
+
+.chat-list-item[class*="bg-cyan"]::before {
+  background: linear-gradient(180deg, var(--clay-accent), var(--clay-green));
+}
+
+.chat-avatar {
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.46),
+    0 10px 24px -18px rgba(15, 23, 42, 0.5);
+}
+
+.chat-room-panel {
+  background:
+    linear-gradient(180deg, color-mix(in srgb, var(--clay-surface) 90%, transparent), color-mix(in srgb, var(--clay-surface-muted) 74%, transparent)) !important;
+}
+
+html.theme-dark .chat-room-panel {
+  background:
+    linear-gradient(180deg, rgba(15, 23, 42, 0.9), rgba(2, 6, 23, 0.92)) !important;
+}
+
+.chat-thread-header,
+.chat-insights,
+.chat-composer {
+  backdrop-filter: blur(16px);
+}
+
+html.theme-light .chat-thread-header {
+  background:
+    linear-gradient(135deg, rgba(16, 185, 129, 0.96), rgba(5, 150, 105, 0.92)) !important;
+  color: #ffffff;
+}
+
+@media (min-width: 768px) {
+  html.theme-light .chat-thread-header {
+    background:
+      linear-gradient(135deg, rgba(255, 255, 255, 0.96), rgba(240, 253, 250, 0.9)) !important;
+    color: var(--clay-text);
+  }
+}
+
+.chat-insights {
+  background:
+    linear-gradient(90deg, color-mix(in srgb, var(--clay-surface) 86%, transparent), color-mix(in srgb, var(--clay-green) 7%, var(--clay-surface))) !important;
+}
+
+html.theme-dark .chat-insights {
+  background:
+    linear-gradient(90deg, rgba(15, 23, 42, 0.92), rgba(6, 78, 59, 0.22)) !important;
+}
+
+.chat-message-surface {
+  isolation: isolate;
+}
+
+.chat-message-surface::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.2), transparent 18%, transparent 78%, rgba(255, 255, 255, 0.32));
+  z-index: 0;
+}
+
+html.theme-dark .chat-message-surface::after {
+  background:
+    linear-gradient(180deg, rgba(15, 23, 42, 0.28), transparent 18%, transparent 78%, rgba(2, 6, 23, 0.42));
+}
+
+.chat-message-scroll {
+  z-index: 1;
+}
+
+.chat-empty-state {
+  background: color-mix(in srgb, var(--clay-surface) 78%, transparent);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.52);
+}
+
+html.theme-dark .chat-empty-state {
+  background: rgba(15, 23, 42, 0.58);
+  box-shadow: inset 0 1px 0 rgba(148, 163, 184, 0.12);
+}
+
+.chat-bubble {
+  position: relative;
+  backdrop-filter: blur(10px);
+  box-shadow:
+    0 14px 30px -24px rgba(15, 23, 42, 0.55),
+    inset 0 1px 0 rgba(255, 255, 255, 0.46) !important;
+}
+
+.chat-bubble-mine {
+  border-bottom-right-radius: 0.35rem !important;
+}
+
+.chat-bubble-other {
+  border-bottom-left-radius: 0.35rem !important;
+}
+
+html.theme-light .chat-bubble-mine {
+  background:
+    linear-gradient(135deg, rgba(209, 250, 229, 0.98), rgba(167, 243, 208, 0.9)) !important;
+}
+
+html.theme-light .chat-bubble-other {
+  background:
+    linear-gradient(135deg, rgba(255, 255, 255, 0.98), rgba(248, 250, 252, 0.94)) !important;
+}
+
+html.theme-dark .chat-bubble {
+  box-shadow:
+    0 18px 36px -26px rgba(0, 0, 0, 0.72),
+    inset 0 1px 0 rgba(148, 163, 184, 0.14) !important;
+}
+
+html.theme-dark .chat-bubble-mine {
+  background:
+    linear-gradient(135deg, rgba(6, 95, 70, 0.72), rgba(16, 185, 129, 0.24)) !important;
+}
+
+html.theme-dark .chat-bubble-other {
+  background:
+    linear-gradient(135deg, rgba(15, 23, 42, 0.96), rgba(30, 41, 59, 0.9)) !important;
+}
+
+.chat-composer {
+  background:
+    linear-gradient(180deg, color-mix(in srgb, var(--clay-surface) 78%, transparent), color-mix(in srgb, var(--clay-surface) 96%, var(--clay-surface-muted) 4%)) !important;
+  box-shadow: 0 -18px 34px -32px rgba(15, 23, 42, 0.5);
+}
+
+html.theme-dark .chat-composer {
+  background:
+    linear-gradient(180deg, rgba(15, 23, 42, 0.82), rgba(2, 6, 23, 0.94)) !important;
+  box-shadow: 0 -20px 38px -34px rgba(0, 0, 0, 0.86);
+}
+
+.chat-composer-input {
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.58), 0 12px 28px -25px rgba(15, 23, 42, 0.58) !important;
+}
+
+html.theme-dark .chat-composer-input {
+  box-shadow: inset 0 1px 0 rgba(148, 163, 184, 0.14), 0 14px 30px -24px rgba(0, 0, 0, 0.8) !important;
+}
+
+.chat-attach-button,
+.chat-send-button {
+  box-shadow: 0 14px 30px -22px rgba(15, 23, 42, 0.58);
+}
+
+.chat-send-button {
+  background: linear-gradient(135deg, #059669, #10b981) !important;
 }
