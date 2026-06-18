@@ -24,6 +24,7 @@ import {
   UserCheck,
   Menu,
   X,
+  CheckSquare,
 } from "lucide-react";
 import { motion as Motion } from "framer-motion";
 import { useChatNotifications } from "../../context/useChatNotifications";
@@ -34,6 +35,7 @@ const MENU_CONFIG = {
   admin: [
     { name: "Home", icon: Home, path: "/dashboard" },
     { name: "Pipeline", icon: Users, path: "/leads" },
+    { name: "Tasks", icon: CheckSquare, path: "/tasks" },
     { name: "Attendance", icon: UserCheck, path: "/attendance" },
     { name: "Schedule", icon: Calendar, path: "/calendar" },
     { name: "Finance", icon: PieChart, path: "/finance" },
@@ -52,6 +54,7 @@ const MENU_CONFIG = {
   ],
   manager: [
     { name: "Home", icon: Home, path: "/dashboard" },
+    { name: "Tasks", icon: CheckSquare, path: "/tasks" },
     { name: "Schedule", icon: Calendar, path: "/calendar" },
     { name: "Attendance", icon: UserCheck, path: "/attendance" },
     { name: "Finance", icon: PieChart, path: "/finance" },
@@ -68,6 +71,7 @@ const MENU_CONFIG = {
   ],
   executive: [
     { name: "My Desk", icon: Briefcase, path: "/dashboard" },
+    { name: "Tasks", icon: CheckSquare, path: "/tasks" },
     { name: "My Leads", icon: Users, path: "/my-leads" },
     { name: "Attendance", icon: UserCheck, path: "/attendance" },
     { name: "Inventory", icon: Building2, path: "/inventory" },
@@ -80,6 +84,7 @@ const MENU_CONFIG = {
   ],
   field_agent: [
     { name: "Route", icon: Map, path: "/dashboard" },
+    { name: "Tasks", icon: CheckSquare, path: "/tasks" },
     { name: "My Leads", icon: Users, path: "/my-leads" },
     { name: "Attendance", icon: UserCheck, path: "/attendance" },
     { name: "Inventory", icon: Building2, path: "/inventory" },

@@ -26,6 +26,36 @@ export interface AuthPayload {
   user: User;
 }
 
+export interface LeadRequirements {
+  inventoryType?: "COMMERCIAL" | "RESIDENTIAL" | "";
+  transactionType?: "SALE" | "RENT" | "";
+  furnishingStatus?: string;
+  budgetMin?: number | null;
+  budgetMax?: number | null;
+  areaMin?: number | null;
+  areaMax?: number | null;
+  areaUnit?: "SQ_FT" | "SQ_M";
+  commercial?: {
+    seats?: number | null;
+    cabins?: number | null;
+    parkingAvailable?: boolean;
+    pantry?: boolean;
+  };
+  residential?: {
+    bhkType?: string;
+    floor?: number | null;
+    amenities?: {
+      lift?: boolean;
+      security?: boolean;
+      gym?: boolean;
+      swimmingPool?: boolean;
+      clubhouse?: boolean;
+      powerBackup?: boolean;
+      parking?: boolean;
+    };
+  };
+}
+
 export interface Lead {
   _id: string;
   name: string;
@@ -39,6 +69,7 @@ export interface Lead {
   assignedTo?: User;
   inventoryId?: InventoryAsset | string | null;
   relatedInventoryIds?: Array<InventoryAsset | string>;
+  requirements?: LeadRequirements;
   createdAt?: string;
   updatedAt?: string;
 }

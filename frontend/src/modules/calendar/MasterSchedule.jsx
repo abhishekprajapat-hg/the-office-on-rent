@@ -23,6 +23,7 @@ import {
 import api from "../../services/api";
 import { addLeadDiaryEntry, getLeadDiary } from "../../services/leadService";
 import { toErrorMessage } from "../../utils/errorMessage";
+import { getTasks, updateTask } from "../../services/taskService";
 
 const DAY_NAMES = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
 
@@ -171,13 +172,19 @@ const MasterSchedule = () => {
   const isDark = (localStorage.getItem("theme") || "light") === "dark";
   const userRole = String(localStorage.getItem("role") || "");
 
-  const loadLeads = async () => {
+  const [tasks, setTasks] = useState([]);
+
+  const loadScheduleData = async () => {
     try {
       setLoading(true);
       setError("");
-      const res = await api.get("/leads");
-      const list = res.data?.leads || [];
+      const [leadsRes, tasksData] = await Promise.all([
+        api.get("/leads"),
+        getTasks()
+      ]);
+      const list = leadsRes.data?.leads || [];
       setLeads(list);
+      setTasks(tasksData || []);
       if (!form.leadId && list.length > 0) {
         setForm((prev) => ({
           ...prev,
@@ -185,15 +192,16 @@ const MasterSchedule = () => {
         }));
       }
     } catch (err) {
-      setError(toErrorMessage(err, "Failed to load leads"));
+      setError(toErrorMessage(err, "Failed to load schedule data"));
       setLeads([]);
+      setTasks([]);
     } finally {
       setLoading(false);
     }
   };
 
   useEffect(() => {
-    loadLeads();
+    loadScheduleData();
   }, []);
 
   useEffect(() => {
@@ -221,12 +229,30 @@ const MasterSchedule = () => {
     return map;
   }, [followUps]);
 
+  const tasksByDate = useMemo(() => {
+    const map = new Map();
+    tasks.forEach((task) => {
+      if (!task.dueDate) return;
+      const key = toDateKey(task.dueDate);
+      const arr = map.get(key) || [];
+      arr.push(task);
+      map.set(key, arr);
+    });
+    return map;
+  }, [tasks]);
+
   const calendarCells = useMemo(() => buildCalendarCells(monthCursor), [monthCursor]);
   const selectedKey = toDateKey(selectedDate);
   const selectedDayItems = useMemo(() => {
     const items = [...(byDate.get(selectedKey) || [])];
     return items.sort((a, b) => new Date(a.nextFollowUp) - new Date(b.nextFollowUp));
   }, [byDate, selectedKey]);
+
+  const selectedDayTasks = useMemo(() => {
+    const key = toDateKey(selectedDate);
+    return (tasksByDate.get(key) || []).sort((a, b) => new Date(a.dueDate) - new Date(b.dueDate));
+  }, [tasksByDate, selectedDate]);
+
   const selectedDayLead = useMemo(
     () => selectedDayItems.find((lead) => lead._id === selectedLeadId) || selectedDayItems[0] || null,
     [selectedDayItems, selectedLeadId],
@@ -353,7 +379,7 @@ const MasterSchedule = () => {
       });
 
       setSuccess("Follow-up scheduled successfully");
-      await loadLeads();
+      await loadScheduleData();
 
       const followUpDate = new Date(form.nextFollowUp);
       if (!Number.isNaN(followUpDate.getTime())) {
@@ -428,7 +454,7 @@ const MasterSchedule = () => {
       }
 
       setSuccess("Follow-up deleted successfully");
-      await loadLeads();
+      await loadScheduleData();
     } catch (err) {
       setError(toErrorMessage(err, "Failed to delete follow-up"));
     } finally {
@@ -486,6 +512,17 @@ const MasterSchedule = () => {
     }
   };
 
+  const handleToggleTaskComplete = async (task) => {
+    const newStatus = task.status === "COMPLETED" ? "TODO" : "COMPLETED";
+    try {
+      await updateTask(task._id, { status: newStatus });
+      setSuccess(`Task marked as ${newStatus.toLowerCase()}`);
+      await loadScheduleData();
+    } catch (err) {
+      setError(toErrorMessage(err, "Failed to update task status"));
+    }
+  };
+
   return (
 	    <div className={`ui-page-shell custom-scrollbar overflow-x-hidden ${isDark ? "bg-slate-950/35" : "bg-white/30"}`}>
       <div className="ui-hero-card mb-6 flex flex-col gap-4 md:flex-row md:items-end md:justify-between">
@@ -502,7 +539,7 @@ const MasterSchedule = () => {
         </div>
         <div className="flex flex-wrap items-center gap-2">
           <button
-            onClick={loadLeads}
+            onClick={loadScheduleData}
             className={`h-10 px-4 rounded-xl border text-sm font-semibold flex items-center gap-2 ${
               isDark ? "border-slate-700 bg-slate-900/70 text-slate-200" : "border-slate-300 bg-white text-slate-700"
             }`}
@@ -557,7 +594,8 @@ const MasterSchedule = () => {
           <div className="grid grid-cols-7 auto-rows-fr">
             {calendarCells.map((date) => {
               const key = toDateKey(date);
-              const count = (byDate.get(key) || []).length;
+              const leadCount = (byDate.get(key) || []).length;
+              const taskCount = (tasksByDate.get(key) || []).length;
               const selected = key === selectedKey;
               const inMonth = date.getMonth() === monthCursor.getMonth();
               const isToday = key === toDateKey(new Date());
@@ -570,19 +608,34 @@ const MasterSchedule = () => {
                     isDark ? "border-slate-800 hover:bg-slate-800/60" : "border-slate-100 hover:bg-slate-50"
                   } ${selected ? (isDark ? "bg-cyan-500/10" : "bg-sky-50") : ""}`}
                 >
-                  <div className="flex items-center justify-between">
+                  <div className="flex items-start justify-between w-full h-full">
                     <span className={`w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold ${
                       isToday ? "bg-cyan-500 text-white" : inMonth ? (isDark ? "text-slate-200" : "text-slate-700") : (isDark ? "text-slate-600" : "text-slate-300")
                     }`}>
                       {date.getDate()}
                     </span>
-                    {count > 0 && (
-                      <span className={`text-[10px] px-2 py-0.5 rounded-full font-bold ${
-                        isDark ? "bg-cyan-500/20 text-cyan-200" : "bg-sky-100 text-sky-700"
-                      }`}>
-                        {count}
-                      </span>
-                    )}
+                    <div className="flex flex-col gap-1 items-end shrink-0">
+                      {leadCount > 0 && (
+                        <span 
+                          className={`text-[9px] px-1.5 py-0.5 rounded font-bold ${
+                            isDark ? "bg-amber-500/20 text-amber-300 border border-amber-500/30" : "bg-amber-50 text-amber-700 border border-amber-200"
+                          }`}
+                          title={`${leadCount} Lead Follow-up(s)`}
+                        >
+                          {leadCount} L
+                        </span>
+                      )}
+                      {taskCount > 0 && (
+                        <span 
+                          className={`text-[9px] px-1.5 py-0.5 rounded font-bold ${
+                            isDark ? "bg-emerald-500/20 text-emerald-300 border border-emerald-500/30" : "bg-emerald-50 text-emerald-700 border border-emerald-250"
+                          }`}
+                          title={`${taskCount} Task Deadline(s)`}
+                        >
+                          {taskCount} T
+                        </span>
+                      )}
+                    </div>
                   </div>
                 </button>
               );
@@ -631,169 +684,255 @@ const MasterSchedule = () => {
                 {new Date(selectedDate).toLocaleDateString([], { weekday: "long", day: "2-digit", month: "long" })}
               </div>
               <div className={`text-xs mt-1 ${isDark ? "text-slate-400" : "text-slate-500"}`}>
-                {selectedDayItems.length} item{selectedDayItems.length === 1 ? "" : "s"}
+                {selectedDayItems.length} follow-up{selectedDayItems.length === 1 ? "" : "s"}, {selectedDayTasks.length} task{selectedDayTasks.length === 1 ? "" : "s"}
               </div>
             </div>
 
-	              <div className="flex-1 overflow-visible p-4 space-y-3 xl:overflow-y-auto custom-scrollbar">
+	              <div className="flex-1 overflow-visible p-4 space-y-4 xl:overflow-y-auto custom-scrollbar">
                 {loading ? (
                   <div className={`text-sm ${isDark ? "text-slate-400" : "text-slate-500"}`}>Loading...</div>
-                ) : selectedDayItems.length === 0 ? (
-                <div className={`h-full rounded-xl border border-dashed flex flex-col items-center justify-center p-6 text-center ${
-                  isDark ? "border-slate-700 text-slate-400" : "border-slate-300 text-slate-500"
-                }`}>
-                  <CalendarIcon size={26} className="mb-2 opacity-70" />
-                  No follow-ups on this date
-                </div>
                 ) : (
-                  selectedDayItems.map((lead, index) => {
-                    const isActiveLead = selectedLeadId === lead._id;
-                    const isDiaryForLead = selectedDiaryLeadId === lead._id;
+                  <>
+                    {/* SECTION 1: Lead Follow-ups */}
+                    <div className="space-y-2.5">
+                      <h4 className={`text-xs font-bold uppercase tracking-wider flex items-center justify-between ${
+                        isDark ? "text-slate-400" : "text-slate-500"
+                      }`}>
+                        <span>Lead Follow-ups</span>
+                        <span className={`px-1.5 py-0.5 rounded text-[10px] ${
+                          isDark ? "bg-slate-800 text-slate-300" : "bg-slate-100 text-slate-600"
+                        }`}>{selectedDayItems.length}</span>
+                      </h4>
+                      {selectedDayItems.length === 0 ? (
+                        <div className={`text-xs p-3 border border-dashed rounded-xl text-center ${
+                          isDark ? "border-slate-800 text-slate-500" : "border-slate-200 text-slate-400"
+                        }`}>
+                          No follow-ups scheduled
+                        </div>
+                      ) : (
+                        selectedDayItems.map((lead, index) => {
+                          const isActiveLead = selectedLeadId === lead._id;
+                          const isDiaryForLead = selectedDiaryLeadId === lead._id;
 
-                    return (
-                      <div key={lead._id} className="space-y-3">
-                        <motion.div
-                          initial={{ opacity: 0, x: 10 }}
-                          animate={{ opacity: 1, x: 0 }}
-                          transition={{ delay: index * 0.04 }}
-                          onClick={() => handleSelectLead(lead._id)}
-                          className={`rounded-xl border p-3 cursor-pointer transition-colors ${
-                            isActiveLead
-                              ? (isDark ? "border-cyan-500/50 bg-cyan-500/10" : "border-sky-400 bg-sky-50")
-                              : (isDark ? "border-slate-700 bg-slate-900/85 hover:border-slate-500" : "border-slate-200 bg-white hover:border-slate-300")
-                          }`}
-                        >
-                          <div className="flex items-start justify-between gap-2">
-                            <div className={`text-sm font-semibold ${isDark ? "text-slate-100" : "text-slate-900"}`}>{lead.name}</div>
-                            <div className="flex items-center gap-1">
-                              <button
-                                type="button"
-                                onClick={(event) => {
-                                  event.stopPropagation();
-                                  handleOpenLeadDetails(lead._id);
-                                }}
-                                className={`inline-flex h-7 w-7 items-center justify-center rounded-md border ${
-                                  isDark
-                                    ? "border-slate-600 bg-slate-800 text-slate-200 hover:border-cyan-400/60"
-                                    : "border-slate-300 bg-white text-slate-600 hover:border-sky-400 hover:text-sky-700"
+                          return (
+                            <div key={lead._id} className="space-y-3">
+                              <motion.div
+                                initial={{ opacity: 0, x: 10 }}
+                                animate={{ opacity: 1, x: 0 }}
+                                transition={{ delay: index * 0.04 }}
+                                onClick={() => handleSelectLead(lead._id)}
+                                className={`rounded-xl border p-3 cursor-pointer transition-colors ${
+                                  isActiveLead
+                                    ? (isDark ? "border-cyan-500/50 bg-cyan-500/10" : "border-sky-400 bg-sky-50")
+                                    : (isDark ? "border-slate-700 bg-slate-900/85 hover:border-slate-500" : "border-slate-200 bg-white hover:border-slate-300")
                                 }`}
-                                title="Follow-up details"
-                                aria-label="Open follow-up details"
                               >
-                                <PanelRightOpen size={13} />
-                              </button>
-                              <button
-                                type="button"
-                                onClick={(event) => {
-                                  event.stopPropagation();
-                                  handleDeleteFollowUp(lead);
-                                }}
-                                disabled={deletingLeadId === lead._id}
-                                className={`inline-flex h-7 w-7 items-center justify-center rounded-md border ${
-                                  isDark
-                                    ? "border-rose-500/50 bg-rose-500/10 text-rose-200 hover:border-rose-400"
-                                    : "border-rose-300 bg-rose-50 text-rose-700 hover:border-rose-400"
-                                } disabled:opacity-60`}
-                                title="Delete follow-up"
-                                aria-label="Delete follow-up"
-                              >
-                                {deletingLeadId === lead._id ? (
-                                  <Loader2 size={13} className="animate-spin" />
-                                ) : (
-                                  <Trash2 size={13} />
-                                )}
-                              </button>
-                            </div>
-                          </div>
-                          <div className={`mt-2 text-xs space-y-1 ${isDark ? "text-slate-300" : "text-slate-600"}`}>
-                            <div className="flex items-center gap-2">
-                              <Clock3 size={12} /> {formatDateTime(lead.nextFollowUp)}
-                            </div>
-                            <div className="flex items-center gap-2">
-                              <Phone size={12} /> {lead.phone || "-"}
-                            </div>
-                            <div className="flex items-center gap-2">
-                              <User size={12} /> Assigned: {getAssignedLabel(lead)}
-                            </div>
-                            <div className="flex items-center gap-2">
-                              <Users size={12} /> Under: {getReportingLabel(lead)}
-                            </div>
-                            <div className="flex items-center gap-2">
-                              <User size={12} /> {lead.status}
-                            </div>
-                          </div>
-                        </motion.div>
-
-                        {isActiveLead && isDiaryForLead ? (
-                          <div className={`rounded-xl border p-4 space-y-3 ${isDark ? "border-cyan-500/40 bg-slate-900/70" : "border-sky-300 bg-sky-50/60"}`}>
-                            <div className="flex items-center justify-between gap-2">
-                              <div className="flex items-center gap-2">
-                                <NotebookPen size={14} className={isDark ? "text-cyan-300" : "text-sky-700"} />
-                                <span className={`text-sm font-bold ${isDark ? "text-slate-100" : "text-slate-800"}`}>
-                                  Lead Diary
-                                </span>
-                              </div>
-                              <span className={`text-[11px] font-semibold ${isDark ? "text-slate-300" : "text-slate-600"}`}>
-                                {lead.name}
-                              </span>
-                            </div>
-
-                            <div className="space-y-2">
-                              <textarea
-                                value={diaryDraft}
-                                onChange={(e) => setDiaryDraft(e.target.value)}
-                                maxLength={2000}
-                                placeholder={`Add diary note for ${lead.name}`}
-                                className={`w-full min-h-[84px] rounded-xl border px-3 py-2 text-sm bg-transparent resize-y ${
-                                  isDark ? "border-slate-700 text-slate-100 placeholder:text-slate-500" : "border-slate-300 text-slate-800 placeholder:text-slate-400"
-                                }`}
-                              />
-                              <div className="flex items-center justify-between gap-2">
-                                <span className={`text-[11px] ${isDark ? "text-slate-400" : "text-slate-500"}`}>
-                                  {diaryDraft.length}/2000
-                                </span>
-                                <button
-                                  onClick={handleAddDiary}
-                                  disabled={diarySaving || !diaryDraft.trim()}
-                                  className={`h-9 px-3 rounded-lg text-xs font-semibold flex items-center gap-1.5 ${
-                                    isDark ? "bg-cyan-600 hover:bg-cyan-500 text-white" : "bg-sky-600 hover:bg-sky-500 text-white"
-                                  } disabled:opacity-60`}
-                                >
-                                  {diarySaving ? <Loader2 size={13} className="animate-spin" /> : <Save size={13} />}
-                                  {diarySaving ? "Saving..." : "Add Note"}
-                                </button>
-                              </div>
-                            </div>
-
-                            <div className={`rounded-xl border max-h-48 overflow-y-auto custom-scrollbar ${isDark ? "border-slate-700 bg-slate-900/50" : "border-slate-200 bg-white"}`}>
-                              {diaryLoading ? (
-                                <div className={`px-3 py-4 text-sm flex items-center gap-2 ${isDark ? "text-slate-300" : "text-slate-600"}`}>
-                                  <Loader2 size={14} className="animate-spin" /> Loading diary...
+                                <div className="flex items-start justify-between gap-2">
+                                  <div className={`text-sm font-semibold ${isDark ? "text-slate-100" : "text-slate-900"}`}>{lead.name}</div>
+                                  <div className="flex items-center gap-1">
+                                    <button
+                                      type="button"
+                                      onClick={(event) => {
+                                        event.stopPropagation();
+                                        handleOpenLeadDetails(lead._id);
+                                      }}
+                                      className={`inline-flex h-7 w-7 items-center justify-center rounded-md border ${
+                                        isDark
+                                          ? "border-slate-600 bg-slate-800 text-slate-200 hover:border-cyan-400/60"
+                                          : "border-slate-300 bg-white text-slate-600 hover:border-sky-400 hover:text-sky-700"
+                                      }`}
+                                      title="Follow-up details"
+                                      aria-label="Open follow-up details"
+                                    >
+                                      <PanelRightOpen size={13} />
+                                    </button>
+                                    <button
+                                      type="button"
+                                      onClick={(event) => {
+                                        event.stopPropagation();
+                                        handleDeleteFollowUp(lead);
+                                      }}
+                                      disabled={deletingLeadId === lead._id}
+                                      className={`inline-flex h-7 w-7 items-center justify-center rounded-md border ${
+                                        isDark
+                                          ? "border-rose-500/50 bg-rose-500/10 text-rose-200 hover:border-rose-400"
+                                          : "border-rose-300 bg-rose-50 text-rose-700 hover:border-rose-400"
+                                      } disabled:opacity-60`}
+                                      title="Delete follow-up"
+                                      aria-label="Delete follow-up"
+                                    >
+                                      {deletingLeadId === lead._id ? (
+                                        <Loader2 size={13} className="animate-spin" />
+                                      ) : (
+                                        <Trash2 size={13} />
+                                      )}
+                                    </button>
+                                  </div>
                                 </div>
-                              ) : diaryEntries.length === 0 ? (
-                                <div className={`px-3 py-4 text-sm ${isDark ? "text-slate-400" : "text-slate-500"}`}>
-                                  No diary notes yet
+                                <div className={`mt-2 text-xs space-y-1 ${isDark ? "text-slate-300" : "text-slate-600"}`}>
+                                  <div className="flex items-center gap-2">
+                                    <Clock3 size={12} /> {formatDateTime(lead.nextFollowUp)}
+                                  </div>
+                                  <div className="flex items-center gap-2">
+                                    <Phone size={12} /> {lead.phone || "-"}
+                                  </div>
+                                  <div className="flex items-center gap-2">
+                                    <User size={12} /> Assigned: {getAssignedLabel(lead)}
+                                  </div>
+                                  <div className="flex items-center gap-2">
+                                    <Users size={12} /> Under: {getReportingLabel(lead)}
+                                  </div>
+                                  <div className="flex items-center gap-2">
+                                    <User size={12} /> {lead.status}
+                                  </div>
                                 </div>
-                              ) : (
-                                <div className="divide-y divide-slate-200/60 dark:divide-slate-700/80">
-                                  {diaryEntries.map((entry) => (
-                                    <div key={entry._id} className="px-3 py-2.5">
-                                      <p className={`text-sm whitespace-pre-wrap break-words ${isDark ? "text-slate-100" : "text-slate-800"}`}>
-                                        {entry.note}
-                                      </p>
-                                      <div className={`mt-1 text-[11px] ${isDark ? "text-slate-400" : "text-slate-500"}`}>
-                                        {entry.createdBy?.name || "Unknown"} - {formatDiaryTime(entry.createdAt)}
-                                      </div>
+                              </motion.div>
+
+                              {isActiveLead && isDiaryForLead ? (
+                                <div className={`rounded-xl border p-4 space-y-3 ${isDark ? "border-cyan-500/40 bg-slate-900/70" : "border-sky-300 bg-sky-50/60"}`}>
+                                  <div className="flex items-center justify-between gap-2">
+                                    <div className="flex items-center gap-2">
+                                      <NotebookPen size={14} className={isDark ? "text-cyan-300" : "text-sky-700"} />
+                                      <span className={`text-sm font-bold ${isDark ? "text-slate-100" : "text-slate-800"}`}>
+                                        Lead Diary
+                                      </span>
                                     </div>
-                                  ))}
+                                    <span className={`text-[11px] font-semibold ${isDark ? "text-slate-300" : "text-slate-600"}`}>
+                                      {lead.name}
+                                    </span>
+                                  </div>
+
+                                  <div className="space-y-2">
+                                    <textarea
+                                      value={diaryDraft}
+                                      onChange={(e) => setDiaryDraft(e.target.value)}
+                                      maxLength={2000}
+                                      placeholder={`Add diary note for ${lead.name}`}
+                                      className={`w-full min-h-[84px] rounded-xl border px-3 py-2 text-sm bg-transparent resize-y ${
+                                        isDark ? "border-slate-700 text-slate-100 placeholder:text-slate-500" : "border-slate-300 text-slate-800 placeholder:text-slate-400"
+                                      }`}
+                                    />
+                                    <div className="flex items-center justify-between gap-2">
+                                      <span className={`text-[11px] ${isDark ? "text-slate-400" : "text-slate-500"}`}>
+                                        {diaryDraft.length}/2000
+                                      </span>
+                                      <button
+                                        onClick={handleAddDiary}
+                                        disabled={diarySaving || !diaryDraft.trim()}
+                                        className={`h-9 px-3 rounded-lg text-xs font-semibold flex items-center gap-1.5 ${
+                                          isDark ? "bg-cyan-600 hover:bg-cyan-500 text-white" : "bg-sky-600 hover:bg-sky-500 text-white"
+                                        } disabled:opacity-60`}
+                                      >
+                                        {diarySaving ? <Loader2 size={13} className="animate-spin" /> : <Save size={13} />}
+                                        {diarySaving ? "Saving..." : "Add Note"}
+                                      </button>
+                                    </div>
+                                  </div>
+
+                                  <div className={`rounded-xl border max-h-48 overflow-y-auto custom-scrollbar ${isDark ? "border-slate-700 bg-slate-900/50" : "border-slate-200 bg-white"}`}>
+                                    {diaryLoading ? (
+                                      <div className={`px-3 py-4 text-sm flex items-center gap-2 ${isDark ? "text-slate-300" : "text-slate-600"}`}>
+                                        <Loader2 size={14} className="animate-spin" /> Loading diary...
+                                      </div>
+                                    ) : diaryEntries.length === 0 ? (
+                                      <div className={`px-3 py-4 text-sm ${isDark ? "text-slate-400" : "text-slate-500"}`}>
+                                        No diary notes yet
+                                      </div>
+                                    ) : (
+                                      <div className="divide-y divide-slate-200/60 dark:divide-slate-700/80">
+                                        {diaryEntries.map((entry) => (
+                                          <div key={entry._id} className="px-3 py-2.5">
+                                            <p className={`text-sm whitespace-pre-wrap break-words ${isDark ? "text-slate-100" : "text-slate-800"}`}>
+                                              {entry.note}
+                                            </p>
+                                            <div className={`mt-1 text-[11px] ${isDark ? "text-slate-400" : "text-slate-500"}`}>
+                                              {entry.createdBy?.name || "Unknown"} - {formatDiaryTime(entry.createdAt)}
+                                            </div>
+                                          </div>
+                                        ))}
+                                      </div>
+                                    )}
+                                  </div>
                                 </div>
-                              )}
+                              ) : null}
                             </div>
-                          </div>
-                        ) : null}
-                      </div>
-                    );
-                  })
+                          );
+                        })
+                      )}
+                    </div>
+
+                    {/* SECTION 2: Task Deadlines */}
+                    <div className="space-y-2.5 pt-2">
+                      <h4 className={`text-xs font-bold uppercase tracking-wider flex items-center justify-between ${
+                        isDark ? "text-slate-400" : "text-slate-500"
+                      }`}>
+                        <span>Task Deadlines</span>
+                        <span className={`px-1.5 py-0.5 rounded text-[10px] ${
+                          isDark ? "bg-slate-800 text-slate-300" : "bg-slate-100 text-slate-600"
+                        }`}>{selectedDayTasks.length}</span>
+                      </h4>
+                      {selectedDayTasks.length === 0 ? (
+                        <div className={`text-xs p-3 border border-dashed rounded-xl text-center ${
+                          isDark ? "border-slate-800 text-slate-500" : "border-slate-200 text-slate-400"
+                        }`}>
+                          No tasks due
+                        </div>
+                      ) : (
+                        selectedDayTasks.map((task, index) => {
+                          const isCompleted = task.status === "COMPLETED";
+                          return (
+                            <motion.div
+                              key={task._id}
+                              initial={{ opacity: 0, x: 10 }}
+                              animate={{ opacity: 1, x: 0 }}
+                              transition={{ delay: index * 0.04 }}
+                              className={`rounded-xl border p-3 flex items-start gap-3 transition-colors ${
+                                isDark ? "border-slate-700 bg-slate-900/85 hover:border-slate-500" : "border-slate-200 bg-white hover:border-slate-300"
+                              }`}
+                            >
+                              <input
+                                type="checkbox"
+                                checked={isCompleted}
+                                onChange={() => handleToggleTaskComplete(task)}
+                                className="mt-1 h-4 w-4 rounded border-slate-700 bg-transparent text-emerald-500 focus:ring-0 focus:ring-offset-0 cursor-pointer"
+                              />
+                              <div className="flex-1 min-w-0">
+                                <div className={`text-sm font-semibold truncate ${
+                                  isCompleted ? "line-through text-slate-500" : (isDark ? "text-slate-100" : "text-slate-900")
+                                }`}>
+                                  {task.title}
+                                </div>
+                                {task.description && (
+                                  <p className={`text-xs truncate ${isDark ? "text-slate-400" : "text-slate-500"}`}>
+                                    {task.description}
+                                  </p>
+                                )}
+                                <div className="mt-2 flex flex-wrap items-center gap-1.5 text-[10px]">
+                                  <span className={`px-1.5 py-0.5 rounded font-bold uppercase tracking-wider ${
+                                    task.priority === "HIGH" ? "bg-rose-500/15 text-rose-450 border border-rose-500/10" :
+                                    task.priority === "MEDIUM" ? "bg-amber-500/15 text-amber-450 border border-amber-500/10" :
+                                    "bg-blue-500/15 text-blue-450 border border-blue-500/10"
+                                  }`}>
+                                    {task.priority}
+                                  </span>
+                                  <span className={`px-1.5 py-0.5 rounded font-bold uppercase tracking-wider ${
+                                    isCompleted ? "bg-emerald-500/15 text-emerald-450" : "bg-slate-500/15 text-slate-400"
+                                  }`}>
+                                    {task.status.replace("_", " ")}
+                                  </span>
+                                  {task.assignedTo && (
+                                    <span className={isDark ? "text-slate-400" : "text-slate-500"}>
+                                      Assignee: {task.assignedTo.name}
+                                    </span>
+                                  )}
+                                </div>
+                              </div>
+                            </motion.div>
+                          );
+                        })
+                      )}
+                    </div>
+                  </>
                 )}
               </div>
             </div>

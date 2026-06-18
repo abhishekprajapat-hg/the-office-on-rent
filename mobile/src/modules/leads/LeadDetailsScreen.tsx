@@ -40,6 +40,13 @@ import {
   type LeadDiaryEntry,
   type LeadStatusRequest,
 } from "../../services/leadService";
+import {
+  getTasks,
+  createTask,
+  updateTask,
+  deleteTask,
+  type Task,
+} from "../../services/taskService";
 import { uploadChatFile } from "../../services/chatService";
 import { getInventoryAssets } from "../../services/inventoryService";
 import { getUsers } from "../../services/userService";
@@ -162,6 +169,157 @@ const toObjectIdString = (value: unknown) => {
   }
   return String(value || "");
 };
+
+const createDefaultLeadRequirementsDraft = () => ({
+  inventoryType: "",
+  transactionType: "",
+  furnishingStatus: "",
+  budgetMin: "",
+  budgetMax: "",
+  areaMin: "",
+  areaMax: "",
+  areaUnit: "SQ_FT",
+  commercial: {
+    seats: "",
+    cabins: "",
+    parkingAvailable: false,
+    pantry: false,
+  },
+  residential: {
+    bhkType: "",
+    floor: "",
+    amenities: {
+      lift: false,
+      security: false,
+      gym: false,
+      swimmingPool: false,
+      clubhouse: false,
+      powerBackup: false,
+      parking: false,
+    },
+  },
+});
+
+const toRequirementDraftText = (value: any) => {
+  if (value === null || value === undefined) return "";
+  return String(value).trim();
+};
+
+const toRequirementAreaUnit = (value: any) =>
+  String(value || "").trim().toUpperCase() === "SQ_M" ? "SQ_M" : "SQ_FT";
+
+const mapLeadRequirementsToDraft = (requirements: any = {}) => {
+  const base = createDefaultLeadRequirementsDraft();
+  const commercial = requirements?.commercial || {};
+  const residential = requirements?.residential || {};
+  const amenities = residential?.amenities || {};
+
+  return {
+    inventoryType: toRequirementDraftText(requirements?.inventoryType).toUpperCase(),
+    transactionType: toRequirementDraftText(requirements?.transactionType).toUpperCase(),
+    furnishingStatus: toRequirementDraftText(requirements?.furnishingStatus).toUpperCase(),
+    budgetMin: toRequirementDraftText(requirements?.budgetMin),
+    budgetMax: toRequirementDraftText(requirements?.budgetMax),
+    areaMin: toRequirementDraftText(requirements?.areaMin),
+    areaMax: toRequirementDraftText(requirements?.areaMax),
+    areaUnit: toRequirementAreaUnit(requirements?.areaUnit || base.areaUnit),
+    commercial: {
+      seats: toRequirementDraftText(commercial?.seats),
+      cabins: toRequirementDraftText(commercial?.cabins),
+      parkingAvailable: Boolean(commercial?.parkingAvailable),
+      pantry: Boolean(commercial?.pantry),
+    },
+    residential: {
+      bhkType: toRequirementDraftText(residential?.bhkType).toUpperCase(),
+      floor: toRequirementDraftText(residential?.floor),
+      amenities: {
+        lift: Boolean(amenities?.lift),
+        security: Boolean(amenities?.security),
+        gym: Boolean(amenities?.gym),
+        swimmingPool: Boolean(amenities?.swimmingPool),
+        clubhouse: Boolean(amenities?.clubhouse),
+        powerBackup: Boolean(amenities?.powerBackup),
+        parking: Boolean(amenities?.parking),
+      },
+    },
+  };
+};
+
+const toAmountNumber = (value: any) => {
+  if (value === null || value === undefined) return null;
+  if (typeof value === "string" && value.trim() === "") return null;
+  const parsed = Number(value);
+  return Number.isFinite(parsed) ? parsed : null;
+};
+
+const toRequirementTransactionType = (value: any) => {
+  const normalized = String(value || "").trim().toUpperCase();
+  if (normalized === "RENT") return "RENT";
+  if (normalized === "SALE") return "SALE";
+  return "";
+};
+
+const buildLeadRequirementsPayloadFromDraft = (draft: any = {}) => ({
+  inventoryType: String(draft?.inventoryType || "").trim().toUpperCase(),
+  transactionType: toRequirementTransactionType(draft?.transactionType),
+  furnishingStatus: String(draft?.furnishingStatus || "").trim().toUpperCase(),
+  budgetMin: toAmountNumber(draft?.budgetMin),
+  budgetMax: toAmountNumber(draft?.budgetMax),
+  areaMin: toAmountNumber(draft?.areaMin),
+  areaMax: toAmountNumber(draft?.areaMax),
+  areaUnit: toRequirementAreaUnit(draft?.areaUnit),
+  commercial: {
+    seats: toAmountNumber(draft?.commercial?.seats),
+    cabins: toAmountNumber(draft?.commercial?.cabins),
+    parkingAvailable: Boolean(draft?.commercial?.parkingAvailable),
+    pantry: Boolean(draft?.commercial?.pantry),
+  },
+  residential: {
+    bhkType: String(draft?.residential?.bhkType || "").trim().toUpperCase(),
+    floor: toAmountNumber(draft?.residential?.floor),
+    amenities: {
+      lift: Boolean(draft?.residential?.amenities?.lift),
+      security: Boolean(draft?.residential?.amenities?.security),
+      gym: Boolean(draft?.residential?.amenities?.gym),
+      swimmingPool: Boolean(draft?.residential?.amenities?.swimmingPool),
+      clubhouse: Boolean(draft?.residential?.amenities?.clubhouse),
+      powerBackup: Boolean(draft?.residential?.amenities?.powerBackup),
+      parking: Boolean(draft?.residential?.amenities?.parking),
+    },
+  },
+});
+
+const LEAD_REQUIREMENT_FURNISHING_OPTIONS = [
+  { value: "", label: "Any Furnishing" },
+  { value: "UNFURNISHED", label: "Unfurnished" },
+  { value: "SEMI_FURNISHED", label: "Semi Furnished" },
+  { value: "FULLY_FURNISHED", label: "Fully Furnished" },
+  { value: "BARE_SHELL", label: "Bare Shell" },
+  { value: "WARM_SHELL", label: "Warm Shell" },
+  { value: "MANAGED_OFFICE", label: "Managed Office" },
+  { value: "COWORKING", label: "Coworking" },
+];
+
+const LEAD_REQUIREMENT_BHK_OPTIONS = [
+  { value: "", label: "Any BHK" },
+  { value: "1BHK", label: "1 BHK" },
+  { value: "2BHK", label: "2 BHK" },
+  { value: "3BHK", label: "3 BHK" },
+  { value: "4BHK", label: "4 BHK" },
+  { value: "5BHK", label: "5 BHK" },
+  { value: "STUDIO", label: "Studio" },
+  { value: "OTHER", label: "Other" },
+];
+
+const LEAD_REQUIREMENT_RESIDENTIAL_AMENITY_FIELDS = [
+  { key: "lift", label: "Lift" },
+  { key: "security", label: "Security" },
+  { key: "gym", label: "Gym" },
+  { key: "swimmingPool", label: "Swimming Pool" },
+  { key: "clubhouse", label: "Clubhouse" },
+  { key: "powerBackup", label: "Power Backup" },
+  { key: "parking", label: "Parking" },
+];
 
 const getInventoryLeadLabel = (inventory: any) =>
   [inventory?.projectName, inventory?.towerName, inventory?.unitNumber]
@@ -313,6 +471,87 @@ export const LeadDetailsScreen = () => {
   const lastDiaryTranscriptRef = useRef("");
   const currentUserId = String((user as any)?._id || (user as any)?.id || "");
 
+  // Requirements States
+  const [requirementsDraft, setRequirementsDraft] = useState<any>(
+    createDefaultLeadRequirementsDraft(),
+  );
+
+  const updateRequirementRootField = useCallback((field: string, value: any) => {
+    setRequirementsDraft((prev: any) => ({
+      ...prev,
+      [field]: value,
+    }));
+  }, []);
+
+  const updateRequirementCommercialField = useCallback((field: string, value: any) => {
+    setRequirementsDraft((prev: any) => ({
+      ...prev,
+      commercial: {
+        seats: "",
+        cabins: "",
+        parkingAvailable: false,
+        pantry: false,
+        ...prev.commercial,
+        [field]: value,
+      },
+    }));
+  }, []);
+
+  const updateRequirementResidentialField = useCallback((field: string, value: any) => {
+    setRequirementsDraft((prev: any) => ({
+      ...prev,
+      residential: {
+        bhkType: "",
+        floor: "",
+        amenities: {
+          lift: false,
+          security: false,
+          gym: false,
+          swimmingPool: false,
+          clubhouse: false,
+          powerBackup: false,
+          parking: false,
+        },
+        ...prev.residential,
+        [field]: value,
+      },
+    }));
+  }, []);
+
+  const updateRequirementResidentialAmenity = useCallback((field: string, value: any) => {
+    setRequirementsDraft((prev: any) => ({
+      ...prev,
+      residential: {
+        bhkType: "",
+        floor: "",
+        ...prev.residential,
+        amenities: {
+          lift: false,
+          security: false,
+          gym: false,
+          swimmingPool: false,
+          clubhouse: false,
+          powerBackup: false,
+          parking: false,
+          ...prev.residential?.amenities,
+          [field]: value,
+        },
+      },
+    }));
+  }, []);
+
+  // Tasks States
+  const [leadTasks, setLeadTasks] = useState<Task[]>([]);
+  const [loadingTasks, setLoadingTasks] = useState(false);
+  const [newTaskTitle, setNewTaskTitle] = useState("");
+  const [newTaskDueDate, setNewTaskDueDate] = useState("");
+  const [newTaskPriority, setNewTaskPriority] = useState("MEDIUM");
+  const [newTaskAssignedTo, setNewTaskAssignedTo] = useState("");
+  const [addingTask, setAddingTask] = useState(false);
+  const [taskAssigneeDropdownOpen, setTaskAssigneeDropdownOpen] = useState(false);
+  const [showTaskDatePicker, setShowTaskDatePicker] = useState(false);
+  const [taskDatePickerSeed, setTaskDatePickerSeed] = useState<Date>(new Date());
+
   const visibleDiaryEntries = useMemo(
     () => (showAllDiaryEntries ? diaryEntries : diaryEntries.slice(0, 2)),
     [diaryEntries, showAllDiaryEntries],
@@ -444,10 +683,12 @@ export const LeadDetailsScreen = () => {
       setInventoryOptions(resolvedInventoryRows);
 
       const resolvedLeadId = String((currentLead as any)?._id || "");
-      const [timelineResult, diaryResult, historyResult] = await Promise.allSettled([
+      setLoadingTasks(true);
+      const [timelineResult, diaryResult, historyResult, tasksResult] = await Promise.allSettled([
         getLeadActivity(resolvedLeadId),
         getLeadDiary(resolvedLeadId),
         getLeadStatusRequests({ leadId: resolvedLeadId }),
+        getTasks({ leadId: resolvedLeadId }),
       ]);
       setActivities(
         timelineResult.status === "fulfilled" && Array.isArray(timelineResult.value)
@@ -464,6 +705,12 @@ export const LeadDetailsScreen = () => {
           ? historyResult.value
           : [],
       );
+      setLeadTasks(
+        tasksResult.status === "fulfilled" && Array.isArray(tasksResult.value)
+          ? tasksResult.value
+          : [],
+      );
+      setLoadingTasks(false);
 
       setStatusDraft(currentLead.status || "NEW");
       setFollowUpDraft(formatFollowUpInput(currentLead.nextFollowUp));
@@ -481,6 +728,11 @@ export const LeadDetailsScreen = () => {
       setPaymentReferenceDraft(String((currentLead as any)?.dealPayment?.paymentReference || ""));
       setPaymentNoteDraft(String((currentLead as any)?.dealPayment?.note || ""));
       setClosureDocumentsDraft(Array.isArray((currentLead as any)?.closureDocuments) ? (currentLead as any).closureDocuments : []);
+      if ((currentLead as any).requirements) {
+        setRequirementsDraft(mapLeadRequirementsToDraft((currentLead as any).requirements));
+      } else {
+        setRequirementsDraft(createDefaultLeadRequirementsDraft());
+      }
       setClosedForm((prev) => ({ ...prev, saleLeadId: prev.saleLeadId || String(currentLead._id || "") }));
     } catch (e) {
       setError(toErrorMessage(e, "Failed to load lead details"));
@@ -729,7 +981,10 @@ export const LeadDetailsScreen = () => {
   const saveUpdate = async () => {
     if (!lead) return;
 
-    const payload: any = { status: statusDraft };
+    const payload: any = {
+      status: statusDraft,
+      requirements: buildLeadRequirementsPayloadFromDraft(requirementsDraft),
+    };
 
     if (followUpDraft.trim()) {
       const parsed = parseFollowUpInput(followUpDraft);
@@ -793,6 +1048,123 @@ export const LeadDetailsScreen = () => {
     } finally {
       setSaving(false);
     }
+  };
+
+  const fetchLeadTasks = useCallback(async () => {
+    if (!leadId) return;
+    setLoadingTasks(true);
+    try {
+      const data = await getTasks({ leadId });
+      setLeadTasks(data || []);
+    } catch (err) {
+      console.error("Failed to load lead tasks", err);
+    } finally {
+      setLoadingTasks(false);
+    }
+  }, [leadId]);
+
+  const handleAddLeadTask = async () => {
+    if (!newTaskTitle.trim() || !lead?._id) return;
+    setAddingTask(true);
+    try {
+      const payload = {
+        title: newTaskTitle.trim(),
+        status: "TODO",
+        priority: newTaskPriority,
+        dueDate: newTaskDueDate || null,
+        assignedTo: (newTaskAssignedTo || null) as any,
+        leadId: lead._id,
+      };
+      const created = await createTask(payload);
+      if (created) {
+        setNewTaskTitle("");
+        setNewTaskDueDate("");
+        setNewTaskPriority("MEDIUM");
+        setNewTaskAssignedTo("");
+        setSuccess("Task created");
+        await fetchLeadTasks();
+      }
+    } catch (err) {
+      setError(toErrorMessage(err, "Failed to create lead task"));
+    } finally {
+      setAddingTask(false);
+    }
+  };
+
+  const handleToggleLeadTaskStatus = async (task: Task) => {
+    const newStatus = task.status === "COMPLETED" ? "TODO" : "COMPLETED";
+    try {
+      setLeadTasks((prev) => prev.map((t) => (t._id === task._id ? { ...t, status: newStatus } : t)));
+      await updateTask(task._id, { status: newStatus });
+      setSuccess("Task updated");
+      await fetchLeadTasks();
+    } catch (err) {
+      setError(toErrorMessage(err, "Failed to update task status"));
+      await fetchLeadTasks();
+    }
+  };
+
+  const handleDeleteLeadTask = async (taskId: string) => {
+    const performDelete = async () => {
+      try {
+        setLeadTasks((prev) => prev.filter((t) => t._id !== taskId));
+        await deleteTask(taskId);
+        setSuccess("Task deleted");
+        await fetchLeadTasks();
+      } catch (err) {
+        setError(toErrorMessage(err, "Failed to delete task"));
+        await fetchLeadTasks();
+      }
+    };
+
+    if (Platform.OS === "web") {
+      const confirmed = typeof window !== "undefined" ? window.confirm("Delete this task?") : false;
+      if (confirmed) await performDelete();
+      return;
+    }
+
+    Alert.alert(
+      "Delete task",
+      "Are you sure you want to delete this task?",
+      [
+        { text: "Cancel", style: "cancel" },
+        { text: "Delete", style: "destructive", onPress: performDelete },
+      ],
+    );
+  };
+
+  const openTaskDatePicker = () => {
+    const seed = newTaskDueDate ? new Date(newTaskDueDate) : new Date();
+
+    if (Platform.OS === "android") {
+      DateTimePickerAndroid.open({
+        value: seed,
+        mode: "date",
+        onChange: (event: any, pickedDate?: Date) => {
+          if (event.type !== "set" || !pickedDate) return;
+          setNewTaskDueDate(pickedDate.toISOString().split("T")[0]);
+        },
+      });
+      return;
+    }
+
+    if (Platform.OS === "web") {
+      return;
+    }
+
+    setTaskDatePickerSeed(seed);
+    setShowTaskDatePicker(true);
+  };
+
+  const onTaskDatePickerChange = (event: any, selectedDate?: Date) => {
+    if (event.type === "dismissed") {
+      setShowTaskDatePicker(false);
+      return;
+    }
+    if (selectedDate) {
+      setNewTaskDueDate(selectedDate.toISOString().split("T")[0]);
+    }
+    setShowTaskDatePicker(false);
   };
 
   const openDialer = async (phone?: string) => {
@@ -2177,6 +2549,222 @@ export const LeadDetailsScreen = () => {
       </AppCard>
 
       <AppCard style={styles.card as object}>
+        <Text style={styles.section}>Lead Requirements</Text>
+        
+        <Text style={styles.metricLabel}>Inventory Type</Text>
+        <View style={styles.modalChipWrap}>
+          {[
+            { value: "", label: "Any" },
+            { value: "COMMERCIAL", label: "Commercial" },
+            { value: "RESIDENTIAL", label: "Residential" },
+          ].map((item) => (
+            <AppChip
+              key={`req-inv-${item.value}`}
+              label={item.label}
+              active={requirementsDraft?.inventoryType === item.value}
+              onPress={() => updateRequirementRootField("inventoryType", item.value)}
+              style={styles.modalChip as object}
+            />
+          ))}
+        </View>
+
+        <Text style={styles.metricLabel}>Deal Type</Text>
+        <View style={styles.modalChipWrap}>
+          {[
+            { value: "", label: "Any" },
+            { value: "SALE", label: "Sale" },
+            { value: "RENT", label: "Rent" },
+          ].map((item) => (
+            <AppChip
+              key={`req-tx-${item.value}`}
+              label={item.label}
+              active={requirementsDraft?.transactionType === item.value}
+              onPress={() => updateRequirementRootField("transactionType", item.value)}
+              style={styles.modalChip as object}
+            />
+          ))}
+        </View>
+
+        <Text style={styles.metricLabel}>Furnishing Status</Text>
+        <View style={styles.modalChipWrap}>
+          {LEAD_REQUIREMENT_FURNISHING_OPTIONS.map((item) => (
+            <AppChip
+              key={`req-furn-${item.value}`}
+              label={item.label}
+              active={requirementsDraft?.furnishingStatus === item.value}
+              onPress={() => updateRequirementRootField("furnishingStatus", item.value)}
+              style={styles.modalChip as object}
+            />
+          ))}
+        </View>
+
+        <Text style={styles.metricLabel}>Area Unit</Text>
+        <View style={styles.modalChipWrap}>
+          {[
+            { value: "SQ_FT", label: "Sq Ft" },
+            { value: "SQ_M", label: "Sq M" },
+          ].map((item) => (
+            <AppChip
+              key={`req-unit-${item.value}`}
+              label={item.label}
+              active={requirementsDraft?.areaUnit === item.value}
+              onPress={() => updateRequirementRootField("areaUnit", item.value)}
+              style={styles.modalChip as object}
+            />
+          ))}
+        </View>
+
+        <View style={styles.twoColRow}>
+          <View style={{ flex: 1 }}>
+            <Text style={styles.metricLabel}>Budget Min</Text>
+            <AppInput
+              style={[styles.input as object, styles.twoColInput as object]}
+              value={requirementsDraft?.budgetMin || ""}
+              onChangeText={(val: string) => updateRequirementRootField("budgetMin", val)}
+              placeholder="Min budget"
+              keyboardType="phone-pad"
+            />
+          </View>
+          <View style={{ flex: 1 }}>
+            <Text style={styles.metricLabel}>Budget Max</Text>
+            <AppInput
+              style={[styles.input as object, styles.twoColInput as object]}
+              value={requirementsDraft?.budgetMax || ""}
+              onChangeText={(val: string) => updateRequirementRootField("budgetMax", val)}
+              placeholder="Max budget"
+              keyboardType="phone-pad"
+            />
+          </View>
+        </View>
+
+        <View style={styles.twoColRow}>
+          <View style={{ flex: 1 }}>
+            <Text style={styles.metricLabel}>Area Min</Text>
+            <AppInput
+              style={[styles.input as object, styles.twoColInput as object]}
+              value={requirementsDraft?.areaMin || ""}
+              onChangeText={(val: string) => updateRequirementRootField("areaMin", val)}
+              placeholder="Min area"
+              keyboardType="phone-pad"
+            />
+          </View>
+          <View style={{ flex: 1 }}>
+            <Text style={styles.metricLabel}>Area Max</Text>
+            <AppInput
+              style={[styles.input as object, styles.twoColInput as object]}
+              value={requirementsDraft?.areaMax || ""}
+              onChangeText={(val: string) => updateRequirementRootField("areaMax", val)}
+              placeholder="Max area"
+              keyboardType="phone-pad"
+            />
+          </View>
+        </View>
+
+        {requirementsDraft?.inventoryType === "COMMERCIAL" ? (
+          <View style={{ marginTop: 10, padding: 10, borderWidth: 1, borderColor: "#cbd5e1", borderRadius: 10, backgroundColor: "#f8fafc" }}>
+            <Text style={[styles.section, { fontSize: 13, marginBottom: 6 }]}>Commercial Preferences</Text>
+            <View style={styles.twoColRow}>
+              <View style={{ flex: 1 }}>
+                <Text style={styles.metricLabel}>Seats</Text>
+                <AppInput
+                  style={[styles.input as object, styles.twoColInput as object]}
+                  value={requirementsDraft?.commercial?.seats || ""}
+                  onChangeText={(val: string) => updateRequirementCommercialField("seats", val)}
+                  placeholder="Workstations"
+                  keyboardType="phone-pad"
+                />
+              </View>
+              <View style={{ flex: 1 }}>
+                <Text style={styles.metricLabel}>Cabins</Text>
+                <AppInput
+                  style={[styles.input as object, styles.twoColInput as object]}
+                  value={requirementsDraft?.commercial?.cabins || ""}
+                  onChangeText={(val: string) => updateRequirementCommercialField("cabins", val)}
+                  placeholder="Cabins"
+                  keyboardType="phone-pad"
+                />
+              </View>
+            </View>
+            
+            <View style={styles.checkboxGrid}>
+              <Pressable
+                style={[styles.checkboxItem, requirementsDraft?.commercial?.parkingAvailable && styles.checkboxItemActive]}
+                onPress={() => updateRequirementCommercialField("parkingAvailable", !requirementsDraft?.commercial?.parkingAvailable)}
+              >
+                <Ionicons
+                  name={requirementsDraft?.commercial?.parkingAvailable ? "checkbox" : "square-outline"}
+                  size={14}
+                  color={requirementsDraft?.commercial?.parkingAvailable ? "#10b981" : "#475569"}
+                />
+                <Text style={styles.checkboxLabel}>Parking Available</Text>
+              </Pressable>
+
+              <Pressable
+                style={[styles.checkboxItem, requirementsDraft?.commercial?.pantry && styles.checkboxItemActive]}
+                onPress={() => updateRequirementCommercialField("pantry", !requirementsDraft?.commercial?.pantry)}
+              >
+                <Ionicons
+                  name={requirementsDraft?.commercial?.pantry ? "checkbox" : "square-outline"}
+                  size={14}
+                  color={requirementsDraft?.commercial?.pantry ? "#10b981" : "#475569"}
+                />
+                <Text style={styles.checkboxLabel}>Pantry</Text>
+              </Pressable>
+            </View>
+          </View>
+        ) : null}
+
+        {requirementsDraft?.inventoryType === "RESIDENTIAL" ? (
+          <View style={{ marginTop: 10, padding: 10, borderWidth: 1, borderColor: "#cbd5e1", borderRadius: 10, backgroundColor: "#f8fafc" }}>
+            <Text style={[styles.section, { fontSize: 13, marginBottom: 6 }]}>Residential Preferences</Text>
+            
+            <Text style={styles.metricLabel}>BHK Type</Text>
+            <View style={styles.modalChipWrap}>
+              {LEAD_REQUIREMENT_BHK_OPTIONS.map((item) => (
+                <AppChip
+                  key={`req-bhk-${item.value}`}
+                  label={item.label}
+                  active={requirementsDraft?.residential?.bhkType === item.value}
+                  onPress={() => updateRequirementResidentialField("bhkType", item.value)}
+                  style={styles.modalChip as object}
+                />
+              ))}
+            </View>
+
+            <Text style={styles.metricLabel}>Preferred Floor</Text>
+            <AppInput
+              style={styles.input as object}
+              value={requirementsDraft?.residential?.floor || ""}
+              onChangeText={(val: string) => updateRequirementResidentialField("floor", val)}
+              placeholder="Floor number"
+              keyboardType="phone-pad"
+            />
+
+            <Text style={styles.metricLabel}>Amenities</Text>
+            <View style={styles.checkboxGrid}>
+              {LEAD_REQUIREMENT_RESIDENTIAL_AMENITY_FIELDS.map((field) => {
+                const checked = Boolean(requirementsDraft?.residential?.amenities?.[field.key]);
+                return (
+                  <Pressable
+                    key={`amenity-${field.key}`}
+                    style={[styles.checkboxItem, checked && styles.checkboxItemActive]}
+                    onPress={() => updateRequirementResidentialAmenity(field.key, !checked)}
+                  >
+                    <Ionicons
+                      name={checked ? "checkbox" : "square-outline"}
+                      size={14}
+                      color={checked ? "#10b981" : "#475569"}
+                    />
+                    <Text style={styles.checkboxLabel}>{field.label}</Text>
+                  </Pressable>
+                );
+              })}
+            </View>
+          </View>
+        ) : null}
+      </AppCard>
+
+      <AppCard style={styles.card as object}>
         <View style={styles.sectionRow}>
           <Text style={styles.section}>Properties</Text>
           <Text style={styles.meta}>{selectedLeadRelatedInventories.length} linked</Text>
@@ -2775,6 +3363,245 @@ export const LeadDetailsScreen = () => {
           <AppButton title={saving ? "Assigning..." : "Assign Lead"} onPress={saveAssignment} disabled={saving || !assignDraft} />
         </AppCard>
       ) : null}
+
+      <AppCard style={styles.card as object}>
+        <View style={styles.sectionRow}>
+          <Text style={styles.section}>Lead Tasks</Text>
+          <Text style={styles.meta}>
+            {leadTasks.filter((t) => t.status !== "COMPLETED").length} pending
+          </Text>
+        </View>
+
+        {/* Quick add task form */}
+        <View style={styles.taskForm}>
+          <AppInput
+            style={styles.input as object}
+            placeholder="Add a new task for this lead..."
+            value={newTaskTitle}
+            onChangeText={setNewTaskTitle}
+          />
+
+          <Text style={styles.metricLabel}>Priority</Text>
+          <View style={styles.modalChipWrap}>
+            {["LOW", "MEDIUM", "HIGH"].map((pri) => (
+              <AppChip
+                key={`task-pri-${pri}`}
+                label={pri}
+                active={newTaskPriority === pri}
+                onPress={() => setNewTaskPriority(pri)}
+                style={styles.modalChip as object}
+              />
+            ))}
+          </View>
+
+          <Text style={styles.metricLabel}>Assignee</Text>
+          <Pressable
+            style={styles.selectInput}
+            onPress={() => setTaskAssigneeDropdownOpen((prev) => !prev)}
+          >
+            <Text style={styles.selectInputText}>
+              {executives.find((u) => u._id === newTaskAssignedTo)?.name || "Unassigned"}
+            </Text>
+          </Pressable>
+          {taskAssigneeDropdownOpen ? (
+            <View style={styles.selectMenu}>
+              <ScrollView style={styles.selectMenuScroll} nestedScrollEnabled>
+                <Pressable
+                  style={styles.selectMenuItem}
+                  onPress={() => {
+                    setNewTaskAssignedTo("");
+                    setTaskAssigneeDropdownOpen(false);
+                  }}
+                >
+                  <Text style={styles.selectMenuItemText}>Unassigned</Text>
+                </Pressable>
+                {executives.map((u) => (
+                  <Pressable
+                    key={`task-assign-${u._id}`}
+                    style={styles.selectMenuItem}
+                    onPress={() => {
+                      setNewTaskAssignedTo(u._id || "");
+                      setTaskAssigneeDropdownOpen(false);
+                    }}
+                  >
+                    <Text style={styles.selectMenuItemText}>{u.name}</Text>
+                  </Pressable>
+                ))}
+              </ScrollView>
+            </View>
+          ) : null}
+
+          <Text style={styles.metricLabel}>Due Date</Text>
+          <View style={styles.followUpInputRow}>
+            {Platform.OS === "web" ? (
+              <input
+                type="date"
+                value={newTaskDueDate}
+                onChange={(e) => setNewTaskDueDate(e.target.value)}
+                style={{
+                  flex: 1,
+                  height: 38,
+                  paddingHorizontal: 10,
+                  borderRadius: 10,
+                  borderWidth: 1,
+                  borderColor: "#cbd5e1",
+                  fontSize: 12,
+                  backgroundColor: "#fff",
+                  color: "#334155",
+                  outlineStyle: "none"
+                } as any}
+              />
+            ) : (
+              <>
+                <AppInput
+                  style={[styles.input as object, styles.followUpInput as object]}
+                  value={newTaskDueDate}
+                  onChangeText={setNewTaskDueDate}
+                  placeholder="YYYY-MM-DD"
+                  editable={false}
+                />
+                <Pressable style={styles.followUpCalendarBtn} onPress={openTaskDatePicker}>
+                  <Ionicons name="calendar-outline" size={16} color="#334155" />
+                </Pressable>
+              </>
+            )}
+          </View>
+          {showTaskDatePicker && Platform.OS === "ios" ? (
+            <DateTimePicker
+              value={taskDatePickerSeed}
+              mode="date"
+              display="spinner"
+              onChange={onTaskDatePickerChange}
+            />
+          ) : null}
+
+          <AppButton
+            title={addingTask ? "Adding..." : "Add Task"}
+            onPress={handleAddLeadTask}
+            disabled={addingTask || !newTaskTitle.trim()}
+          />
+        </View>
+
+        {/* Tasks list */}
+        <View style={{ marginTop: 14 }}>
+          {loadingTasks ? (
+            <ActivityIndicator color="#0f172a" style={{ marginVertical: 12 }} />
+          ) : leadTasks.length === 0 ? (
+            <Text style={styles.meta}>No tasks linked to this lead.</Text>
+          ) : (
+            leadTasks.map((task) => {
+              const isCompleted = task.status === "COMPLETED";
+              const parsedDueDate = task.dueDate ? new Date(task.dueDate) : null;
+              const expired =
+                !isCompleted &&
+                parsedDueDate &&
+                parsedDueDate.getTime() < new Date().setHours(0, 0, 0, 0);
+
+              return (
+                <View
+                  key={task._id}
+                  style={[
+                    styles.taskRow,
+                    isCompleted && styles.taskRowCompleted,
+                  ]}
+                >
+                  <Pressable
+                    style={[
+                      styles.taskCheckbox,
+                      isCompleted && styles.taskCheckboxCompleted,
+                    ]}
+                    onPress={() => handleToggleLeadTaskStatus(task)}
+                  >
+                    {isCompleted ? (
+                      <Ionicons name="checkmark" size={12} color="#fff" />
+                    ) : null}
+                  </Pressable>
+
+                  <View style={{ flex: 1 }}>
+                    <Text
+                      style={[
+                        styles.taskTitle,
+                        isCompleted && styles.taskTitleCompleted,
+                      ]}
+                    >
+                      {task.title}
+                    </Text>
+
+                    <View style={styles.taskMetaRow}>
+                      <Text
+                        style={[
+                          styles.taskBadge,
+                          {
+                            color:
+                              task.priority === "HIGH"
+                                ? "#b91c1c"
+                                : task.priority === "MEDIUM"
+                                ? "#d97706"
+                                : "#2563eb",
+                            backgroundColor:
+                              task.priority === "HIGH"
+                                ? "#fef2f2"
+                                : task.priority === "MEDIUM"
+                                ? "#fef3c7"
+                                : "#eff6ff",
+                            borderColor:
+                              task.priority === "HIGH"
+                                ? "#fecaca"
+                                : task.priority === "MEDIUM"
+                                ? "#fde68a"
+                                : "#bfdbfe",
+                          },
+                        ]}
+                      >
+                        {task.priority}
+                      </Text>
+
+                      {task.assignedTo?.name ? (
+                        <Text
+                          style={[
+                            styles.taskBadge,
+                            {
+                              color: "#475569",
+                              backgroundColor: "#f1f5f9",
+                              borderColor: "#cbd5e1",
+                            },
+                          ]}
+                        >
+                          Assigned: {task.assignedTo.name}
+                        </Text>
+                      ) : null}
+
+                      {task.dueDate ? (
+                        <Text
+                          style={[
+                            styles.taskBadge,
+                            {
+                              color: expired ? "#b91c1c" : "#475569",
+                              backgroundColor: expired ? "#fef2f2" : "#f1f5f9",
+                              borderColor: expired ? "#fecaca" : "#cbd5e1",
+                              fontWeight: expired ? "700" : "600",
+                            },
+                          ]}
+                        >
+                          Due: {task.dueDate.split("T")[0]}{" "}
+                          {expired ? "(Overdue)" : ""}
+                        </Text>
+                      ) : null}
+                    </View>
+                  </View>
+
+                  <Pressable
+                    style={styles.taskDeleteBtn}
+                    onPress={() => handleDeleteLeadTask(task._id)}
+                  >
+                    <Ionicons name="trash-outline" size={14} color="#b91c1c" />
+                  </Pressable>
+                </View>
+              );
+            })
+          )}
+        </View>
+      </AppCard>
 
       <View style={styles.sectionRow}>
         <Text style={styles.section}>Activity Timeline</Text>
@@ -3984,5 +4811,121 @@ const styles = StyleSheet.create({
     borderRadius: 10,
     backgroundColor: "#f0fdf4",
     color: "#166534",
+  },
+  taskRow: {
+    borderWidth: 1,
+    borderColor: "#cbd5e1",
+    borderRadius: 10,
+    backgroundColor: "#fff",
+    padding: 10,
+    marginBottom: 8,
+    flexDirection: "row",
+    alignItems: "flex-start",
+    gap: 8,
+  },
+  taskRowCompleted: {
+    opacity: 0.6,
+    backgroundColor: "#f8fafc",
+  },
+  taskCheckbox: {
+    width: 20,
+    height: 20,
+    borderWidth: 1,
+    borderColor: "#cbd5e1",
+    borderRadius: 4,
+    alignItems: "center",
+    justifyContent: "center",
+    marginRight: 6,
+    marginTop: 2,
+  },
+  taskCheckboxCompleted: {
+    backgroundColor: "#10b981",
+    borderColor: "#10b981",
+  },
+  taskTitle: {
+    fontSize: 13,
+    fontWeight: "600",
+    color: "#0f172a",
+  },
+  taskTitleCompleted: {
+    textDecorationLine: "line-through",
+    color: "#64748b",
+  },
+  taskMetaRow: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 6,
+    marginTop: 4,
+  },
+  taskBadge: {
+    fontSize: 10,
+    fontWeight: "700",
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: 4,
+    borderWidth: 1,
+  },
+  taskDeleteBtn: {
+    padding: 4,
+  },
+  taskForm: {
+    marginTop: 10,
+    gap: 8,
+  },
+  taskFormRow: {
+    flexDirection: "row",
+    gap: 8,
+  },
+  taskFormSelect: {
+    flex: 1,
+    height: 36,
+    borderWidth: 1,
+    borderColor: "#cbd5e1",
+    borderRadius: 8,
+    paddingHorizontal: 8,
+    justifyContent: "center",
+    backgroundColor: "#fff",
+  },
+  taskFormSelectText: {
+    fontSize: 11,
+    color: "#334155",
+  },
+  taskAddBtn: {
+    height: 36,
+    borderRadius: 8,
+    backgroundColor: "#0f172a",
+    alignItems: "center",
+    justifyContent: "center",
+    paddingHorizontal: 16,
+  },
+  taskAddBtnText: {
+    color: "#fff",
+    fontSize: 12,
+    fontWeight: "700",
+  },
+  checkboxGrid: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 8,
+    marginTop: 8,
+  },
+  checkboxItem: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    borderWidth: 1,
+    borderColor: "#cbd5e1",
+    borderRadius: 8,
+    paddingHorizontal: 8,
+    paddingVertical: 6,
+    backgroundColor: "#fff",
+  },
+  checkboxItemActive: {
+    borderColor: "#10b981",
+    backgroundColor: "#f0fdf4",
+  },
+  checkboxLabel: {
+    fontSize: 11,
+    color: "#334155",
   },
 });

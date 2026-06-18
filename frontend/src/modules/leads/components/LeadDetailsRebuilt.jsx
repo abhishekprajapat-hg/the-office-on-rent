@@ -5,6 +5,7 @@ import {
   ArrowLeft,
   Building2,
   CalendarClock,
+  Check,
   Copy,
   Download,
   Eye,
@@ -22,6 +23,12 @@ import {
   Send,
   Trash2,
 } from "lucide-react";
+import {
+  getTasks as apiGetTasks,
+  createTask as apiCreateTask,
+  updateTask as apiUpdateTask,
+  deleteTask as apiDeleteTask,
+} from "../../../services/taskService";
 
 const approvalLabel = (status) => {
   if (status === "APPROVED") return "Approved";
@@ -457,6 +464,83 @@ const LeadDetailsRebuiltContent = ({
   const [proposalSpecialNote, setProposalSpecialNote] = React.useState("");
   const [proposalActionMessage, setProposalActionMessage] = React.useState("");
   const [shareLinks, setShareLinks] = React.useState({});
+
+  const [leadTasks, setLeadTasks] = React.useState([]);
+  const [loadingTasks, setLoadingTasks] = React.useState(false);
+  const [newTaskTitle, setNewTaskTitle] = React.useState("");
+  const [newTaskDueDate, setNewTaskDueDate] = React.useState("");
+  const [newTaskPriority, setNewTaskPriority] = React.useState("MEDIUM");
+  const [newTaskAssignedTo, setNewTaskAssignedTo] = React.useState("");
+  const [addingTask, setAddingTask] = React.useState(false);
+
+  const fetchLeadTasks = React.useCallback(async () => {
+    if (!selectedLead?._id) return;
+    setLoadingTasks(true);
+    try {
+      const data = await apiGetTasks({ leadId: selectedLead._id });
+      setLeadTasks(data || []);
+    } catch (err) {
+      console.error("Failed to load lead tasks", err);
+    } finally {
+      setLoadingTasks(false);
+    }
+  }, [selectedLead?._id]);
+
+  React.useEffect(() => {
+    fetchLeadTasks();
+  }, [fetchLeadTasks]);
+
+  const handleAddLeadTask = async (e) => {
+    e.preventDefault();
+    if (!newTaskTitle.trim()) return;
+    setAddingTask(true);
+    try {
+      const payload = {
+        title: newTaskTitle.trim(),
+        status: "TODO",
+        priority: newTaskPriority,
+        dueDate: newTaskDueDate || null,
+        assignedTo: newTaskAssignedTo || null,
+        leadId: selectedLead._id
+      };
+      const created = await apiCreateTask(payload);
+      if (created) {
+        setNewTaskTitle("");
+        setNewTaskDueDate("");
+        setNewTaskPriority("MEDIUM");
+        setNewTaskAssignedTo("");
+        fetchLeadTasks();
+      }
+    } catch (err) {
+      console.error("Failed to create lead task", err);
+    } finally {
+      setAddingTask(false);
+    }
+  };
+
+  const handleToggleLeadTaskStatus = async (task) => {
+    const newStatus = task.status === "COMPLETED" ? "TODO" : "COMPLETED";
+    try {
+      setLeadTasks(prev => prev.map(t => t._id === task._id ? { ...t, status: newStatus } : t));
+      await apiUpdateTask(task._id, { status: newStatus });
+      fetchLeadTasks();
+    } catch (err) {
+      console.error("Failed to toggle task status", err);
+      fetchLeadTasks();
+    }
+  };
+
+  const handleDeleteLeadTask = async (taskId) => {
+    if (!window.confirm("Delete this task?")) return;
+    try {
+      setLeadTasks(prev => prev.filter(t => t._id !== taskId));
+      await apiDeleteTask(taskId);
+      fetchLeadTasks();
+    } catch (err) {
+      console.error("Failed to delete task", err);
+      fetchLeadTasks();
+    }
+  };
 
   React.useEffect(() => {
     if (!Array.isArray(selectedLeadRelatedInventories) || !selectedLeadRelatedInventories.length) {
@@ -2693,6 +2777,154 @@ const LeadDetailsRebuiltContent = ({
             <button type="button" onClick={onUpdateLead} disabled={savingUpdates} className={`mt-3 inline-flex h-10 w-full items-center justify-center gap-2 rounded-xl text-sm font-semibold text-white disabled:opacity-60 ${primaryBtn}`}>
               {savingUpdates ? <Loader size={14} className="animate-spin" /> : <Save size={14} />} Save Lead Update
             </button>
+          </section>
+
+          {/* Lead Tasks integration */}
+          <section className={`rounded-3xl border p-4 ${card}`}>
+            <div className="flex items-center justify-between">
+              <div className={`text-xs font-bold uppercase tracking-widest ${isDark ? "text-slate-400" : "text-slate-500"}`}>Lead Tasks</div>
+              <span className={`text-[11px] ${isDark ? "text-slate-400" : "text-slate-500"}`}>{leadTasks.filter(t => t.status !== "COMPLETED").length} pending</span>
+            </div>
+
+            {/* Quick add task form */}
+            <form onSubmit={handleAddLeadTask} className="mt-3 space-y-2">
+              <div className="flex gap-2">
+                <input
+                  type="text"
+                  placeholder="Add a new task for this lead..."
+                  value={newTaskTitle}
+                  onChange={(e) => setNewTaskTitle(e.target.value)}
+                  className={`h-9 flex-1 rounded-lg border px-3 text-xs ${input}`}
+                />
+                <button
+                  type="submit"
+                  disabled={addingTask || !newTaskTitle.trim()}
+                  className={`inline-flex h-9 shrink-0 items-center justify-center rounded-lg px-3 text-xs font-semibold text-white disabled:opacity-55 ${primaryBtn}`}
+                >
+                  {addingTask ? "Adding..." : "Add"}
+                </button>
+              </div>
+              
+              <div className="grid grid-cols-3 gap-2">
+                <select
+                  value={newTaskPriority}
+                  onChange={(e) => setNewTaskPriority(e.target.value)}
+                  className={`h-8 rounded-lg border px-2 text-[10px] font-semibold ${input}`}
+                >
+                  <option value="LOW">Low Priority</option>
+                  <option value="MEDIUM">Med Priority</option>
+                  <option value="HIGH">High Priority</option>
+                </select>
+
+                <select
+                  value={newTaskAssignedTo}
+                  onChange={(e) => setNewTaskAssignedTo(e.target.value)}
+                  className={`h-8 rounded-lg border px-2 text-[10px] font-semibold ${input}`}
+                >
+                  <option value="">Unassigned</option>
+                  {executives.map(u => (
+                    <option key={u._id} value={u._id}>{u.name}</option>
+                  ))}
+                </select>
+
+                <input
+                  type="date"
+                  value={newTaskDueDate}
+                  onChange={(e) => setNewTaskDueDate(e.target.value)}
+                  className={`h-8 rounded-lg border px-2 text-[10px] font-semibold ${input}`}
+                />
+              </div>
+            </form>
+
+            {/* Tasks list */}
+            <div className="mt-3 space-y-2 max-h-60 overflow-y-auto custom-scrollbar">
+              {loadingTasks ? (
+                <div className={`text-xs py-4 text-center ${isDark ? "text-slate-400" : "text-slate-500"}`}>
+                  Loading tasks...
+                </div>
+              ) : leadTasks.length === 0 ? (
+                <div className={`text-xs py-4 text-center ${isDark ? "text-slate-400" : "text-slate-500"}`}>
+                  No tasks linked to this lead.
+                </div>
+              ) : (
+                leadTasks.map((task) => {
+                  const isCompleted = task.status === "COMPLETED";
+                  const expired = !isCompleted && task.dueDate && new Date(task.dueDate) < new Date().setHours(0,0,0,0);
+                  
+                  return (
+                    <div 
+                      key={task._id} 
+                      className={`flex items-start justify-between gap-2.5 rounded-lg border p-2.5 text-xs transition-all ${
+                        isCompleted
+                          ? isDark ? "border-slate-800 bg-slate-950/35 opacity-60" : "border-slate-100 bg-slate-50/60 opacity-60"
+                          : isDark ? "border-slate-700 bg-slate-900/60 hover:border-slate-600" : "border-slate-200 bg-white hover:border-slate-300"
+                      }`}
+                    >
+                      <div className="flex items-start gap-2.5 min-w-0">
+                        <button
+                          type="button"
+                          onClick={() => handleToggleLeadTaskStatus(task)}
+                          className={`mt-0.5 flex h-4 w-4 shrink-0 items-center justify-center rounded border transition-colors ${
+                            isCompleted
+                              ? "border-emerald-500 bg-emerald-500 text-white"
+                              : isDark ? "border-slate-700 hover:border-sky-400" : "border-slate-350 hover:border-sky-500"
+                          }`}
+                        >
+                          {isCompleted && <Check size={11} strokeWidth={3} />}
+                        </button>
+
+                        <div className="min-w-0">
+                          <p className={`font-semibold leading-normal break-words ${
+                            isCompleted ? "line-through text-slate-500" : isDark ? "text-slate-100" : "text-slate-800"
+                          }`}>
+                            {task.title}
+                          </p>
+                          <div className="mt-1 flex flex-wrap items-center gap-1.5 text-[9px] font-semibold">
+                            <span className={`px-1.5 py-0.5 rounded border uppercase tracking-wider ${
+                              task.priority === "HIGH"
+                                ? "bg-rose-500/10 text-rose-400 border-rose-500/20"
+                                : task.priority === "MEDIUM"
+                                  ? "bg-amber-500/10 text-amber-400 border-amber-500/20"
+                                  : "bg-blue-500/10 text-blue-400 border-blue-500/20"
+                            }`}>
+                              {task.priority}
+                            </span>
+
+                            {task.assignedTo && (
+                              <span className={`px-1.5 py-0.5 rounded border ${
+                                isDark ? "bg-slate-800 text-slate-300 border-slate-700" : "bg-slate-100 text-slate-600 border-slate-200"
+                              }`}>
+                                Assigned: {task.assignedTo.name}
+                              </span>
+                            )}
+
+                            {task.dueDate && (
+                              <span className={`px-1.5 py-0.5 rounded border flex items-center gap-0.5 ${
+                                expired 
+                                  ? "bg-rose-500/15 text-rose-500 border-rose-500/20 font-bold" 
+                                  : isDark ? "bg-slate-800 text-slate-300 border-slate-700" : "bg-slate-100 text-slate-600 border-slate-200"
+                              }`}>
+                                <Calendar size={8} />
+                                {new Date(task.dueDate).toLocaleDateString("en-IN", { day: "numeric", month: "short" })}
+                                {expired && " (Overdue)"}
+                              </span>
+                            )}
+                          </div>
+                        </div>
+                      </div>
+
+                      <button
+                        type="button"
+                        onClick={() => handleDeleteLeadTask(task._id)}
+                        className={`h-6 w-6 rounded border flex items-center justify-center shrink-0 border-transparent text-rose-550 hover:bg-rose-500/10`}
+                      >
+                        <Trash2 size={11} />
+                      </button>
+                    </div>
+                  );
+                })
+              )}
+            </div>
           </section>
 
           <section

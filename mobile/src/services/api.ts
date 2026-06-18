@@ -20,9 +20,9 @@ const resolveWebDevHost = () => {
 const resolveApiBaseUrl = () => {
   const useLocalDevApi = isTruthy(process.env.EXPO_PUBLIC_USE_LOCAL_API || "");
   const disableWebLocalApi = isTruthy(process.env.EXPO_PUBLIC_DISABLE_WEB_LOCAL_API || "");
+  const webHost = __DEV__ && !disableWebLocalApi ? resolveWebDevHost() : "";
 
-  if (__DEV__ && useLocalDevApi && !disableWebLocalApi) {
-    const webHost = resolveWebDevHost();
+  if (__DEV__ && webHost) {
     if (webHost) return `http://${webHost}:${resolveLocalApiPort()}/api`;
   }
 

@@ -50,6 +50,7 @@ const ServiceTermsNotice = lazy(() => import("./modules/legal/ServiceTermsNotice
 const Performance = lazy(() => import("./modules/reports/Performance"));
 const UserProfile = lazy(() => import("./modules/profile/UserProfile"));
 const SharedInventoryView = lazy(() => import("./modules/inventory/SharedInventoryView"));
+const TaskManager = lazy(() => import("./modules/tasks/TaskManager"));
 
 const EARTH_RADIUS_METERS = 6371000;
 const LOCATION_SYNC_MIN_INTERVAL_MS = 30000;
@@ -830,6 +831,14 @@ export default function App() {
                         <Route
                           path="/calendar"
                           element={canAccess(["ADMIN", ...MANAGEMENT_ROLES, "EXECUTIVE", "FIELD_EXECUTIVE"]) ? <MasterSchedule /> : <Navigate to="/" />}
+                        />
+                        <Route
+                          path="/tasks"
+                          element={
+                            canAccess(["ADMIN", ...MANAGEMENT_ROLES, "EXECUTIVE", "FIELD_EXECUTIVE"])
+                              ? <TaskManager theme={theme} />
+                              : <Navigate to="/" />
+                          }
                         />
                         <Route
                           path="/attendance"

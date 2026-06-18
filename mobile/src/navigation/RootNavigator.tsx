@@ -16,7 +16,7 @@ const AppShell = () => {
     if (!isLoggedIn) return;
 
     void ensureNotificationSetup();
-    const subscription = registerNotificationTapListener((payload) => {
+    const subscription = registerNotificationTapListener((payload: any) => {
       navigateFromAnywhere("ChatConversation", {
         conversationId: payload.conversationId,
         contactId: payload.contactId,

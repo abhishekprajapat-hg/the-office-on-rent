@@ -59,6 +59,7 @@ export const AppInput = ({
   keyboardType,
   autoCapitalize,
   style,
+  editable,
 }: {
   value: string;
   onChangeText: (value: string) => void;
@@ -67,6 +68,7 @@ export const AppInput = ({
   keyboardType?: "default" | "email-address" | "phone-pad";
   autoCapitalize?: "none" | "sentences" | "words" | "characters";
   style?: object;
+  editable?: boolean;
 }) => (
   <TextInput
     style={[styles.input, style]}
@@ -78,6 +80,7 @@ export const AppInput = ({
     secureTextEntry={secureTextEntry}
     keyboardType={keyboardType}
     autoCapitalize={autoCapitalize}
+    editable={editable}
   />
 );
 

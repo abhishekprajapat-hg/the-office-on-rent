@@ -13,6 +13,8 @@ dist-ssr
 *.local
 backend/.env
 frontend/.env
+backend/.mongo-data/
+backend/.mongo-log/
 
 # Editor directories and files
 .vscode/*
