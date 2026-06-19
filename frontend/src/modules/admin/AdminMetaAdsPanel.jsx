@@ -29,7 +29,7 @@ const AdminMetaAdsPanel = ({ theme = "light" }) => {
       ? "border-slate-700 bg-slate-950 text-slate-200"
       : "border-slate-300 bg-white text-slate-700"
   }`;
-  const cardClass = `rounded-2xl border p-4 ${
+  const cardClass = `ui-soft-panel rounded-2xl border p-4 ${
     isDark ? "border-slate-700 bg-slate-900/80" : "border-slate-200 bg-white"
   }`;
 
@@ -135,20 +135,20 @@ const AdminMetaAdsPanel = ({ theme = "light" }) => {
 
   if (loading) {
     return (
-      <div className={`w-full h-full px-4 sm:px-6 md:px-10 pt-6 ${isDark ? "bg-slate-950/40" : "bg-slate-50/70"}`}>
+      <div className={`ui-page-shell custom-scrollbar pt-6 ${isDark ? "bg-slate-950/40" : "bg-slate-50/70"}`}>
         <div className={cardClass}>Loading Meta integration...</div>
       </div>
     );
   }
 
   return (
-    <div className={`w-full h-full overflow-y-auto custom-scrollbar px-4 sm:px-6 md:px-10 pt-4 md:pt-6 pb-8 flex flex-col gap-4 ${
+    <div className={`ui-page-shell custom-scrollbar flex flex-col gap-4 pt-4 md:pt-6 ${
       isDark ? "bg-slate-950/40" : "bg-slate-50/70"
     }`}>
-      <section className={cardClass}>
+      <section className={`ui-hero-card ${cardClass}`}>
         <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
           <div>
-            <h1 className={`text-2xl font-semibold ${isDark ? "text-slate-100" : "text-slate-900"}`}>
+            <h1 className={`font-display text-2xl font-semibold ${isDark ? "text-slate-100" : "text-slate-900"}`}>
               Meta Ads Integration
             </h1>
             <p className={`mt-1 text-sm ${isDark ? "text-slate-400" : "text-slate-600"}`}>

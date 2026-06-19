@@ -147,87 +147,205 @@ export const LeadsMatrixToolbar = ({
   totalLeads,
   filteredLeads,
   dueFollowUps,
-}) => (
-  <div
-    className={`mb-5 overflow-hidden rounded-3xl border px-4 py-4 sm:px-5 sm:py-5 ${
-      isDark ? "border-slate-700 bg-slate-900/75" : "border-slate-200 bg-white/90"
-    }`}
-    style={{
-      backgroundImage: isDark
-        ? "radial-gradient(circle at 88% 8%, rgba(16,185,129,0.16), transparent 35%), radial-gradient(circle at 8% 90%, rgba(56,189,248,0.12), transparent 38%)"
-        : "radial-gradient(circle at 88% 8%, rgba(16,185,129,0.12), transparent 35%), radial-gradient(circle at 8% 90%, rgba(56,189,248,0.1), transparent 38%)",
-    }}
-  >
-    <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
-      <div className="min-w-0">
-        <p className={`inline-flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-[0.16em] ${
-          isDark ? "text-emerald-200" : "text-emerald-700"
-        }`}>
-          <Sparkles size={13} />
-          Sales Intelligence
-        </p>
-        <h1 className={`mt-1 font-display text-2xl tracking-tight sm:text-4xl ${
-          isDark ? "text-slate-50" : "text-slate-900"
-        }`}>
-          Lead Matrix
-        </h1>
-        <p className={`mt-2 text-xs uppercase tracking-[0.16em] ${
-          isDark ? "text-slate-400" : "text-slate-500"
-        }`}>
-          {filteredLeads} visible of {totalLeads} total | {dueFollowUps} follow-ups due
-        </p>
+}) => {
+  const visibilityRatio = totalLeads > 0
+    ? Math.max(0, Math.min(100, Math.round((filteredLeads / totalLeads) * 100)))
+    : 0;
+
+  return (
+    <div
+      className={`ui-hero-card relative mb-6 overflow-hidden rounded-[28px] px-4 py-4 sm:px-6 sm:py-6 ${
+        isDark
+          ? "border-slate-700/80 bg-slate-900/90 shadow-[0_20px_80px_rgba(2,6,23,0.55)]"
+          : "border-slate-200 bg-white shadow-[0_18px_55px_rgba(15,23,42,0.12)]"
+      }`}
+      style={{
+        backgroundImage: isDark
+          ? "radial-gradient(circle at 92% 10%, rgba(16,185,129,0.22), transparent 34%), radial-gradient(circle at 4% 80%, rgba(56,189,248,0.16), transparent 40%)"
+          : "radial-gradient(circle at 92% 10%, rgba(16,185,129,0.2), transparent 34%), radial-gradient(circle at 4% 80%, rgba(56,189,248,0.13), transparent 40%)",
+      }}
+    >
+      <div className="pointer-events-none absolute inset-0 opacity-70">
+        <div className={`absolute inset-x-0 top-0 h-px ${isDark ? "bg-cyan-200/30" : "bg-cyan-300/80"}`} />
+        <div className={`absolute inset-x-0 bottom-0 h-px ${isDark ? "bg-emerald-300/25" : "bg-emerald-300/60"}`} />
       </div>
 
-      <div className="flex flex-wrap items-center gap-2">
-        <button
-          type="button"
-          onClick={onRefresh}
-          className={`h-10 rounded-xl border px-4 text-xs font-bold uppercase tracking-wide transition-colors ${
+      <div className="relative z-10 grid grid-cols-1 gap-5 lg:grid-cols-12">
+        <div className="lg:col-span-8">
+          <div className={`inline-flex items-center gap-2 rounded-full border px-3 py-1 text-[10px] font-bold uppercase tracking-[0.18em] ${
             isDark
-              ? "border-slate-600 bg-slate-950 text-slate-200 hover:border-emerald-400/50 hover:text-emerald-200"
-              : "border-slate-300 bg-white text-slate-700 hover:border-emerald-400 hover:text-emerald-700"
-          } inline-flex items-center gap-2`}
-        >
-          {refreshing ? <Loader size={14} className="animate-spin" /> : <RefreshCw size={14} />}
-          Refresh
-        </button>
+              ? "border-emerald-300/35 bg-emerald-500/15 text-emerald-100"
+              : "border-emerald-300 bg-emerald-50 text-emerald-700"
+          }`}>
+            <Sparkles size={12} />
+            Pipeline Operations Deck
+          </div>
 
-        {canAddLead && (
-          <button
-            type="button"
-            onClick={onOpenAddModal}
-            className={`h-10 rounded-xl px-5 text-xs font-bold uppercase tracking-wide text-white transition-colors ${
-              isDark ? "bg-emerald-600 hover:bg-emerald-500" : "bg-slate-900 hover:bg-emerald-600"
-            } inline-flex items-center gap-2`}
-          >
-            <Plus size={15} />
-            Add Lead
-          </button>
-        )}
+          <h1 className={`mt-2 font-display text-3xl tracking-tight sm:text-4xl ${
+            isDark ? "text-slate-50" : "text-slate-900"
+          }`}>
+            Lead Matrix Command Grid
+          </h1>
 
-        {canBulkUploadLeads && (
-          <button
-            type="button"
-            onClick={onOpenBulkUploadModal}
-            className={`h-10 rounded-xl border px-4 text-xs font-bold uppercase tracking-wide transition-colors ${
-              isDark
-                ? "border-cyan-400/40 bg-cyan-500/10 text-cyan-100 hover:bg-cyan-500/20"
-                : "border-cyan-300 bg-cyan-50 text-cyan-700 hover:bg-cyan-100"
-            } inline-flex items-center gap-2`}
-          >
-            <UploadCloud size={14} />
-            Bulk Upload
-          </button>
-        )}
+          <p className={`mt-2 max-w-2xl text-sm ${
+            isDark ? "text-slate-300" : "text-slate-600"
+          }`}>
+            Fast triage view for follow-ups, ownership, and conversion momentum.
+            Click any card or row to drill down instantly.
+          </p>
+
+          <div className="mt-4 grid grid-cols-1 gap-2 sm:grid-cols-3">
+            <div className={`rounded-2xl border px-3 py-2 ${
+              isDark ? "border-slate-700/80 bg-slate-950/70" : "border-slate-200 bg-white/80"
+            }`}>
+              <p className={`text-[10px] font-bold uppercase tracking-[0.14em] ${
+                isDark ? "text-slate-400" : "text-slate-500"
+              }`}>
+                Visible Leads
+              </p>
+              <p className={`mt-1 text-xl font-display ${isDark ? "text-cyan-100" : "text-cyan-700"}`}>
+                {filteredLeads}
+              </p>
+            </div>
+
+            <div className={`rounded-2xl border px-3 py-2 ${
+              isDark ? "border-slate-700/80 bg-slate-950/70" : "border-slate-200 bg-white/80"
+            }`}>
+              <p className={`text-[10px] font-bold uppercase tracking-[0.14em] ${
+                isDark ? "text-slate-400" : "text-slate-500"
+              }`}>
+                Total Leads
+              </p>
+              <p className={`mt-1 text-xl font-display ${isDark ? "text-slate-100" : "text-slate-800"}`}>
+                {totalLeads}
+              </p>
+            </div>
+
+            <div className={`rounded-2xl border px-3 py-2 ${
+              isDark ? "border-rose-300/30 bg-rose-500/10" : "border-rose-200 bg-rose-50"
+            }`}>
+              <p className={`text-[10px] font-bold uppercase tracking-[0.14em] ${
+                isDark ? "text-rose-200/90" : "text-rose-700"
+              }`}>
+                Due Follow-ups
+              </p>
+              <p className={`mt-1 text-xl font-display ${isDark ? "text-rose-100" : "text-rose-700"}`}>
+                {dueFollowUps}
+              </p>
+            </div>
+          </div>
+
+          <div className="mt-4">
+            <div className="flex items-center justify-between text-[11px] font-semibold uppercase tracking-[0.14em]">
+              <span className={isDark ? "text-slate-400" : "text-slate-500"}>View Coverage</span>
+              <span className={isDark ? "text-cyan-200" : "text-cyan-700"}>{visibilityRatio}%</span>
+            </div>
+            <div className={`mt-1 h-2.5 w-full overflow-hidden rounded-full ${
+              isDark ? "bg-slate-800" : "bg-slate-200"
+            }`}>
+              <Motion.div
+                initial={{ width: 0 }}
+                animate={{ width: `${visibilityRatio}%` }}
+                transition={{ duration: 0.45, ease: "easeOut" }}
+                className={`h-full rounded-full ${
+                  isDark ? "bg-gradient-to-r from-cyan-300 to-emerald-300" : "bg-gradient-to-r from-cyan-500 to-emerald-500"
+                }`}
+              />
+            </div>
+          </div>
+        </div>
+
+        <div className="lg:col-span-4">
+          <div className={`h-full rounded-3xl border p-3 sm:p-4 ${
+            isDark
+              ? "border-slate-700 bg-slate-950/70"
+              : "border-slate-200 bg-white/80"
+          }`}>
+            <p className={`text-[10px] font-bold uppercase tracking-[0.16em] ${
+              isDark ? "text-slate-400" : "text-slate-500"
+            }`}>
+              Quick Actions
+            </p>
+
+            <div className="mt-3 flex flex-col gap-2">
+              <button
+                type="button"
+                onClick={onRefresh}
+                className={`h-11 rounded-xl border px-4 text-xs font-bold uppercase tracking-[0.14em] transition-colors ${
+                  isDark
+                    ? "border-slate-600 bg-slate-900 text-slate-100 hover:border-emerald-300/60 hover:text-emerald-100"
+                    : "border-slate-300 bg-white text-slate-700 hover:border-emerald-400 hover:text-emerald-700"
+                } inline-flex items-center justify-center gap-2`}
+              >
+                {refreshing ? <Loader size={14} className="animate-spin" /> : <RefreshCw size={14} />}
+                Refresh Feed
+              </button>
+
+              {canAddLead && (
+                <button
+                  type="button"
+                  onClick={onOpenAddModal}
+                  className={`h-11 rounded-xl px-4 text-xs font-bold uppercase tracking-[0.14em] text-white transition-colors ${
+                    isDark ? "bg-emerald-600 hover:bg-emerald-500" : "bg-slate-900 hover:bg-emerald-600"
+                  } inline-flex items-center justify-center gap-2`}
+                >
+                  <Plus size={15} />
+                  Add New Lead
+                </button>
+              )}
+
+              {canBulkUploadLeads && (
+                <button
+                  type="button"
+                  onClick={onOpenBulkUploadModal}
+                  className={`h-11 rounded-xl border px-4 text-xs font-bold uppercase tracking-[0.14em] transition-colors ${
+                    isDark
+                      ? "border-cyan-300/50 bg-cyan-500/10 text-cyan-100 hover:bg-cyan-500/20"
+                      : "border-cyan-300 bg-cyan-50 text-cyan-700 hover:bg-cyan-100"
+                  } inline-flex items-center justify-center gap-2`}
+                >
+                  <UploadCloud size={14} />
+                  Bulk Upload
+                </button>
+              )}
+            </div>
+
+            <div className={`mt-3 rounded-xl border px-3 py-2 text-xs ${
+              isDark ? "border-slate-700 bg-slate-900/80 text-slate-300" : "border-slate-200 bg-slate-50 text-slate-600"
+            }`}>
+              <div className="flex items-center justify-between">
+                <span className="inline-flex items-center gap-1.5">
+                  <Eye size={12} />
+                  Visible
+                </span>
+                <span className="font-semibold">{filteredLeads}</span>
+              </div>
+              <div className="mt-1 flex items-center justify-between">
+                <span className="inline-flex items-center gap-1.5">
+                  <Users2 size={12} />
+                  Total
+                </span>
+                <span className="font-semibold">{totalLeads}</span>
+              </div>
+              <div className="mt-1 flex items-center justify-between">
+                <span className="inline-flex items-center gap-1.5">
+                  <CalendarClock size={12} />
+                  Due
+                </span>
+                <span className={`font-semibold ${isDark ? "text-rose-200" : "text-rose-700"}`}>{dueFollowUps}</span>
+              </div>
+            </div>
+          </div>
+        </div>
       </div>
     </div>
-  </div>
-);
+  );
+};
 
 export const LeadsMatrixAlerts = ({ isDark, error, success }) => (
   <>
     {error && (
-      <div className={`mb-4 rounded-xl border px-3 py-2 text-sm ${
+      <div className={`ui-soft-panel mb-4 rounded-xl px-3 py-2 text-sm ${
         isDark ? "border-rose-500/35 bg-rose-500/15 text-rose-100" : "border-rose-200 bg-rose-50 text-rose-700"
       }`}>
         {error}
@@ -235,7 +353,7 @@ export const LeadsMatrixAlerts = ({ isDark, error, success }) => (
     )}
 
     {success && (
-      <div className={`mb-4 flex items-center gap-2 rounded-xl border px-3 py-2 text-sm ${
+      <div className={`ui-soft-panel mb-4 flex items-center gap-2 rounded-xl px-3 py-2 text-sm ${
         isDark ? "border-emerald-500/35 bg-emerald-500/15 text-emerald-100" : "border-emerald-200 bg-emerald-50 text-emerald-700"
       }`}>
         <CheckCircle2 size={14} /> {success}
@@ -252,13 +370,69 @@ export const LeadsMatrixMetrics = ({
   onMetricSelect,
 }) => {
   const cards = [
-    { key: "total", label: "Total Leads", value: metrics.total, tone: "text-slate-700", icon: Users2 },
-    { key: "new", label: "Fresh", value: metrics.new, tone: "text-sky-700", icon: Sparkles },
-    { key: "contacted", label: "Contacted", value: metrics.contacted, tone: "text-amber-700", icon: Phone },
-    { key: "interested", label: "Interested", value: metrics.interested, tone: "text-emerald-700", icon: CheckCircle2 },
-    { key: "closed", label: "Closed", value: metrics.closed, tone: "text-violet-700", icon: BarChart3 },
-    { key: "due", label: "Due Follow-up", value: metrics.dueFollowUps, tone: "text-rose-700", icon: CalendarClock },
-    { key: "conversion", label: "Conversion", value: `${metrics.conversionRate}%`, tone: "text-cyan-700", icon: ArrowUpRight },
+    {
+      key: "total",
+      label: "Total Leads",
+      value: metrics.total,
+      tone: "text-slate-900",
+      darkTone: "text-slate-100",
+      accent: "from-slate-400 to-slate-600",
+      icon: Users2,
+    },
+    {
+      key: "new",
+      label: "Fresh",
+      value: metrics.new,
+      tone: "text-sky-700",
+      darkTone: "text-sky-100",
+      accent: "from-sky-400 to-cyan-500",
+      icon: Sparkles,
+    },
+    {
+      key: "contacted",
+      label: "Contacted",
+      value: metrics.contacted,
+      tone: "text-amber-700",
+      darkTone: "text-amber-100",
+      accent: "from-amber-400 to-orange-500",
+      icon: Phone,
+    },
+    {
+      key: "interested",
+      label: "Interested",
+      value: metrics.interested,
+      tone: "text-emerald-700",
+      darkTone: "text-emerald-100",
+      accent: "from-emerald-400 to-teal-500",
+      icon: CheckCircle2,
+    },
+    {
+      key: "closed",
+      label: "Closed",
+      value: metrics.closed,
+      tone: "text-indigo-700",
+      darkTone: "text-indigo-100",
+      accent: "from-indigo-400 to-blue-500",
+      icon: BarChart3,
+    },
+    {
+      key: "due",
+      label: "Due Follow-up",
+      value: metrics.dueFollowUps,
+      tone: "text-rose-700",
+      darkTone: "text-rose-100",
+      accent: "from-rose-400 to-red-500",
+      icon: CalendarClock,
+    },
+    {
+      key: "conversion",
+      label: "Conversion",
+      value: `${metrics.conversionRate}%`,
+      tone: "text-cyan-700",
+      darkTone: "text-cyan-100",
+      accent: "from-cyan-400 to-teal-500",
+      icon: ArrowUpRight,
+    },
   ];
 
   const isCardActive = (key) => {
@@ -272,32 +446,53 @@ export const LeadsMatrixMetrics = ({
   };
 
   return (
-    <div className="mb-5 grid grid-cols-2 gap-2 sm:grid-cols-3 xl:grid-cols-7">
-      {cards.map(({ key, label, value, tone, icon: Icon }) => (
+    <div className="mb-5 grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-4 2xl:grid-cols-7">
+      {cards.map(({
+        key,
+        label,
+        value,
+        tone,
+        darkTone,
+        accent,
+        icon: Icon,
+      }) => (
         <button
           key={key}
           type="button"
           onClick={() => onMetricSelect(key)}
-          className={`rounded-2xl border p-3 text-left transition-colors ${
+          className={`ui-soft-panel group relative overflow-hidden rounded-3xl px-4 py-3 text-left transition-all ${
             isCardActive(key)
               ? isDark
-                ? "border-emerald-400/45 bg-emerald-500/10"
-                : "border-emerald-300 bg-emerald-50/75"
+                ? "border-cyan-300/60 bg-slate-900 shadow-[0_0_0_1px_rgba(34,211,238,0.28)]"
+                : "border-cyan-300 bg-cyan-50/80 shadow-[0_0_0_1px_rgba(14,165,233,0.25)]"
               : isDark
-                ? "border-slate-700 bg-slate-900/80 hover:border-slate-600"
+                ? "border-slate-700 bg-slate-900/80 hover:border-slate-500"
                 : "border-slate-200 bg-white hover:border-slate-300"
           }`}
         >
+          <div className={`pointer-events-none absolute inset-x-0 top-0 h-1 bg-gradient-to-r ${accent}`} />
+
           <div className="flex items-center justify-between gap-2">
             <p className={`truncate text-[10px] font-semibold uppercase tracking-[0.14em] ${
               isDark ? "text-slate-400" : "text-slate-500"
             }`}>
               {label}
             </p>
-            <Icon size={13} className={isDark ? "text-slate-400" : "text-slate-500"} />
+            <div className={`rounded-lg border p-1.5 ${
+              isDark ? "border-slate-700 bg-slate-950/80 text-slate-300" : "border-slate-200 bg-slate-50 text-slate-600"
+            }`}>
+              <Icon size={13} />
+            </div>
           </div>
-          <p className={`mt-1 text-2xl font-display ${isDark ? "text-slate-100" : tone}`}>
+
+          <p className={`mt-2 text-3xl font-display tracking-tight ${isDark ? darkTone : tone}`}>
             {value}
+          </p>
+
+          <p className={`mt-1 text-[10px] font-semibold uppercase tracking-[0.13em] ${
+            isDark ? "text-slate-500 group-hover:text-slate-400" : "text-slate-400 group-hover:text-slate-500"
+          }`}>
+            Tap to filter
           </p>
         </button>
       ))}
@@ -319,21 +514,47 @@ export const LeadsMatrixFilters = ({
   onShowDueOnlyChange,
   getStatusLabel,
 }) => (
-  <div className={`mb-4 rounded-2xl border p-3 sm:p-4 ${
-    isDark ? "border-slate-700 bg-slate-900/80" : "border-slate-200 bg-white/90"
+  <div className={`ui-soft-panel relative mb-4 overflow-hidden rounded-3xl p-3 sm:p-4 ${
+    isDark
+      ? "border-slate-700 bg-slate-900/85"
+      : "border-slate-200 bg-white"
   }`}>
-    <div className="grid grid-cols-1 gap-3 lg:grid-cols-12">
+    <div className="pointer-events-none absolute inset-0 opacity-80">
+      <div className={`absolute -left-12 top-0 h-28 w-28 rounded-full blur-2xl ${
+        isDark ? "bg-cyan-500/20" : "bg-cyan-300/35"
+      }`} />
+      <div className={`absolute right-0 top-0 h-24 w-24 rounded-full blur-2xl ${
+        isDark ? "bg-emerald-500/15" : "bg-emerald-300/30"
+      }`} />
+    </div>
+
+    <div className="relative z-10">
+      <div className="mb-3 flex items-center gap-2">
+        <div className={`inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-[10px] font-bold uppercase tracking-[0.14em] ${
+          isDark ? "border-slate-700 bg-slate-950 text-slate-300" : "border-slate-300 bg-slate-50 text-slate-600"
+        }`}>
+          <Filter size={11} />
+          Filter Stack
+        </div>
+        <p className={`text-[11px] font-semibold uppercase tracking-[0.14em] ${
+          isDark ? "text-slate-400" : "text-slate-500"
+        }`}>
+          Search, status and follow-up controls
+        </p>
+      </div>
+
+      <div className="grid grid-cols-1 gap-3 lg:grid-cols-12">
       <div className="relative lg:col-span-5">
-        <Search className={`absolute left-3 top-1/2 -translate-y-1/2 ${isDark ? "text-slate-500" : "text-slate-400"}`} size={15} />
+        <Search className={`absolute left-3 top-1/2 -translate-y-1/2 ${isDark ? "text-slate-400" : "text-slate-500"}`} size={15} />
         <input
           type="text"
           value={query}
           onChange={(event) => onQueryChange(event.target.value)}
           placeholder="Search by name, city, project, executive, phone"
-          className={`h-10 w-full rounded-xl border pl-9 pr-9 text-sm outline-none transition-colors ${
+          className={`h-11 w-full rounded-2xl border pl-9 pr-9 text-sm outline-none transition-colors ${
             isDark
-              ? "border-slate-700 bg-slate-950 text-slate-200 placeholder:text-slate-500 focus:border-emerald-400/45"
-              : "border-slate-300 bg-white text-slate-700 placeholder:text-slate-400 focus:border-emerald-400"
+              ? "border-slate-700 bg-slate-950/90 text-slate-100 placeholder:text-slate-500 focus:border-cyan-300/50"
+              : "border-slate-300 bg-white text-slate-700 placeholder:text-slate-400 focus:border-cyan-400"
           }`}
         />
         {query && (
@@ -354,10 +575,10 @@ export const LeadsMatrixFilters = ({
         <select
           value={statusFilter}
           onChange={(event) => onStatusFilterChange(event.target.value)}
-          className={`h-10 w-full rounded-xl border px-3 text-sm outline-none transition-colors ${
+          className={`h-11 w-full rounded-2xl border px-3 text-sm outline-none transition-colors ${
             isDark
-              ? "border-slate-700 bg-slate-950 text-slate-200 focus:border-emerald-400/45"
-              : "border-slate-300 bg-white text-slate-700 focus:border-emerald-400"
+              ? "border-slate-700 bg-slate-950/90 text-slate-100 focus:border-cyan-300/50"
+              : "border-slate-300 bg-white text-slate-700 focus:border-cyan-400"
           }`}
         >
           <option value="ALL">All statuses</option>
@@ -370,8 +591,8 @@ export const LeadsMatrixFilters = ({
       </div>
 
       <div className="lg:col-span-2">
-        <div className={`flex h-10 items-center gap-2 rounded-xl border px-3 ${
-          isDark ? "border-slate-700 bg-slate-950 text-slate-300" : "border-slate-300 bg-white text-slate-600"
+        <div className={`flex h-11 items-center gap-2 rounded-2xl border px-3 ${
+          isDark ? "border-slate-700 bg-slate-950/90 text-slate-300" : "border-slate-300 bg-white text-slate-600"
         }`}>
           <SlidersHorizontal size={14} />
           <select
@@ -389,32 +610,35 @@ export const LeadsMatrixFilters = ({
       <button
         type="button"
         onClick={() => onShowDueOnlyChange(!showDueOnly)}
-        className={`lg:col-span-2 h-10 rounded-xl border text-xs font-semibold uppercase tracking-[0.12em] transition-colors ${
+        className={`lg:col-span-2 h-11 rounded-2xl border text-xs font-semibold uppercase tracking-[0.12em] transition-colors ${
           showDueOnly
             ? isDark
-              ? "border-rose-400/45 bg-rose-500/15 text-rose-100"
+              ? "border-rose-300/60 bg-rose-500/20 text-rose-100"
               : "border-rose-300 bg-rose-50 text-rose-700"
             : isDark
-              ? "border-slate-700 bg-slate-950 text-slate-300 hover:border-slate-600"
+              ? "border-slate-700 bg-slate-950/90 text-slate-300 hover:border-slate-500"
               : "border-slate-300 bg-white text-slate-600 hover:border-slate-400"
         }`}
       >
-        Due Follow-ups
+        <span className="inline-flex items-center gap-1.5">
+          <CalendarClock size={13} />
+          {showDueOnly ? "Due Mode On" : "Due Follow-ups"}
+        </span>
       </button>
     </div>
 
-    <div className="mt-3 flex gap-1.5 overflow-x-auto pb-1 custom-scrollbar">
+    <div className="mt-3 flex gap-2 overflow-x-auto pb-1 custom-scrollbar">
       <button
         type="button"
         onClick={() => onStatusFilterChange("ALL")}
-        className={`shrink-0 rounded-full border px-3 py-1.5 text-[11px] font-semibold uppercase tracking-[0.12em] ${
+        className={`shrink-0 rounded-full border px-3 py-1.5 text-[11px] font-semibold uppercase tracking-[0.12em] transition-colors ${
           statusFilter === "ALL"
             ? isDark
-              ? "border-emerald-400/45 bg-emerald-500/15 text-emerald-100"
+              ? "border-emerald-300/55 bg-emerald-500/20 text-emerald-100"
               : "border-emerald-300 bg-emerald-50 text-emerald-700"
             : isDark
-              ? "border-slate-700 bg-slate-950 text-slate-300"
-              : "border-slate-300 bg-white text-slate-600"
+              ? "border-slate-700 bg-slate-950 text-slate-300 hover:border-slate-500"
+              : "border-slate-300 bg-white text-slate-600 hover:border-slate-400"
         }`}
       >
         All ({leadStatuses.reduce((sum, status) => sum + Number(statusBreakdown[status] || 0), 0)})
@@ -424,19 +648,20 @@ export const LeadsMatrixFilters = ({
           key={status}
           type="button"
           onClick={() => onStatusFilterChange(status)}
-          className={`shrink-0 rounded-full border px-3 py-1.5 text-[11px] font-semibold uppercase tracking-[0.12em] ${
+          className={`shrink-0 rounded-full border px-3 py-1.5 text-[11px] font-semibold uppercase tracking-[0.12em] transition-colors ${
             statusFilter === status
               ? isDark
-                ? "border-cyan-400/45 bg-cyan-500/15 text-cyan-100"
+                ? "border-cyan-300/55 bg-cyan-500/20 text-cyan-100"
                 : "border-cyan-300 bg-cyan-50 text-cyan-700"
               : isDark
-                ? "border-slate-700 bg-slate-950 text-slate-300"
-                : "border-slate-300 bg-white text-slate-600"
+                ? "border-slate-700 bg-slate-950 text-slate-300 hover:border-slate-500"
+                : "border-slate-300 bg-white text-slate-600 hover:border-slate-400"
           }`}
         >
           {getStatusLabel(status)} ({statusBreakdown[status] || 0})
         </button>
       ))}
+    </div>
     </div>
   </div>
 );
@@ -446,28 +671,144 @@ export const LeadsMatrixTable = ({
   loading,
   filteredLeads,
   onOpenLeadDetails,
+  onInlineStatusChange,
+  updatingInlineStatusId,
+  leadStatuses = [],
   getStatusColor,
   getStatusLabel,
   formatDate,
 }) => {
+  const [openStatusMenuId, setOpenStatusMenuId] = React.useState("");
+
   const isFollowUpDue = (lead) => {
     if (!lead?.nextFollowUp) return false;
     const followUpMs = new Date(lead.nextFollowUp).getTime();
     return Number.isFinite(followUpMs) && followUpMs <= Date.now() && !["REQUESTED", "CLOSED", "LOST"].includes(String(lead.status || ""));
   };
 
+  const getLeadInitials = (leadName) =>
+    String(leadName || "")
+      .trim()
+      .split(/\s+/)
+      .slice(0, 2)
+      .map((part) => part.charAt(0).toUpperCase())
+      .join("") || "LD";
+
+  const handleRowKeyDown = (event, lead) => {
+    if (event.key !== "Enter" && event.key !== " ") return;
+    event.preventDefault();
+    onOpenLeadDetails(lead);
+  };
+
+  const StatusPicker = ({ lead, compact = false }) => {
+    const leadId = String(lead?._id || "");
+    const isUpdating = updatingInlineStatusId === leadId;
+    const currentStatus = String(lead?.status || "NEW").toUpperCase();
+    const isOpen = openStatusMenuId === leadId;
+
+    const handleStatusSelect = (status) => {
+      const nextStatus = String(status || "").trim().toUpperCase();
+      setOpenStatusMenuId("");
+
+      if (nextStatus === "CLOSED") {
+        onOpenLeadDetails(lead);
+        return;
+      }
+
+      onInlineStatusChange?.(lead, nextStatus);
+    };
+
+    return (
+      <div
+        className={`relative inline-flex ${isOpen ? "z-[90]" : "z-10"}`}
+        onClick={(event) => event.stopPropagation()}
+        onKeyDown={(event) => event.stopPropagation()}
+      >
+        <button
+          type="button"
+          disabled={isUpdating}
+          onClick={() => setOpenStatusMenuId((prev) => (prev === leadId ? "" : leadId))}
+          className={`inline-flex items-center gap-1.5 rounded-full border py-1 pl-2.5 pr-2 font-bold uppercase outline-none transition-all focus:ring-2 ${
+            compact ? "text-[10px]" : "text-[11px]"
+          } ${getStatusColor(lead?.status)} ${
+            isUpdating ? "cursor-wait opacity-60" : "cursor-pointer hover:shadow-sm"
+          } ${
+            isDark ? "focus:ring-cyan-300/20" : "focus:ring-blue-200"
+          }`}
+          title="Change lead status"
+          aria-label={`Change status for ${lead?.name || "lead"}`}
+          aria-expanded={isOpen}
+        >
+          <span>{isUpdating ? "Updating" : getStatusLabel(currentStatus)}</span>
+          <span className={`text-[9px] transition-transform ${isOpen ? "rotate-180" : ""}`}>
+            v
+          </span>
+        </button>
+
+        {isOpen ? (
+          <div
+            className={`absolute left-0 top-full z-[100] mt-1.5 w-44 overflow-hidden rounded-xl border p-1 text-left shadow-2xl backdrop-blur-xl ${
+              isDark
+                ? "border-slate-700 bg-slate-950/95"
+                : "border-slate-200 bg-white/95"
+            }`}
+          >
+            {leadStatuses.map((status) => {
+              const isCurrent = status === currentStatus;
+              const isClosed = status === "CLOSED";
+
+              return (
+                <button
+                  type="button"
+                  key={status}
+                  onClick={() => handleStatusSelect(status)}
+                  className={`flex w-full items-center justify-between gap-3 rounded-lg px-2.5 py-1.5 text-[11px] font-bold uppercase transition-colors ${
+                    isCurrent
+                      ? isDark
+                        ? "bg-cyan-400/15 text-cyan-100"
+                        : "bg-blue-50 text-blue-700"
+                      : isDark
+                        ? "text-slate-300 hover:bg-white/10 hover:text-white"
+                        : "text-slate-700 hover:bg-slate-100 hover:text-slate-950"
+                  }`}
+                >
+                  <span className="min-w-0 truncate">{getStatusLabel(status)}</span>
+                  {isClosed ? (
+                    <span className={isDark ? "shrink-0 text-[9px] text-amber-200" : "shrink-0 text-[9px] text-amber-700"}>
+                      OPEN
+                    </span>
+                  ) : isCurrent ? (
+                    <span className={isDark ? "shrink-0 text-[9px] text-cyan-200" : "shrink-0 text-[9px] text-blue-600"}>
+                      ACTIVE
+                    </span>
+                  ) : null}
+                </button>
+              );
+            })}
+          </div>
+        ) : null}
+      </div>
+    );
+  };
+
   return (
-    <div className={`flex min-h-[420px] flex-1 flex-col overflow-hidden rounded-2xl border shadow-sm ${
-      isDark ? "border-slate-700 bg-slate-900/85" : "border-slate-200 bg-white"
+    <div className={`ui-soft-panel relative flex min-h-[420px] flex-1 flex-col overflow-hidden rounded-3xl shadow-sm ${
+      isDark
+        ? "border-slate-700 bg-slate-900/90 shadow-[0_20px_70px_rgba(2,6,23,0.5)]"
+        : "border-slate-200 bg-white shadow-[0_18px_48px_rgba(15,23,42,0.1)]"
     }`}>
+      <div className="pointer-events-none absolute inset-0 opacity-70">
+        <div className={`absolute inset-x-0 top-0 h-px ${isDark ? "bg-cyan-300/30" : "bg-cyan-300/70"}`} />
+      </div>
+
       {loading ? (
-        <div className={`flex h-56 items-center justify-center gap-2 text-sm ${
+        <div className={`relative z-10 flex h-56 items-center justify-center gap-2 text-sm ${
           isDark ? "text-slate-400" : "text-slate-500"
         }`}>
           <Loader className="animate-spin" size={18} /> Loading leads...
         </div>
       ) : filteredLeads.length === 0 ? (
-        <div className={`flex h-64 flex-col items-center justify-center ${
+        <div className={`relative z-10 flex h-64 flex-col items-center justify-center ${
           isDark ? "text-slate-400" : "text-slate-500"
         }`}>
           <Filter size={40} className="mb-3 opacity-40" />
@@ -475,45 +816,67 @@ export const LeadsMatrixTable = ({
         </div>
       ) : (
         <>
-          <div className="max-h-[62vh] overflow-y-auto p-2 custom-scrollbar md:hidden">
-            <div className="space-y-2">
+          <div className="relative z-10 max-h-[68vh] overflow-y-auto p-2.5 custom-scrollbar md:hidden">
+            <div className="space-y-2.5">
               {filteredLeads.map((lead) => {
                 const pendingAmount = getLeadPendingAmount(lead);
+                const followUpDue = isFollowUpDue(lead);
+                const isStatusMenuOpen = openStatusMenuId === String(lead._id || "");
                 return (
-                  <Motion.button
-                    type="button"
+                  <Motion.div
+                    role="button"
+                    tabIndex={0}
                     key={lead._id}
                     initial={{ opacity: 0, y: 6 }}
                     animate={{ opacity: 1, y: 0 }}
                     onClick={() => onOpenLeadDetails(lead)}
-                    className={`w-full rounded-xl border p-3 text-left transition-colors ${
+                    onKeyDown={(event) => handleRowKeyDown(event, lead)}
+                    className={`relative w-full rounded-2xl border p-3.5 text-left transition-all ${
+                      isStatusMenuOpen ? "z-50" : "z-0"
+                    } ${
                       isDark
-                        ? "border-slate-700 bg-slate-950/60 hover:border-cyan-400/40"
+                        ? "border-slate-700 bg-slate-950/70 hover:border-cyan-300/40"
                         : "border-slate-200 bg-white hover:border-cyan-300 hover:bg-slate-50"
                     }`}
                   >
                     <div className="flex items-start justify-between gap-3">
-                      <div className="min-w-0">
-                        <p className={`truncate text-sm font-semibold ${isDark ? "text-slate-100" : "text-slate-900"}`}>
-                          {lead.name || "Unnamed lead"}
-                        </p>
-                        <p className={`mt-0.5 truncate text-xs ${isDark ? "text-slate-400" : "text-slate-500"}`}>
-                          {lead.projectInterested || "Project not set"}
-                        </p>
+                      <div className="flex min-w-0 items-start gap-2.5">
+                        <div className={`mt-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-xl border text-xs font-bold ${
+                          isDark
+                            ? "border-cyan-300/30 bg-cyan-500/10 text-cyan-100"
+                            : "border-cyan-200 bg-cyan-50 text-cyan-700"
+                        }`}>
+                          {getLeadInitials(lead.name)}
+                        </div>
+
+                        <div className="min-w-0">
+                          <p className={`truncate text-sm font-semibold ${isDark ? "text-slate-100" : "text-slate-900"}`}>
+                            {lead.name || "Unnamed lead"}
+                          </p>
+                          <p className={`mt-0.5 truncate text-xs ${isDark ? "text-slate-400" : "text-slate-500"}`}>
+                            {lead.projectInterested || "Project not set"}
+                          </p>
+                        </div>
                       </div>
-                      <span className={`rounded border px-2 py-1 text-[10px] font-bold uppercase ${getStatusColor(lead.status)}`}>
-                        {getStatusLabel(lead.status) || "-"}
-                      </span>
+
+                      <StatusPicker lead={lead} compact />
                     </div>
 
-                    <div className={`mt-2 space-y-1 text-xs ${isDark ? "text-slate-300" : "text-slate-600"}`}>
+                    <div className={`mt-3 grid grid-cols-1 gap-1.5 text-xs ${isDark ? "text-slate-300" : "text-slate-600"}`}>
                       <p className="flex items-center gap-1.5">
                         <Phone size={12} />
                         {lead.phone || "-"}
                       </p>
-                      <p className="truncate">{lead.email || "-"}</p>
-                      <p className="truncate">City: {lead.city || "-"}</p>
-                      <p className={isFollowUpDue(lead) ? "text-rose-600 font-semibold" : ""}>
+                      <p className="flex items-center gap-1.5 truncate">
+                        <Mail size={12} />
+                        <span className="truncate">{lead.email || "-"}</span>
+                      </p>
+                      <p className="flex items-center gap-1.5 truncate">
+                        <MapPin size={12} />
+                        <span className="truncate">{lead.city || "-"}</span>
+                      </p>
+                      <p className={`flex items-center gap-1.5 ${followUpDue ? "font-semibold text-rose-600" : ""}`}>
+                        <CalendarClock size={12} />
                         Follow-up: {formatDate(lead.nextFollowUp)}
                       </p>
                       <p className={pendingAmount ? (isDark ? "text-amber-200" : "text-amber-700") : ""}>
@@ -521,89 +884,123 @@ export const LeadsMatrixTable = ({
                       </p>
                     </div>
 
-                    <div className={`mt-3 inline-flex items-center gap-1 text-[11px] font-bold uppercase tracking-[0.12em] ${
+                    <div className={`mt-3 inline-flex items-center gap-1 text-[11px] font-bold uppercase tracking-[0.13em] ${
                       isDark ? "text-cyan-200" : "text-cyan-700"
                     }`}>
-                      Open
+                      Open profile
                       <ArrowUpRight size={12} />
                     </div>
-                  </Motion.button>
+                  </Motion.div>
                 );
               })}
             </div>
           </div>
 
-          <div className="hidden flex-1 flex-col md:flex">
-            <div className={`grid grid-cols-12 gap-3 border-b px-4 py-3 text-[11px] font-bold uppercase tracking-[0.14em] ${
+          <div className="relative z-10 hidden flex-1 flex-col md:flex">
+            <div className={`grid grid-cols-12 gap-3 border-b px-5 py-3 text-[10px] font-bold uppercase tracking-[0.16em] ${
               isDark ? "border-slate-700 bg-slate-900 text-slate-400" : "border-slate-200 bg-slate-50 text-slate-500"
             }`}>
-              <div className="col-span-3">Lead</div>
-              <div className="col-span-3">Contact</div>
+              <div className="col-span-3">Lead Profile</div>
+              <div className="col-span-3">Contact Trail</div>
               <div className="col-span-2">Status</div>
-              <div className="col-span-2">Follow-up / Pending</div>
-              <div className="col-span-2">Assigned</div>
+              <div className="col-span-2">Follow-up</div>
+              <div className="col-span-2">Ownership</div>
             </div>
 
-            <div className="max-h-[62vh] overflow-y-auto p-2 custom-scrollbar">
-              <div className="space-y-1.5">
+            <div className="max-h-[66vh] overflow-y-auto p-2.5 custom-scrollbar">
+              <div className="space-y-2">
                 {filteredLeads.map((lead) => {
                   const pendingAmount = getLeadPendingAmount(lead);
+                  const followUpDue = isFollowUpDue(lead);
+                  const isStatusMenuOpen = openStatusMenuId === String(lead._id || "");
                   return (
-                    <Motion.button
-                      type="button"
+                    <Motion.div
+                      role="button"
+                      tabIndex={0}
                       key={lead._id}
                       initial={{ opacity: 0, y: 6 }}
                       animate={{ opacity: 1, y: 0 }}
                       onClick={() => onOpenLeadDetails(lead)}
-                      className={`grid w-full grid-cols-12 items-center gap-3 rounded-xl border px-3 py-3 text-left transition-colors ${
+                      onKeyDown={(event) => handleRowKeyDown(event, lead)}
+                      className={`group relative grid w-full grid-cols-12 items-center gap-3 overflow-visible rounded-2xl border px-4 py-3 text-left transition-all ${
+                        isStatusMenuOpen ? "z-50" : "z-0"
+                      } ${
                         isDark
-                          ? "border-slate-700 bg-slate-950/55 hover:border-cyan-400/40 hover:bg-slate-900"
+                          ? "border-slate-700 bg-slate-950/65 hover:border-cyan-300/45 hover:bg-slate-900"
                           : "border-slate-200 bg-white hover:border-cyan-300 hover:bg-slate-50"
                       }`}
                     >
-                      <div className="col-span-3 min-w-0">
-                        <p className={`truncate text-sm font-semibold ${isDark ? "text-slate-100" : "text-slate-900"}`}>
+                      <div className={`absolute left-0 top-0 h-full w-1 ${
+                        followUpDue
+                          ? "bg-rose-500"
+                          : isDark
+                            ? "bg-cyan-400/40"
+                            : "bg-cyan-300/70"
+                      }`}
+                      />
+
+                      <div className="col-span-3 flex min-w-0 items-center gap-2.5">
+                        <div className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border text-xs font-bold ${
+                          isDark
+                            ? "border-cyan-300/35 bg-cyan-500/10 text-cyan-100"
+                            : "border-cyan-200 bg-cyan-50 text-cyan-700"
+                        }`}>
+                          {getLeadInitials(lead.name)}
+                        </div>
+
+                        <div className="min-w-0">
+                          <p className={`truncate text-sm font-semibold ${isDark ? "text-slate-100" : "text-slate-900"}`}>
                           {lead.name || "Unnamed lead"}
                         </p>
                         <p className={`mt-0.5 truncate text-xs ${isDark ? "text-slate-400" : "text-slate-500"}`}>
                           {lead.projectInterested || "Project not set"}
                         </p>
                       </div>
+                      </div>
 
                       <div className={`col-span-3 min-w-0 text-xs ${isDark ? "text-slate-300" : "text-slate-600"}`}>
-                        <p className="truncate">{lead.phone || "-"}</p>
-                        <p className="truncate">{lead.email || "-"}</p>
-                        <p className="truncate">{lead.city || "-"}</p>
+                        <p className="flex items-center gap-1.5 truncate">
+                          <Phone size={12} />
+                          <span className="truncate">{lead.phone || "-"}</span>
+                        </p>
+                        <p className="mt-1 flex items-center gap-1.5 truncate">
+                          <Mail size={12} />
+                          <span className="truncate">{lead.email || "-"}</span>
+                        </p>
+                        <p className="mt-1 flex items-center gap-1.5 truncate">
+                          <MapPin size={12} />
+                          <span className="truncate">{lead.city || "-"}</span>
+                        </p>
                       </div>
 
                       <div className="col-span-2">
-                        <span className={`rounded border px-2 py-1 text-[11px] font-bold uppercase ${getStatusColor(lead.status)}`}>
-                          {getStatusLabel(lead.status) || "-"}
-                        </span>
+                        <StatusPicker lead={lead} />
                       </div>
 
-                      <div className={`col-span-2 text-xs ${
-                        isFollowUpDue(lead)
-                          ? "font-semibold text-rose-600"
-                          : isDark
-                            ? "text-slate-300"
-                            : "text-slate-600"
-                      }`}>
-                        <p>{formatDate(lead.nextFollowUp)}</p>
+                      <div className={`col-span-2 text-xs ${isDark ? "text-slate-300" : "text-slate-600"}`}>
+                        <p className={`inline-flex items-center gap-1.5 ${
+                          followUpDue ? "font-semibold text-rose-600" : ""
+                        }`}>
+                          <CalendarClock size={12} />
+                          {formatDate(lead.nextFollowUp)}
+                        </p>
                         <p className={`mt-1 ${pendingAmount ? (isDark ? "text-amber-200" : "text-amber-700") : ""}`}>
                           Remaining: {pendingAmount ? formatCurrencyInr(pendingAmount) : "-"}
                         </p>
                       </div>
 
-                      <div className={`col-span-2 min-w-0 text-xs ${isDark ? "text-cyan-200" : "text-cyan-700"}`}>
-                        <p className="truncate font-semibold">
+                      <div className="col-span-2 min-w-0 text-xs">
+                        <p className={`truncate font-semibold ${isDark ? "text-cyan-100" : "text-cyan-700"}`}>
                           {lead.assignedTo?.name || "Unassigned"}
                         </p>
-                        <p className={`truncate ${isDark ? "text-slate-400" : "text-slate-500"}`}>
-                          {lead.assignedTo?.role || "Tap to manage"}
-                        </p>
+                        <div className="mt-1 flex items-center justify-between gap-2">
+                          <p className={`truncate ${isDark ? "text-slate-400" : "text-slate-500"}`}>
+                            {lead.assignedTo?.role || "Tap to manage"}
+                          </p>
+                          <ArrowUpRight size={13} className={isDark ? "text-slate-500 group-hover:text-cyan-200" : "text-slate-400 group-hover:text-cyan-600"} />
+                        </div>
                       </div>
-                    </Motion.button>
+                    </Motion.div>
                   );
                 })}
               </div>
@@ -660,7 +1057,7 @@ export const AddLeadModal = ({
         initial={{ scale: 0.96, y: 10 }}
         animate={{ scale: 1, y: 0 }}
         exit={{ scale: 0.96, y: 10 }}
-        className={`w-full max-w-3xl max-h-[92vh] overflow-y-auto rounded-2xl border p-5 shadow-2xl ${
+        className={`ui-soft-panel w-full max-w-3xl max-h-[92vh] overflow-y-auto rounded-2xl p-5 shadow-2xl ${
           isDark ? "border-slate-700 bg-slate-900" : "border-slate-200 bg-white"
         }`}
       >
@@ -839,7 +1236,7 @@ export const BulkLeadUploadModal = ({
       initial={{ scale: 0.96, y: 10 }}
       animate={{ scale: 1, y: 0 }}
       exit={{ scale: 0.96, y: 10 }}
-      className={`w-full max-w-2xl rounded-2xl border p-5 shadow-2xl ${
+      className={`ui-soft-panel w-full max-w-2xl rounded-2xl p-5 shadow-2xl ${
         isDark ? "border-slate-700 bg-slate-900" : "border-slate-200 bg-white"
       }`}
     >

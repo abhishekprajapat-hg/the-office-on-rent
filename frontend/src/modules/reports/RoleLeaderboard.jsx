@@ -26,7 +26,7 @@ const formatPercent = (value) => {
 const rankBadgeClass = (rank) => {
   if (rank === 1) return "bg-amber-100 text-amber-700 border-amber-200";
   if (rank === 2) return "bg-slate-100 text-slate-700 border-slate-200";
-  if (rank === 3) return "bg-orange-100 text-orange-700 border-orange-200";
+  if (rank === 3) return "bg-cyan-100 text-cyan-700 border-cyan-200";
   return "bg-slate-50 text-slate-600 border-slate-200";
 };
 
@@ -104,8 +104,8 @@ const RoleLeaderboard = () => {
   };
 
   return (
-    <div className="h-full w-full overflow-y-auto custom-scrollbar px-4 pb-8 pt-20 sm:px-6 lg:px-8 md:pt-24">
-      <div className="mb-6 flex flex-col gap-4 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm sm:flex-row sm:items-center sm:justify-between">
+    <div className="ui-page-shell custom-scrollbar">
+      <div className="ui-hero-card mb-6 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
         <div>
           <h1 className="font-display text-2xl text-slate-900 sm:text-3xl">
             Role Leaderboard
@@ -125,7 +125,7 @@ const RoleLeaderboard = () => {
                 id="leaderboard-role"
                 value={selectedRole}
                 onChange={(event) => setSelectedRole(event.target.value)}
-                className="h-10 rounded-lg border border-slate-300 bg-white px-3 text-sm text-slate-800 outline-none transition focus:border-emerald-400 focus:ring-2 focus:ring-emerald-100"
+                className="h-10 rounded-lg border border-slate-300 bg-white px-3 text-sm text-slate-800 outline-none transition focus:border-cyan-400 focus:ring-2 focus:ring-cyan-100"
               >
                 {roleFilterOptions.map((option) => (
                   <option key={option.value} value={option.value}>
@@ -143,7 +143,7 @@ const RoleLeaderboard = () => {
             id="leaderboard-window"
             value={windowDays}
             onChange={(event) => setWindowDays(Number(event.target.value))}
-            className="h-10 rounded-lg border border-slate-300 bg-white px-3 text-sm text-slate-800 outline-none transition focus:border-emerald-400 focus:ring-2 focus:ring-emerald-100"
+            className="h-10 rounded-lg border border-slate-300 bg-white px-3 text-sm text-slate-800 outline-none transition focus:border-cyan-400 focus:ring-2 focus:ring-cyan-100"
           >
             {WINDOW_OPTIONS.map((option) => (
               <option key={option.value} value={option.value}>
@@ -155,7 +155,7 @@ const RoleLeaderboard = () => {
             type="button"
             onClick={handleRefresh}
             disabled={loading || refreshing}
-            className="inline-flex h-10 items-center gap-2 rounded-lg border border-slate-300 bg-white px-3 text-xs font-semibold text-slate-700 transition hover:border-emerald-300 hover:text-emerald-700 disabled:cursor-not-allowed disabled:opacity-60"
+            className="inline-flex h-10 items-center gap-2 rounded-lg border border-slate-300 bg-white px-3 text-xs font-semibold text-slate-700 transition hover:border-cyan-300 hover:text-cyan-700 disabled:cursor-not-allowed disabled:opacity-60"
           >
             {refreshing ? <Loader2 size={14} className="animate-spin" /> : <RefreshCw size={14} />}
             Refresh
@@ -171,24 +171,24 @@ const RoleLeaderboard = () => {
       ) : null}
 
       {loading ? (
-        <div className="flex h-40 items-center justify-center rounded-2xl border border-slate-200 bg-white text-slate-500">
+        <div className="ui-soft-panel flex h-40 items-center justify-center rounded-2xl border border-slate-200 bg-white text-slate-500">
           <Loader2 size={18} className="mr-2 animate-spin" />
           Loading leaderboard...
         </div>
       ) : (
         <>
           <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
-            <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+            <div className="ui-soft-panel rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
               <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-500">
                 Active Peers
               </p>
               <div className="mt-2 flex items-center gap-2 text-slate-900">
-                <Users size={16} className="text-emerald-600" />
+                <Users size={16} className="text-cyan-600" />
                 <span className="text-xl font-semibold">{Number(data.count || 0)}</span>
               </div>
             </div>
 
-            <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+            <div className="ui-soft-panel rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
               <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-500">
                 Your Rank
               </p>
@@ -200,7 +200,7 @@ const RoleLeaderboard = () => {
               </div>
             </div>
 
-            <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+            <div className="ui-soft-panel rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
               <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-500">
                 Top Conversion
               </p>
@@ -214,11 +214,11 @@ const RoleLeaderboard = () => {
           </div>
 
           {rows.length === 0 ? (
-            <div className="mt-5 rounded-2xl border border-slate-200 bg-white px-4 py-6 text-sm text-slate-600 shadow-sm">
+            <div className="ui-soft-panel mt-5 rounded-2xl border border-slate-200 bg-white px-4 py-6 text-sm text-slate-600 shadow-sm">
               No users available for leaderboard in selected window.
             </div>
           ) : (
-            <div className="mt-5 overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
+            <div className="ui-soft-panel mt-5 overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
               <div className="overflow-x-auto">
                 <table className="min-w-full divide-y divide-slate-200">
                   <thead className="bg-slate-50">
@@ -235,7 +235,7 @@ const RoleLeaderboard = () => {
                     {rows.map((row) => (
                       <tr
                         key={row.userId}
-                        className={row.isSelf ? "bg-emerald-50/70" : "bg-white"}
+                        className={row.isSelf ? "bg-cyan-50/70" : "bg-white"}
                       >
                         <td className="px-4 py-3">
                           <span className={`inline-flex items-center gap-1 rounded-full border px-2 py-1 text-xs font-semibold ${rankBadgeClass(row.rank)}`}>
@@ -255,7 +255,7 @@ const RoleLeaderboard = () => {
                         <td className="px-4 py-3 text-sm text-slate-700">
                           {Number(row.totalLeads || 0).toLocaleString("en-IN")}
                         </td>
-                        <td className="px-4 py-3 text-sm font-semibold text-emerald-700">
+                        <td className="px-4 py-3 text-sm font-semibold text-cyan-700">
                           {formatPercent(row.conversionRate)}
                         </td>
                         <td className="px-4 py-3 text-sm text-slate-700">

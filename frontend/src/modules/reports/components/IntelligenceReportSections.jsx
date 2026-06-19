@@ -18,9 +18,9 @@ export const ReportsHeader = ({
   onRefresh,
   onExport,
 }) => (
-  <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
+  <div className="ui-hero-card flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
     <div>
-      <h1 className="text-3xl font-semibold text-slate-900">Reports Dashboard</h1>
+      <h1 className="font-display text-3xl font-semibold text-slate-900">Reports Dashboard</h1>
       <p className="mt-1 text-xs uppercase tracking-[0.16em] text-slate-500">
         Funnel, quality, team and inventory reporting
       </p>
@@ -30,8 +30,8 @@ export const ReportsHeader = ({
     </div>
 
     <div className="flex flex-col items-start gap-2 sm:items-end">
-      <div className="inline-flex flex-wrap items-center gap-2 rounded-2xl border border-slate-200 bg-white p-2 shadow-sm">
-        <div className="inline-flex flex-wrap items-center gap-1 rounded-xl bg-slate-100 p-1">
+      <div className="ui-soft-panel inline-flex flex-wrap items-center gap-2 rounded-2xl border border-slate-200 bg-white p-2 shadow-sm">
+        <div className="inline-flex flex-wrap items-center gap-1 rounded-xl bg-slate-100/90 p-1">
           {rangeOptions.map((range) => (
             <button
               key={range.key}
@@ -39,8 +39,8 @@ export const ReportsHeader = ({
               onClick={() => onRangeChange(range.key)}
               className={`h-9 rounded-lg px-3 text-xs font-semibold transition-all ${
                 rangeKey === range.key
-                  ? "bg-slate-900 text-white shadow-sm"
-                  : "bg-transparent text-slate-700 hover:bg-white hover:text-slate-900"
+                  ? "bg-cyan-600 text-white shadow-sm"
+                  : "bg-transparent text-slate-700 hover:bg-white hover:text-cyan-700"
               }`}
             >
               {range.label}
@@ -52,7 +52,7 @@ export const ReportsHeader = ({
           type="button"
           onClick={onRefresh}
           disabled={refreshing}
-          className="h-9 rounded-xl border border-slate-300 bg-white px-3 text-xs font-semibold text-slate-700 hover:border-slate-400 disabled:opacity-60 inline-flex items-center gap-2"
+          className="h-9 rounded-xl border border-slate-300 bg-white px-3 text-xs font-semibold text-slate-700 hover:border-cyan-400 hover:text-cyan-700 disabled:opacity-60 inline-flex items-center gap-2"
         >
           <RefreshCw size={14} className={refreshing ? "animate-spin" : ""} />
           Refresh
@@ -61,7 +61,7 @@ export const ReportsHeader = ({
         <button
           type="button"
           onClick={onExport}
-          className="h-9 rounded-xl border border-slate-300 bg-white px-3 text-xs font-semibold text-slate-700 hover:border-slate-400 inline-flex items-center gap-2"
+          className="h-9 rounded-xl border border-slate-300 bg-white px-3 text-xs font-semibold text-slate-700 hover:border-cyan-400 hover:text-cyan-700 inline-flex items-center gap-2"
         >
           <Download size={14} />
           Export CSV
@@ -69,7 +69,7 @@ export const ReportsHeader = ({
       </div>
 
       {rangeKey === "CUSTOM" ? (
-        <div className="flex flex-wrap gap-2 rounded-xl border border-slate-200 bg-white p-2 shadow-sm">
+        <div className="ui-soft-panel flex flex-wrap gap-2 rounded-xl border border-slate-200 bg-white p-2 shadow-sm">
           <label className="inline-flex items-center gap-2 rounded-lg border border-slate-300 bg-white px-3 text-xs font-semibold text-slate-600">
             From
             <input
@@ -152,7 +152,7 @@ export const ReportSummaryCards = ({ topMetrics, formatPercent }) => (
 );
 
 export const LeadFunnelSection = ({ leadStageRows, formatPercent }) => (
-  <section className="rounded-2xl border border-slate-200 bg-white p-4">
+  <section className="ui-soft-panel rounded-2xl border border-slate-200 bg-white p-4">
     <h2 className="text-sm font-semibold uppercase tracking-[0.14em] text-slate-600">Lead Funnel</h2>
     <div className="mt-3 space-y-3">
       {leadStageRows.map((row) => (
@@ -165,7 +165,7 @@ export const LeadFunnelSection = ({ leadStageRows, formatPercent }) => (
           </div>
           <div className="h-2 w-full rounded-full bg-slate-100">
             <div
-              className="h-full rounded-full bg-slate-900"
+              className="h-full rounded-full bg-gradient-to-r from-cyan-500 to-sky-500"
               style={{ width: `${Math.min(row.share, 100)}%` }}
             />
           </div>
@@ -176,7 +176,7 @@ export const LeadFunnelSection = ({ leadStageRows, formatPercent }) => (
 );
 
 export const LeadAgingSection = ({ agingBuckets }) => (
-  <section className="rounded-2xl border border-slate-200 bg-white p-4">
+  <section className="ui-soft-panel rounded-2xl border border-slate-200 bg-white p-4">
     <h2 className="text-sm font-semibold uppercase tracking-[0.14em] text-slate-600">
       Lead Aging (Active Pipeline)
     </h2>
@@ -189,7 +189,7 @@ export const LeadAgingSection = ({ agingBuckets }) => (
           </div>
           <div className="h-2 w-full rounded-full bg-slate-100">
             <div
-              className="h-full rounded-full bg-slate-900"
+              className="h-full rounded-full bg-gradient-to-r from-emerald-500 to-cyan-500"
               style={{ width: `${Math.min(row.share, 100)}%` }}
             />
           </div>
@@ -200,7 +200,7 @@ export const LeadAgingSection = ({ agingBuckets }) => (
 );
 
 export const SourceEffectivenessSection = ({ sourcePerformance, formatPercent }) => (
-  <section className="rounded-2xl border border-slate-200 bg-white p-4">
+  <section className="ui-soft-panel rounded-2xl border border-slate-200 bg-white p-4">
     <h2 className="text-sm font-semibold uppercase tracking-[0.14em] text-slate-600">
       Source Effectiveness
     </h2>
@@ -236,7 +236,7 @@ export const SourceEffectivenessSection = ({ sourcePerformance, formatPercent })
 );
 
 export const ProjectDemandSection = ({ projectDemand }) => (
-  <section className="rounded-2xl border border-slate-200 bg-white p-4">
+  <section className="ui-soft-panel rounded-2xl border border-slate-200 bg-white p-4">
     <h2 className="text-sm font-semibold uppercase tracking-[0.14em] text-slate-600">
       Project Demand
     </h2>
@@ -270,7 +270,7 @@ export const ProjectDemandSection = ({ projectDemand }) => (
 );
 
 export const ExecutivePerformanceSection = ({ executivePerformance, formatPercent }) => (
-  <section className="rounded-2xl border border-slate-200 bg-white p-4">
+  <section className="ui-soft-panel rounded-2xl border border-slate-200 bg-white p-4">
     <h2 className="text-sm font-semibold uppercase tracking-[0.14em] text-slate-600">
       Executive Performance
     </h2>
@@ -308,7 +308,7 @@ export const ExecutivePerformanceSection = ({ executivePerformance, formatPercen
 );
 
 export const FollowUpRiskSection = ({ followUpRisk, formatDateTime }) => (
-  <section className="rounded-2xl border border-slate-200 bg-white p-4">
+  <section className="ui-soft-panel rounded-2xl border border-slate-200 bg-white p-4">
     <h2 className="text-sm font-semibold uppercase tracking-[0.14em] text-slate-600">
       Follow-up Risk Monitor
     </h2>
@@ -325,7 +325,7 @@ export const FollowUpRiskSection = ({ followUpRisk, formatDateTime }) => (
     ) : (
       <div className="mt-3 space-y-2">
         {followUpRisk.list.map((lead) => (
-          <div key={lead._id} className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2">
+          <div key={lead._id} className="rounded-lg border border-slate-200 bg-slate-50/80 px-3 py-2">
             <div className="flex items-start justify-between gap-3">
               <div>
                 <p className="text-sm font-medium text-slate-800">{lead.name || "-"}</p>
@@ -341,7 +341,7 @@ export const FollowUpRiskSection = ({ followUpRisk, formatDateTime }) => (
 );
 
 export const InventoryInsightsSection = ({ inventoryInsights, formatCurrency }) => (
-  <section className="rounded-2xl border border-slate-200 bg-white p-4">
+  <section className="ui-soft-panel rounded-2xl border border-slate-200 bg-white p-4">
     <h2 className="text-sm font-semibold uppercase tracking-[0.14em] text-slate-600">
       Inventory Insights
     </h2>
@@ -389,10 +389,10 @@ export const InventoryInsightsSection = ({ inventoryInsights, formatCurrency }) 
 );
 
 const StatCard = ({ title, value, helper, icon: Icon }) => (
-  <div className="rounded-2xl border border-slate-200 bg-white p-4">
+  <div className="ui-soft-panel rounded-2xl border border-slate-200 bg-white p-4">
     <div className="flex items-center justify-between gap-3">
       <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-500">{title}</p>
-      <div className="rounded-lg bg-slate-100 p-2 text-slate-700">
+      <div className="rounded-lg bg-cyan-50 p-2 text-cyan-700">
         {React.createElement(Icon, { size: 14 })}
       </div>
     </div>

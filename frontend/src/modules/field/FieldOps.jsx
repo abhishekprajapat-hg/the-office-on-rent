@@ -714,17 +714,19 @@ const FieldOps = () => {
 
   if (loading) {
     return (
-      <div className="w-full h-full flex items-center justify-center gap-2 text-sm text-slate-500">
-        <RefreshCw size={16} className="animate-spin" />
-        Loading field operations...
+      <div className="ui-page-shell flex h-full w-full items-center justify-center">
+        <div className="ui-soft-panel inline-flex items-center gap-2 px-4 py-3 text-sm text-slate-600">
+          <RefreshCw size={16} className="animate-spin" />
+          Loading field operations...
+        </div>
       </div>
     );
   }
 
   return (
-    <div className="w-full h-full overflow-y-auto px-3 py-5 sm:px-6 sm:py-6 lg:px-8 custom-scrollbar">
+    <div className="ui-page-shell h-full w-full overflow-y-auto custom-scrollbar">
       <div className="space-y-5 sm:space-y-6">
-        <section className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
+        <section className="ui-hero-card overflow-hidden">
           <div className="bg-gradient-to-r from-slate-900 via-slate-800 to-cyan-900 px-4 py-5 sm:px-6">
             <div className="flex flex-col gap-4 xl:flex-row xl:items-start xl:justify-between">
               <div>
@@ -815,7 +817,7 @@ const FieldOps = () => {
         </section>
 
         {error && (
-          <div className="flex items-center gap-2 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+          <div className="ui-soft-panel flex items-center gap-2 border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
             <AlertCircle size={16} />
             {error}
           </div>

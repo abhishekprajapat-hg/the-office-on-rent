@@ -31,7 +31,6 @@ import {
   clearConversationMessages,
   createDirectRoom,
   deleteConversationMessage,
-  getConversationCalls,
   getConversationMessages,
   getMessengerContacts,
   getMessengerConversations,
@@ -43,7 +42,6 @@ import { createChatSocket } from "../../services/chatSocket";
 import { useChatNotifications } from "../../context/useChatNotifications";
 import { toErrorMessage } from "../../utils/errorMessage";
 import {
-  TeamChatCallLogsPanel,
   TeamChatSidebar,
 } from "./components/TeamChatPanels";
 
@@ -1474,34 +1472,6 @@ const TeamChat = ({ theme = "light" }) => {
     }
   }, []);
 
-  const callTimelineOffsetClass = useMemo(() => {
-    if (!activeCall) return "";
-    return activeCall.mode === CALL_MODES.VIDEO ? "pt-[29rem] sm:pt-[26rem]" : "pt-40";
-  }, [activeCall]);
-
-  const recentCallHistory = useMemo(
-    () => (Array.isArray(callHistory) ? callHistory.slice(0, 5) : []),
-    [callHistory],
-  );
-
-  const callSummary = useMemo(() => {
-    const rows = Array.isArray(callHistory) ? callHistory : [];
-
-    return rows.reduce(
-      (summary, row) => {
-        const status = String(row?.status || "").trim().toLowerCase();
-        summary.total += 1;
-        if (status === "connected" || status === "ended") {
-          summary.completed += 1;
-        } else if (status === "missed" || status === "rejected" || status === "failed") {
-          summary.missed += 1;
-        }
-        return summary;
-      },
-      { total: 0, completed: 0, missed: 0 },
-    );
-  }, [callHistory]);
-
   const syncConversationPreviewFromRows = useCallback((roomId, rows) => {
     const normalizedRoomId = toId(roomId);
     if (!normalizedRoomId) return;
@@ -1618,15 +1588,8 @@ const TeamChat = ({ theme = "light" }) => {
       return;
     }
 
-    try {
-      setCallHistoryLoading(true);
-      const rows = await getConversationCalls({ conversationId: id, limit: 12 });
-      setCallHistory(Array.isArray(rows) ? rows : []);
-    } catch {
-      setCallHistory([]);
-    } finally {
-      setCallHistoryLoading(false);
-    }
+    setCallHistory([]);
+    setCallHistoryLoading(false);
   }, []);
 
   const loadMessagesForConversation = useCallback(async (conversationId) => {
@@ -1977,10 +1940,6 @@ const TeamChat = ({ theme = "light" }) => {
   }, [loadMessagesForConversation, selectedConversationId]);
 
   useEffect(() => {
-    loadCallHistoryForConversation(selectedConversationId);
-  }, [loadCallHistoryForConversation, selectedConversationId]);
-
-  useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: "smooth", block: "end" });
   }, [messages]);
 
@@ -2328,11 +2287,6 @@ const TeamChat = ({ theme = "light" }) => {
     socket.on("chat:room:read", onRoomRead);
     socket.on("chat:room:cleared", onRoomCleared);
     socket.on("chat:typing", onTyping);
-    socket.on("chat:call:incoming", onCallIncoming);
-    socket.on("chat:call:accepted", onCallAccepted);
-    socket.on("chat:call:rejected", onCallRejected);
-    socket.on("chat:call:ended", onCallEnded);
-    socket.on("chat:call:signal", onCallSignal);
 
     return () => {
       socket.off("connect", onConnect);
@@ -2346,11 +2300,6 @@ const TeamChat = ({ theme = "light" }) => {
       socket.off("chat:room:read", onRoomRead);
       socket.off("chat:room:cleared", onRoomCleared);
       socket.off("chat:typing", onTyping);
-      socket.off("chat:call:incoming", onCallIncoming);
-      socket.off("chat:call:accepted", onCallAccepted);
-      socket.off("chat:call:rejected", onCallRejected);
-      socket.off("chat:call:ended", onCallEnded);
-      socket.off("chat:call:signal", onCallSignal);
       clearLocalTypingStopTimer();
       typingStateRef.current = { roomId: "", isTyping: false };
       remoteTypingTimeouts.forEach((timeoutId) => clearTimeout(timeoutId));
@@ -2636,21 +2585,21 @@ const TeamChat = ({ theme = "light" }) => {
 
   if (loading) {
     return (
-      <div className={`flex h-full w-full items-center justify-center ${isDark ? "text-slate-400" : "text-slate-500"}`}>
-        Loading messenger...
+      <div className="ui-page-shell flex h-full w-full items-center justify-center">
+        <div className={`ui-soft-panel px-4 py-3 text-sm ${isDark ? "text-slate-300" : "text-slate-600"}`}>
+          Loading messenger...
+        </div>
       </div>
     );
   }
 
   return (
     <div
-      className={`h-full min-h-0 w-full overflow-hidden p-0 sm:p-3 ${isDark ? "bg-slate-950/35" : "bg-[#e6ded6]"}`}
+      className="ui-page-shell chat-page h-full min-h-0 w-full overflow-hidden p-0 sm:p-3"
     >
       <div className="mx-auto flex h-full min-h-0 w-full max-w-[1600px] flex-col gap-2 sm:gap-3">
         <section
-          className={`hidden rounded-2xl border px-3 py-2.5 sm:block sm:px-4 ${
-            isDark ? "border-slate-700 bg-slate-900/70" : "border-slate-200 bg-white/90"
-          }`}
+          className="ui-hero-card hidden px-3 py-2.5 sm:block sm:px-4"
           style={{
             backgroundImage: isDark
               ? "radial-gradient(circle at 95% 0%, rgba(6,182,212,0.16), transparent 30%)"
@@ -2719,8 +2668,8 @@ const TeamChat = ({ theme = "light" }) => {
       <Motion.div
         initial={{ opacity: 0, y: 12 }}
         animate={{ opacity: 1, y: 0 }}
-        className={`grid min-h-0 flex-1 w-full grid-cols-1 overflow-hidden rounded-none border-0 shadow-none sm:rounded-2xl sm:border sm:shadow-sm md:grid-cols-[360px_minmax(0,1fr)] xl:grid-cols-[360px_minmax(0,1fr)_320px] ${
-          isDark ? "border-slate-700 bg-slate-900/70" : "border-slate-200 bg-white/90"
+        className={`ui-soft-panel chat-workspace grid min-h-0 flex-1 w-full grid-cols-1 overflow-hidden rounded-none border-0 shadow-none sm:rounded-2xl sm:border sm:shadow-sm md:grid-cols-[360px_minmax(0,1fr)] xl:grid-cols-[360px_minmax(0,1fr)_320px] ${
+          isDark ? "bg-slate-900/70" : "bg-white/95"
         }`}
       >
         <TeamChatSidebar
@@ -2751,22 +2700,9 @@ const TeamChat = ({ theme = "light" }) => {
           contactsCount={contacts.length}
           chatFilter={chatFilter}
           setChatFilter={setChatFilter}
-          callHistoryLoading={callHistoryLoading}
-          callHistory={callHistory}
-          callSummary={callSummary}
-          activeCall={activeCall}
-          incomingCall={incomingCall}
-          canUseCalls={canUseCalls}
-          onStartAudioCall={() => handleStartCall(CALL_MODES.AUDIO)}
-          onStartVideoCall={() => handleStartCall(CALL_MODES.VIDEO)}
-          onEndCall={handleEndCall}
-          toId={toId}
-          normalizeCallMode={normalizeCallMode}
-          toCallHistoryStatusLabel={toCallHistoryStatusLabel}
-          toDayLabel={toDayLabel}
         />
-        <section className={`${mobileSidebarVisible ? "hidden md:flex" : "flex"} h-full min-h-0 min-w-0 w-full flex-col overflow-hidden ${isDark ? "bg-slate-900/65" : "bg-[#efeae2]"}`}>
-          <div className={`sticky top-0 z-20 flex items-center gap-2 border-b px-3 py-2.5 sm:px-4 ${
+        <section className={`${mobileSidebarVisible ? "hidden md:flex" : "flex"} chat-room-panel h-full min-h-0 min-w-0 w-full flex-col overflow-hidden ${isDark ? "bg-slate-900/65" : "bg-slate-50/90"}`}>
+          <div className={`chat-thread-header sticky top-0 z-20 flex items-center gap-2 border-b px-3 py-2.5 sm:px-4 ${
             isDark ? "border-slate-700 bg-slate-900/90" : "border-emerald-700/25 bg-emerald-600 md:border-slate-200 md:bg-white"
           }`}>
             <button
@@ -2782,7 +2718,7 @@ const TeamChat = ({ theme = "light" }) => {
 
             {activeContact ? (
               <div className="flex min-w-0 flex-1 items-center gap-2">
-                <div className={`flex h-9 w-9 items-center justify-center rounded-full text-[10px] font-semibold ${
+                <div className={`chat-avatar flex h-9 w-9 items-center justify-center rounded-full text-[10px] font-semibold ${
                   isDark ? "bg-slate-800 text-slate-200" : "bg-emerald-500 text-white md:bg-slate-200 md:text-slate-700"
                 }`}>
                   {getInitials(activeContact.name)}
@@ -2811,62 +2747,6 @@ const TeamChat = ({ theme = "light" }) => {
             )}
 
             <div className="ml-auto flex shrink-0 items-center gap-1 sm:gap-2">
-              {activeContact && (
-                activeCall ? (
-                  <button
-                    type="button"
-                    onClick={handleEndCall}
-                    className="inline-flex h-8 w-8 items-center justify-center rounded-lg bg-rose-600 text-white transition-colors hover:bg-rose-500"
-                    title="End call"
-                  >
-                    <PhoneOff size={14} />
-                  </button>
-                ) : (
-                  <>
-                    <button
-                      type="button"
-                      onClick={() => handleStartCall(CALL_MODES.AUDIO)}
-                      disabled={Boolean(incomingCall)}
-                      className={`inline-flex h-8 w-8 items-center justify-center rounded-lg border transition-colors ${
-                        isDark
-                          ? "border-slate-700 text-slate-200 hover:border-cyan-400/50 hover:text-cyan-200"
-                          : "border-white/45 text-white hover:bg-white/10 md:border-slate-300 md:text-slate-600 md:hover:border-emerald-400 md:hover:text-emerald-700"
-                      } disabled:cursor-not-allowed disabled:opacity-60`}
-                      title="Start voice call"
-                    >
-                      <Phone size={14} />
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => handleStartCall(CALL_MODES.VIDEO)}
-                      disabled={Boolean(incomingCall)}
-                      className={`inline-flex h-8 w-8 items-center justify-center rounded-lg border transition-colors ${
-                        isDark
-                          ? "border-slate-700 text-slate-200 hover:border-cyan-400/50 hover:text-cyan-200"
-                          : "border-white/45 text-white hover:bg-white/10 md:border-slate-300 md:text-slate-600 md:hover:border-emerald-400 md:hover:text-emerald-700"
-                      } disabled:cursor-not-allowed disabled:opacity-60`}
-                      title="Start video call"
-                    >
-                      <Video size={14} />
-                    </button>
-                  </>
-                )
-              )}
-              {activeContact && (
-                <button
-                  type="button"
-                  onClick={() => setMobileListMode("calls")}
-                  disabled={Boolean(activeCall)}
-                  className={`inline-flex h-8 w-8 items-center justify-center rounded-lg border transition-colors md:hidden ${
-                    isDark
-                      ? "border-slate-700 text-slate-200 hover:border-cyan-400/50 hover:text-cyan-200"
-                      : "border-white/45 text-white hover:bg-white/10"
-                  } disabled:cursor-not-allowed disabled:opacity-60`}
-                  title="Open call hub"
-                >
-                  <PhoneCall size={14} />
-                </button>
-              )}
               <span className={`hidden text-xs sm:inline ${isDark ? "text-slate-400" : "text-emerald-50 md:text-slate-500"}`}>
                 {messageSearchQuery
                   ? `${visibleTimeline.length}/${messages.length} messages`
@@ -2911,7 +2791,7 @@ const TeamChat = ({ theme = "light" }) => {
           </div>
 
           {activeContact && (
-            <div className={`hidden border-b px-3 py-2.5 sm:px-4 md:block ${
+            <div className={`chat-insights hidden border-b px-3 py-2.5 sm:px-4 md:block ${
               isDark ? "border-slate-700 bg-slate-900/80" : "border-slate-200 bg-slate-50/75"
             }`}>
               <div className="flex flex-wrap items-center gap-1.5">
@@ -2979,270 +2859,28 @@ const TeamChat = ({ theme = "light" }) => {
             </div>
           )}
 
-          {callError && (
-            <div className={`mx-3 mt-2 rounded-xl border px-3 py-2 text-xs sm:mx-4 ${
-              isDark ? "border-rose-500/35 bg-rose-500/10 text-rose-100" : "border-rose-300 bg-rose-50 text-rose-700"
-            }`}>
-              {callError}
-            </div>
-          )}
-
-          {incomingCall && (
-            <div className={`mx-3 mt-2 rounded-xl border px-3 py-2 sm:mx-4 ${
-              isDark ? "border-cyan-400/30 bg-cyan-500/10" : "border-emerald-300 bg-emerald-50"
-            }`}>
-              <div className="flex flex-wrap items-center gap-2 sm:gap-3">
-                <div className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-full ${
-                  isDark ? "bg-slate-900 text-cyan-200" : "bg-white text-emerald-700"
-                }`}>
-                  {incomingCall.mode === CALL_MODES.VIDEO ? <Video size={16} /> : <Phone size={16} />}
-                </div>
-                <div className="min-w-0 flex-1">
-                  <p className={`truncate text-sm font-semibold ${isDark ? "text-slate-100" : "text-slate-900"}`}>
-                    {incomingCall?.from?.name || "Incoming call"}
-                  </p>
-                  <p className={`text-xs ${isDark ? "text-slate-300" : "text-slate-600"}`}>
-                    {incomingCall.mode === CALL_MODES.VIDEO ? "Video call" : "Voice call"} incoming
-                  </p>
-                </div>
-                <button
-                  type="button"
-                  onClick={handleAcceptIncomingCall}
-                  className="inline-flex h-8 flex-none items-center justify-center rounded-lg bg-emerald-600 px-3 text-xs font-semibold text-white hover:bg-emerald-500"
-                >
-                  Accept
-                </button>
-                <button
-                  type="button"
-                  onClick={handleRejectIncomingCall}
-                  className="inline-flex h-8 flex-none items-center justify-center rounded-lg bg-rose-600 px-3 text-xs font-semibold text-white hover:bg-rose-500"
-                >
-                  Decline
-                </button>
-              </div>
-            </div>
-          )}
-
-          <div className={`relative flex min-h-0 flex-1 flex-col overflow-hidden ${isDark ? "bg-slate-950/45" : "bg-slate-50"}`}>
-            {activeCall && (
-              <audio ref={remoteAudioRef} autoPlay playsInline muted={isSpeakerMuted} />
-            )}
-            <div className={`pointer-events-none absolute inset-0 opacity-45 ${
+          <div className={`chat-message-surface relative flex min-h-0 flex-1 flex-col overflow-hidden ${isDark ? "bg-slate-950/45" : "bg-slate-50"}`}>
+            <div className={`chat-message-pattern pointer-events-none absolute inset-0 opacity-45 ${
               isDark
                 ? "bg-[radial-gradient(circle_at_20%_20%,rgba(34,211,238,0.14),transparent_40%),radial-gradient(circle_at_80%_0%,rgba(14,165,233,0.12),transparent_35%),linear-gradient(45deg,rgba(15,23,42,0.75)_25%,transparent_25%,transparent_50%,rgba(15,23,42,0.75)_50%,rgba(15,23,42,0.75)_75%,transparent_75%,transparent)] bg-[length:220px_220px]"
                 : "bg-[radial-gradient(circle_at_25%_20%,rgba(16,185,129,0.14),transparent_42%),radial-gradient(circle_at_85%_0%,rgba(74,222,128,0.1),transparent_35%),linear-gradient(45deg,rgba(255,255,255,0.58)_25%,transparent_25%,transparent_50%,rgba(255,255,255,0.58)_50%,rgba(255,255,255,0.58)_75%,transparent_75%,transparent)] bg-[length:220px_220px]"
             }`}
             />
-            {activeCall && (
-              <div className={`absolute left-0 right-0 top-0 z-20 overflow-hidden border md:left-3 md:right-3 md:top-3 md:rounded-2xl ${
-                isDark ? "border-cyan-400/25 bg-slate-900/95" : "border-emerald-300 bg-white/95"
-              }`}>
-                <div className="flex items-center justify-between gap-3 border-b px-3 py-2.5 sm:px-4">
-                  <div className="min-w-0">
-                    <p className={`truncate text-sm font-semibold ${isDark ? "text-slate-100" : "text-slate-900"}`}>
-                      {activeCallPeerName}
-                    </p>
-                    <p className={`text-xs ${isDark ? "text-slate-400" : "text-slate-600"}`}>
-                      {activeCall.mode === CALL_MODES.VIDEO ? "Video call" : "Voice call"} | {activeCallLabel}
-                    </p>
-                  </div>
-                  <span className={`rounded-full px-2.5 py-1 text-[11px] font-semibold ${
-                    isDark ? "bg-slate-800 text-slate-200" : "bg-slate-100 text-slate-700"
-                  }`}>
-                    {formatCallDuration(callElapsedSeconds)}
-                  </span>
-                </div>
-
-                <div
-                  ref={callStageRef}
-                  className={activeCall.mode === CALL_MODES.VIDEO ? `relative h-[56vh] sm:h-64 ${isDark ? "bg-slate-950" : "bg-slate-100"}` : ""}
-                >
-                  {activeCall.mode === CALL_MODES.VIDEO ? (
-                    <>
-                      <video
-                        ref={remoteVideoRef}
-                        autoPlay
-                        muted
-                        playsInline
-                        className="h-full w-full bg-black object-cover"
-                      />
-                      <div className="absolute bottom-2 right-2 h-24 w-32 overflow-hidden rounded-lg border border-white/40 bg-black shadow-lg sm:h-28 sm:w-36">
-                        <video
-                          ref={localVideoRef}
-                          autoPlay
-                          muted
-                          playsInline
-                          className={`h-full w-full object-cover transition-opacity ${isCameraMuted ? "opacity-0" : "opacity-100"}`}
-                        />
-                        {isCameraMuted && (
-                          <div className="absolute inset-0 flex flex-col items-center justify-center gap-1 bg-slate-950/85 text-[10px] text-slate-200">
-                            <VideoOff size={12} />
-                            <span>Camera off</span>
-                          </div>
-                        )}
-                      </div>
-                    </>
-                  ) : (
-                    <div className={`flex items-center gap-2 px-3 py-3 text-sm sm:px-4 ${isDark ? "text-slate-200" : "text-slate-700"}`}>
-                      <Phone size={14} />
-                      <span>Microphone call in progress. Keep this chat open.</span>
-                    </div>
-                  )}
-                </div>
-
-                <div className={`border-t px-3 py-2.5 sm:px-4 ${isDark ? "border-slate-700/80" : "border-slate-200"}`}>
-                  <div className="grid grid-cols-2 gap-2 sm:grid-cols-5">
-                    <button
-                      type="button"
-                      onClick={handleToggleMicMute}
-                      className={`inline-flex items-center justify-center gap-1.5 rounded-lg border px-2 py-2 text-xs font-semibold transition-colors ${
-                        isMicMuted
-                          ? isDark
-                            ? "border-amber-400/50 bg-amber-500/15 text-amber-100"
-                            : "border-amber-300 bg-amber-50 text-amber-700"
-                          : isDark
-                            ? "border-slate-700 text-slate-200 hover:border-cyan-400/50"
-                            : "border-slate-300 text-slate-700 hover:border-emerald-400"
-                      }`}
-                      title={isMicMuted ? "Unmute microphone" : "Mute microphone"}
-                    >
-                      {isMicMuted ? <MicOff size={13} /> : <Mic size={13} />}
-                      <span>{isMicMuted ? "Unmute" : "Mute"}</span>
-                    </button>
-
-                    <button
-                      type="button"
-                      onClick={handleToggleSpeakerMute}
-                      className={`inline-flex items-center justify-center gap-1.5 rounded-lg border px-2 py-2 text-xs font-semibold transition-colors ${
-                        isSpeakerMuted
-                          ? isDark
-                            ? "border-amber-400/50 bg-amber-500/15 text-amber-100"
-                            : "border-amber-300 bg-amber-50 text-amber-700"
-                          : isDark
-                            ? "border-slate-700 text-slate-200 hover:border-cyan-400/50"
-                            : "border-slate-300 text-slate-700 hover:border-emerald-400"
-                      }`}
-                      title={isSpeakerMuted ? "Unmute speaker" : "Mute speaker"}
-                    >
-                      {isSpeakerMuted ? <VolumeX size={13} /> : <Volume2 size={13} />}
-                      <span>{isSpeakerMuted ? "Speaker Off" : "Speaker"}</span>
-                    </button>
-
-                    <button
-                      type="button"
-                      onClick={handleToggleCameraMute}
-                      disabled={!isVideoCallActive}
-                      className={`inline-flex items-center justify-center gap-1.5 rounded-lg border px-2 py-2 text-xs font-semibold transition-colors ${
-                        !isVideoCallActive
-                          ? isDark
-                            ? "cursor-not-allowed border-slate-800 text-slate-500"
-                            : "cursor-not-allowed border-slate-200 text-slate-400"
-                          : isCameraMuted
-                            ? isDark
-                              ? "border-amber-400/50 bg-amber-500/15 text-amber-100"
-                              : "border-amber-300 bg-amber-50 text-amber-700"
-                            : isDark
-                              ? "border-slate-700 text-slate-200 hover:border-cyan-400/50"
-                              : "border-slate-300 text-slate-700 hover:border-emerald-400"
-                      }`}
-                      title={isVideoCallActive ? (isCameraMuted ? "Turn camera on" : "Turn camera off") : "Camera controls for video call only"}
-                    >
-                      {isCameraMuted ? <VideoOff size={13} /> : <Video size={13} />}
-                      <span>{isCameraMuted ? "Cam Off" : "Camera"}</span>
-                    </button>
-
-                    <button
-                      type="button"
-                      onClick={handleToggleCallFullscreen}
-                      disabled={!isVideoCallActive}
-                      className={`inline-flex items-center justify-center gap-1.5 rounded-lg border px-2 py-2 text-xs font-semibold transition-colors ${
-                        !isVideoCallActive
-                          ? isDark
-                            ? "cursor-not-allowed border-slate-800 text-slate-500"
-                            : "cursor-not-allowed border-slate-200 text-slate-400"
-                          : isDark
-                            ? "border-slate-700 text-slate-200 hover:border-cyan-400/50"
-                            : "border-slate-300 text-slate-700 hover:border-emerald-400"
-                      }`}
-                      title={isVideoCallActive ? (isCallFullscreen ? "Exit full screen" : "Open full screen") : "Full screen for video call only"}
-                    >
-                      {isCallFullscreen ? <Minimize2 size={13} /> : <Maximize2 size={13} />}
-                      <span>{isCallFullscreen ? "Exit Full" : "Full View"}</span>
-                    </button>
-
-                    <button
-                      type="button"
-                      onClick={handleEndCall}
-                      className="inline-flex items-center justify-center gap-1.5 rounded-lg bg-rose-600 px-2 py-2 text-xs font-semibold text-white transition-colors hover:bg-rose-500"
-                      title="End call"
-                    >
-                      <PhoneOff size={13} />
-                      <span>End</span>
-                    </button>
-                  </div>
-                </div>
-              </div>
-            )}
-
-            <div className={`relative min-h-0 flex-1 space-y-3 overflow-y-auto px-3 py-4 sm:px-5 custom-scrollbar ${callTimelineOffsetClass}`}>
-            {selectedConversationId && (callHistoryLoading || recentCallHistory.length > 0) && (
-              <div className={`mb-2 hidden rounded-2xl border px-3 py-2.5 xl:hidden md:block ${
-                isDark ? "border-slate-700 bg-slate-900/85" : "border-slate-200 bg-white/95"
-              }`}>
-                <p className={`text-[11px] font-semibold uppercase tracking-[0.14em] ${
-                  isDark ? "text-slate-300" : "text-slate-600"
-                }`}>
-                  Recent Calls
-                </p>
-
-                {callHistoryLoading ? (
-                  <p className={`mt-1 text-xs ${isDark ? "text-slate-400" : "text-slate-500"}`}>
-                    Loading call history...
-                  </p>
-                ) : (
-                  <div className="mt-1.5 space-y-1.5">
-                    {recentCallHistory.map((row, index) => {
-                      const rowId = toId(row?._id) || `${toId(row?.callId)}-${index}`;
-                      const modeLabel = normalizeCallMode(row?.mode) === CALL_MODES.VIDEO ? "Video" : "Voice";
-                      return (
-                        <div
-                          key={rowId}
-                          className={`flex items-center justify-between gap-2 rounded-lg border px-2.5 py-1.5 ${
-                            isDark ? "border-slate-700 bg-slate-950/50" : "border-slate-200 bg-slate-50"
-                          }`}
-                        >
-                          <div className="min-w-0">
-                            <p className={`truncate text-xs font-semibold ${isDark ? "text-slate-200" : "text-slate-800"}`}>
-                              {modeLabel} Call
-                            </p>
-                            <p className={`truncate text-[11px] ${isDark ? "text-slate-400" : "text-slate-500"}`}>
-                              {toCallHistoryStatusLabel(row, currentUser.id)}
-                            </p>
-                          </div>
-                          <span className={`shrink-0 text-[10px] ${isDark ? "text-slate-500" : "text-slate-500"}`}>
-                            {toSidebarTime(row?.startedAt || row?.createdAt)}
-                          </span>
-                        </div>
-                      );
-                    })}
-                  </div>
-                )}
-              </div>
-            )}
+            <div className="chat-message-scroll relative min-h-0 flex-1 space-y-3 overflow-y-auto px-3 py-4 sm:px-5 custom-scrollbar">
             {messagesLoading ? (
               <div className={`text-sm ${isDark ? "text-slate-400" : "text-slate-500"}`}>
                 Loading messages...
               </div>
             ) : !activeContact ? (
-              <div className={`rounded-xl border border-dashed p-6 text-center text-sm ${isDark ? "border-slate-700 text-slate-400" : "border-slate-300 text-slate-500"}`}>
+              <div className={`chat-empty-state rounded-xl border border-dashed p-6 text-center text-sm ${isDark ? "border-slate-700 text-slate-400" : "border-slate-300 text-slate-500"}`}>
                 Pick a contact from the left panel.
               </div>
             ) : messages.length === 0 ? (
-              <div className={`rounded-xl border border-dashed p-6 text-center text-sm ${isDark ? "border-slate-700 text-slate-400" : "border-slate-300 text-slate-500"}`}>
+              <div className={`chat-empty-state rounded-xl border border-dashed p-6 text-center text-sm ${isDark ? "border-slate-700 text-slate-400" : "border-slate-300 text-slate-500"}`}>
                 No messages yet. Start the conversation.
               </div>
             ) : visibleTimeline.length === 0 ? (
-              <div className={`rounded-xl border border-dashed p-6 text-center text-sm ${isDark ? "border-slate-700 text-slate-400" : "border-slate-300 text-slate-500"}`}>
+              <div className={`chat-empty-state rounded-xl border border-dashed p-6 text-center text-sm ${isDark ? "border-slate-700 text-slate-400" : "border-slate-300 text-slate-500"}`}>
                 No messages match "{messageSearch.trim()}".
               </div>
             ) : (
@@ -3272,7 +2910,7 @@ const TeamChat = ({ theme = "light" }) => {
                       </div>
                     )}
                     <div className={`flex ${mine ? "justify-end" : "justify-start"}`}>
-                      <div className={`max-w-[94%] rounded-2xl border px-3 py-2.5 shadow-sm sm:max-w-[78%] lg:max-w-[72%] ${
+                      <div className={`chat-bubble ${mine ? "chat-bubble-mine" : "chat-bubble-other"} max-w-[94%] rounded-2xl border px-3 py-2.5 shadow-sm sm:max-w-[78%] lg:max-w-[72%] ${
                         mine
                           ? isDark
                             ? "border-emerald-400/35 bg-emerald-500/20 text-slate-100"
@@ -3471,7 +3109,7 @@ const TeamChat = ({ theme = "light" }) => {
 
           <form
             onSubmit={handleSend}
-            className={`shrink-0 border-t px-3 pt-2.5 pb-[calc(0.625rem+env(safe-area-inset-bottom))] sm:px-4 ${isDark ? "border-slate-700 bg-slate-900/85" : "border-slate-200 bg-[#f0f2f5]"}`}
+            className={`chat-composer shrink-0 border-t px-3 pt-2.5 pb-[calc(0.625rem+env(safe-area-inset-bottom))] sm:px-4 ${isDark ? "border-slate-700 bg-slate-900/85" : "border-slate-200 bg-[#f0f2f5]"}`}
           >
             {queuedShare && (
               <div className={`mb-3 rounded-xl border p-2.5 ${isDark ? "border-emerald-400/25 bg-emerald-500/10" : "border-emerald-200 bg-emerald-50/80"}`}>
@@ -3569,7 +3207,7 @@ const TeamChat = ({ theme = "light" }) => {
                 type="button"
                 onClick={handleOpenMediaPicker}
                 disabled={!activeContact || uploadingMedia || sending || Boolean(queuedShare)}
-                className={`h-10 w-10 shrink-0 rounded-full border transition-colors sm:h-11 sm:w-11 ${
+                className={`chat-attach-button h-10 w-10 shrink-0 rounded-full border transition-colors sm:h-11 sm:w-11 ${
                   isDark
                     ? "border-slate-700 bg-slate-950 text-slate-200 hover:border-emerald-400/40 hover:text-emerald-200"
                     : "border-slate-300 bg-white text-slate-600 hover:border-emerald-400 hover:text-emerald-700"
@@ -3598,12 +3236,12 @@ const TeamChat = ({ theme = "light" }) => {
                 rows={2}
                 maxLength={1200}
                 disabled={!activeContact}
-                className={`min-h-[2.75rem] max-h-36 w-full resize-none rounded-2xl border px-3 py-2 text-sm outline-none sm:max-h-44 ${isDark ? "border-slate-700 bg-slate-950 text-slate-100 placeholder:text-slate-500 focus:border-emerald-400/50" : "border-slate-300 bg-white text-slate-900 placeholder:text-slate-400 focus:border-emerald-500"} disabled:cursor-not-allowed disabled:opacity-60`}
+                className={`chat-composer-input min-h-[2.75rem] max-h-36 w-full resize-none rounded-2xl border px-3 py-2 text-sm outline-none sm:max-h-44 ${isDark ? "border-slate-700 bg-slate-950 text-slate-100 placeholder:text-slate-500 focus:border-emerald-400/50" : "border-slate-300 bg-white text-slate-900 placeholder:text-slate-400 focus:border-emerald-500"} disabled:cursor-not-allowed disabled:opacity-60`}
               />
               <button
                 type="submit"
                 disabled={sending || uploadingMedia || (!draft.trim() && !queuedShare && queuedMedia.length === 0) || !activeContact}
-                className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-emerald-600 text-white hover:bg-emerald-500 disabled:cursor-not-allowed disabled:opacity-60 sm:h-11 sm:w-11"
+                className="chat-send-button flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-emerald-600 text-white hover:bg-emerald-500 disabled:cursor-not-allowed disabled:opacity-60 sm:h-11 sm:w-11"
                 title="Send message"
               >
                 {sending ? <RefreshCw size={15} className="animate-spin" /> : <Send size={15} />}
@@ -3612,19 +3250,6 @@ const TeamChat = ({ theme = "light" }) => {
           </form>
         </section>
 
-        <TeamChatCallLogsPanel
-          isDark={isDark}
-          activeContact={activeContact}
-          callHistoryLoading={callHistoryLoading}
-          callHistory={callHistory}
-          callSummary={callSummary}
-          currentUserId={currentUser.id}
-          toId={toId}
-          normalizeCallMode={normalizeCallMode}
-          toSidebarTime={toSidebarTime}
-          toCallHistoryStatusLabel={toCallHistoryStatusLabel}
-          toDayLabel={toDayLabel}
-        />
       </Motion.div>
       </div>
     </div>

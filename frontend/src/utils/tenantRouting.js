@@ -19,6 +19,7 @@ const RESERVED_ROOT_SEGMENTS = new Set([
   "terms-and-conditions",
   "data-use-notice",
   "service-terms",
+  "shared",
   "portal",
   "api",
   "assets",

@@ -29,6 +29,7 @@ import { FinancialCoreScreen } from "../modules/finance/FinancialCoreScreen";
 import { NotificationsScreen } from "../modules/notifications/NotificationsScreen";
 import { ProfileScreen } from "../modules/profile/ProfileScreen";
 import { MoreMenuScreen } from "../modules/more/MoreMenuScreen";
+import { TaskManagerScreen } from "../modules/tasks/TaskManagerScreen";
 import { RealtimePopupOverlay } from "../components/common/RealtimePopupOverlay";
 
 const Tab = createBottomTabNavigator();
@@ -209,6 +210,11 @@ export const RoleTabs = ({ role }: { role: UserRole }) => (
         name="LeadDetails"
         component={LeadDetailsScreen}
         options={{ title: "Lead Details" }}
+      />
+      <Stack.Screen
+        name="Tasks"
+        component={TaskManagerScreen}
+        options={{ title: "Tasks" }}
       />
       <Stack.Screen
         name="InventoryDetails"

@@ -7,24 +7,21 @@ export default {
   theme: {
     extend: {
       colors: {
-        // NEW: The bright foundation (Off-White / Slate 50)
-        void: "#F8FAFC",
+        void: "#f6f8fb",
 
-        // NEW: Dark text for bright backgrounds
         text: {
-          primary: "#0f172a", // Slate 900
-          secondary: "#475569", // Slate 600
-          tertiary: "#94a3b8" // Slate 400
+          primary: "#0f172a",
+          secondary: "#475569",
+          tertiary: "#94a3b8"
         },
 
-        // GEMSTONE PALETTE (Unchanged, but we will use them differently)
         gem: {
-          cyan: "#22d3ee", cyanDark: "#06b6d4",
-          gold: "#fbbf24", goldDark: "#d97706",
+          cyan: "#38bdf8", cyanDark: "#0284c7",
+          gold: "#f59e0b", goldDark: "#b45309",
           pink: "#f472b6", pinkDark: "#be185d",
-          violet: "#a78bfa", violetDark: "#7c3aed",
-          emerald: "#34d399", emeraldDark: "#059669",
-          sun: "#0ea5e9", // Slightly deeper blue for light mode sun
+          violet: "#8b5cf6", violetDark: "#6d28d9",
+          emerald: "#10b981", emeraldDark: "#047857",
+          sun: "#2563eb",
         }
       },
       fontFamily: {
@@ -36,9 +33,12 @@ export default {
         'spin-slow': 'spin 120s linear infinite',
       },
       boxShadow: {
-        // NEW: Soft, expensive shadows for light mode
-        'glass-light': '0 4px 30px rgba(0, 0, 0, 0.1)',
-        'glass-light-hover': '0 10px 40px rgba(0, 0, 0, 0.15)',
+        clay: 'inset 1px 1px 2px rgba(148, 163, 184, 0.18), inset -1px -1px 2px rgba(255, 255, 255, 0.72)',
+        'clay-sm': 'inset 1px 1px 2px rgba(148, 163, 184, 0.16), inset -1px -1px 2px rgba(255, 255, 255, 0.68)',
+        'clay-inset': 'inset 1px 1px 2px rgba(148, 163, 184, 0.18), inset -1px -1px 2px rgba(255, 255, 255, 0.72)',
+        'glass-light': '0 18px 48px -36px rgba(37, 99, 235, 0.65)',
+        'glass-light-hover': '0 22px 56px -34px rgba(37, 99, 235, 0.72)',
+        'flat-card': '0 1px 2px rgba(15, 23, 42, 0.06), 0 10px 30px -24px rgba(15, 23, 42, 0.3)',
       }
     },
   },

@@ -34,13 +34,13 @@ const Toggle = ({ value, onChange }) => (
 );
 
 const Section = ({ icon: Icon, title, subtitle, children }) => (
-  <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+  <section className="ui-soft-panel rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
     <div className="mb-4 flex items-start justify-between gap-3">
       <div>
         <h2 className="text-lg font-semibold text-slate-900">{title}</h2>
         <p className="mt-1 text-xs uppercase tracking-[0.14em] text-slate-500">{subtitle}</p>
       </div>
-      <div className="rounded-lg border border-slate-200 bg-slate-50 p-2 text-slate-600">
+      <div className="rounded-lg border border-cyan-200 bg-cyan-50 p-2 text-cyan-700">
         <Icon size={15} />
       </div>
     </div>
@@ -109,11 +109,11 @@ const SystemSettings = () => {
   };
 
   return (
-    <div className="h-full w-full overflow-y-auto px-4 pb-10 pt-20 sm:px-6 lg:px-10 md:pt-24 custom-scrollbar">
-      <div className="mb-6 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+    <div className="ui-page-shell custom-scrollbar pb-10">
+      <div className="ui-hero-card mb-6">
         <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
           <div>
-            <h1 className="text-3xl font-semibold text-slate-900">System Settings</h1>
+            <h1 className="font-display text-3xl font-semibold text-slate-900">System Settings</h1>
             <p className="mt-1 text-xs uppercase tracking-[0.14em] text-slate-500">
               Essential controls only (fully active)
             </p>
@@ -132,7 +132,7 @@ const SystemSettings = () => {
             <button
               type="button"
               onClick={handleRestoreSaved}
-              className="inline-flex h-10 items-center gap-2 rounded-lg border border-slate-300 bg-white px-3 text-xs font-semibold text-slate-700 transition hover:border-slate-400"
+              className="inline-flex h-10 items-center gap-2 rounded-lg border border-slate-300 bg-white px-3 text-xs font-semibold text-slate-700 transition hover:border-cyan-400 hover:text-cyan-700"
             >
               <RefreshCw size={14} />
               Restore
@@ -141,7 +141,7 @@ const SystemSettings = () => {
               type="button"
               onClick={handleSave}
               disabled={!isDirty}
-              className="inline-flex h-10 items-center gap-2 rounded-lg bg-slate-900 px-4 text-xs font-semibold text-white transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-60"
+              className="inline-flex h-10 items-center gap-2 rounded-lg bg-cyan-600 px-4 text-xs font-semibold text-white transition hover:bg-cyan-500 disabled:cursor-not-allowed disabled:opacity-60"
             >
               <Save size={14} />
               Save Changes
@@ -150,7 +150,7 @@ const SystemSettings = () => {
         </div>
 
         {saveStatus === "saved" ? (
-          <div className="mt-4 inline-flex items-center gap-2 rounded-lg border border-emerald-300 bg-emerald-100 px-3 py-2 text-xs font-semibold text-emerald-700">
+          <div className="mt-4 inline-flex items-center gap-2 rounded-lg border border-cyan-300 bg-cyan-100 px-3 py-2 text-xs font-semibold text-cyan-700">
             <CheckCircle2 size={14} />
             Settings saved
           </div>

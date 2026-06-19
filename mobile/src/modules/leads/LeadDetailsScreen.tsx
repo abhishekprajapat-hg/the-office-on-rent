@@ -2,6 +2,7 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import {
   ActivityIndicator,
   Alert,
+  KeyboardAvoidingView,
   Linking,
   Modal,
   Platform,
@@ -18,9 +19,11 @@ import { useNavigation, useRoute } from "@react-navigation/native";
 import { Ionicons } from "@expo/vector-icons";
 import DateTimePicker, { DateTimePickerAndroid, type DateTimePickerEvent } from "@react-native-community/datetimepicker";
 import * as DocumentPicker from "expo-document-picker";
+import * as FileSystem from "expo-file-system/legacy";
 import * as MailComposer from "expo-mail-composer";
 import * as Print from "expo-print";
 import * as Sharing from "expo-sharing";
+import { ExpoSpeechRecognitionModule, useSpeechRecognitionEvent } from "expo-speech-recognition";
 import {
   addLeadDiaryEntry,
   addLeadRelatedProperty,
@@ -37,6 +40,13 @@ import {
   type LeadDiaryEntry,
   type LeadStatusRequest,
 } from "../../services/leadService";
+import {
+  getTasks,
+  createTask,
+  updateTask,
+  deleteTask,
+  type Task,
+} from "../../services/taskService";
 import { uploadChatFile } from "../../services/chatService";
 import { getInventoryAssets } from "../../services/inventoryService";
 import { getUsers } from "../../services/userService";
@@ -61,6 +71,7 @@ const DEAL_PAYMENT_TYPES = [
 ] as const;
 const PAYMENT_MODE_OPTIONS = ["Cash", "Cheque", "Bank Transfer", "UPI"] as const;
 const TRANSFER_TYPE_OPTIONS = ["RTGS", "IMPS", "NEFT"] as const;
+const LINK_PROPERTY_TYPE_OPTIONS = ["ALL", "SALE", "RENT"] as const;
 const EMPTY_CLOSED_FORM = {
   saleLeadId: "",
   paymentMode: "Cash" as (typeof PAYMENT_MODE_OPTIONS)[number],
@@ -159,6 +170,157 @@ const toObjectIdString = (value: unknown) => {
   return String(value || "");
 };
 
+const createDefaultLeadRequirementsDraft = () => ({
+  inventoryType: "",
+  transactionType: "",
+  furnishingStatus: "",
+  budgetMin: "",
+  budgetMax: "",
+  areaMin: "",
+  areaMax: "",
+  areaUnit: "SQ_FT",
+  commercial: {
+    seats: "",
+    cabins: "",
+    parkingAvailable: false,
+    pantry: false,
+  },
+  residential: {
+    bhkType: "",
+    floor: "",
+    amenities: {
+      lift: false,
+      security: false,
+      gym: false,
+      swimmingPool: false,
+      clubhouse: false,
+      powerBackup: false,
+      parking: false,
+    },
+  },
+});
+
+const toRequirementDraftText = (value: any) => {
+  if (value === null || value === undefined) return "";
+  return String(value).trim();
+};
+
+const toRequirementAreaUnit = (value: any) =>
+  String(value || "").trim().toUpperCase() === "SQ_M" ? "SQ_M" : "SQ_FT";
+
+const mapLeadRequirementsToDraft = (requirements: any = {}) => {
+  const base = createDefaultLeadRequirementsDraft();
+  const commercial = requirements?.commercial || {};
+  const residential = requirements?.residential || {};
+  const amenities = residential?.amenities || {};
+
+  return {
+    inventoryType: toRequirementDraftText(requirements?.inventoryType).toUpperCase(),
+    transactionType: toRequirementDraftText(requirements?.transactionType).toUpperCase(),
+    furnishingStatus: toRequirementDraftText(requirements?.furnishingStatus).toUpperCase(),
+    budgetMin: toRequirementDraftText(requirements?.budgetMin),
+    budgetMax: toRequirementDraftText(requirements?.budgetMax),
+    areaMin: toRequirementDraftText(requirements?.areaMin),
+    areaMax: toRequirementDraftText(requirements?.areaMax),
+    areaUnit: toRequirementAreaUnit(requirements?.areaUnit || base.areaUnit),
+    commercial: {
+      seats: toRequirementDraftText(commercial?.seats),
+      cabins: toRequirementDraftText(commercial?.cabins),
+      parkingAvailable: Boolean(commercial?.parkingAvailable),
+      pantry: Boolean(commercial?.pantry),
+    },
+    residential: {
+      bhkType: toRequirementDraftText(residential?.bhkType).toUpperCase(),
+      floor: toRequirementDraftText(residential?.floor),
+      amenities: {
+        lift: Boolean(amenities?.lift),
+        security: Boolean(amenities?.security),
+        gym: Boolean(amenities?.gym),
+        swimmingPool: Boolean(amenities?.swimmingPool),
+        clubhouse: Boolean(amenities?.clubhouse),
+        powerBackup: Boolean(amenities?.powerBackup),
+        parking: Boolean(amenities?.parking),
+      },
+    },
+  };
+};
+
+const toAmountNumber = (value: any) => {
+  if (value === null || value === undefined) return null;
+  if (typeof value === "string" && value.trim() === "") return null;
+  const parsed = Number(value);
+  return Number.isFinite(parsed) ? parsed : null;
+};
+
+const toRequirementTransactionType = (value: any) => {
+  const normalized = String(value || "").trim().toUpperCase();
+  if (normalized === "RENT") return "RENT";
+  if (normalized === "SALE") return "SALE";
+  return "";
+};
+
+const buildLeadRequirementsPayloadFromDraft = (draft: any = {}) => ({
+  inventoryType: String(draft?.inventoryType || "").trim().toUpperCase(),
+  transactionType: toRequirementTransactionType(draft?.transactionType),
+  furnishingStatus: String(draft?.furnishingStatus || "").trim().toUpperCase(),
+  budgetMin: toAmountNumber(draft?.budgetMin),
+  budgetMax: toAmountNumber(draft?.budgetMax),
+  areaMin: toAmountNumber(draft?.areaMin),
+  areaMax: toAmountNumber(draft?.areaMax),
+  areaUnit: toRequirementAreaUnit(draft?.areaUnit),
+  commercial: {
+    seats: toAmountNumber(draft?.commercial?.seats),
+    cabins: toAmountNumber(draft?.commercial?.cabins),
+    parkingAvailable: Boolean(draft?.commercial?.parkingAvailable),
+    pantry: Boolean(draft?.commercial?.pantry),
+  },
+  residential: {
+    bhkType: String(draft?.residential?.bhkType || "").trim().toUpperCase(),
+    floor: toAmountNumber(draft?.residential?.floor),
+    amenities: {
+      lift: Boolean(draft?.residential?.amenities?.lift),
+      security: Boolean(draft?.residential?.amenities?.security),
+      gym: Boolean(draft?.residential?.amenities?.gym),
+      swimmingPool: Boolean(draft?.residential?.amenities?.swimmingPool),
+      clubhouse: Boolean(draft?.residential?.amenities?.clubhouse),
+      powerBackup: Boolean(draft?.residential?.amenities?.powerBackup),
+      parking: Boolean(draft?.residential?.amenities?.parking),
+    },
+  },
+});
+
+const LEAD_REQUIREMENT_FURNISHING_OPTIONS = [
+  { value: "", label: "Any Furnishing" },
+  { value: "UNFURNISHED", label: "Unfurnished" },
+  { value: "SEMI_FURNISHED", label: "Semi Furnished" },
+  { value: "FULLY_FURNISHED", label: "Fully Furnished" },
+  { value: "BARE_SHELL", label: "Bare Shell" },
+  { value: "WARM_SHELL", label: "Warm Shell" },
+  { value: "MANAGED_OFFICE", label: "Managed Office" },
+  { value: "COWORKING", label: "Coworking" },
+];
+
+const LEAD_REQUIREMENT_BHK_OPTIONS = [
+  { value: "", label: "Any BHK" },
+  { value: "1BHK", label: "1 BHK" },
+  { value: "2BHK", label: "2 BHK" },
+  { value: "3BHK", label: "3 BHK" },
+  { value: "4BHK", label: "4 BHK" },
+  { value: "5BHK", label: "5 BHK" },
+  { value: "STUDIO", label: "Studio" },
+  { value: "OTHER", label: "Other" },
+];
+
+const LEAD_REQUIREMENT_RESIDENTIAL_AMENITY_FIELDS = [
+  { key: "lift", label: "Lift" },
+  { key: "security", label: "Security" },
+  { key: "gym", label: "Gym" },
+  { key: "swimmingPool", label: "Swimming Pool" },
+  { key: "clubhouse", label: "Clubhouse" },
+  { key: "powerBackup", label: "Power Backup" },
+  { key: "parking", label: "Parking" },
+];
+
 const getInventoryLeadLabel = (inventory: any) =>
   [inventory?.projectName, inventory?.towerName, inventory?.unitNumber]
     .map((value) => String(value || "").trim())
@@ -198,6 +360,15 @@ const escapeHtml = (value: string) =>
     .replaceAll(">", "&gt;")
     .replaceAll('"', "&quot;")
     .replaceAll("'", "&#39;");
+
+const resolveMediaUrl = (rawUrl?: string) => {
+  const safe = String(rawUrl || "").trim();
+  if (!safe) return "";
+  if (/^https?:\/\//i.test(safe)) return safe;
+  const base = String(process.env.EXPO_PUBLIC_API_ORIGIN || process.env.EXPO_PUBLIC_SOCKET_URL || "").trim().replace(/\/$/, "");
+  if (!base) return safe;
+  return `${base}${safe.startsWith("/") ? "" : "/"}${safe}`;
+};
 
 export const LeadDetailsScreen = () => {
   const navigation = useNavigation<any>();
@@ -247,6 +418,7 @@ export const LeadDetailsScreen = () => {
   const [assignDraft, setAssignDraft] = useState("");
   const [siteLatDraft, setSiteLatDraft] = useState("");
   const [siteLngDraft, setSiteLngDraft] = useState("");
+  const [relatedInventoryTypeFilter, setRelatedInventoryTypeFilter] = useState<(typeof LINK_PROPERTY_TYPE_OPTIONS)[number]>("ALL");
   const [relatedInventoryDraft, setRelatedInventoryDraft] = useState("");
   const [linkDropdownOpen, setLinkDropdownOpen] = useState(false);
   const [assignDropdownOpen, setAssignDropdownOpen] = useState(false);
@@ -289,6 +461,7 @@ export const LeadDetailsScreen = () => {
   const [diaryNoteDraft, setDiaryNoteDraft] = useState("");
   const [isDiaryListening, setIsDiaryListening] = useState(false);
   const [isDiaryMicSupported, setIsDiaryMicSupported] = useState(false);
+  const [speechPermissionGranted, setSpeechPermissionGranted] = useState(false);
   const [editingDiaryEntryId, setEditingDiaryEntryId] = useState("");
   const [diaryEditDraft, setDiaryEditDraft] = useState("");
   const [updatingDiaryEntry, setUpdatingDiaryEntry] = useState(false);
@@ -297,6 +470,87 @@ export const LeadDetailsScreen = () => {
   const diaryRecognitionRef = useRef<any>(null);
   const lastDiaryTranscriptRef = useRef("");
   const currentUserId = String((user as any)?._id || (user as any)?.id || "");
+
+  // Requirements States
+  const [requirementsDraft, setRequirementsDraft] = useState<any>(
+    createDefaultLeadRequirementsDraft(),
+  );
+
+  const updateRequirementRootField = useCallback((field: string, value: any) => {
+    setRequirementsDraft((prev: any) => ({
+      ...prev,
+      [field]: value,
+    }));
+  }, []);
+
+  const updateRequirementCommercialField = useCallback((field: string, value: any) => {
+    setRequirementsDraft((prev: any) => ({
+      ...prev,
+      commercial: {
+        seats: "",
+        cabins: "",
+        parkingAvailable: false,
+        pantry: false,
+        ...prev.commercial,
+        [field]: value,
+      },
+    }));
+  }, []);
+
+  const updateRequirementResidentialField = useCallback((field: string, value: any) => {
+    setRequirementsDraft((prev: any) => ({
+      ...prev,
+      residential: {
+        bhkType: "",
+        floor: "",
+        amenities: {
+          lift: false,
+          security: false,
+          gym: false,
+          swimmingPool: false,
+          clubhouse: false,
+          powerBackup: false,
+          parking: false,
+        },
+        ...prev.residential,
+        [field]: value,
+      },
+    }));
+  }, []);
+
+  const updateRequirementResidentialAmenity = useCallback((field: string, value: any) => {
+    setRequirementsDraft((prev: any) => ({
+      ...prev,
+      residential: {
+        bhkType: "",
+        floor: "",
+        ...prev.residential,
+        amenities: {
+          lift: false,
+          security: false,
+          gym: false,
+          swimmingPool: false,
+          clubhouse: false,
+          powerBackup: false,
+          parking: false,
+          ...prev.residential?.amenities,
+          [field]: value,
+        },
+      },
+    }));
+  }, []);
+
+  // Tasks States
+  const [leadTasks, setLeadTasks] = useState<Task[]>([]);
+  const [loadingTasks, setLoadingTasks] = useState(false);
+  const [newTaskTitle, setNewTaskTitle] = useState("");
+  const [newTaskDueDate, setNewTaskDueDate] = useState("");
+  const [newTaskPriority, setNewTaskPriority] = useState("MEDIUM");
+  const [newTaskAssignedTo, setNewTaskAssignedTo] = useState("");
+  const [addingTask, setAddingTask] = useState(false);
+  const [taskAssigneeDropdownOpen, setTaskAssigneeDropdownOpen] = useState(false);
+  const [showTaskDatePicker, setShowTaskDatePicker] = useState(false);
+  const [taskDatePickerSeed, setTaskDatePickerSeed] = useState<Date>(new Date());
 
   const visibleDiaryEntries = useMemo(
     () => (showAllDiaryEntries ? diaryEntries : diaryEntries.slice(0, 2)),
@@ -333,10 +587,15 @@ export const LeadDetailsScreen = () => {
         const id = toObjectIdString(item);
         if (!id || linkedIds.has(id)) return false;
         const status = String(item?.status || "").trim().toLowerCase();
-        return status === "available";
+        if (status !== "available") return false;
+
+        if (relatedInventoryTypeFilter === "ALL") return true;
+        const itemType = String(item?.type || "").trim().toLowerCase();
+        const normalizedType = itemType === "rent" || itemType === "rental" ? "RENT" : "SALE";
+        return normalizedType === relatedInventoryTypeFilter;
       });
     },
-    [inventoryOptions, selectedLeadRelatedInventories],
+    [inventoryOptions, selectedLeadRelatedInventories, relatedInventoryTypeFilter],
   );
   const selectedProposalPropertySet = useMemo(
     () => new Set(proposalSelectedPropertyIds),
@@ -424,10 +683,12 @@ export const LeadDetailsScreen = () => {
       setInventoryOptions(resolvedInventoryRows);
 
       const resolvedLeadId = String((currentLead as any)?._id || "");
-      const [timelineResult, diaryResult, historyResult] = await Promise.allSettled([
+      setLoadingTasks(true);
+      const [timelineResult, diaryResult, historyResult, tasksResult] = await Promise.allSettled([
         getLeadActivity(resolvedLeadId),
         getLeadDiary(resolvedLeadId),
         getLeadStatusRequests({ leadId: resolvedLeadId }),
+        getTasks({ leadId: resolvedLeadId }),
       ]);
       setActivities(
         timelineResult.status === "fulfilled" && Array.isArray(timelineResult.value)
@@ -444,6 +705,12 @@ export const LeadDetailsScreen = () => {
           ? historyResult.value
           : [],
       );
+      setLeadTasks(
+        tasksResult.status === "fulfilled" && Array.isArray(tasksResult.value)
+          ? tasksResult.value
+          : [],
+      );
+      setLoadingTasks(false);
 
       setStatusDraft(currentLead.status || "NEW");
       setFollowUpDraft(formatFollowUpInput(currentLead.nextFollowUp));
@@ -461,6 +728,11 @@ export const LeadDetailsScreen = () => {
       setPaymentReferenceDraft(String((currentLead as any)?.dealPayment?.paymentReference || ""));
       setPaymentNoteDraft(String((currentLead as any)?.dealPayment?.note || ""));
       setClosureDocumentsDraft(Array.isArray((currentLead as any)?.closureDocuments) ? (currentLead as any).closureDocuments : []);
+      if ((currentLead as any).requirements) {
+        setRequirementsDraft(mapLeadRequirementsToDraft((currentLead as any).requirements));
+      } else {
+        setRequirementsDraft(createDefaultLeadRequirementsDraft());
+      }
       setClosedForm((prev) => ({ ...prev, saleLeadId: prev.saleLeadId || String(currentLead._id || "") }));
     } catch (e) {
       setError(toErrorMessage(e, "Failed to load lead details"));
@@ -492,12 +764,48 @@ export const LeadDetailsScreen = () => {
   }, [lead, selectedLeadRelatedInventories]);
 
   useEffect(() => {
+    let active = true;
+
+    const setupNativeSpeech = async () => {
+      try {
+        const available = ExpoSpeechRecognitionModule.isRecognitionAvailable();
+        if (!active) return;
+        if (!available) {
+          setIsDiaryMicSupported(false);
+          setSpeechPermissionGranted(false);
+          return;
+        }
+        const permission = await ExpoSpeechRecognitionModule.getPermissionsAsync();
+        if (!active) return;
+        setSpeechPermissionGranted(Boolean(permission?.granted));
+        setIsDiaryMicSupported(true);
+      } catch {
+        if (!active) return;
+        setIsDiaryMicSupported(false);
+        setSpeechPermissionGranted(false);
+      }
+    };
+
+    if (Platform.OS !== "web") {
+      diaryRecognitionRef.current = null;
+      void setupNativeSpeech();
+      return () => {
+        active = false;
+        try {
+          ExpoSpeechRecognitionModule.abort();
+        } catch {}
+      };
+    }
+
     const win = globalThis as any;
     const SpeechRecognition = win?.SpeechRecognition || win?.webkitSpeechRecognition;
     if (!SpeechRecognition) {
       setIsDiaryMicSupported(false);
+      setSpeechPermissionGranted(false);
       diaryRecognitionRef.current = null;
-      return;
+      return () => {
+        active = false;
+      };
     }
 
     try {
@@ -546,18 +854,52 @@ export const LeadDetailsScreen = () => {
 
       diaryRecognitionRef.current = recognition;
       setIsDiaryMicSupported(true);
+      setSpeechPermissionGranted(true);
     } catch {
       setIsDiaryMicSupported(false);
+      setSpeechPermissionGranted(false);
       diaryRecognitionRef.current = null;
     }
 
     return () => {
+      active = false;
       if (!diaryRecognitionRef.current) return;
       try {
         diaryRecognitionRef.current.stop();
       } catch {}
     };
   }, []);
+
+  useSpeechRecognitionEvent("start", () => {
+    if (Platform.OS === "web") return;
+    lastDiaryTranscriptRef.current = "";
+    setIsDiaryListening(true);
+  });
+
+  useSpeechRecognitionEvent("end", () => {
+    if (Platform.OS === "web") return;
+    setIsDiaryListening(false);
+    lastDiaryTranscriptRef.current = "";
+  });
+
+  useSpeechRecognitionEvent("error", (event) => {
+    if (Platform.OS === "web") return;
+    setIsDiaryListening(false);
+    const message = String((event as any)?.message || "").trim() || "Unable to start voice input. Try again.";
+    setError(message);
+  });
+
+  useSpeechRecognitionEvent("result", (event) => {
+    if (Platform.OS === "web") return;
+    const results = Array.isArray((event as any)?.results) ? (event as any).results : [];
+    const first = results[0] || null;
+    const transcript = String(first?.transcript || "").replace(/\s+/g, " ").trim();
+    if (!transcript) return;
+    if (!(event as any)?.isFinal && transcript === lastDiaryTranscriptRef.current) return;
+    lastDiaryTranscriptRef.current = transcript;
+    if (!(event as any)?.isFinal) return;
+    setDiaryNoteDraft((prev) => `${String(prev || "").trim()} ${transcript}`.trim());
+  });
 
   const assigneeName = useMemo(() => {
     if (!lead?.assignedTo?._id) return "Unassigned";
@@ -639,7 +981,10 @@ export const LeadDetailsScreen = () => {
   const saveUpdate = async () => {
     if (!lead) return;
 
-    const payload: any = { status: statusDraft };
+    const payload: any = {
+      status: statusDraft,
+      requirements: buildLeadRequirementsPayloadFromDraft(requirementsDraft),
+    };
 
     if (followUpDraft.trim()) {
       const parsed = parseFollowUpInput(followUpDraft);
@@ -703,6 +1048,123 @@ export const LeadDetailsScreen = () => {
     } finally {
       setSaving(false);
     }
+  };
+
+  const fetchLeadTasks = useCallback(async () => {
+    if (!leadId) return;
+    setLoadingTasks(true);
+    try {
+      const data = await getTasks({ leadId });
+      setLeadTasks(data || []);
+    } catch (err) {
+      console.error("Failed to load lead tasks", err);
+    } finally {
+      setLoadingTasks(false);
+    }
+  }, [leadId]);
+
+  const handleAddLeadTask = async () => {
+    if (!newTaskTitle.trim() || !lead?._id) return;
+    setAddingTask(true);
+    try {
+      const payload = {
+        title: newTaskTitle.trim(),
+        status: "TODO",
+        priority: newTaskPriority,
+        dueDate: newTaskDueDate || null,
+        assignedTo: (newTaskAssignedTo || null) as any,
+        leadId: lead._id,
+      };
+      const created = await createTask(payload);
+      if (created) {
+        setNewTaskTitle("");
+        setNewTaskDueDate("");
+        setNewTaskPriority("MEDIUM");
+        setNewTaskAssignedTo("");
+        setSuccess("Task created");
+        await fetchLeadTasks();
+      }
+    } catch (err) {
+      setError(toErrorMessage(err, "Failed to create lead task"));
+    } finally {
+      setAddingTask(false);
+    }
+  };
+
+  const handleToggleLeadTaskStatus = async (task: Task) => {
+    const newStatus = task.status === "COMPLETED" ? "TODO" : "COMPLETED";
+    try {
+      setLeadTasks((prev) => prev.map((t) => (t._id === task._id ? { ...t, status: newStatus } : t)));
+      await updateTask(task._id, { status: newStatus });
+      setSuccess("Task updated");
+      await fetchLeadTasks();
+    } catch (err) {
+      setError(toErrorMessage(err, "Failed to update task status"));
+      await fetchLeadTasks();
+    }
+  };
+
+  const handleDeleteLeadTask = async (taskId: string) => {
+    const performDelete = async () => {
+      try {
+        setLeadTasks((prev) => prev.filter((t) => t._id !== taskId));
+        await deleteTask(taskId);
+        setSuccess("Task deleted");
+        await fetchLeadTasks();
+      } catch (err) {
+        setError(toErrorMessage(err, "Failed to delete task"));
+        await fetchLeadTasks();
+      }
+    };
+
+    if (Platform.OS === "web") {
+      const confirmed = typeof window !== "undefined" ? window.confirm("Delete this task?") : false;
+      if (confirmed) await performDelete();
+      return;
+    }
+
+    Alert.alert(
+      "Delete task",
+      "Are you sure you want to delete this task?",
+      [
+        { text: "Cancel", style: "cancel" },
+        { text: "Delete", style: "destructive", onPress: performDelete },
+      ],
+    );
+  };
+
+  const openTaskDatePicker = () => {
+    const seed = newTaskDueDate ? new Date(newTaskDueDate) : new Date();
+
+    if (Platform.OS === "android") {
+      DateTimePickerAndroid.open({
+        value: seed,
+        mode: "date",
+        onChange: (event: any, pickedDate?: Date) => {
+          if (event.type !== "set" || !pickedDate) return;
+          setNewTaskDueDate(pickedDate.toISOString().split("T")[0]);
+        },
+      });
+      return;
+    }
+
+    if (Platform.OS === "web") {
+      return;
+    }
+
+    setTaskDatePickerSeed(seed);
+    setShowTaskDatePicker(true);
+  };
+
+  const onTaskDatePickerChange = (event: any, selectedDate?: Date) => {
+    if (event.type === "dismissed") {
+      setShowTaskDatePicker(false);
+      return;
+    }
+    if (selectedDate) {
+      setNewTaskDueDate(selectedDate.toISOString().split("T")[0]);
+    }
+    setShowTaskDatePicker(false);
   };
 
   const openDialer = async (phone?: string) => {
@@ -896,11 +1358,24 @@ export const LeadDetailsScreen = () => {
     return `Rs ${Math.round(value).toLocaleString("en-IN")}`;
   };
 
+  const selectedProposalRows = useMemo(
+    () => (selectedProposalProperties.length > 0 ? selectedProposalProperties : selectedLeadRelatedInventories),
+    [selectedLeadRelatedInventories, selectedProposalProperties],
+  );
+
+  const proposalImageUrls = useMemo(
+    () =>
+      selectedProposalRows
+        .flatMap((row: any) => (Array.isArray(row?.images) ? row.images : []))
+        .map((url: string) => resolveMediaUrl(String(url || "").trim()))
+        .filter(Boolean)
+        .slice(0, 12),
+    [selectedProposalRows],
+  );
+
   const buildProposalText = useCallback(() => {
     if (!lead) return "";
-    const selectedRows = selectedProposalProperties.length > 0
-      ? selectedProposalProperties
-      : selectedLeadRelatedInventories;
+    const selectedRows = selectedProposalRows;
     const today = formatProposalDate(new Date());
     const validity = Number.parseInt(proposalValidityDays, 10);
     const lines = [
@@ -931,10 +1406,13 @@ export const LeadDetailsScreen = () => {
     lines.push("", "Regards,", "Samvid Realty");
 
     return lines.join("\n");
-  }, [lead, proposalSpecialNote, proposalValidityDays, selectedLeadRelatedInventories, selectedProposalProperties]);
+  }, [lead, proposalSpecialNote, proposalValidityDays, selectedProposalRows]);
 
   const buildProposalHtml = useCallback(() => {
     const proposalText = buildProposalText();
+    const imageGrid = proposalImageUrls
+      .map((url) => `<img src="${escapeHtml(url)}" alt="Property image" />`)
+      .join("");
     return `
       <html>
         <head>
@@ -943,18 +1421,21 @@ export const LeadDetailsScreen = () => {
             body { font-family: Arial, sans-serif; color: #0f172a; padding: 24px; line-height: 1.5; }
             pre { white-space: pre-wrap; font-family: Arial, sans-serif; font-size: 12px; }
             h1 { margin: 0 0 12px; font-size: 20px; }
+            .imageGrid { margin-top: 16px; display: grid; grid-template-columns: repeat(2, 1fr); gap: 8px; }
+            .imageGrid img { width: 100%; max-height: 220px; object-fit: cover; border: 1px solid #e2e8f0; border-radius: 6px; }
           </style>
         </head>
         <body>
           <pre>${escapeHtml(proposalText)}</pre>
+          ${imageGrid ? `<div class="imageGrid">${imageGrid}</div>` : ""}
         </body>
       </html>
     `;
-  }, [buildProposalText]);
+  }, [buildProposalText, proposalImageUrls]);
 
   const copyProposalText = async () => {
     const message = buildProposalText();
-    if (!selectedLeadRelatedInventories.length) {
+    if (!selectedProposalRows.length) {
       Alert.alert("Select property", "Please select at least one property for proposal.");
       return;
     }
@@ -989,16 +1470,14 @@ export const LeadDetailsScreen = () => {
       }
     }
     if (Platform.OS !== "web") {
-      await Share.share({ title: "Proposal Text", message }).catch(() => {
-        setError("Unable to share/copy proposal text");
-      });
+      setError("Copy unavailable on this device. Please use a clipboard-enabled build.");
       return;
     }
     Alert.alert("Copy unavailable", "Clipboard copy is not supported on this device/browser.");
   };
 
   const generateProposalPdf = async () => {
-    if (!selectedLeadRelatedInventories.length) {
+    if (!selectedProposalRows.length) {
       Alert.alert("Select property", "Please select at least one property for proposal.");
       return "";
     }
@@ -1054,6 +1533,56 @@ export const LeadDetailsScreen = () => {
       .split("\n")
       .forEach((line) => addLine(line));
 
+    const loadImageForPdf = async (url: string): Promise<{ dataUrl: string; width: number; height: number } | null> =>
+      new Promise((resolve) => {
+        const img = new Image();
+        img.crossOrigin = "anonymous";
+        img.onload = () => {
+          try {
+            const canvas = document.createElement("canvas");
+            canvas.width = img.naturalWidth || img.width;
+            canvas.height = img.naturalHeight || img.height;
+            const ctx = canvas.getContext("2d");
+            if (!ctx) {
+              resolve(null);
+              return;
+            }
+            ctx.drawImage(img, 0, 0);
+            resolve({
+              dataUrl: canvas.toDataURL("image/jpeg", 0.9),
+              width: img.naturalWidth || img.width || 1,
+              height: img.naturalHeight || img.height || 1,
+            });
+          } catch {
+            resolve(null);
+          }
+        };
+        img.onerror = () => resolve(null);
+        img.src = url;
+      });
+
+    if (proposalImageUrls.length > 0) {
+      ensureSpace(24);
+      doc.setFont("helvetica", "bold");
+      doc.setFontSize(12);
+      doc.setTextColor(15, 23, 42);
+      doc.text("Property Images", margin, cursorY);
+      cursorY += 14;
+
+      for (let index = 0; index < proposalImageUrls.length; index += 1) {
+        const loaded = await loadImageForPdf(proposalImageUrls[index]);
+        if (!loaded) continue;
+        const maxWidth = contentWidth;
+        const maxHeight = 240;
+        const ratio = Math.min(maxWidth / loaded.width, maxHeight / loaded.height);
+        const drawWidth = Math.max(1, Math.round(loaded.width * ratio));
+        const drawHeight = Math.max(1, Math.round(loaded.height * ratio));
+        ensureSpace(drawHeight + 12);
+        doc.addImage(loaded.dataUrl, "JPEG", margin, cursorY, drawWidth, drawHeight);
+        cursorY += drawHeight + 10;
+      }
+    }
+
     return doc.output("blob");
   };
 
@@ -1107,8 +1636,18 @@ export const LeadDetailsScreen = () => {
       return false;
     }
 
-    const pdfUri = await generateProposalPdf();
-    if (!pdfUri) return false;
+    const tempPdfUri = await generateProposalPdf();
+    if (!tempPdfUri) return false;
+    const localPdfUri = await (async () => {
+      try {
+        const localUri = `${FileSystem.documentDirectory || ""}${fileName}`;
+        if (!localUri) return tempPdfUri;
+        await FileSystem.copyAsync({ from: tempPdfUri, to: localUri });
+        return localUri;
+      } catch {
+        return tempPdfUri;
+      }
+    })();
 
     if (!IS_WEB && options.preferNativeShareOnWeb && nav?.navigator?.share) {
       try {
@@ -1125,7 +1664,7 @@ export const LeadDetailsScreen = () => {
     }
 
     if (!IS_WEB && await Sharing.isAvailableAsync()) {
-      await Sharing.shareAsync(pdfUri, {
+      await Sharing.shareAsync(localPdfUri, {
         mimeType: "application/pdf",
         dialogTitle: options.title,
         UTI: "com.adobe.pdf",
@@ -1136,7 +1675,7 @@ export const LeadDetailsScreen = () => {
     await Share.share({
       title: options.title,
       message: options.message,
-      url: pdfUri,
+      url: localPdfUri,
     });
     return true;
   };
@@ -1156,22 +1695,10 @@ export const LeadDetailsScreen = () => {
 
       const pdfUri = await generateProposalPdf();
       if (!pdfUri) return;
-
-      if (!IS_WEB && await Sharing.isAvailableAsync()) {
-        await Sharing.shareAsync(pdfUri, {
-          mimeType: "application/pdf",
-          dialogTitle: "Save/Download Proposal PDF",
-          UTI: "com.adobe.pdf",
-        });
-        setSuccess("PDF ready to save/share");
-        return;
-      }
-
-      await Share.share({
-        title: "Property Proposal PDF",
-        message: "Property proposal PDF generated",
-        url: pdfUri,
-      });
+      const localUri = `${FileSystem.documentDirectory || ""}${fileName}`;
+      if (!localUri) throw new Error("Local storage unavailable");
+      await FileSystem.copyAsync({ from: pdfUri, to: localUri });
+      setSuccess("PDF downloaded in local storage");
     } catch {
       Alert.alert("PDF failed", "Unable to generate or download proposal PDF.");
     } finally {
@@ -1194,47 +1721,37 @@ export const LeadDetailsScreen = () => {
   };
 
   const shareProposalWhatsApp = async () => {
-    if (!selectedLeadRelatedInventories.length) {
+    if (!selectedProposalRows.length) {
       Alert.alert("Select property", "Please select at least one property for proposal.");
       return;
     }
-    const phone = toWhatsAppPhone((lead as any)?.phone) || "";
-    if (!phone) {
-      Alert.alert("Invalid number", "Lead phone number is invalid. Last 10 digits are required.");
-      return;
-    }
+    try {
+      if (Platform.OS === "web") {
+        await openSystemPdfShare({
+          title: "Share Proposal PDF",
+          message: "Share on WhatsApp",
+          preferNativeShareOnWeb: true,
+        });
+        return;
+      }
 
-    const text = encodeURIComponent(buildProposalText());
-    const appUrlWithPhone = `whatsapp://send?phone=${phone}&text=${text}`;
-    const appUrlGeneric = `whatsapp://send?text=${text}`;
-    const webUrl = `https://wa.me/${phone}?text=${text}`;
-    if (Platform.OS === "web") {
-      await Linking.openURL(webUrl).catch(() => {
-        Alert.alert("WhatsApp unavailable", "Unable to open WhatsApp Web.");
+      const canOpenWhatsApp = await Linking.canOpenURL("whatsapp://send").catch(() => false);
+      if (!canOpenWhatsApp) {
+        Alert.alert("WhatsApp unavailable", "WhatsApp is not installed on this device.");
+        return;
+      }
+      const ok = await openSystemPdfShare({
+        title: "Share Proposal PDF",
+        message: "Share on WhatsApp",
       });
-      return;
+      if (!ok) throw new Error("Share not available");
+    } catch {
+      Alert.alert("WhatsApp unavailable", "Unable to open WhatsApp share for PDF.");
     }
-    const canAppWithPhone = await Linking.canOpenURL(appUrlWithPhone).catch(() => false);
-    if (canAppWithPhone) {
-      await Linking.openURL(appUrlWithPhone).catch(() => {
-        Alert.alert("WhatsApp unavailable", "Unable to open WhatsApp.");
-      });
-      return;
-    }
-    const canAppGeneric = await Linking.canOpenURL(appUrlGeneric).catch(() => false);
-    if (canAppGeneric) {
-      await Linking.openURL(appUrlGeneric).catch(() => {
-        Alert.alert("WhatsApp unavailable", "Unable to open WhatsApp.");
-      });
-      return;
-    }
-    await Linking.openURL(webUrl).catch(() => {
-      Alert.alert("WhatsApp unavailable", "Unable to open WhatsApp.");
-    });
   };
 
   const shareProposalEmail = async () => {
-    if (!selectedLeadRelatedInventories.length) {
+    if (!selectedProposalRows.length) {
       Alert.alert("Select property", "Please select at least one property for proposal.");
       return;
     }
@@ -1244,10 +1761,23 @@ export const LeadDetailsScreen = () => {
     const body = buildProposalText();
 
     if (Platform.OS !== "web" && (await MailComposer.isAvailableAsync())) {
+      const pdfUri = await generateProposalPdf();
+      const fileName = buildProposalPdfName();
+      let localUri = pdfUri;
+      if (pdfUri) {
+        try {
+          const preferredUri = `${FileSystem.documentDirectory || ""}${fileName}`;
+          if (preferredUri) {
+            await FileSystem.copyAsync({ from: pdfUri, to: preferredUri });
+            localUri = preferredUri;
+          }
+        } catch {}
+      }
       await MailComposer.composeAsync({
         recipients: email ? [email] : [],
         subject,
         body,
+        attachments: localUri ? [localUri] : [],
       });
       return;
     }
@@ -1750,12 +2280,49 @@ export const LeadDetailsScreen = () => {
   };
 
   const handleDiaryVoiceToggle = () => {
-    if (!isDiaryMicSupported || !diaryRecognitionRef.current) {
+    if (!isDiaryMicSupported) {
       setError("Speech to text is not supported on this device/browser.");
       return;
     }
 
     setError("");
+    if (Platform.OS !== "web") {
+      const startNative = async () => {
+        try {
+          if (!speechPermissionGranted) {
+            const permission = await ExpoSpeechRecognitionModule.requestPermissionsAsync();
+            const granted = Boolean(permission?.granted);
+            setSpeechPermissionGranted(granted);
+            if (!granted) {
+              setError("Microphone permission is required for voice input.");
+              return;
+            }
+          }
+          if (isDiaryListening) {
+            ExpoSpeechRecognitionModule.stop();
+            return;
+          }
+          ExpoSpeechRecognitionModule.start({
+            lang: "en-IN",
+            interimResults: true,
+            maxAlternatives: 1,
+            addsPunctuation: true,
+            continuous: false,
+          });
+        } catch {
+          setError("Unable to start voice input. Try again.");
+          setIsDiaryListening(false);
+        }
+      };
+      void startNative();
+      return;
+    }
+
+    if (!diaryRecognitionRef.current) {
+      setError("Speech to text is not supported on this device/browser.");
+      return;
+    }
+
     try {
       if (isDiaryListening) {
         diaryRecognitionRef.current.stop();
@@ -1982,6 +2549,222 @@ export const LeadDetailsScreen = () => {
       </AppCard>
 
       <AppCard style={styles.card as object}>
+        <Text style={styles.section}>Lead Requirements</Text>
+        
+        <Text style={styles.metricLabel}>Inventory Type</Text>
+        <View style={styles.modalChipWrap}>
+          {[
+            { value: "", label: "Any" },
+            { value: "COMMERCIAL", label: "Commercial" },
+            { value: "RESIDENTIAL", label: "Residential" },
+          ].map((item) => (
+            <AppChip
+              key={`req-inv-${item.value}`}
+              label={item.label}
+              active={requirementsDraft?.inventoryType === item.value}
+              onPress={() => updateRequirementRootField("inventoryType", item.value)}
+              style={styles.modalChip as object}
+            />
+          ))}
+        </View>
+
+        <Text style={styles.metricLabel}>Deal Type</Text>
+        <View style={styles.modalChipWrap}>
+          {[
+            { value: "", label: "Any" },
+            { value: "SALE", label: "Sale" },
+            { value: "RENT", label: "Rent" },
+          ].map((item) => (
+            <AppChip
+              key={`req-tx-${item.value}`}
+              label={item.label}
+              active={requirementsDraft?.transactionType === item.value}
+              onPress={() => updateRequirementRootField("transactionType", item.value)}
+              style={styles.modalChip as object}
+            />
+          ))}
+        </View>
+
+        <Text style={styles.metricLabel}>Furnishing Status</Text>
+        <View style={styles.modalChipWrap}>
+          {LEAD_REQUIREMENT_FURNISHING_OPTIONS.map((item) => (
+            <AppChip
+              key={`req-furn-${item.value}`}
+              label={item.label}
+              active={requirementsDraft?.furnishingStatus === item.value}
+              onPress={() => updateRequirementRootField("furnishingStatus", item.value)}
+              style={styles.modalChip as object}
+            />
+          ))}
+        </View>
+
+        <Text style={styles.metricLabel}>Area Unit</Text>
+        <View style={styles.modalChipWrap}>
+          {[
+            { value: "SQ_FT", label: "Sq Ft" },
+            { value: "SQ_M", label: "Sq M" },
+          ].map((item) => (
+            <AppChip
+              key={`req-unit-${item.value}`}
+              label={item.label}
+              active={requirementsDraft?.areaUnit === item.value}
+              onPress={() => updateRequirementRootField("areaUnit", item.value)}
+              style={styles.modalChip as object}
+            />
+          ))}
+        </View>
+
+        <View style={styles.twoColRow}>
+          <View style={{ flex: 1 }}>
+            <Text style={styles.metricLabel}>Budget Min</Text>
+            <AppInput
+              style={[styles.input as object, styles.twoColInput as object]}
+              value={requirementsDraft?.budgetMin || ""}
+              onChangeText={(val: string) => updateRequirementRootField("budgetMin", val)}
+              placeholder="Min budget"
+              keyboardType="phone-pad"
+            />
+          </View>
+          <View style={{ flex: 1 }}>
+            <Text style={styles.metricLabel}>Budget Max</Text>
+            <AppInput
+              style={[styles.input as object, styles.twoColInput as object]}
+              value={requirementsDraft?.budgetMax || ""}
+              onChangeText={(val: string) => updateRequirementRootField("budgetMax", val)}
+              placeholder="Max budget"
+              keyboardType="phone-pad"
+            />
+          </View>
+        </View>
+
+        <View style={styles.twoColRow}>
+          <View style={{ flex: 1 }}>
+            <Text style={styles.metricLabel}>Area Min</Text>
+            <AppInput
+              style={[styles.input as object, styles.twoColInput as object]}
+              value={requirementsDraft?.areaMin || ""}
+              onChangeText={(val: string) => updateRequirementRootField("areaMin", val)}
+              placeholder="Min area"
+              keyboardType="phone-pad"
+            />
+          </View>
+          <View style={{ flex: 1 }}>
+            <Text style={styles.metricLabel}>Area Max</Text>
+            <AppInput
+              style={[styles.input as object, styles.twoColInput as object]}
+              value={requirementsDraft?.areaMax || ""}
+              onChangeText={(val: string) => updateRequirementRootField("areaMax", val)}
+              placeholder="Max area"
+              keyboardType="phone-pad"
+            />
+          </View>
+        </View>
+
+        {requirementsDraft?.inventoryType === "COMMERCIAL" ? (
+          <View style={{ marginTop: 10, padding: 10, borderWidth: 1, borderColor: "#cbd5e1", borderRadius: 10, backgroundColor: "#f8fafc" }}>
+            <Text style={[styles.section, { fontSize: 13, marginBottom: 6 }]}>Commercial Preferences</Text>
+            <View style={styles.twoColRow}>
+              <View style={{ flex: 1 }}>
+                <Text style={styles.metricLabel}>Seats</Text>
+                <AppInput
+                  style={[styles.input as object, styles.twoColInput as object]}
+                  value={requirementsDraft?.commercial?.seats || ""}
+                  onChangeText={(val: string) => updateRequirementCommercialField("seats", val)}
+                  placeholder="Workstations"
+                  keyboardType="phone-pad"
+                />
+              </View>
+              <View style={{ flex: 1 }}>
+                <Text style={styles.metricLabel}>Cabins</Text>
+                <AppInput
+                  style={[styles.input as object, styles.twoColInput as object]}
+                  value={requirementsDraft?.commercial?.cabins || ""}
+                  onChangeText={(val: string) => updateRequirementCommercialField("cabins", val)}
+                  placeholder="Cabins"
+                  keyboardType="phone-pad"
+                />
+              </View>
+            </View>
+            
+            <View style={styles.checkboxGrid}>
+              <Pressable
+                style={[styles.checkboxItem, requirementsDraft?.commercial?.parkingAvailable && styles.checkboxItemActive]}
+                onPress={() => updateRequirementCommercialField("parkingAvailable", !requirementsDraft?.commercial?.parkingAvailable)}
+              >
+                <Ionicons
+                  name={requirementsDraft?.commercial?.parkingAvailable ? "checkbox" : "square-outline"}
+                  size={14}
+                  color={requirementsDraft?.commercial?.parkingAvailable ? "#10b981" : "#475569"}
+                />
+                <Text style={styles.checkboxLabel}>Parking Available</Text>
+              </Pressable>
+
+              <Pressable
+                style={[styles.checkboxItem, requirementsDraft?.commercial?.pantry && styles.checkboxItemActive]}
+                onPress={() => updateRequirementCommercialField("pantry", !requirementsDraft?.commercial?.pantry)}
+              >
+                <Ionicons
+                  name={requirementsDraft?.commercial?.pantry ? "checkbox" : "square-outline"}
+                  size={14}
+                  color={requirementsDraft?.commercial?.pantry ? "#10b981" : "#475569"}
+                />
+                <Text style={styles.checkboxLabel}>Pantry</Text>
+              </Pressable>
+            </View>
+          </View>
+        ) : null}
+
+        {requirementsDraft?.inventoryType === "RESIDENTIAL" ? (
+          <View style={{ marginTop: 10, padding: 10, borderWidth: 1, borderColor: "#cbd5e1", borderRadius: 10, backgroundColor: "#f8fafc" }}>
+            <Text style={[styles.section, { fontSize: 13, marginBottom: 6 }]}>Residential Preferences</Text>
+            
+            <Text style={styles.metricLabel}>BHK Type</Text>
+            <View style={styles.modalChipWrap}>
+              {LEAD_REQUIREMENT_BHK_OPTIONS.map((item) => (
+                <AppChip
+                  key={`req-bhk-${item.value}`}
+                  label={item.label}
+                  active={requirementsDraft?.residential?.bhkType === item.value}
+                  onPress={() => updateRequirementResidentialField("bhkType", item.value)}
+                  style={styles.modalChip as object}
+                />
+              ))}
+            </View>
+
+            <Text style={styles.metricLabel}>Preferred Floor</Text>
+            <AppInput
+              style={styles.input as object}
+              value={requirementsDraft?.residential?.floor || ""}
+              onChangeText={(val: string) => updateRequirementResidentialField("floor", val)}
+              placeholder="Floor number"
+              keyboardType="phone-pad"
+            />
+
+            <Text style={styles.metricLabel}>Amenities</Text>
+            <View style={styles.checkboxGrid}>
+              {LEAD_REQUIREMENT_RESIDENTIAL_AMENITY_FIELDS.map((field) => {
+                const checked = Boolean(requirementsDraft?.residential?.amenities?.[field.key]);
+                return (
+                  <Pressable
+                    key={`amenity-${field.key}`}
+                    style={[styles.checkboxItem, checked && styles.checkboxItemActive]}
+                    onPress={() => updateRequirementResidentialAmenity(field.key, !checked)}
+                  >
+                    <Ionicons
+                      name={checked ? "checkbox" : "square-outline"}
+                      size={14}
+                      color={checked ? "#10b981" : "#475569"}
+                    />
+                    <Text style={styles.checkboxLabel}>{field.label}</Text>
+                  </Pressable>
+                );
+              })}
+            </View>
+          </View>
+        ) : null}
+      </AppCard>
+
+      <AppCard style={styles.card as object}>
         <View style={styles.sectionRow}>
           <Text style={styles.section}>Properties</Text>
           <Text style={styles.meta}>{selectedLeadRelatedInventories.length} linked</Text>
@@ -2024,6 +2807,16 @@ export const LeadDetailsScreen = () => {
         {canLinkProperties ? (
           <>
             <Text style={styles.section}>Select property to link</Text>
+            <View style={styles.linkFilterRow}>
+              {LINK_PROPERTY_TYPE_OPTIONS.map((typeOption) => (
+                <AppChip
+                  key={`link-filter-${typeOption}`}
+                  label={typeOption}
+                  active={relatedInventoryTypeFilter === typeOption}
+                  onPress={() => setRelatedInventoryTypeFilter(typeOption)}
+                />
+              ))}
+            </View>
             <View style={styles.linkRow}>
             <Pressable style={[styles.selectInput, styles.linkSelect]} onPress={() => setLinkDropdownOpen((previous) => !previous)}>
               <Text style={styles.selectInputText}>
@@ -2268,6 +3061,7 @@ export const LeadDetailsScreen = () => {
         <TextInput
           style={[styles.diaryInput, { height: 84 }]}
           placeholder="Add conversation notes, visit details, objections, or next steps..."
+          placeholderTextColor="#94a3b8"
           value={diaryNoteDraft}
           onChangeText={setDiaryNoteDraft}
           multiline
@@ -2284,7 +3078,7 @@ export const LeadDetailsScreen = () => {
                 {isDiaryListening ? "Stop" : "Voice"}
               </Text>
             </Pressable>
-            <Pressable style={[styles.addNoteBtn, (!diaryNoteDraft.trim() || saving) && styles.addNoteBtnDisabled]} onPress={submitDiary} disabled={saving || !diaryNoteDraft.trim()}>
+            <Pressable style={[styles.addNoteBtn, saving && styles.addNoteBtnDisabled]} onPress={submitDiary} disabled={saving}>
               <Ionicons name="document-text-outline" size={14} color="#fff" />
               <Text style={styles.addNoteText}>{saving ? "Saving..." : "Add Note"}</Text>
             </Pressable>
@@ -2400,6 +3194,7 @@ export const LeadDetailsScreen = () => {
         <TextInput
           style={[styles.diaryInput, { height: 84 }]}
           placeholder="Add conversation notes, visit details, objections, or next step context..."
+          placeholderTextColor="#94a3b8"
           value={diaryNoteDraft}
           onChangeText={setDiaryNoteDraft}
           multiline
@@ -2416,7 +3211,7 @@ export const LeadDetailsScreen = () => {
                 {isDiaryListening ? "Stop" : "Voice"}
               </Text>
             </Pressable>
-            <Pressable style={[styles.addNoteBtn, (!diaryNoteDraft.trim() || saving) && styles.addNoteBtnDisabled]} onPress={submitDiary} disabled={saving || !diaryNoteDraft.trim()}>
+            <Pressable style={[styles.addNoteBtn, saving && styles.addNoteBtnDisabled]} onPress={submitDiary} disabled={saving}>
               <Ionicons name="document-text-outline" size={14} color="#fff" />
               <Text style={styles.addNoteText}>{saving ? "Saving..." : "Add Note"}</Text>
             </Pressable>
@@ -2569,6 +3364,245 @@ export const LeadDetailsScreen = () => {
         </AppCard>
       ) : null}
 
+      <AppCard style={styles.card as object}>
+        <View style={styles.sectionRow}>
+          <Text style={styles.section}>Lead Tasks</Text>
+          <Text style={styles.meta}>
+            {leadTasks.filter((t) => t.status !== "COMPLETED").length} pending
+          </Text>
+        </View>
+
+        {/* Quick add task form */}
+        <View style={styles.taskForm}>
+          <AppInput
+            style={styles.input as object}
+            placeholder="Add a new task for this lead..."
+            value={newTaskTitle}
+            onChangeText={setNewTaskTitle}
+          />
+
+          <Text style={styles.metricLabel}>Priority</Text>
+          <View style={styles.modalChipWrap}>
+            {["LOW", "MEDIUM", "HIGH"].map((pri) => (
+              <AppChip
+                key={`task-pri-${pri}`}
+                label={pri}
+                active={newTaskPriority === pri}
+                onPress={() => setNewTaskPriority(pri)}
+                style={styles.modalChip as object}
+              />
+            ))}
+          </View>
+
+          <Text style={styles.metricLabel}>Assignee</Text>
+          <Pressable
+            style={styles.selectInput}
+            onPress={() => setTaskAssigneeDropdownOpen((prev) => !prev)}
+          >
+            <Text style={styles.selectInputText}>
+              {executives.find((u) => u._id === newTaskAssignedTo)?.name || "Unassigned"}
+            </Text>
+          </Pressable>
+          {taskAssigneeDropdownOpen ? (
+            <View style={styles.selectMenu}>
+              <ScrollView style={styles.selectMenuScroll} nestedScrollEnabled>
+                <Pressable
+                  style={styles.selectMenuItem}
+                  onPress={() => {
+                    setNewTaskAssignedTo("");
+                    setTaskAssigneeDropdownOpen(false);
+                  }}
+                >
+                  <Text style={styles.selectMenuItemText}>Unassigned</Text>
+                </Pressable>
+                {executives.map((u) => (
+                  <Pressable
+                    key={`task-assign-${u._id}`}
+                    style={styles.selectMenuItem}
+                    onPress={() => {
+                      setNewTaskAssignedTo(u._id || "");
+                      setTaskAssigneeDropdownOpen(false);
+                    }}
+                  >
+                    <Text style={styles.selectMenuItemText}>{u.name}</Text>
+                  </Pressable>
+                ))}
+              </ScrollView>
+            </View>
+          ) : null}
+
+          <Text style={styles.metricLabel}>Due Date</Text>
+          <View style={styles.followUpInputRow}>
+            {Platform.OS === "web" ? (
+              <input
+                type="date"
+                value={newTaskDueDate}
+                onChange={(e) => setNewTaskDueDate(e.target.value)}
+                style={{
+                  flex: 1,
+                  height: 38,
+                  paddingHorizontal: 10,
+                  borderRadius: 10,
+                  borderWidth: 1,
+                  borderColor: "#cbd5e1",
+                  fontSize: 12,
+                  backgroundColor: "#fff",
+                  color: "#334155",
+                  outlineStyle: "none"
+                } as any}
+              />
+            ) : (
+              <>
+                <AppInput
+                  style={[styles.input as object, styles.followUpInput as object]}
+                  value={newTaskDueDate}
+                  onChangeText={setNewTaskDueDate}
+                  placeholder="YYYY-MM-DD"
+                  editable={false}
+                />
+                <Pressable style={styles.followUpCalendarBtn} onPress={openTaskDatePicker}>
+                  <Ionicons name="calendar-outline" size={16} color="#334155" />
+                </Pressable>
+              </>
+            )}
+          </View>
+          {showTaskDatePicker && Platform.OS === "ios" ? (
+            <DateTimePicker
+              value={taskDatePickerSeed}
+              mode="date"
+              display="spinner"
+              onChange={onTaskDatePickerChange}
+            />
+          ) : null}
+
+          <AppButton
+            title={addingTask ? "Adding..." : "Add Task"}
+            onPress={handleAddLeadTask}
+            disabled={addingTask || !newTaskTitle.trim()}
+          />
+        </View>
+
+        {/* Tasks list */}
+        <View style={{ marginTop: 14 }}>
+          {loadingTasks ? (
+            <ActivityIndicator color="#0f172a" style={{ marginVertical: 12 }} />
+          ) : leadTasks.length === 0 ? (
+            <Text style={styles.meta}>No tasks linked to this lead.</Text>
+          ) : (
+            leadTasks.map((task) => {
+              const isCompleted = task.status === "COMPLETED";
+              const parsedDueDate = task.dueDate ? new Date(task.dueDate) : null;
+              const expired =
+                !isCompleted &&
+                parsedDueDate &&
+                parsedDueDate.getTime() < new Date().setHours(0, 0, 0, 0);
+
+              return (
+                <View
+                  key={task._id}
+                  style={[
+                    styles.taskRow,
+                    isCompleted && styles.taskRowCompleted,
+                  ]}
+                >
+                  <Pressable
+                    style={[
+                      styles.taskCheckbox,
+                      isCompleted && styles.taskCheckboxCompleted,
+                    ]}
+                    onPress={() => handleToggleLeadTaskStatus(task)}
+                  >
+                    {isCompleted ? (
+                      <Ionicons name="checkmark" size={12} color="#fff" />
+                    ) : null}
+                  </Pressable>
+
+                  <View style={{ flex: 1 }}>
+                    <Text
+                      style={[
+                        styles.taskTitle,
+                        isCompleted && styles.taskTitleCompleted,
+                      ]}
+                    >
+                      {task.title}
+                    </Text>
+
+                    <View style={styles.taskMetaRow}>
+                      <Text
+                        style={[
+                          styles.taskBadge,
+                          {
+                            color:
+                              task.priority === "HIGH"
+                                ? "#b91c1c"
+                                : task.priority === "MEDIUM"
+                                ? "#d97706"
+                                : "#2563eb",
+                            backgroundColor:
+                              task.priority === "HIGH"
+                                ? "#fef2f2"
+                                : task.priority === "MEDIUM"
+                                ? "#fef3c7"
+                                : "#eff6ff",
+                            borderColor:
+                              task.priority === "HIGH"
+                                ? "#fecaca"
+                                : task.priority === "MEDIUM"
+                                ? "#fde68a"
+                                : "#bfdbfe",
+                          },
+                        ]}
+                      >
+                        {task.priority}
+                      </Text>
+
+                      {task.assignedTo?.name ? (
+                        <Text
+                          style={[
+                            styles.taskBadge,
+                            {
+                              color: "#475569",
+                              backgroundColor: "#f1f5f9",
+                              borderColor: "#cbd5e1",
+                            },
+                          ]}
+                        >
+                          Assigned: {task.assignedTo.name}
+                        </Text>
+                      ) : null}
+
+                      {task.dueDate ? (
+                        <Text
+                          style={[
+                            styles.taskBadge,
+                            {
+                              color: expired ? "#b91c1c" : "#475569",
+                              backgroundColor: expired ? "#fef2f2" : "#f1f5f9",
+                              borderColor: expired ? "#fecaca" : "#cbd5e1",
+                              fontWeight: expired ? "700" : "600",
+                            },
+                          ]}
+                        >
+                          Due: {task.dueDate.split("T")[0]}{" "}
+                          {expired ? "(Overdue)" : ""}
+                        </Text>
+                      ) : null}
+                    </View>
+                  </View>
+
+                  <Pressable
+                    style={styles.taskDeleteBtn}
+                    onPress={() => handleDeleteLeadTask(task._id)}
+                  >
+                    <Ionicons name="trash-outline" size={14} color="#b91c1c" />
+                  </Pressable>
+                </View>
+              );
+            })
+          )}
+        </View>
+      </AppCard>
+
       <View style={styles.sectionRow}>
         <Text style={styles.section}>Activity Timeline</Text>
       </View>
@@ -2595,8 +3629,13 @@ export const LeadDetailsScreen = () => {
 
       <Modal visible={statusRequestOpen} animationType="fade" transparent onRequestClose={closeStatusRequestModal}>
         <Pressable style={styles.modalWrap} onPress={closeStatusRequestModal}>
+          <KeyboardAvoidingView
+            style={styles.modalKeyboardWrap}
+            behavior={Platform.OS === "ios" ? "padding" : "height"}
+            keyboardVerticalOffset={Platform.OS === "ios" ? 84 : 18}
+          >
           <Pressable style={[styles.modalCard, styles.modalCardWide]} onPress={(event) => event.stopPropagation()}>
-            <ScrollView showsVerticalScrollIndicator={false}>
+            <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.statusRequestModalContent}>
             <Text style={styles.modalTitle}>Request Status Change</Text>
             <Text style={styles.meta}>Requested status: {statusDraft}</Text>
             <Text style={styles.section}>Payment Mode</Text>
@@ -2838,6 +3877,7 @@ export const LeadDetailsScreen = () => {
             ) : null}
             </ScrollView>
           </Pressable>
+          </KeyboardAvoidingView>
         </Pressable>
       </Modal>
 
@@ -3014,7 +4054,7 @@ const styles = StyleSheet.create({
   statusWrap: { flexDirection: "row", flexWrap: "wrap", gap: 8, alignItems: "center", alignContent: "flex-start" },
   assignRow: { flexDirection: "row", gap: 8, alignItems: "center", paddingBottom: 2 },
   chip: {},
-  input: { marginBottom: 10 },
+  input: { marginBottom: 12 },
   followUpInputRow: {
     flexDirection: "row",
     alignItems: "center",
@@ -3036,8 +4076,8 @@ const styles = StyleSheet.create({
     justifyContent: "center",
   },
   dateFieldActionRow: {
-    marginTop: -2,
-    marginBottom: 8,
+    marginTop: 0,
+    marginBottom: 12,
     alignItems: "flex-start",
   },
   dateFieldBtn: {
@@ -3064,7 +4104,7 @@ const styles = StyleSheet.create({
     height: 42,
     paddingHorizontal: 12,
     justifyContent: "center",
-    marginBottom: 8,
+    marginBottom: 12,
   },
   selectInputText: {
     color: "#334155",
@@ -3188,6 +4228,13 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     gap: 8,
+  },
+  linkFilterRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    marginBottom: 8,
+    flexWrap: "wrap",
   },
   linkSelect: {
     flex: 1,
@@ -3605,6 +4652,10 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     padding: 16,
   },
+  modalKeyboardWrap: {
+    width: "100%",
+    justifyContent: "center",
+  },
   modalCard: {
     backgroundColor: "#fff",
     borderRadius: 14,
@@ -3612,6 +4663,9 @@ const styles = StyleSheet.create({
   },
   modalCardWide: {
     maxHeight: "88%",
+  },
+  statusRequestModalContent: {
+    paddingBottom: 12,
   },
   modalChipWrap: {
     flexDirection: "row",
@@ -3757,5 +4811,121 @@ const styles = StyleSheet.create({
     borderRadius: 10,
     backgroundColor: "#f0fdf4",
     color: "#166534",
+  },
+  taskRow: {
+    borderWidth: 1,
+    borderColor: "#cbd5e1",
+    borderRadius: 10,
+    backgroundColor: "#fff",
+    padding: 10,
+    marginBottom: 8,
+    flexDirection: "row",
+    alignItems: "flex-start",
+    gap: 8,
+  },
+  taskRowCompleted: {
+    opacity: 0.6,
+    backgroundColor: "#f8fafc",
+  },
+  taskCheckbox: {
+    width: 20,
+    height: 20,
+    borderWidth: 1,
+    borderColor: "#cbd5e1",
+    borderRadius: 4,
+    alignItems: "center",
+    justifyContent: "center",
+    marginRight: 6,
+    marginTop: 2,
+  },
+  taskCheckboxCompleted: {
+    backgroundColor: "#10b981",
+    borderColor: "#10b981",
+  },
+  taskTitle: {
+    fontSize: 13,
+    fontWeight: "600",
+    color: "#0f172a",
+  },
+  taskTitleCompleted: {
+    textDecorationLine: "line-through",
+    color: "#64748b",
+  },
+  taskMetaRow: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 6,
+    marginTop: 4,
+  },
+  taskBadge: {
+    fontSize: 10,
+    fontWeight: "700",
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: 4,
+    borderWidth: 1,
+  },
+  taskDeleteBtn: {
+    padding: 4,
+  },
+  taskForm: {
+    marginTop: 10,
+    gap: 8,
+  },
+  taskFormRow: {
+    flexDirection: "row",
+    gap: 8,
+  },
+  taskFormSelect: {
+    flex: 1,
+    height: 36,
+    borderWidth: 1,
+    borderColor: "#cbd5e1",
+    borderRadius: 8,
+    paddingHorizontal: 8,
+    justifyContent: "center",
+    backgroundColor: "#fff",
+  },
+  taskFormSelectText: {
+    fontSize: 11,
+    color: "#334155",
+  },
+  taskAddBtn: {
+    height: 36,
+    borderRadius: 8,
+    backgroundColor: "#0f172a",
+    alignItems: "center",
+    justifyContent: "center",
+    paddingHorizontal: 16,
+  },
+  taskAddBtnText: {
+    color: "#fff",
+    fontSize: 12,
+    fontWeight: "700",
+  },
+  checkboxGrid: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 8,
+    marginTop: 8,
+  },
+  checkboxItem: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    borderWidth: 1,
+    borderColor: "#cbd5e1",
+    borderRadius: 8,
+    paddingHorizontal: 8,
+    paddingVertical: 6,
+    backgroundColor: "#fff",
+  },
+  checkboxItemActive: {
+    borderColor: "#10b981",
+    backgroundColor: "#f0fdf4",
+  },
+  checkboxLabel: {
+    fontSize: 11,
+    color: "#334155",
   },
 });

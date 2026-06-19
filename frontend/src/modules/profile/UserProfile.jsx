@@ -202,8 +202,8 @@ const UserProfile = () => {
   };
 
   return (
-    <div className="w-full h-full px-4 sm:px-6 lg:px-10 pt-20 md:pt-24 pb-8 space-y-6 overflow-y-auto custom-scrollbar">
-      <div>
+    <div className="ui-page-shell custom-scrollbar space-y-6">
+      <div className="ui-hero-card">
         <h1 className="font-display text-2xl sm:text-4xl text-slate-900 tracking-tight">
           User Profile
         </h1>
@@ -213,28 +213,28 @@ const UserProfile = () => {
       </div>
 
       {error && (
-        <div className="rounded-xl border border-red-200 bg-red-50 text-red-700 text-sm px-3 py-2">
+        <div className="ui-soft-panel rounded-xl border border-red-200 bg-red-50 text-red-700 text-sm px-3 py-2">
           {error}
         </div>
       )}
 
       {success && (
-        <div className="rounded-xl border border-emerald-200 bg-emerald-50 text-emerald-700 text-sm px-3 py-2">
+        <div className="ui-soft-panel rounded-xl border border-cyan-200 bg-cyan-50 text-cyan-700 text-sm px-3 py-2">
           {success}
         </div>
       )}
 
       {loading ? (
-        <div className="h-56 rounded-2xl border bg-white flex items-center justify-center text-slate-400 gap-2">
+        <div className="ui-soft-panel h-56 rounded-2xl border bg-white flex items-center justify-center text-slate-400 gap-2">
           <Loader size={18} className="animate-spin" /> Loading profile...
         </div>
       ) : !profile ? (
-        <div className="h-56 rounded-2xl border bg-white flex items-center justify-center text-slate-500">
+        <div className="ui-soft-panel h-56 rounded-2xl border bg-white flex items-center justify-center text-slate-500">
           Profile data not available
         </div>
       ) : (
         <>
-          <div className="rounded-2xl border bg-white p-5 sm:p-6">
+          <div className="ui-soft-panel rounded-2xl border bg-white p-5 sm:p-6">
             <div className="flex flex-col sm:flex-row sm:items-start gap-4">
               <div className="w-14 h-14 rounded-2xl bg-slate-100 text-slate-700 flex items-center justify-center">
                 <UserCircle2 size={30} />
@@ -289,7 +289,7 @@ const UserProfile = () => {
               <button
                 onClick={handleSave}
                 disabled={saving}
-                className="h-10 px-4 rounded-lg bg-slate-900 text-white text-sm font-semibold inline-flex items-center gap-2 disabled:opacity-60"
+                className="h-10 px-4 rounded-lg bg-cyan-600 text-white text-sm font-semibold inline-flex items-center gap-2 hover:bg-cyan-500 disabled:opacity-60"
               >
                 {saving ? <Loader size={14} className="animate-spin" /> : <Save size={14} />}
                 Save Profile
@@ -298,7 +298,7 @@ const UserProfile = () => {
           </div>
 
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-            <div className="rounded-2xl border bg-white p-5">
+            <div className="ui-soft-panel rounded-2xl border bg-white p-5">
               <div className="text-xs uppercase tracking-widest text-slate-400 font-bold mb-3">
                 Reporting
               </div>
@@ -321,7 +321,7 @@ const UserProfile = () => {
               )}
             </div>
 
-            <div className="rounded-2xl border bg-white p-5">
+            <div className="ui-soft-panel rounded-2xl border bg-white p-5">
               <div className="text-xs uppercase tracking-widest text-slate-400 font-bold mb-3">
                 Account Metadata
               </div>
@@ -340,7 +340,7 @@ const UserProfile = () => {
           {summaryCards.length > 0 && (
             <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
               {summaryCards.map((card) => (
-                <div key={card.key} className="rounded-2xl border bg-white p-4">
+                <div key={card.key} className="ui-soft-panel rounded-2xl border bg-white p-4">
                   <div className="flex items-center justify-between">
                     <div className="text-[10px] uppercase tracking-widest text-slate-400 font-bold">
                       {card.label}

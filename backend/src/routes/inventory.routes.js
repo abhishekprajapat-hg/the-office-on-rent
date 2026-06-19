@@ -29,6 +29,12 @@ router.get(
 router.get("/:id", inventoryController.getInventoryById);
 
 router.post(
+  "/:id/share",
+  writeLimiter,
+  inventoryController.createShareLink,
+);
+
+router.post(
   "/",
   writeLimiter,
   authMiddleware.checkRole(["ADMIN"]),

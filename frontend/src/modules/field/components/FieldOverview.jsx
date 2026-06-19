@@ -61,7 +61,7 @@ const FieldOverview = ({
         />
       </div>
 
-      <div className="mt-6">
+      <div className="ui-soft-panel mt-6 p-3 sm:p-4">
         <LeadPerformancePanel
           leads={leads}
           theme="light"
@@ -72,7 +72,7 @@ const FieldOverview = ({
       </div>
 
       <div className="mt-6 grid grid-cols-1 gap-4 xl:grid-cols-[1.1fr_1fr]">
-        <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+        <div className="ui-soft-panel rounded-2xl p-5">
           <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-500">
             Today Tasks
           </p>
@@ -101,7 +101,7 @@ const FieldOverview = ({
                     <button
                       type="button"
                       onClick={() => onCompleteTask(task.id)}
-                      className="rounded-lg bg-slate-900 px-3 py-1.5 text-[10px] font-semibold uppercase tracking-[0.12em] text-white hover:bg-emerald-600"
+                      className="rounded-lg bg-slate-900 px-3 py-1.5 text-[10px] font-semibold uppercase tracking-[0.12em] text-white hover:bg-cyan-700"
                     >
                       Check In
                     </button>
@@ -153,13 +153,13 @@ const FieldStatCard = ({ title, value, hint, icon, onClick }) => (
   <button
     type="button"
     onClick={onClick}
-    className="rounded-2xl border border-slate-200 bg-white p-5 text-left shadow-sm transition-all hover:-translate-y-0.5 hover:border-emerald-300 hover:shadow-md"
+    className="ui-soft-panel rounded-2xl p-5 text-left transition-all hover:-translate-y-0.5 hover:border-cyan-300/70"
   >
     <div className="flex items-center justify-between">
       <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-500">
         {title}
       </p>
-      <div className="rounded-lg bg-emerald-50 p-2 text-emerald-600">
+      <div className="rounded-lg bg-cyan-50 p-2 text-cyan-700">
         {icon ? React.createElement(icon, { size: 14 }) : null}
       </div>
     </div>
@@ -172,7 +172,7 @@ const QuickPageCard = ({ title, subtitle, icon, onClick }) => (
   <button
     type="button"
     onClick={onClick}
-    className="w-full rounded-2xl border border-slate-200 bg-white p-5 text-left transition-all hover:-translate-y-0.5 hover:border-emerald-300 hover:shadow-md"
+    className="ui-soft-panel w-full rounded-2xl p-5 text-left transition-all hover:-translate-y-0.5 hover:border-cyan-300/70"
   >
     <div className="mb-3 inline-flex rounded-lg bg-slate-100 p-2 text-slate-700">
       {icon ? React.createElement(icon, { size: 16 }) : null}

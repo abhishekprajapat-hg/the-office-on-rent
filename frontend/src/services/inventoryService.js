@@ -134,3 +134,11 @@ export const rejectInventoryRequest = async (requestId, rejectionReason) => {
   });
   return res.data || null;
 };
+
+export const createInventoryShareLink = async (inventoryId) => {
+  const res = await api.post(`/inventory/${inventoryId}/share`);
+  return {
+    shareToken: res.data?.shareToken || "",
+    expiresAt: res.data?.expiresAt || null,
+  };
+};

@@ -63,37 +63,37 @@ const terms = [
 ];
 
 const ServiceTermsNotice = () => (
-  <div className="min-h-screen bg-slate-50 text-slate-800">
+  <div className="min-h-screen bg-slate-950 text-slate-100">
     <div className="mx-auto w-full max-w-5xl px-4 py-10 sm:px-6 sm:py-14">
       <Link
         to="/login"
-        className="inline-flex items-center gap-2 rounded-lg border border-slate-300 px-3 py-2 text-xs font-semibold uppercase tracking-[0.16em] text-slate-600 hover:border-cyan-500/60 hover:text-cyan-700"
+        className="inline-flex items-center gap-2 rounded-xl border border-slate-600 bg-slate-900/80 px-3 py-2 text-xs font-semibold uppercase tracking-[0.16em] text-slate-200 hover:border-cyan-400/70 hover:text-cyan-200"
       >
         <ArrowLeft size={14} />
         Back To Login
       </Link>
 
-      <div className="mt-6 rounded-2xl border border-slate-200 bg-white p-6 sm:p-8">
+      <div className="mt-6 rounded-3xl border border-slate-700 bg-slate-900/86 p-6 shadow-[0_26px_65px_-36px_rgba(2,6,23,0.95)] backdrop-blur-xl sm:p-8">
         <div className="flex items-start gap-3">
-          <div className="mt-0.5 rounded-lg bg-cyan-50 p-2 text-cyan-700">
+          <div className="mt-0.5 rounded-lg border border-cyan-300/35 bg-cyan-400/10 p-2 text-cyan-200">
             <FileText size={18} />
           </div>
           <div>
-            <p className="text-[11px] uppercase tracking-[0.22em] text-cyan-700">
+            <p className="text-[11px] uppercase tracking-[0.22em] text-cyan-200">
               Legal
             </p>
-            <h1 className="mt-1 font-display text-3xl text-slate-900">Terms And Conditions</h1>
-            <p className="mt-2 text-sm text-slate-500">Last updated: {LAST_UPDATED}</p>
+            <h1 className="mt-1 font-display text-3xl text-slate-100">Terms And Conditions</h1>
+            <p className="mt-2 text-sm text-slate-400">Last updated: {LAST_UPDATED}</p>
           </div>
         </div>
 
         <div className="mt-7 space-y-5">
           {terms.map((term) => (
-            <section key={term.title} className="rounded-xl border border-slate-200 bg-slate-50 p-4">
-              <h2 className="text-sm font-semibold uppercase tracking-[0.14em] text-slate-800">
+            <section key={term.title} className="rounded-2xl border border-slate-700 bg-slate-950/75 p-4">
+              <h2 className="text-sm font-semibold uppercase tracking-[0.14em] text-slate-100">
                 {term.title}
               </h2>
-              <p className="mt-2 text-sm leading-relaxed text-slate-600">{term.body}</p>
+              <p className="mt-2 text-sm leading-relaxed text-slate-300">{term.body}</p>
             </section>
           ))}
         </div>

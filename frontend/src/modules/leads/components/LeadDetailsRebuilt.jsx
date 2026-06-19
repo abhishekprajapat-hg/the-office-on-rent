@@ -1,9 +1,11 @@
 import React from "react";
 import { motion as Motion } from "framer-motion";
+import { createInventoryShareLink } from "../../../services/inventoryService";
 import {
   ArrowLeft,
   Building2,
   CalendarClock,
+  Check,
   Copy,
   Download,
   Eye,
@@ -21,6 +23,12 @@ import {
   Send,
   Trash2,
 } from "lucide-react";
+import {
+  getTasks as apiGetTasks,
+  createTask as apiCreateTask,
+  updateTask as apiUpdateTask,
+  deleteTask as apiDeleteTask,
+} from "../../../services/taskService";
 
 const approvalLabel = (status) => {
   if (status === "APPROVED") return "Approved";
@@ -404,13 +412,21 @@ const LeadDetailsRebuiltContent = ({
   toObjectIdString,
   WhatsAppIcon,
 }) => {
-  const card = isDark ? "border-slate-700 bg-slate-950/70" : "border-slate-200 bg-white";
-  const softCard = isDark ? "border-slate-700 bg-slate-900/80" : "border-slate-200 bg-slate-50";
-  const input = isDark ? "border-slate-700 bg-slate-950 text-slate-200" : "border-slate-300 bg-white text-slate-700";
+  const card = isDark
+    ? "ui-soft-panel border-slate-700/85 bg-slate-950/70 shadow-[inset_0_1px_0_rgba(148,163,184,0.08)]"
+    : "ui-soft-panel border-slate-200 bg-white shadow-[inset_0_1px_0_rgba(148,163,184,0.2)]";
+  const softCard = isDark
+    ? "ui-soft-panel border-slate-700/90 bg-slate-900/80"
+    : "ui-soft-panel border-slate-200 bg-slate-50/85";
+  const input = isDark
+    ? "border-slate-700 bg-slate-950/90 text-slate-100 placeholder:text-slate-500"
+    : "border-slate-300 bg-white text-slate-700 placeholder:text-slate-400";
   const button = isDark
-    ? "border-slate-600 bg-slate-900 text-slate-200 hover:border-emerald-400/45 hover:text-emerald-200"
-    : "border-slate-300 bg-white text-slate-700 hover:border-emerald-400 hover:text-emerald-700";
-  const primaryBtn = isDark ? "bg-emerald-600 hover:bg-emerald-500" : "bg-slate-900 hover:bg-emerald-600";
+    ? "border-slate-600 bg-slate-900 text-slate-100 hover:border-sky-300/55 hover:bg-slate-800 hover:text-sky-100"
+    : "border-slate-300 bg-white text-slate-700 hover:border-sky-300 hover:bg-sky-50 hover:text-sky-700";
+  const primaryBtn = isDark
+    ? "bg-gradient-to-r from-sky-600 to-emerald-600 hover:from-sky-500 hover:to-emerald-500"
+    : "bg-gradient-to-r from-slate-900 to-sky-700 hover:from-slate-800 hover:to-sky-600";
 
   const isClosedDealFlow =
     ["CLOSED", "REQUESTED"].includes(statusDraft)
@@ -447,6 +463,128 @@ const LeadDetailsRebuiltContent = ({
   const [proposalValidityDays, setProposalValidityDays] = React.useState("7");
   const [proposalSpecialNote, setProposalSpecialNote] = React.useState("");
   const [proposalActionMessage, setProposalActionMessage] = React.useState("");
+  const [shareLinks, setShareLinks] = React.useState({});
+
+  const [leadTasks, setLeadTasks] = React.useState([]);
+  const [loadingTasks, setLoadingTasks] = React.useState(false);
+  const [newTaskTitle, setNewTaskTitle] = React.useState("");
+  const [newTaskDueDate, setNewTaskDueDate] = React.useState("");
+  const [newTaskPriority, setNewTaskPriority] = React.useState("MEDIUM");
+  const [newTaskAssignedTo, setNewTaskAssignedTo] = React.useState("");
+  const [addingTask, setAddingTask] = React.useState(false);
+
+  const fetchLeadTasks = React.useCallback(async () => {
+    if (!selectedLead?._id) return;
+    setLoadingTasks(true);
+    try {
+      const data = await apiGetTasks({ leadId: selectedLead._id });
+      setLeadTasks(data || []);
+    } catch (err) {
+      console.error("Failed to load lead tasks", err);
+    } finally {
+      setLoadingTasks(false);
+    }
+  }, [selectedLead?._id]);
+
+  React.useEffect(() => {
+    fetchLeadTasks();
+  }, [fetchLeadTasks]);
+
+  const handleAddLeadTask = async (e) => {
+    e.preventDefault();
+    if (!newTaskTitle.trim()) return;
+    setAddingTask(true);
+    try {
+      const payload = {
+        title: newTaskTitle.trim(),
+        status: "TODO",
+        priority: newTaskPriority,
+        dueDate: newTaskDueDate || null,
+        assignedTo: newTaskAssignedTo || null,
+        leadId: selectedLead._id
+      };
+      const created = await apiCreateTask(payload);
+      if (created) {
+        setNewTaskTitle("");
+        setNewTaskDueDate("");
+        setNewTaskPriority("MEDIUM");
+        setNewTaskAssignedTo("");
+        fetchLeadTasks();
+      }
+    } catch (err) {
+      console.error("Failed to create lead task", err);
+    } finally {
+      setAddingTask(false);
+    }
+  };
+
+  const handleToggleLeadTaskStatus = async (task) => {
+    const newStatus = task.status === "COMPLETED" ? "TODO" : "COMPLETED";
+    try {
+      setLeadTasks(prev => prev.map(t => t._id === task._id ? { ...t, status: newStatus } : t));
+      await apiUpdateTask(task._id, { status: newStatus });
+      fetchLeadTasks();
+    } catch (err) {
+      console.error("Failed to toggle task status", err);
+      fetchLeadTasks();
+    }
+  };
+
+  const handleDeleteLeadTask = async (taskId) => {
+    if (!window.confirm("Delete this task?")) return;
+    try {
+      setLeadTasks(prev => prev.filter(t => t._id !== taskId));
+      await apiDeleteTask(taskId);
+      fetchLeadTasks();
+    } catch (err) {
+      console.error("Failed to delete task", err);
+      fetchLeadTasks();
+    }
+  };
+
+  React.useEffect(() => {
+    if (!Array.isArray(selectedLeadRelatedInventories) || !selectedLeadRelatedInventories.length) {
+      setShareLinks({});
+      return;
+    }
+
+    let isMounted = true;
+
+    const fetchLinks = async () => {
+      const links = {};
+      const origin = window.location.origin;
+
+      try {
+        await Promise.all(
+          selectedLeadRelatedInventories.map(async (inventory) => {
+            const inventoryId = String(inventory?._id || "").trim();
+            if (!inventoryId) return;
+
+            try {
+              const { shareToken } = await createInventoryShareLink(inventoryId);
+              if (shareToken && isMounted) {
+                links[inventoryId] = `${origin}/shared/inventory/${shareToken}`;
+              }
+            } catch (err) {
+              console.error(`Failed to fetch share link for inventory ${inventoryId}:`, err);
+            }
+          })
+        );
+
+        if (isMounted) {
+          setShareLinks(links);
+        }
+      } catch (err) {
+        console.error("Failed to fetch share links:", err);
+      }
+    };
+
+    fetchLinks();
+
+    return () => {
+      isMounted = false;
+    };
+  }, [selectedLeadRelatedInventories]);
   const [closureUploadMessage, setClosureUploadMessage] = React.useState("");
   const [uploadingClosureDocuments, setUploadingClosureDocuments] = React.useState(false);
   const [proposalSelectedPropertyIds, setProposalSelectedPropertyIds] = React.useState([]);
@@ -930,6 +1068,9 @@ const LeadDetailsRebuiltContent = ({
       lines.push(`Inventory Category: ${toTitleCaseLabel(inventory?.inventoryType) || "-"}`);
       lines.push(`Category: ${String(inventory?.category || "Apartment").trim() || "-"}`);
       lines.push(`Price: ${formatCurrencyInr(inventory?.price)}`);
+      if (shareLinks[property.id]) {
+        lines.push(`Details Link: ${shareLinks[property.id]}`);
+      }
     });
 
     lines.push("");
@@ -956,6 +1097,7 @@ const LeadDetailsRebuiltContent = ({
     selectedLead?.projectInterested,
     selectedPropertyCount,
     selectedProposalProperties,
+    shareLinks,
   ]);
 
   const proposalWhatsAppHref = React.useMemo(() => {
@@ -1056,101 +1198,231 @@ const LeadDetailsRebuiltContent = ({
     const contentWidth = pageWidth - (margin * 2);
     let cursorY = margin;
 
-    const ensureSpace = (requiredHeight = 20) => {
-      if (cursorY + requiredHeight > pageHeight - margin) {
+    const validityDays = String(proposalValidityDays || "7").trim() || "7";
+    const clientName = String(selectedLead?.name || "Client").trim();
+    const now = new Date();
+    const proposalDate = `${now.getDate()}/${now.getMonth() + 1}/${now.getFullYear()}`;
+
+    const formatCurrencyPdf = (value) => {
+      const amount = Number(value);
+      if (!Number.isFinite(amount) || amount <= 0) return "On request";
+      return `Rs. ${amount.toLocaleString("en-IN")}`;
+    };
+
+    // Page 1 Header
+    doc.setFillColor(15, 118, 110); // Teal primary color
+    doc.rect(0, 0, 595, 100, "F");
+
+    doc.setFont("helvetica", "bold");
+    doc.setFontSize(18);
+    doc.setTextColor(255, 255, 255);
+    doc.text("SAMVID REALTY", 36, 45);
+
+    doc.setFont("helvetica", "normal");
+    doc.setFontSize(11);
+    doc.setTextColor(204, 251, 241); // Light teal text
+    doc.text("PROPERTY PROPOSAL SUMMARY", 36, 68);
+
+    // Client & Metadata details
+    doc.setFont("helvetica", "bold");
+    doc.setFontSize(10);
+    doc.setTextColor(100, 116, 139); // slate 500
+    doc.text("PREPARED FOR:", 36, 135);
+    doc.setFont("helvetica", "bold");
+    doc.setFontSize(13);
+    doc.setTextColor(15, 23, 42); // slate 900
+    doc.text(clientName.toUpperCase(), 36, 153);
+
+    doc.setFont("helvetica", "bold");
+    doc.setFontSize(10);
+    doc.setTextColor(100, 116, 139);
+    doc.text("PROPOSAL DATE:", 360, 135);
+    doc.setFont("helvetica", "normal");
+    doc.setFontSize(11);
+    doc.setTextColor(15, 23, 42);
+    doc.text(proposalDate, 360, 153);
+
+    doc.setFont("helvetica", "bold");
+    doc.setFontSize(10);
+    doc.setTextColor(100, 116, 139);
+    doc.text("VALIDITY:", 470, 135);
+    doc.setFont("helvetica", "normal");
+    doc.setFontSize(11);
+    doc.setTextColor(15, 23, 42);
+    doc.text(`${validityDays} Days`, 470, 153);
+
+    // Separator line
+    doc.setDrawColor(226, 232, 240); // slate 200
+    doc.setLineWidth(1);
+    doc.line(36, 175, 559, 175);
+
+    cursorY = 200;
+
+    for (let i = 0; i < selectedProposalProperties.length; i++) {
+      const property = selectedProposalProperties[i];
+      const inventory = property.inventory || {};
+      const hasImages = property.imageUrls.length > 0;
+      const spaceNeeded = hasImages ? 280 : 130;
+
+      // Add a page break if details + photos won't fit on this page
+      if (cursorY + spaceNeeded > pageHeight - margin) {
         doc.addPage();
-        cursorY = margin;
+        // Page header on subsequent pages
+        doc.setFillColor(15, 118, 110);
+        doc.rect(0, 0, 595, 35, "F");
+        doc.setFont("helvetica", "bold");
+        doc.setFontSize(9);
+        doc.setTextColor(255, 255, 255);
+        doc.text(`PROPERTY PROPOSAL FOR ${clientName.toUpperCase()}`, 36, 22);
+        cursorY = 60;
       }
-    };
 
-    const addText = (text, options = {}) => {
-      const {
-        fontSize = 11,
-        bold = false,
-        indent = 0,
-        spacing = 4,
-        color = [15, 23, 42],
-      } = options;
-      const safeText = String(text || "").trim() || "-";
-      const lines = doc.splitTextToSize(safeText, contentWidth - indent);
-      const lineHeight = fontSize + 3;
-      ensureSpace((lines.length * lineHeight) + spacing);
-      doc.setFont("helvetica", bold ? "bold" : "normal");
-      doc.setFontSize(fontSize);
-      doc.setTextColor(color[0], color[1], color[2]);
-      doc.text(lines, margin + indent, cursorY);
-      cursorY += (lines.length * lineHeight) + spacing;
-    };
+      // Property title
+      doc.setFont("helvetica", "bold");
+      doc.setFontSize(12);
+      doc.setTextColor(15, 118, 110); // Teal accent
+      doc.text(`PROPERTY ${i + 1}: ${property.label.toUpperCase()}`, 36, cursorY);
 
-    const lines = String(proposalText || "").split("\n");
-    lines.forEach((line) => {
-      const isTitle = line.trim() === "SAMVID REALTY - PROPERTY PROPOSAL";
-      addText(line, {
-        fontSize: isTitle ? 14 : 11,
-        bold: isTitle,
-        spacing: isTitle ? 8 : 4,
-      });
-    });
+      // Property card boundary box
+      const cardStart = cursorY + 10;
+      doc.setDrawColor(241, 245, 249); // slate 100
+      doc.setFillColor(248, 250, 252); // slate 50
+      doc.rect(36, cardStart, 523, 90, "FD");
 
-    if (proposalImageEntries.length > 0) {
-      addText("", { spacing: 2 });
-      addText("Property Photos", {
-        fontSize: 12,
-        bold: true,
-        spacing: 8,
-      });
+      // Key details column 1 (x=50)
+      doc.setFontSize(9);
+      doc.setFont("helvetica", "bold");
+      doc.setTextColor(100, 116, 139);
+      doc.text("Project:", 50, cardStart + 22);
+      doc.setFont("helvetica", "normal");
+      doc.setTextColor(15, 23, 42);
+      doc.text(String(inventory?.projectName || selectedLead?.projectInterested || "-").trim(), 125, cardStart + 22);
+
+      doc.setFont("helvetica", "bold");
+      doc.setTextColor(100, 116, 139);
+      doc.text("Location:", 50, cardStart + 42);
+      doc.setFont("helvetica", "normal");
+      doc.setTextColor(15, 23, 42);
+      doc.text(String(getInventoryLocationLabel(inventory) || selectedLead?.city || "-").trim(), 125, cardStart + 42);
+
+      doc.setFont("helvetica", "bold");
+      doc.setTextColor(100, 116, 139);
+      doc.text("Type:", 50, cardStart + 62);
+      doc.setFont("helvetica", "normal");
+      doc.setTextColor(15, 23, 42);
+      doc.text(String(inventory?.type || "Sale").trim(), 125, cardStart + 62);
+
+      // Key details column 2 (x=300)
+      doc.setFont("helvetica", "bold");
+      doc.setTextColor(100, 116, 139);
+      doc.text("Category:", 300, cardStart + 22);
+      doc.setFont("helvetica", "normal");
+      doc.setTextColor(15, 23, 42);
+      doc.text(String(inventory?.category || "Apartment").trim(), 370, cardStart + 22);
+
+      doc.setFont("helvetica", "bold");
+      doc.setTextColor(100, 116, 139);
+      doc.text("Asking Price:", 300, cardStart + 42);
+      doc.setFont("helvetica", "bold");
+      doc.setTextColor(16, 185, 129); // Emerald price tag
+      doc.text(formatCurrencyPdf(inventory?.price), 370, cardStart + 42);
+
+      // Clickable detail link inside PDF
+      const shareUrl = shareLinks[property.id];
+      if (shareUrl) {
+        doc.setFont("helvetica", "bold");
+        doc.setTextColor(3, 102, 214); // Blue link color
+        doc.text("CLICK TO VIEW DETAILS ONLINE", 300, cardStart + 62);
+        const linkWidth = doc.getTextWidth("CLICK TO VIEW DETAILS ONLINE");
+        // Draw underline
+        doc.setDrawColor(3, 102, 214);
+        doc.setLineWidth(0.5);
+        doc.line(300, cardStart + 64, 300 + linkWidth, cardStart + 64);
+        // Create actual PDF click link
+        doc.link(300, cardStart + 52, linkWidth, 12, { url: shareUrl });
+      }
+
+      cursorY = cardStart + 105;
+
+      // Draw property images if available
+      const images = property.imageUrls.slice(0, 2); // limit to 2 inline images side-by-side
+      if (images.length > 0) {
+        const imgWidth = 250;
+        const imgHeight = 140;
+
+        for (let imgIdx = 0; imgIdx < images.length; imgIdx++) {
+          const imgUrl = images[imgIdx];
+          const imgX = 36 + (imgIdx * (imgWidth + 23)); // 23pt gutter gap
+
+          try {
+            const source = await fetchPdfImageSource(imgUrl);
+            doc.addImage(
+              source.dataUrl,
+              source.format || "JPEG",
+              imgX,
+              cursorY,
+              imgWidth,
+              imgHeight,
+              undefined,
+              "FAST"
+            );
+          } catch {
+            // Draw placeholder card if load fails
+            doc.setDrawColor(226, 232, 240);
+            doc.setFillColor(248, 250, 252);
+            doc.rect(imgX, cursorY, imgWidth, imgHeight, "FD");
+            doc.setFont("helvetica", "normal");
+            doc.setFontSize(8);
+            doc.setTextColor(148, 163, 184);
+            doc.text("Photo preview unavailable", imgX + 70, cursorY + 75);
+          }
+        }
+        cursorY += imgHeight + 25;
+      } else {
+        cursorY += 15;
+      }
     }
 
-    const addProposalImage = async (imageEntry, index) => {
-      const imageLabel = String(imageEntry?.propertyLabel || `Property ${index + 1}`).trim();
-      const imageNumber = Number(imageEntry?.imageIndex || index + 1);
-      addText(`${imageLabel} - Image ${imageNumber}`, {
-        fontSize: 10,
-        bold: true,
-        spacing: 4,
-      });
+    // Special Note and Footer
+    const footerNeededSpace = proposalSpecialNote ? 100 : 50;
+    if (cursorY + footerNeededSpace > pageHeight - margin) {
+      doc.addPage();
+      doc.setFillColor(15, 118, 110);
+      doc.rect(0, 0, 595, 35, "F");
+      cursorY = 60;
+    }
 
-      try {
-        const source = await fetchPdfImageSource(imageEntry?.url);
-        const imageProps = doc.getImageProperties(source.dataUrl);
-        const rawWidth = Number(imageProps?.width) || 1;
-        const rawHeight = Number(imageProps?.height) || 1;
-        const safeRatio = rawHeight / rawWidth;
-        const maxRenderWidth = contentWidth;
-        const maxRenderHeight = Math.max(160, pageHeight - (margin * 2) - 90);
-        let renderWidth = maxRenderWidth;
-        let renderHeight = renderWidth * safeRatio;
+    if (proposalSpecialNote) {
+      doc.setFont("helvetica", "bold");
+      doc.setFontSize(10);
+      doc.setTextColor(15, 23, 42);
+      doc.text("SPECIAL NOTE:", 36, cursorY);
 
-        if (renderHeight > maxRenderHeight) {
-          renderHeight = maxRenderHeight;
-          renderWidth = renderHeight / safeRatio;
-        }
+      doc.setFont("helvetica", "normal");
+      doc.setFontSize(9);
+      doc.setTextColor(71, 85, 105);
+      const noteLines = doc.splitTextToSize(proposalSpecialNote, 523);
+      doc.text(noteLines, 36, cursorY + 15);
+      cursorY += (noteLines.length * 12) + 25;
+    }
 
-        ensureSpace(renderHeight + 14);
-        doc.addImage(
-          source.dataUrl,
-          source.format || "JPEG",
-          margin,
-          cursorY,
-          renderWidth,
-          renderHeight,
-          undefined,
-          "FAST",
-        );
-        cursorY += renderHeight + 10;
-      } catch {
-        addText("Image unavailable in PDF", {
-          fontSize: 10,
-          color: [148, 163, 184],
-          spacing: 10,
-        });
-      }
-    };
+    doc.setFont("helvetica", "normal");
+    doc.setFontSize(10);
+    doc.setTextColor(71, 85, 105);
+    doc.text("Regards,", 36, cursorY);
+    doc.setFont("helvetica", "bold");
+    doc.setTextColor(15, 118, 110);
+    doc.text("Samvid Realty", 36, cursorY + 15);
 
-    for (let index = 0; index < proposalImageEntries.length; index += 1) {
-      // Keep image rendering sequential for predictable PDF layout and memory usage.
-      // eslint-disable-next-line no-await-in-loop
-      await addProposalImage(proposalImageEntries[index], index);
+    // Apply Page Numbers on all pages
+    const totalPages = doc.internal.getNumberOfPages();
+    for (let p = 1; p <= totalPages; p++) {
+      doc.setPage(p);
+      doc.setFont("helvetica", "normal");
+      doc.setFontSize(8);
+      doc.setTextColor(148, 163, 184);
+      doc.text(`Page ${p} of ${totalPages}`, 500, 815);
+      doc.text("Generated by Samvid OS", 36, 815);
     }
 
     return doc.output("blob");
@@ -1438,35 +1710,43 @@ const LeadDetailsRebuiltContent = ({
       initial={{ opacity: 0, y: 16 }}
       animate={{ opacity: 1, y: 0 }}
       exit={{ opacity: 0, y: 16 }}
-      className={`relative z-10 w-full overflow-x-hidden rounded-xl border shadow-2xl sm:rounded-3xl ${
-        isDark ? "border-slate-700 bg-slate-900" : "border-slate-200 bg-white"
+      className={`ui-soft-panel relative z-10 w-full overflow-x-hidden rounded-[26px] shadow-[0_28px_90px_-56px_rgba(15,23,42,0.75)] sm:rounded-[30px] ${
+        isDark ? "border-slate-700 bg-slate-900/95" : "border-slate-200 bg-white/95"
       }`}
     >
+      <div className="pointer-events-none absolute inset-0 overflow-hidden rounded-[inherit]">
+        <div className={`absolute -left-10 top-0 h-36 w-36 rounded-full blur-3xl ${
+          isDark ? "bg-sky-500/20" : "bg-sky-300/45"
+        }`} />
+        <div className={`absolute right-0 top-6 h-40 w-40 rounded-full blur-3xl ${
+          isDark ? "bg-emerald-500/15" : "bg-emerald-300/35"
+        }`} />
+      </div>
       <div
-        className={`border-b px-2.5 py-2.5 sm:px-6 sm:py-5 ${
-          isDark ? "border-slate-700 bg-slate-900/95" : "border-slate-200 bg-slate-50/95"
+        className={`ui-hero-card relative border-b px-3 py-3 sm:px-6 sm:py-5 ${
+          isDark ? "border-slate-700 bg-slate-900/90" : "border-slate-200 bg-slate-50/95"
         }`}
       >
         <div className="flex flex-wrap items-start justify-between gap-2">
           <div className="min-w-0">
-            <p className={`text-[10px] font-semibold uppercase tracking-[0.16em] ${
-              isDark ? "text-emerald-200" : "text-emerald-700"
+            <p className={`text-[10px] font-semibold uppercase tracking-[0.18em] ${
+              isDark ? "text-sky-200" : "text-sky-700"
             }`}>
               Lead Profile
             </p>
-            <h2 className={`truncate text-xl font-bold sm:text-2xl ${isDark ? "text-slate-100" : "text-slate-900"}`}>
+            <h2 className={`truncate text-2xl font-bold tracking-tight sm:text-3xl ${isDark ? "text-slate-100" : "text-slate-900"}`}>
               {String(nameDraft || "").trim() || selectedLead?.name || "Lead"}
             </h2>
-            <p className={`mt-1 truncate text-[11px] sm:text-xs ${isDark ? "text-slate-400" : "text-slate-500"}`}>
+            <p className={`mt-1 truncate text-xs sm:text-sm ${isDark ? "text-slate-300" : "text-slate-600"}`}>
               {String(projectInterestedDraft || "").trim() || selectedLead?.projectInterested || "Project not tagged yet"}
             </p>
-            <div className="mt-2 flex flex-wrap gap-1">
-              <span className={`rounded-full border px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-[0.1em] sm:px-2 sm:text-[10px] ${
-                isDark ? "border-cyan-400/45 bg-cyan-500/15 text-cyan-100" : "border-cyan-300 bg-cyan-50 text-cyan-700"
+            <div className="mt-2 flex flex-wrap gap-1.5">
+              <span className={`rounded-full border px-2 py-1 text-[9px] font-bold uppercase tracking-[0.12em] sm:px-2.5 sm:text-[10px] ${
+                isDark ? "border-sky-300/45 bg-sky-500/15 text-sky-100" : "border-sky-300 bg-sky-50 text-sky-700"
               }`}>
                 {statusLabel(statusDraft || selectedLead?.status || "NEW")}
               </span>
-              <span className={`rounded-full border px-1.5 py-0.5 text-[9px] font-semibold sm:px-2 sm:text-[10px] ${
+              <span className={`rounded-full border px-2 py-1 text-[9px] font-semibold sm:px-2.5 sm:text-[10px] ${
                 isDark ? "border-slate-700 bg-slate-800 text-slate-300" : "border-slate-300 bg-white text-slate-600"
               }`}>
                 ID: {String(selectedLead?._id || "").slice(-6).toUpperCase()}
@@ -1476,33 +1756,33 @@ const LeadDetailsRebuiltContent = ({
           <button
             type="button"
             onClick={onClose}
-            className={`inline-flex h-8 items-center gap-1 rounded-lg border px-2.5 text-[11px] font-semibold uppercase tracking-[0.08em] sm:h-9 sm:px-3 sm:text-xs sm:tracking-[0.12em] ${button}`}
+            className={`inline-flex h-9 items-center gap-1 rounded-xl border px-3 text-[11px] font-semibold uppercase tracking-[0.1em] sm:px-3.5 sm:text-xs sm:tracking-[0.12em] ${button}`}
           >
             <ArrowLeft size={12} />
             Back
           </button>
         </div>
 
-        <div className="mt-3 grid grid-cols-2 gap-1.5 xl:grid-cols-4">
-          <div className={`rounded-lg border px-2 py-1.5 sm:rounded-xl sm:px-3 sm:py-2 ${card}`}>
+        <div className="mt-4 grid grid-cols-2 gap-2 xl:grid-cols-4">
+          <div className={`rounded-2xl border px-2.5 py-2 sm:px-3 sm:py-2.5 ${card}`}>
             <p className={`text-[9px] uppercase tracking-[0.1em] sm:text-[10px] sm:tracking-[0.12em] ${isDark ? "text-slate-400" : "text-slate-500"}`}>Assigned</p>
             <p className={`mt-0.5 truncate text-[11px] font-semibold sm:mt-1 sm:text-xs ${isDark ? "text-slate-100" : "text-slate-800"}`}>
               {selectedLead?.assignedTo?.name || "Unassigned"}
             </p>
           </div>
-          <div className={`rounded-lg border px-2 py-1.5 sm:rounded-xl sm:px-3 sm:py-2 ${card}`}>
+          <div className={`rounded-2xl border px-2.5 py-2 sm:px-3 sm:py-2.5 ${card}`}>
             <p className={`text-[9px] uppercase tracking-[0.1em] sm:text-[10px] sm:tracking-[0.12em] ${isDark ? "text-slate-400" : "text-slate-500"}`}>Follow-up</p>
             <p className={`mt-0.5 truncate text-[11px] font-semibold sm:mt-1 sm:text-xs ${isDark ? "text-slate-100" : "text-slate-800"}`}>
               {formatDate(followUpDraft || selectedLead?.nextFollowUp)}
             </p>
           </div>
-          <div className={`rounded-lg border px-2 py-1.5 sm:rounded-xl sm:px-3 sm:py-2 ${card}`}>
+          <div className={`rounded-2xl border px-2.5 py-2 sm:px-3 sm:py-2.5 ${card}`}>
             <p className={`text-[9px] uppercase tracking-[0.1em] sm:text-[10px] sm:tracking-[0.12em] ${isDark ? "text-slate-400" : "text-slate-500"}`}>Approval</p>
             <p className={`mt-0.5 truncate text-[11px] font-semibold sm:mt-1 sm:text-xs ${isDark ? "text-slate-100" : "text-slate-800"}`}>
               {approvalLabel(currentApprovalStatus)}
             </p>
           </div>
-          <div className={`rounded-lg border px-2 py-1.5 sm:rounded-xl sm:px-3 sm:py-2 ${card}`}>
+          <div className={`rounded-2xl border px-2.5 py-2 sm:px-3 sm:py-2.5 ${card}`}>
             <p className={`text-[9px] uppercase tracking-[0.1em] sm:text-[10px] sm:tracking-[0.12em] ${isDark ? "text-slate-400" : "text-slate-500"}`}>Primary Property</p>
             <p className={`mt-0.5 truncate text-[11px] font-semibold sm:mt-1 sm:text-xs ${isDark ? "text-slate-100" : "text-slate-800"}`}>
               {activePropertyLabel}
@@ -1511,10 +1791,10 @@ const LeadDetailsRebuiltContent = ({
         </div>
       </div>
 
-      <div className="grid grid-cols-1 gap-3 p-2 sm:gap-4 sm:p-6 xl:grid-cols-12">
+      <div className="relative grid grid-cols-1 gap-3 p-2.5 sm:gap-4 sm:p-6 xl:grid-cols-12">
         <div className="space-y-4 xl:col-span-5">
           <section
-            className={`rounded-2xl border p-3 ${card}`}
+            className={`rounded-3xl border p-4 ${card}`}
             style={{ contentVisibility: "auto", containIntrinsicSize: "320px" }}
           >
             <div className={`text-xs font-bold uppercase tracking-widest ${isDark ? "text-slate-400" : "text-slate-500"}`}>Contact</div>
@@ -1605,7 +1885,7 @@ const LeadDetailsRebuiltContent = ({
             </div>
           </section>
 
-          <section className={`rounded-2xl border p-3 ${card}`}>
+          <section className={`rounded-3xl border p-4 ${card}`}>
             <div className={`text-xs font-bold uppercase tracking-widest ${isDark ? "text-slate-400" : "text-slate-500"}`}>
               Lead Requirements
             </div>
@@ -1810,7 +2090,7 @@ const LeadDetailsRebuiltContent = ({
             ) : null}
           </section>
 
-          <section className={`rounded-2xl border p-3 ${card}`}>
+          <section className={`rounded-3xl border p-4 ${card}`}>
             <div className="flex items-center justify-between">
               <div className={`text-xs font-bold uppercase tracking-widest ${isDark ? "text-slate-400" : "text-slate-500"}`}>Properties</div>
               <span className={`text-[11px] ${isDark ? "text-slate-400" : "text-slate-500"}`}>{relatedInventoryRows.length} linked</span>
@@ -1970,7 +2250,7 @@ const LeadDetailsRebuiltContent = ({
             ) : null}
           </section>
 
-          <section className={`rounded-2xl border p-3 ${card}`}>
+          <section className={`rounded-3xl border p-4 ${card}`}>
             <div className="flex items-center justify-between gap-2">
               <div className={`inline-flex items-center gap-1 text-xs font-bold uppercase tracking-widest ${isDark ? "text-slate-400" : "text-slate-500"}`}>
                 <FileText size={12} />
@@ -2227,7 +2507,7 @@ const LeadDetailsRebuiltContent = ({
           </section>
 
           {canAssignLead ? (
-            <section className={`rounded-2xl border p-3 ${card}`}>
+            <section className={`rounded-3xl border p-4 ${card}`}>
               <div className={`text-xs font-bold uppercase tracking-widest ${isDark ? "text-slate-400" : "text-slate-500"}`}>Assignment</div>
               <select value={executiveDraft} onChange={(event) => setExecutiveDraft(event.target.value)} className={`mt-2 h-10 w-full rounded-xl border px-3 text-sm ${input}`}>
                 <option value="">Select executive</option>
@@ -2241,7 +2521,7 @@ const LeadDetailsRebuiltContent = ({
         </div>
 
         <div className="space-y-4 xl:col-span-7">
-          <section className={`rounded-2xl border p-3 ${card}`}>
+          <section className={`rounded-3xl border p-4 ${card}`}>
             <div className={`text-xs font-bold uppercase tracking-widest ${isDark ? "text-slate-400" : "text-slate-500"}`}>Lead Controls</div>
             <div className="mt-2">
               <label className={`inline-flex items-center gap-1 text-[10px] uppercase tracking-wider font-bold ${isDark ? "text-slate-400" : "text-slate-500"}`}>
@@ -2499,8 +2779,156 @@ const LeadDetailsRebuiltContent = ({
             </button>
           </section>
 
+          {/* Lead Tasks integration */}
+          <section className={`rounded-3xl border p-4 ${card}`}>
+            <div className="flex items-center justify-between">
+              <div className={`text-xs font-bold uppercase tracking-widest ${isDark ? "text-slate-400" : "text-slate-500"}`}>Lead Tasks</div>
+              <span className={`text-[11px] ${isDark ? "text-slate-400" : "text-slate-500"}`}>{leadTasks.filter(t => t.status !== "COMPLETED").length} pending</span>
+            </div>
+
+            {/* Quick add task form */}
+            <form onSubmit={handleAddLeadTask} className="mt-3 space-y-2">
+              <div className="flex gap-2">
+                <input
+                  type="text"
+                  placeholder="Add a new task for this lead..."
+                  value={newTaskTitle}
+                  onChange={(e) => setNewTaskTitle(e.target.value)}
+                  className={`h-9 flex-1 rounded-lg border px-3 text-xs ${input}`}
+                />
+                <button
+                  type="submit"
+                  disabled={addingTask || !newTaskTitle.trim()}
+                  className={`inline-flex h-9 shrink-0 items-center justify-center rounded-lg px-3 text-xs font-semibold text-white disabled:opacity-55 ${primaryBtn}`}
+                >
+                  {addingTask ? "Adding..." : "Add"}
+                </button>
+              </div>
+              
+              <div className="grid grid-cols-3 gap-2">
+                <select
+                  value={newTaskPriority}
+                  onChange={(e) => setNewTaskPriority(e.target.value)}
+                  className={`h-8 rounded-lg border px-2 text-[10px] font-semibold ${input}`}
+                >
+                  <option value="LOW">Low Priority</option>
+                  <option value="MEDIUM">Med Priority</option>
+                  <option value="HIGH">High Priority</option>
+                </select>
+
+                <select
+                  value={newTaskAssignedTo}
+                  onChange={(e) => setNewTaskAssignedTo(e.target.value)}
+                  className={`h-8 rounded-lg border px-2 text-[10px] font-semibold ${input}`}
+                >
+                  <option value="">Unassigned</option>
+                  {executives.map(u => (
+                    <option key={u._id} value={u._id}>{u.name}</option>
+                  ))}
+                </select>
+
+                <input
+                  type="date"
+                  value={newTaskDueDate}
+                  onChange={(e) => setNewTaskDueDate(e.target.value)}
+                  className={`h-8 rounded-lg border px-2 text-[10px] font-semibold ${input}`}
+                />
+              </div>
+            </form>
+
+            {/* Tasks list */}
+            <div className="mt-3 space-y-2 max-h-60 overflow-y-auto custom-scrollbar">
+              {loadingTasks ? (
+                <div className={`text-xs py-4 text-center ${isDark ? "text-slate-400" : "text-slate-500"}`}>
+                  Loading tasks...
+                </div>
+              ) : leadTasks.length === 0 ? (
+                <div className={`text-xs py-4 text-center ${isDark ? "text-slate-400" : "text-slate-500"}`}>
+                  No tasks linked to this lead.
+                </div>
+              ) : (
+                leadTasks.map((task) => {
+                  const isCompleted = task.status === "COMPLETED";
+                  const expired = !isCompleted && task.dueDate && new Date(task.dueDate) < new Date().setHours(0,0,0,0);
+                  
+                  return (
+                    <div 
+                      key={task._id} 
+                      className={`flex items-start justify-between gap-2.5 rounded-lg border p-2.5 text-xs transition-all ${
+                        isCompleted
+                          ? isDark ? "border-slate-800 bg-slate-950/35 opacity-60" : "border-slate-100 bg-slate-50/60 opacity-60"
+                          : isDark ? "border-slate-700 bg-slate-900/60 hover:border-slate-600" : "border-slate-200 bg-white hover:border-slate-300"
+                      }`}
+                    >
+                      <div className="flex items-start gap-2.5 min-w-0">
+                        <button
+                          type="button"
+                          onClick={() => handleToggleLeadTaskStatus(task)}
+                          className={`mt-0.5 flex h-4 w-4 shrink-0 items-center justify-center rounded border transition-colors ${
+                            isCompleted
+                              ? "border-emerald-500 bg-emerald-500 text-white"
+                              : isDark ? "border-slate-700 hover:border-sky-400" : "border-slate-350 hover:border-sky-500"
+                          }`}
+                        >
+                          {isCompleted && <Check size={11} strokeWidth={3} />}
+                        </button>
+
+                        <div className="min-w-0">
+                          <p className={`font-semibold leading-normal break-words ${
+                            isCompleted ? "line-through text-slate-500" : isDark ? "text-slate-100" : "text-slate-800"
+                          }`}>
+                            {task.title}
+                          </p>
+                          <div className="mt-1 flex flex-wrap items-center gap-1.5 text-[9px] font-semibold">
+                            <span className={`px-1.5 py-0.5 rounded border uppercase tracking-wider ${
+                              task.priority === "HIGH"
+                                ? "bg-rose-500/10 text-rose-400 border-rose-500/20"
+                                : task.priority === "MEDIUM"
+                                  ? "bg-amber-500/10 text-amber-400 border-amber-500/20"
+                                  : "bg-blue-500/10 text-blue-400 border-blue-500/20"
+                            }`}>
+                              {task.priority}
+                            </span>
+
+                            {task.assignedTo && (
+                              <span className={`px-1.5 py-0.5 rounded border ${
+                                isDark ? "bg-slate-800 text-slate-300 border-slate-700" : "bg-slate-100 text-slate-600 border-slate-200"
+                              }`}>
+                                Assigned: {task.assignedTo.name}
+                              </span>
+                            )}
+
+                            {task.dueDate && (
+                              <span className={`px-1.5 py-0.5 rounded border flex items-center gap-0.5 ${
+                                expired 
+                                  ? "bg-rose-500/15 text-rose-500 border-rose-500/20 font-bold" 
+                                  : isDark ? "bg-slate-800 text-slate-300 border-slate-700" : "bg-slate-100 text-slate-600 border-slate-200"
+                              }`}>
+                                <Calendar size={8} />
+                                {new Date(task.dueDate).toLocaleDateString("en-IN", { day: "numeric", month: "short" })}
+                                {expired && " (Overdue)"}
+                              </span>
+                            )}
+                          </div>
+                        </div>
+                      </div>
+
+                      <button
+                        type="button"
+                        onClick={() => handleDeleteLeadTask(task._id)}
+                        className={`h-6 w-6 rounded border flex items-center justify-center shrink-0 border-transparent text-rose-550 hover:bg-rose-500/10`}
+                      >
+                        <Trash2 size={11} />
+                      </button>
+                    </div>
+                  );
+                })
+              )}
+            </div>
+          </section>
+
           <section
-            className={`rounded-2xl border p-3 ${card}`}
+            className={`rounded-3xl border p-4 ${card}`}
             style={{ contentVisibility: "auto", containIntrinsicSize: "280px" }}
           >
             <div className={`mb-2 flex items-center gap-1 text-xs font-bold uppercase tracking-widest ${isDark ? "text-slate-400" : "text-slate-500"}`}>
@@ -2544,3 +2972,4 @@ export const LeadDetailsRebuilt = (props) => {
   if (!props.selectedLead) return null;
   return <LeadDetailsRebuiltContent {...props} />;
 };
+

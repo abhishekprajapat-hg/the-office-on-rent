@@ -85,11 +85,13 @@ app.get("/api/metrics", async (req, res) => {
   return metricsHandler(req, res);
 });
 
+app.use("/api/public", require("./routes/publicInventory.routes"));
 app.use("/api", apiLimiter);
 app.use("/api/client", require("./routes/client.routes"));
 app.use("/api/leads", require("./routes/lead.routes"));
 app.use("/api/auth", require("./routes/auth.routes"));
 app.use("/api/users", require("./routes/user.routes"));
+app.use("/api/attendance", require("./routes/attendance.routes"));
 app.use("/api/targets", require("./routes/target.routes"));
 app.use("/api/inventory", require("./routes/inventory.routes"));
 app.use("/api/inventory-request", require("./routes/inventoryRequest.routes"));
@@ -97,6 +99,7 @@ app.use("/api/webhook", require("./routes/webhook.routes"));
 app.use("/api/chat", require("./routes/chat.routes"));
 app.use("/api/samvid", require("./routes/samvid.routes"));
 app.use("/api/saas", require("./routes/saas.routes"));
+app.use("/api/tasks", require("./routes/task.routes"));
 
 app.use((req, res) => {
   res.status(404).json({

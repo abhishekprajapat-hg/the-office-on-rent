@@ -65,7 +65,7 @@ const LEAD_POPULATE_FIELDS = [
   { path: "assignedManager", select: "name role" },
   { path: "assignedExecutive", select: "name role" },
   { path: "assignedFieldExecutive", select: "name role" },
-  { path: "createdBy", select: "name role" },
+  { path: "createdBy", select: "name role partnerCode brokerageConfig" },
   { path: "dealPayment.approvalRequestedBy", select: "name role" },
   { path: "dealPayment.approvalReviewedBy", select: "name role" },
   { path: "closureDocuments.uploadedBy", select: "name role" },
@@ -84,7 +84,7 @@ const LEAD_PAYMENT_REQUEST_POPULATE_FIELDS = [
   { path: "assignedManager", select: "name role phone email" },
   { path: "assignedExecutive", select: "name role phone email" },
   { path: "assignedFieldExecutive", select: "name role phone email" },
-  { path: "createdBy", select: "name role phone email" },
+  { path: "createdBy", select: "name role phone email partnerCode brokerageConfig" },
   { path: "dealPayment.approvalRequestedBy", select: "name role phone email" },
   { path: "dealPayment.approvalReviewedBy", select: "name role phone email" },
   { path: "closureDocuments.uploadedBy", select: "name role phone email" },
@@ -3390,9 +3390,26 @@ exports.rejectLeadStatusRequest = async (req, res) => {
     request.reviewNote = String(req.body?.reviewNote || "").trim().slice(0, 500);
     await request.save();
 
+    const proposedStatusLabel = String(request.proposedStatus || "-").trim();
+    const reviewNote = String(request.reviewNote || "").trim();
+    const diaryParts = [
+      `Status request rejected by admin.`,
+      `Requested status: ${proposedStatusLabel}.`,
+      `Reason: ${rejectionReason}.`,
+    ];
+    if (reviewNote) {
+      diaryParts.push(`Review note: ${reviewNote}.`);
+    }
+    const diaryNote = diaryParts.join(" ").slice(0, MAX_LEAD_DIARY_NOTE_LENGTH);
+    await LeadDiary.create({
+      lead: request.lead,
+      note: diaryNote,
+      createdBy: req.user._id,
+    });
+
     await LeadActivity.create({
       lead: request.lead,
-      action: `Status request rejected: ${request.proposedStatus}`,
+      action: `Status request rejected: ${request.proposedStatus} | Reason: ${rejectionReason}`.slice(0, 500),
       performedBy: req.user._id,
     });
 

@@ -1913,7 +1913,7 @@ const AssetVault = () => {
   };
 
   return (
-    <div className="w-full h-full px-4 sm:px-6 lg:px-10 pt-20 md:pt-24 pb-8 flex flex-col gap-8 overflow-y-auto custom-scrollbar relative bg-slate-50/50">
+    <div className="ui-page-shell custom-scrollbar relative flex flex-col gap-8 bg-slate-50/50">
       <AssetVaultToolbar
         modeType={modeType}
         onModeChange={setModeType}
@@ -1953,13 +1953,13 @@ const AssetVault = () => {
       />
 
       {error && (
-        <div className="rounded-xl border border-red-200 bg-red-50 text-red-700 p-3 text-sm flex items-center gap-2">
+        <div className="ui-soft-panel rounded-xl border border-red-200 bg-red-50 text-red-700 p-3 text-sm flex items-center gap-2">
           <AlertCircle size={16} /> {error}
         </div>
       )}
 
       {success && (
-        <div className="rounded-xl border border-emerald-200 bg-emerald-50 text-emerald-700 p-3 text-sm">
+        <div className="ui-soft-panel rounded-xl border border-cyan-200 bg-cyan-50 text-cyan-700 p-3 text-sm">
           {success}
         </div>
       )}

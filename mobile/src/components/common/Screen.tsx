@@ -1,7 +1,7 @@
 import React from "react";
 import { ActivityIndicator, Platform, SafeAreaView, StyleSheet, Text, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import { colors, radii, spacing, typography } from "../../theme/tokens";
+import { clay, colors, radii, spacing, typography } from "../../theme/tokens";
 
 export const Screen = ({ title, subtitle, loading, error, children }: {
   title: string;
@@ -38,12 +38,18 @@ const styles = StyleSheet.create({
     backgroundColor: colors.bg,
   },
   header: {
+    marginHorizontal: spacing.md,
+    marginTop: 10,
+    marginBottom: spacing.sm,
     paddingHorizontal: spacing.lg,
-    paddingTop: 12,
-    paddingBottom: spacing.sm,
-    backgroundColor: colors.surface,
+    paddingTop: spacing.md,
+    paddingBottom: spacing.md,
+    borderRadius: radii.xl,
+    backgroundColor: "rgba(255, 255, 255, 0.88)",
     borderBottomWidth: 1,
     borderBottomColor: colors.border,
+    borderWidth: 1,
+    ...clay.shadow,
   },
   title: {
     fontSize: typography.title,
@@ -60,11 +66,12 @@ const styles = StyleSheet.create({
   error: {
     margin: 12,
     padding: 10,
-    borderRadius: radii.sm,
+    borderRadius: radii.md,
     borderWidth: 1,
     borderColor: colors.errorBorder,
     backgroundColor: colors.errorBg,
     color: colors.error,
+    ...clay.shadowSmall,
   },
   body: {
     flex: 1,
