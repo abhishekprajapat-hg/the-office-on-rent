@@ -24,7 +24,7 @@ const TopNavigation = ({
   return (
     <nav
       aria-label="Primary navigation"
-      className="shrink-0 border-b border-slate-200 bg-white/95 px-3 py-2 shadow-sm backdrop-blur-xl dark:border-slate-800 dark:bg-slate-950/95 sm:px-4 lg:px-6"
+      className="shrink-0 border-b border-slate-200 bg-white/95 px-3 py-2 shadow-sm backdrop-blur-xl dark:border-slate-800 dark:bg-slate-950/95 sm:px-4 md:hidden"
     >
       <div className="flex items-center justify-between gap-2">
         <div className="flex min-w-0 items-center gap-1 overflow-x-auto scrollbar-hide">

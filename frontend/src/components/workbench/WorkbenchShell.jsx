@@ -2,6 +2,7 @@ import { useMemo, useState } from "react";
 import { motion as Motion } from "framer-motion";
 import { useChatNotifications } from "../../context/useChatNotifications";
 import { cn } from "../ui";
+import ActivityBar from "./ActivityBar";
 import AppTopCommandBar from "./AppTopCommandBar";
 import PrimarySidebar from "./PrimarySidebar";
 import TopNavigation from "./TopNavigation";
@@ -18,6 +19,7 @@ const WorkbenchShell = ({
   isChatPage = false,
   shouldLockDocumentScroll = true,
 }) => {
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const { adminRequestUnread } = useChatNotifications();
   const userForNav = useMemo(() => user || {}, [user]);
@@ -31,12 +33,23 @@ const WorkbenchShell = ({
         shouldLockDocumentScroll ? "h-dvh overflow-hidden" : "min-h-screen",
       )}
     >
+      <ActivityBar
+        userRole={userRole}
+        user={userForNav}
+        theme={theme}
+        onToggleTheme={onToggleTheme}
+        onLogout={onLogout}
+        unreadAlerts={adminRequestUnread}
+        onMobileMenuOpen={() => setMobileMenuOpen(true)}
+      />
       <PrimarySidebar
         userRole={userRole}
         user={userForNav}
         theme={theme}
         onToggleTheme={onToggleTheme}
         onLogout={onLogout}
+        collapsed={sidebarCollapsed}
+        onToggleCollapsed={() => setSidebarCollapsed((prev) => !prev)}
         mobileOpen={mobileMenuOpen}
         onMobileClose={() => setMobileMenuOpen(false)}
       />
