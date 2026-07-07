@@ -2304,9 +2304,9 @@ exports.removeRelatedPropertyFromLead = async (req, res) => {
 
 exports.getLeadPaymentRequests = async (req, res) => {
   try {
-    if (req.user.role !== USER_ROLES.ADMIN) {
+    if (![USER_ROLES.ADMIN, USER_ROLES.MANAGER].includes(req.user.role)) {
       return res.status(403).json({
-        message: "Only admin can view payment requests",
+        message: "Only admin users can view payment requests",
       });
     }
 
@@ -2627,7 +2627,7 @@ exports.updateLeadStatus = async (req, res) => {
     }
 
     const dealPaymentPayload = parsedDealPayment.value || {};
-    const isAdminUser = req.user.role === USER_ROLES.ADMIN;
+    const isAdminUser = [USER_ROLES.ADMIN, USER_ROLES.MANAGER].includes(req.user.role);
     const isExecutiveUser = EXECUTIVE_ROLES.includes(req.user.role);
     const isNonAdminCloseIntent =
       !isAdminUser && requestedStatus === CLOSED_STATUS;

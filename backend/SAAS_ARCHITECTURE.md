@@ -1,71 +1,31 @@
-# Multi-Tenant SaaS Foundation
+# Single-Client Architecture
 
-This backend now supports:
+This backend is configured for one dedicated client installation.
 
-- Platform-level `SUPER_ADMIN`
-- Tenant-level `ADMIN` and existing company roles
-- Company tenant records with subdomain/custom-domain mapping
-- Subscription plans + tenant subscriptions
-- Super admin controls for company onboarding, plan management, subscriptions, usage, and global analytics
+## Runtime Model
 
-## Roles
+- One active client company record is used as the internal ownership boundary.
+- Users, leads, inventory, tasks, attendance, chat, and settings remain scoped by `companyId`.
+- Public routes, login, and app navigation do not use tenant slugs, subdomains, or custom-domain tenant matching.
+- Platform-level company management, plan management, subscriptions, and tenant analytics are not exposed.
 
-- `SUPER_ADMIN`: global control across all companies
-- `ADMIN`: company/tenant admin (single company scope)
-- Existing hierarchy roles remain unchanged
+## Bootstrap
 
-## Tenant Routing
-
-Tenant context is resolved from request host:
-
-- Subdomain (`company1.crmplatform.com`) using `Company.subdomain`
-- Custom domain using `Company.customDomain`
-
-Environment:
-
-- `SAAS_ROOT_DOMAIN=crmplatform.com`
-- `SAAS_RESERVED_SUBDOMAINS=www,api,app,admin`
-- `SAAS_REQUIRE_TENANT_HOST=false` (set `true` to enforce host-tenant match for tenant users)
-
-## New Models
-
-- `Company`
-- `SubscriptionPlan`
-- `TenantSubscription`
-
-## New APIs
-
-Base route: `/api/saas` (also available under `/api/client/saas`)
-
-Tenant admin:
-
-- `GET /tenant/settings`
-- `PATCH /tenant/settings`
-
-Super admin:
-
-- `GET /tenant/resolve`
-- `GET /companies`
-- `POST /companies`
-- `PATCH /companies/:companyId`
-- `GET /plans`
-- `POST /plans`
-- `PATCH /plans/:planId`
-- `POST /subscriptions/assign`
-- `GET /usage/:companyId`
-- `GET /analytics/global`
-
-## Bootstrap / Migration
-
-Create platform super admin:
+Create the client admin and company:
 
 ```bash
-npm run seed:super-admin
+npm run seed:admin
 ```
 
-Backfill company tenant records from existing `User.companyId`:
+The seed reads these values from `.env`:
 
-```bash
-npm run seed:companies:backfill
-```
+- `CLIENT_COMPANY_NAME`
+- `CLIENT_COMPANY_SLUG`
+- `ADMIN_EMAIL`
+- `ADMIN_PASSWORD`
+- `ADMIN_NAME`
+- `ADMIN_PHONE`
 
+## Compatibility
+
+The `/api/client/saas/tenant/settings` and `/api/client/saas/tenant/meta` endpoints are retained for existing admin settings and Meta Ads screens. In this build, those routes refer to the single client company.

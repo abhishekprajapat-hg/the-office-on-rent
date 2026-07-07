@@ -525,19 +525,7 @@ const MasterSchedule = () => {
 
   return (
 	    <div className={`ui-page-shell custom-scrollbar overflow-x-hidden ${isDark ? "bg-slate-950/35" : "bg-white/30"}`}>
-      <div className="ui-hero-card mb-6 flex flex-col gap-4 md:flex-row md:items-end md:justify-between">
-        <div>
-          <h1 className={`text-3xl font-bold ${isDark ? "text-slate-100" : "text-slate-900"}`}>Master Schedule</h1>
-          <p className={`text-xs mt-1 uppercase tracking-widest ${isDark ? "text-slate-400" : "text-slate-500"}`}>
-            Real follow-ups: {followUps.length}
-          </p>
-          {userRole === "ADMIN" ? (
-            <p className={`text-[11px] mt-1 ${isDark ? "text-cyan-300" : "text-sky-700"}`}>
-              Admin view: all follow-ups in your company
-            </p>
-          ) : null}
-        </div>
-        <div className="flex flex-wrap items-center gap-2">
+      <div className="flex flex-wrap items-center justify-end gap-2">
           <button
             onClick={loadScheduleData}
             className={`h-10 px-4 rounded-xl border text-sm font-semibold flex items-center gap-2 ${
@@ -555,16 +543,15 @@ const MasterSchedule = () => {
           >
             Today
           </button>
-        </div>
       </div>
 
       {error && (
-        <div className={`rounded-xl border p-3 mb-4 text-sm ${isDark ? "border-red-500/35 bg-red-500/10 text-red-300" : "border-red-200 bg-red-50 text-red-700"}`}>
+        <div className={`rounded-xl border p-3 text-sm ${isDark ? "border-red-500/35 bg-red-500/10 text-red-300" : "border-red-200 bg-red-50 text-red-700"}`}>
           {error}
         </div>
       )}
       {success && (
-        <div className={`rounded-xl border p-3 mb-4 text-sm ${isDark ? "border-emerald-500/35 bg-emerald-500/10 text-emerald-300" : "border-emerald-200 bg-emerald-50 text-emerald-700"}`}>
+        <div className={`rounded-xl border p-3 text-sm ${isDark ? "border-emerald-500/35 bg-emerald-500/10 text-emerald-300" : "border-emerald-200 bg-emerald-50 text-emerald-700"}`}>
           {success}
         </div>
       )}

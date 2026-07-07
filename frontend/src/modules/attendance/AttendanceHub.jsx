@@ -30,8 +30,6 @@ import { toErrorMessage } from "../../utils/errorMessage";
 const ADMIN_VIEW_ROLES = new Set([
   "ADMIN",
   "MANAGER",
-  "ASSISTANT_MANAGER",
-  "TEAM_LEADER",
 ]);
 
 const STATUS_STYLES = {
@@ -477,69 +475,53 @@ const AttendanceHub = () => {
   }, [myData.summary]);
 
   return (
-    <div className="ui-page-shell custom-scrollbar relative px-3 sm:px-6 lg:px-8">
+    <div className="ui-page-shell custom-scrollbar relative">
       <div className="pointer-events-none absolute inset-0 -z-10 overflow-hidden">
         <div className="absolute -left-16 top-4 h-64 w-64 rounded-full bg-cyan-300/35 blur-3xl" />
         <div className="absolute right-0 top-24 h-72 w-72 rounded-full bg-emerald-300/35 blur-3xl" />
         <div className="absolute bottom-0 left-1/3 h-56 w-56 rounded-full bg-indigo-300/25 blur-3xl" />
       </div>
 
-      <div className="rounded-[28px] border border-slate-200 bg-white/95 p-5 shadow-[0_24px_60px_-38px_rgba(15,23,42,0.45)]">
-        <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
-          <div>
-            <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-cyan-700">
-              Workforce Console
-            </p>
-            <h1 className="mt-1 font-display text-3xl tracking-tight text-slate-900 sm:text-4xl">
-              Daily Attendance
-            </h1>
-            <p className="mt-2 text-xs uppercase tracking-[0.16em] text-slate-500">
-              Track your day and review attendance history
-            </p>
-          </div>
-
-          <div className="flex flex-wrap items-center gap-2">
-            <input
-              type="month"
-              value={month}
-              onChange={(event) => setMonth(event.target.value)}
-              className="h-10 rounded-xl border border-slate-300 bg-white px-3 text-sm text-slate-800 outline-none transition focus:border-cyan-400 focus:ring-2 focus:ring-cyan-100"
-            />
-            <button
-              type="button"
-              onClick={() => loadMyAttendance({ quiet: true })}
-              disabled={myLoading || myRefreshing}
-              className="inline-flex h-10 items-center gap-2 rounded-xl border border-slate-300 bg-white px-3 text-xs font-semibold text-slate-700 transition hover:border-cyan-300 hover:bg-cyan-50 hover:text-cyan-700 disabled:cursor-not-allowed disabled:opacity-60"
-            >
-              {myRefreshing ? <Loader2 size={14} className="animate-spin" /> : <RefreshCw size={14} />}
-              Refresh
-            </button>
-          </div>
-        </div>
+      <div className="flex flex-wrap items-center justify-end gap-2">
+        <input
+          type="month"
+          value={month}
+          onChange={(event) => setMonth(event.target.value)}
+          className="h-10 rounded-xl border border-slate-300 bg-white px-3 text-sm text-slate-800 shadow-sm outline-none transition focus:border-cyan-400 focus:ring-2 focus:ring-cyan-100"
+        />
+        <button
+          type="button"
+          onClick={() => loadMyAttendance({ quiet: true })}
+          disabled={myLoading || myRefreshing}
+          className="inline-flex h-10 items-center gap-2 rounded-xl border border-slate-300 bg-white px-3 text-xs font-semibold text-slate-700 shadow-sm transition hover:border-cyan-300 hover:bg-cyan-50 hover:text-cyan-700 disabled:cursor-not-allowed disabled:opacity-60"
+        >
+          {myRefreshing ? <Loader2 size={14} className="animate-spin" /> : <RefreshCw size={14} />}
+          Refresh
+        </button>
       </div>
 
       {myError ? (
-        <div className="mt-4 flex items-center gap-2 rounded-2xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700 shadow-sm">
+        <div className="flex items-center gap-2 rounded-2xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700 shadow-sm">
           <AlertCircle size={16} />
           {myError}
         </div>
       ) : null}
 
       {mySuccess ? (
-        <div className="mt-4 flex items-center gap-2 rounded-2xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-700 shadow-sm">
+        <div className="flex items-center gap-2 rounded-2xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-700 shadow-sm">
           <CheckCircle2 size={16} />
           {mySuccess}
         </div>
       ) : null}
 
       {myLoading ? (
-        <div className="mt-4 flex h-40 items-center justify-center rounded-3xl border border-slate-200 bg-white text-slate-500 shadow-sm">
+        <div className="flex h-40 items-center justify-center rounded-3xl border border-slate-200 bg-white text-slate-500 shadow-sm">
           <Loader2 size={18} className="mr-2 animate-spin" />
           Loading attendance...
         </div>
       ) : (
         <>
-          <div className="mt-4 grid grid-cols-1 gap-4 lg:grid-cols-3">
+          <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
             <div className="rounded-3xl border border-slate-200 bg-white p-4 shadow-[0_18px_45px_-34px_rgba(15,23,42,0.35)] lg:col-span-2">
               <div className="flex flex-wrap items-center justify-between gap-3">
                 <div>
@@ -683,7 +665,7 @@ const AttendanceHub = () => {
             </div>
           </div>
 
-          <div className="mt-5 overflow-hidden rounded-3xl border border-slate-200 bg-white shadow-[0_18px_45px_-34px_rgba(15,23,42,0.35)]">
+          <div className="overflow-hidden rounded-3xl border border-slate-200 bg-white shadow-[0_18px_45px_-34px_rgba(15,23,42,0.35)]">
             <div className="border-b border-slate-200 px-4 py-3">
               <p className="text-sm font-semibold text-slate-900">My Daily Records</p>
               <p className="mt-0.5 text-[11px] uppercase tracking-[0.12em] text-slate-500">
@@ -736,7 +718,7 @@ const AttendanceHub = () => {
             </div>
           </div>
 
-          <div className="mt-5 grid grid-cols-1 gap-4 xl:grid-cols-2">
+          <div className="grid grid-cols-1 gap-4 xl:grid-cols-2">
             <section className="rounded-3xl border border-slate-200 bg-white p-4 shadow-[0_18px_45px_-34px_rgba(15,23,42,0.35)]">
               <div className="flex flex-wrap items-center justify-between gap-2">
                 <div className="inline-flex items-center gap-2">
@@ -844,7 +826,7 @@ const AttendanceHub = () => {
 
       {isAdminViewer ? (
         <>
-          <section className="mt-8 rounded-3xl border border-slate-200 bg-white p-4 shadow-[0_18px_45px_-34px_rgba(15,23,42,0.35)]">
+          <section className="rounded-3xl border border-slate-200 bg-white p-4 shadow-[0_18px_45px_-34px_rgba(15,23,42,0.35)]">
           <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
             <div>
               <h2 className="text-xl font-semibold text-slate-900">Team Daily Attendance</h2>
@@ -992,7 +974,7 @@ const AttendanceHub = () => {
           )}
           </section>
 
-          <section className="mt-6 rounded-3xl border border-slate-200 bg-white p-4 shadow-[0_18px_45px_-34px_rgba(15,23,42,0.35)]">
+          <section className="rounded-3xl border border-slate-200 bg-white p-4 shadow-[0_18px_45px_-34px_rgba(15,23,42,0.35)]">
           <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
             <div>
               <h3 className="text-lg font-semibold text-slate-900">Approval Queue</h3>
@@ -1087,7 +1069,7 @@ const AttendanceHub = () => {
           </section>
         </>
       ) : (
-        <div className="mt-6 flex items-start gap-2 rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-600 shadow-sm">
+        <div className="flex items-start gap-2 rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-600 shadow-sm">
           <Clock3 size={16} className="mt-0.5 text-slate-500" />
           Your role has personal attendance access only. Admin or management can view all users attendance.
         </div>

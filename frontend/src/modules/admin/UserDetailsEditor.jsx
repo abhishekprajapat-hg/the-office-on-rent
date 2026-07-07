@@ -10,8 +10,6 @@ import { toErrorMessage } from "../../utils/errorMessage";
 
 const ROLE_OPTIONS = [
   { label: "Manager", value: "MANAGER" },
-  { label: "Assistant Manager", value: "ASSISTANT_MANAGER" },
-  { label: "Team Leader", value: "TEAM_LEADER" },
   { label: "Executive", value: "EXECUTIVE" },
   { label: "Field Executive", value: "FIELD_EXECUTIVE" },
   { label: "Channel Partner", value: "CHANNEL_PARTNER" },
@@ -19,18 +17,14 @@ const ROLE_OPTIONS = [
 
 const REPORTING_PARENT_ROLES = {
   MANAGER: ["ADMIN"],
-  ASSISTANT_MANAGER: ["MANAGER"],
-  TEAM_LEADER: ["ASSISTANT_MANAGER"],
-  EXECUTIVE: ["TEAM_LEADER"],
-  FIELD_EXECUTIVE: ["TEAM_LEADER"],
-  CHANNEL_PARTNER: ["ADMIN"],
+  EXECUTIVE: ["MANAGER"],
+  FIELD_EXECUTIVE: ["MANAGER"],
+  CHANNEL_PARTNER: ["MANAGER"],
 };
 
 const ROLE_LABELS = {
   ADMIN: "Admin",
   MANAGER: "Manager",
-  ASSISTANT_MANAGER: "Assistant Manager",
-  TEAM_LEADER: "Team Leader",
   EXECUTIVE: "Executive",
   FIELD_EXECUTIVE: "Field Executive",
   CHANNEL_PARTNER: "Channel Partner",
@@ -380,7 +374,7 @@ const UserDetailsEditor = ({ theme = "light" }) => {
 
       {isEditingSelf ? (
         <div className={`rounded-xl border p-3 text-sm ${isDarkTheme ? "border-amber-500/30 bg-amber-500/10 text-amber-200" : "border-amber-200 bg-amber-50 text-amber-700"}`}>
-          Own account edit yahan se blocked hai. Profile page se apna account update karo.
+          Editing your own account is blocked here. Please update your account from the profile page.
         </div>
       ) : null}
 
@@ -464,7 +458,7 @@ const UserDetailsEditor = ({ theme = "light" }) => {
           ) : null}
 
           <label className="space-y-1">
-            <span className={`text-xs font-semibold ${isDarkTheme ? "text-slate-300" : "text-slate-600"}`}>Reset Password</span>
+            <span className={`text-xs font-semibold ${isDarkTheme ? "text-slate-300" : "text-slate-600"}`}>Change Password</span>
             <input
               type="password"
               value={formData.password}

@@ -31,7 +31,6 @@ import { useChatNotifications } from "../../context/useChatNotifications";
 import BrandLogo from "../common/BrandLogo";
 
 const MENU_CONFIG = {
-  super_admin: [{ name: "Platform", icon: ShieldCheck, path: "/super-admin" }],
   admin: [
     { name: "Home", icon: Home, path: "/dashboard" },
     { name: "Pipeline", icon: Users, path: "/leads" },
@@ -62,6 +61,7 @@ const MENU_CONFIG = {
     { name: "Inventory", icon: Building2, path: "/inventory" },
     { name: "Field Ops", icon: Map, path: "/map" },
     { name: "Chat", icon: MessageSquare, path: "/chat" },
+    { name: "Alerts", icon: Bell, path: "/admin/notifications" },
     { name: "Reports", icon: ClipboardList, path: "/reports" },
     { name: "Leaderboard", icon: Trophy, path: "/leaderboard" },
     { name: "Targets", icon: PieChart, path: "/targets" },
@@ -122,11 +122,8 @@ const Sidebar = ({ userRole = "manager", onLogout, theme = "light", onToggleThem
   })();
   const canChannelPartnerViewInventory = Boolean(storedUser?.canViewInventory);
   const roleKeyMap = {
-    SUPER_ADMIN: "super_admin",
     ADMIN: "admin",
     MANAGER: "manager",
-    ASSISTANT_MANAGER: "manager",
-    TEAM_LEADER: "manager",
     EXECUTIVE: "executive",
     FIELD_EXECUTIVE: "field_agent",
     CHANNEL_PARTNER: "partner",
@@ -146,7 +143,7 @@ const Sidebar = ({ userRole = "manager", onLogout, theme = "light", onToggleThem
     normalizedRole === "partner"
       ? partnerMenu
       : (MENU_CONFIG[normalizedRole] || MENU_CONFIG.manager);
-  const hasAdminAlerts = userRole === "ADMIN" && adminRequestUnread > 0;
+  const hasAdminAlerts = ["ADMIN", "MANAGER"].includes(userRole) && adminRequestUnread > 0;
   const closeMobileMenu = () => setMobileMenuOpen(false);
   const handleLogout = () => {
     closeMobileMenu();
@@ -213,17 +210,13 @@ const Sidebar = ({ userRole = "manager", onLogout, theme = "light", onToggleThem
         }`}
       >
         <div
-          className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-xl border shadow-sm md:h-8 md:w-8 md:rounded-lg md:group-hover/sidebar:h-9 md:group-hover/sidebar:w-9 md:group-hover/sidebar:rounded-xl ${
-            isDark
-              ? "border-white/10 bg-slate-900"
-              : "border-slate-200 bg-slate-50"
-          }`}
+          className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl border border-slate-200 bg-white p-0.5 shadow-sm md:h-8 md:w-8 md:rounded-lg md:group-hover/sidebar:h-9 md:group-hover/sidebar:w-9 md:group-hover/sidebar:rounded-xl"
         >
-          <BrandLogo className="h-7 w-7 md:h-6 md:w-6 md:group-hover/sidebar:h-7 md:group-hover/sidebar:w-7" />
+          <BrandLogo className="h-full w-full" />
         </div>
         <div className="min-w-0 md:w-0 md:overflow-hidden md:opacity-0 md:transition-all md:duration-200 md:group-hover/sidebar:w-auto md:group-hover/sidebar:opacity-100">
-          <p className={`text-sm font-bold leading-tight ${isDark ? "text-slate-100" : "text-slate-950"}`}>
-            Samvid OS
+          <p className="text-sm font-bold leading-tight text-[#009FA8]">
+            The Office On Rent
           </p>
           <p className={`mt-0.5 text-[10px] font-bold uppercase tracking-[0.22em] ${isDark ? "text-sky-300/80" : "text-blue-700"}`}>
             Operations

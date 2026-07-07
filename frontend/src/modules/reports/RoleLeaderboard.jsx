@@ -105,17 +105,7 @@ const RoleLeaderboard = () => {
 
   return (
     <div className="ui-page-shell custom-scrollbar">
-      <div className="ui-hero-card mb-6 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-        <div>
-          <h1 className="font-display text-2xl text-slate-900 sm:text-3xl">
-            Role Leaderboard
-          </h1>
-          <p className="mt-1 text-xs uppercase tracking-[0.16em] text-slate-500">
-            Compare your performance with all active {String(data.roleLabel || "role").toLowerCase()} users
-          </p>
-        </div>
-
-        <div className="flex items-center gap-2">
+      <div className="flex flex-wrap items-center justify-end gap-2">
           {roleFilterOptions.length > 1 ? (
             <>
               <label className="sr-only" htmlFor="leaderboard-role">
@@ -160,11 +150,10 @@ const RoleLeaderboard = () => {
             {refreshing ? <Loader2 size={14} className="animate-spin" /> : <RefreshCw size={14} />}
             Refresh
           </button>
-        </div>
       </div>
 
       {error ? (
-        <div className="mb-5 flex items-center gap-2 rounded-xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700">
+        <div className="flex items-center gap-2 rounded-xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700">
           <AlertCircle size={16} />
           {error}
         </div>

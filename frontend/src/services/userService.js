@@ -30,6 +30,21 @@ export const updateMyProfile = async (payload) => {
   };
 };
 
+export const createUserDeleteRequest = async (userId, payload = {}) => {
+  const res = await api.post(`/users/${userId}/delete-request`, payload);
+  return res.data;
+};
+
+export const getAdminUserDeleteRequests = async (params = {}) => {
+  const res = await api.get("/users/delete-requests/admin", { params });
+  return Array.isArray(res.data?.requests) ? res.data.requests : [];
+};
+
+export const reviewUserDeleteRequest = async (requestId, payload = {}) => {
+  const res = await api.patch(`/users/delete-requests/${requestId}/review`, payload);
+  return res.data;
+};
+
 export const createUser = async (payload) => {
   const res = await api.post("/users/create", payload);
   return res.data;

@@ -63,10 +63,30 @@ router.patch(
   userController.updateMyProfile
 );
 
+router.get(
+  "/delete-requests/admin",
+  authMiddleware.protect,
+  userController.getAdminUserDeleteRequests
+);
+
+router.patch(
+  "/delete-requests/:requestId/review",
+  writeLimiter,
+  authMiddleware.protect,
+  userController.reviewUserDeleteRequest
+);
+
 router.patch(
   "/location",
   authMiddleware.protect,
   userController.updateMyLocation
+);
+
+router.post(
+  "/:userId/delete-request",
+  writeLimiter,
+  authMiddleware.protect,
+  userController.createUserDeleteRequest
 );
 
 router.patch(

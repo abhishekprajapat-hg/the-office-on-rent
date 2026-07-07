@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useState } from "react";
-import { RefreshCw } from "lucide-react";
+import { Activity, CheckCircle2, KeyRound, Link2, RefreshCw, Webhook } from "lucide-react";
 import {
   getMyTenantMetaIntegration,
   updateMyTenantMetaIntegration,
@@ -135,40 +135,30 @@ const AdminMetaAdsPanel = ({ theme = "light" }) => {
 
   if (loading) {
     return (
-      <div className={`ui-page-shell custom-scrollbar pt-6 ${isDark ? "bg-slate-950/40" : "bg-slate-50/70"}`}>
+      <div className={`ui-page-shell custom-scrollbar ${isDark ? "bg-slate-950/40" : "bg-slate-50/70"}`}>
         <div className={cardClass}>Loading Meta integration...</div>
       </div>
     );
   }
 
   return (
-    <div className={`ui-page-shell custom-scrollbar flex flex-col gap-4 pt-4 md:pt-6 ${
+    <div className={`ui-page-shell custom-scrollbar flex flex-col gap-4 ${
       isDark ? "bg-slate-950/40" : "bg-slate-50/70"
     }`}>
-      <section className={`ui-hero-card ${cardClass}`}>
-        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-          <div>
-            <h1 className={`font-display text-2xl font-semibold ${isDark ? "text-slate-100" : "text-slate-900"}`}>
-              Meta Ads Integration
-            </h1>
-            <p className={`mt-1 text-sm ${isDark ? "text-slate-400" : "text-slate-600"}`}>
-              Company admin panel for Meta lead routing setup.
-            </p>
-          </div>
-          <button
-            type="button"
-            onClick={loadIntegration}
-            className={`h-10 rounded-xl border px-4 text-sm font-semibold inline-flex items-center gap-2 ${
-              isDark
-                ? "border-slate-700 bg-slate-950/70 text-slate-200"
-                : "border-slate-300 bg-white text-slate-700"
-            }`}
-          >
-            <RefreshCw size={14} />
-            Refresh
-          </button>
-        </div>
-      </section>
+      <div className="flex justify-end">
+        <button
+          type="button"
+          onClick={loadIntegration}
+          className={`h-10 rounded-xl border px-4 text-sm font-semibold inline-flex items-center gap-2 shadow-sm ${
+            isDark
+              ? "border-slate-700 bg-slate-950/70 text-slate-200"
+              : "border-slate-300 bg-white text-slate-700"
+          }`}
+        >
+          <RefreshCw size={14} />
+          Refresh
+        </button>
+      </div>
 
       {error ? (
         <div className={`rounded-xl border px-4 py-3 text-sm ${isDark ? "border-red-500/30 bg-red-500/10 text-red-200" : "border-red-200 bg-red-50 text-red-700"}`}>
@@ -181,6 +171,123 @@ const AdminMetaAdsPanel = ({ theme = "light" }) => {
           {notice}
         </div>
       ) : null}
+
+      <section className="grid grid-cols-1 gap-4 lg:grid-cols-4">
+        <MetaHealthCard
+          title="Connection"
+          value={readinessStatus}
+          helper={readiness?.message || "Meta readiness state"}
+          icon={Activity}
+          isDark={isDark}
+        />
+        <MetaHealthCard
+          title="Pages Connected"
+          value={`${Number(readiness?.readyPages || 0)}/${Number(readiness?.totalPages || 0)}`}
+          helper="Subscribed page mappings"
+          icon={CheckCircle2}
+          isDark={isDark}
+        />
+        <MetaHealthCard
+          title="Access Token"
+          value={accessTokenConfigured ? "Configured" : "Missing"}
+          helper={accessTokenPreview || "Token preview unavailable"}
+          icon={KeyRound}
+          isDark={isDark}
+        />
+        <MetaHealthCard
+          title="Recent Sync"
+          value={lastCheckedLabel}
+          helper={readiness?.syncErrorMessage ? "Sync needs attention" : "Webhook check timestamp"}
+          icon={Webhook}
+          isDark={isDark}
+        />
+      </section>
+
+      <section className="grid grid-cols-1 gap-4 xl:grid-cols-[1.2fr_1fr]">
+        <div className={cardClass}>
+          <div className="flex items-center justify-between gap-3">
+            <div>
+              <h2 className={`text-sm font-bold ${isDark ? "text-slate-100" : "text-slate-900"}`}>
+                Page Mapping Cards
+              </h2>
+              <p className={`mt-1 text-xs ${isDark ? "text-slate-400" : "text-slate-500"}`}>
+                Page subscription health from the existing Meta readiness payload.
+              </p>
+            </div>
+            <span className={`rounded-full px-2.5 py-1 text-[10px] font-bold uppercase tracking-[0.12em] ${readinessBadgeClass}`}>
+              {readinessStatus}
+            </span>
+          </div>
+
+          <div className="mt-4 grid grid-cols-1 gap-3 md:grid-cols-2">
+            {readinessRecords.length ? readinessRecords.map((record) => {
+              const pageId = String(record?.pageId || "");
+              const ok = Boolean(record?.success);
+              const recordStatus = String(record?.status || "").toUpperCase() || (ok ? "SUBSCRIBED" : "FAILED");
+              return (
+                <div
+                  key={pageId}
+                  className={`rounded-2xl border p-3 ${
+                    ok
+                      ? isDark
+                        ? "border-emerald-500/30 bg-emerald-500/10"
+                        : "border-emerald-200 bg-emerald-50"
+                      : isDark
+                        ? "border-rose-500/30 bg-rose-500/10"
+                        : "border-rose-200 bg-rose-50"
+                  }`}
+                >
+                  <p className={`truncate text-sm font-bold ${isDark ? "text-slate-100" : "text-slate-900"}`}>
+                    {pageId || "Unmapped page"}
+                  </p>
+                  <p className={`mt-1 text-[10px] font-bold uppercase tracking-[0.12em] ${
+                    ok
+                      ? isDark ? "text-emerald-200" : "text-emerald-700"
+                      : isDark ? "text-rose-200" : "text-rose-700"
+                  }`}>
+                    {recordStatus}
+                  </p>
+                  {record?.errorMessage ? (
+                    <p className={`mt-2 text-xs ${isDark ? "text-rose-200" : "text-rose-700"}`}>
+                      {record.errorMessage}
+                    </p>
+                  ) : null}
+                </div>
+              );
+            }) : (
+              <div className={`rounded-2xl border border-dashed px-4 py-8 text-center text-sm md:col-span-2 ${
+                isDark ? "border-slate-700 text-slate-400" : "border-slate-300 text-slate-500"
+              }`}>
+                Add Meta page IDs to create mapping cards.
+              </div>
+            )}
+          </div>
+        </div>
+
+        <div className={cardClass}>
+          <div className="flex items-center gap-2">
+            <Link2 size={16} className={isDark ? "text-cyan-200" : "text-cyan-700"} />
+            <h2 className={`text-sm font-bold ${isDark ? "text-slate-100" : "text-slate-900"}`}>
+              Webhook Health
+            </h2>
+          </div>
+          <div className={`mt-4 space-y-3 text-xs ${isDark ? "text-slate-300" : "text-slate-600"}`}>
+            <div className={`rounded-xl border p-3 ${isDark ? "border-slate-700 bg-slate-950/70" : "border-slate-200 bg-slate-50"}`}>
+              <p className="font-semibold">Global callback</p>
+              <p className="mt-1 break-all">{webhookGlobalUrl || "-"}</p>
+            </div>
+            <div className={`rounded-xl border p-3 ${isDark ? "border-slate-700 bg-slate-950/70" : "border-slate-200 bg-slate-50"}`}>
+              <p className="font-semibold">Tenant callback</p>
+              <p className="mt-1 break-all">{webhookTenantUrl || "-"}</p>
+            </div>
+            {readiness?.syncErrorMessage ? (
+              <div className={`rounded-xl border p-3 ${isDark ? "border-rose-500/30 bg-rose-500/10 text-rose-200" : "border-rose-200 bg-rose-50 text-rose-700"}`}>
+                {readiness.syncErrorMessage}
+              </div>
+            ) : null}
+          </div>
+        </div>
+      </section>
 
       <section className={cardClass}>
         <div className={`text-sm ${isDark ? "text-slate-300" : "text-slate-700"}`}>
@@ -291,3 +398,28 @@ const AdminMetaAdsPanel = ({ theme = "light" }) => {
 };
 
 export default AdminMetaAdsPanel;
+
+const MetaHealthCard = ({ title, value, helper, icon, isDark }) => (
+  <div className={`ui-soft-panel rounded-2xl border p-4 ${
+    isDark ? "border-slate-700 bg-slate-900/80" : "border-slate-200 bg-white"
+  }`}>
+    <div className="flex items-start justify-between gap-3">
+      <div className="min-w-0">
+        <p className={`text-[10px] font-bold uppercase tracking-[0.14em] ${isDark ? "text-slate-400" : "text-slate-500"}`}>
+          {title}
+        </p>
+        <p className={`mt-2 truncate text-lg font-bold ${isDark ? "text-slate-100" : "text-slate-900"}`}>
+          {value || "-"}
+        </p>
+      </div>
+      <div className={`rounded-xl border p-2 ${
+        isDark ? "border-cyan-400/30 bg-cyan-500/10 text-cyan-200" : "border-cyan-200 bg-cyan-50 text-cyan-700"
+      }`}>
+        {React.createElement(icon, { size: 16 })}
+      </div>
+    </div>
+    <p className={`mt-2 line-clamp-2 text-xs ${isDark ? "text-slate-400" : "text-slate-500"}`}>
+      {helper || "-"}
+    </p>
+  </div>
+);

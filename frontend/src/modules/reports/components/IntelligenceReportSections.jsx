@@ -18,20 +18,9 @@ export const ReportsHeader = ({
   onRefresh,
   onExport,
 }) => (
-  <div className="ui-hero-card flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
-    <div>
-      <h1 className="font-display text-3xl font-semibold text-slate-900">Reports Dashboard</h1>
-      <p className="mt-1 text-xs uppercase tracking-[0.16em] text-slate-500">
-        Funnel, quality, team and inventory reporting
-      </p>
-      <p className="mt-2 text-xs text-slate-500">
-        Use filters to scope report windows and export current insights.
-      </p>
-    </div>
-
-    <div className="flex flex-col items-start gap-2 sm:items-end">
-      <div className="ui-soft-panel inline-flex flex-wrap items-center gap-2 rounded-2xl border border-slate-200 bg-white p-2 shadow-sm">
-        <div className="inline-flex flex-wrap items-center gap-1 rounded-xl bg-slate-100/90 p-1">
+  <div className="flex flex-col items-stretch gap-2 sm:items-end">
+    <div className="ui-soft-panel flex w-full flex-wrap items-center gap-2 rounded-2xl border border-slate-200 bg-white p-2 shadow-sm sm:w-auto">
+        <div className="grid w-full grid-cols-2 gap-1 rounded-xl bg-slate-100/90 p-1 sm:inline-flex sm:w-auto sm:flex-wrap">
           {rangeOptions.map((range) => (
             <button
               key={range.key}
@@ -52,7 +41,7 @@ export const ReportsHeader = ({
           type="button"
           onClick={onRefresh}
           disabled={refreshing}
-          className="h-9 rounded-xl border border-slate-300 bg-white px-3 text-xs font-semibold text-slate-700 hover:border-cyan-400 hover:text-cyan-700 disabled:opacity-60 inline-flex items-center gap-2"
+          className="inline-flex h-9 flex-1 items-center justify-center gap-2 rounded-xl border border-slate-300 bg-white px-3 text-xs font-semibold text-slate-700 hover:border-cyan-400 hover:text-cyan-700 disabled:opacity-60 sm:flex-none"
         >
           <RefreshCw size={14} className={refreshing ? "animate-spin" : ""} />
           Refresh
@@ -61,15 +50,15 @@ export const ReportsHeader = ({
         <button
           type="button"
           onClick={onExport}
-          className="h-9 rounded-xl border border-slate-300 bg-white px-3 text-xs font-semibold text-slate-700 hover:border-cyan-400 hover:text-cyan-700 inline-flex items-center gap-2"
+          className="inline-flex h-9 flex-1 items-center justify-center gap-2 rounded-xl border border-slate-300 bg-white px-3 text-xs font-semibold text-slate-700 hover:border-cyan-400 hover:text-cyan-700 sm:flex-none"
         >
           <Download size={14} />
           Export CSV
         </button>
-      </div>
+    </div>
 
-      {rangeKey === "CUSTOM" ? (
-        <div className="ui-soft-panel flex flex-wrap gap-2 rounded-xl border border-slate-200 bg-white p-2 shadow-sm">
+    {rangeKey === "CUSTOM" ? (
+      <div className="ui-soft-panel flex flex-wrap gap-2 rounded-xl border border-slate-200 bg-white p-2 shadow-sm">
           <label className="inline-flex items-center gap-2 rounded-lg border border-slate-300 bg-white px-3 text-xs font-semibold text-slate-600">
             From
             <input
@@ -110,9 +99,8 @@ export const ReportsHeader = ({
               className="h-9 bg-transparent text-slate-700 outline-none"
             />
           </label>
-        </div>
-      ) : null}
-    </div>
+      </div>
+    ) : null}
   </div>
 );
 

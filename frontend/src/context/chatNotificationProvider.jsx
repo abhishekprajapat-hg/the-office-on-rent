@@ -120,6 +120,27 @@ const normalizeAdminRequestEvent = (payload = {}) => {
   const source = String(payload.source || "").trim().toLowerCase()
     || (payload.leadId || payload.lead ? "lead" : "inventory");
 
+  if (source === "password") {
+    const requestId = String(payload.requestId || "").trim();
+    if (!requestId) return null;
+
+    const requestedByName = String(payload.requestedBy?.name || "").trim() || "User";
+    const createdAt = payload.createdAt || new Date().toISOString();
+    const eventId = String(payload.eventId || "").trim() || `password:${requestId}`;
+
+    return {
+      eventId,
+      source: "password",
+      requestType: "PASSWORD_CHANGE",
+      createdAt,
+      preview: `${requestedByName} requested password change`,
+      leadId: "",
+      requestId,
+      inventoryId: "",
+      payload,
+    };
+  }
+
   if (source === "lead") {
     const leadId = String(payload.leadId || payload.lead?._id || "");
     if (!leadId) return null;
@@ -427,7 +448,7 @@ export const ChatNotificationProvider = ({ children, enabled = true }) => {
     };
 
     const onAdminRequestEvent = (payload = {}) => {
-      if (getCurrentUserRole() !== "ADMIN") return;
+      if (!["ADMIN", "MANAGER"].includes(getCurrentUserRole())) return;
 
       const event = normalizeAdminRequestEvent(payload);
       if (!event) return;
@@ -470,7 +491,7 @@ export const ChatNotificationProvider = ({ children, enabled = true }) => {
         && document.hidden
       ) {
         try {
-          new Notification("New admin request", {
+          new Notification("New request", {
             body: event.preview,
             tag: `admin-request:${eventId}`,
           });

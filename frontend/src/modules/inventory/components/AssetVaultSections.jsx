@@ -1,17 +1,8 @@
 import React from "react";
-import { Plus, Search } from "lucide-react";
+import { Filter, LayoutGrid, Plus, Search, Table2 } from "lucide-react";
 
 export const AssetVaultToolbar = ({ modeType, onModeChange, canOpenCreateModal, canManage, onOpenAddModal }) => (
-  <div className="flex flex-col xl:flex-row xl:justify-between xl:items-end gap-4 z-10">
-    <div>
-      <h1 className="font-display text-4xl text-slate-800 tracking-widest">
-        ASSET <span className="text-emerald-600">VAULT</span>
-      </h1>
-      <p className="font-mono text-xs mt-2 text-slate-400 tracking-[0.3em] uppercase">
-        Live Inventory Database
-      </p>
-    </div>
-
+  <div className="flex flex-col items-start gap-4 z-10 xl:flex-row xl:items-end xl:justify-end">
     <div className="flex flex-wrap gap-3 sm:gap-4 items-center">
       <div className="bg-slate-200 p-1 rounded-full flex gap-1">
         <button
@@ -51,6 +42,10 @@ export const AssetVaultToolbar = ({ modeType, onModeChange, canOpenCreateModal, 
 export const AssetVaultFilters = ({
   searchTerm,
   onSearchChange,
+  viewMode,
+  onViewModeChange,
+  advancedFiltersOpen,
+  onToggleAdvancedFilters,
   statusFilter,
   onStatusFilterChange,
   statusOptions,
@@ -77,17 +72,46 @@ export const AssetVaultFilters = ({
   amenitiesFilter,
   onAmenitiesFilterChange,
 }) => (
-  <div className="space-y-3 z-10">
-    <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-      <div className="md:col-span-2 relative">
+  <div className="sticky top-4 z-20 space-y-3 rounded-2xl border border-slate-200 bg-white/95 p-3 shadow-sm backdrop-blur">
+    <div className="grid grid-cols-1 gap-3 lg:grid-cols-[1fr_auto_220px]">
+      <div className="relative">
         <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={16} />
         <input
           type="text"
           value={searchTerm}
           onChange={(event) => onSearchChange(event.target.value)}
-          placeholder="Search property id/name, location, category"
+          placeholder="Search project, tower, unit, city, area, property ID"
           className="w-full h-11 pl-10 pr-4 rounded-xl border border-slate-200 bg-white text-sm text-slate-700 focus:outline-none focus:border-emerald-500"
         />
+      </div>
+
+      <div className="flex rounded-xl border border-slate-200 bg-slate-50 p-1">
+        <button
+          type="button"
+          onClick={() => onViewModeChange("cards")}
+          className={`inline-flex h-9 flex-1 items-center justify-center gap-2 rounded-lg px-3 text-xs font-bold uppercase tracking-widest transition ${
+            viewMode === "cards"
+              ? "bg-white text-slate-900 shadow-sm"
+              : "text-slate-500 hover:text-slate-800"
+          }`}
+          aria-pressed={viewMode === "cards"}
+        >
+          <LayoutGrid size={14} />
+          Cards
+        </button>
+        <button
+          type="button"
+          onClick={() => onViewModeChange("table")}
+          className={`inline-flex h-9 flex-1 items-center justify-center gap-2 rounded-lg px-3 text-xs font-bold uppercase tracking-widest transition ${
+            viewMode === "table"
+              ? "bg-white text-slate-900 shadow-sm"
+              : "text-slate-500 hover:text-slate-800"
+          }`}
+          aria-pressed={viewMode === "table"}
+        >
+          <Table2 size={14} />
+          Table
+        </button>
       </div>
 
       <select
@@ -104,7 +128,16 @@ export const AssetVaultFilters = ({
       </select>
     </div>
 
-    <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-3">
+    <button
+      type="button"
+      onClick={onToggleAdvancedFilters}
+      className="inline-flex h-10 items-center justify-center gap-2 rounded-xl border border-slate-200 bg-slate-50 px-3 text-xs font-bold uppercase tracking-widest text-slate-600 md:hidden"
+    >
+      <Filter size={14} />
+      {advancedFiltersOpen ? "Hide Filters" : "More Filters"}
+    </button>
+
+    <div className={`${advancedFiltersOpen ? "grid" : "hidden"} grid-cols-1 gap-3 md:grid md:grid-cols-2 xl:grid-cols-4`}>
       <select
         value={inventoryTypeFilter}
         onChange={(event) => onInventoryTypeFilterChange(event.target.value)}
@@ -249,6 +282,7 @@ export const PendingInventoryRequestsPanel = ({
           {pendingRequests.map((request) => {
             const requestId = String(request._id || "");
             const isCreateRequest = request.type === "create";
+            const isDeleteRequest = request.type === "delete";
             const proposedData = request.proposedData || {};
             const currentInventory = request.inventoryId || {};
             const inventoryLabel = isCreateRequest
@@ -256,8 +290,8 @@ export const PendingInventoryRequestsPanel = ({
               : getInventoryUnitLabel(currentInventory);
             const currentStatus = currentInventory?.status || "-";
             const requestedStatus = proposedData?.status || "Available";
-            const detailSource = isCreateRequest ? proposedData : currentInventory;
-            const requestedFields = !isCreateRequest
+            const detailSource = isCreateRequest || isDeleteRequest ? proposedData : currentInventory;
+            const requestedFields = !isCreateRequest && !isDeleteRequest
               ? Object.entries(proposedData).filter(([key]) => requestFieldLabels[key])
               : [];
             const detailLocation = detailSource?.location || "-";
@@ -300,7 +334,9 @@ export const PendingInventoryRequestsPanel = ({
                       By: {request.requestedBy?.name || "Unknown"} ({request.requestedBy?.role || "-"})
                     </p>
                     <p className="mt-1 text-[11px] font-semibold text-slate-600">
-                      {isCreateRequest
+                      {isDeleteRequest
+                        ? "Delete inventory request"
+                        : isCreateRequest
                         ? `New inventory request (${requestedStatus})`
                         : `${currentStatus} to ${requestedStatus}`}
                     </p>
@@ -368,6 +404,12 @@ export const PendingInventoryRequestsPanel = ({
                         </div>
                       </div>
                     )}
+
+                    {request.requestNote ? (
+                      <p className="mt-2 rounded-lg border border-amber-200 bg-amber-50 px-2 py-1 text-[11px] font-semibold text-amber-800">
+                        Reason: {request.requestNote}
+                      </p>
+                    ) : null}
 
                     {!isCreateRequest && linkedInventoryId && (
                       <button

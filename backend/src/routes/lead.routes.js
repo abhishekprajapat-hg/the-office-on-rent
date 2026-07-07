@@ -18,7 +18,7 @@ router.post(
   "/bulk",
   writeLimiter,
   authMiddleware.protect,
-  authMiddleware.checkRole(["ADMIN"]),
+  authMiddleware.checkRole(["ADMIN", "MANAGER"]),
   leadController.bulkUploadLeads,
 );
 
@@ -43,14 +43,14 @@ router.get(
 router.get(
   "/payment-requests",
   authMiddleware.protect,
-  authMiddleware.checkRole(["ADMIN"]),
+  authMiddleware.checkRole(["ADMIN", "MANAGER"]),
   leadController.getLeadPaymentRequests
 );
 
 router.get(
   "/status-requests/pending",
   authMiddleware.protect,
-  authMiddleware.checkRole(["ADMIN", "MANAGER", "ASSISTANT_MANAGER", "TEAM_LEADER"]),
+  authMiddleware.checkRole(["ADMIN", "MANAGER"]),
   leadController.getPendingLeadStatusRequests
 );
 
@@ -70,7 +70,7 @@ router.patch(
   "/status-requests/:requestId/approve",
   writeLimiter,
   authMiddleware.protect,
-  authMiddleware.checkRole(["ADMIN"]),
+  authMiddleware.checkRole(["ADMIN", "MANAGER"]),
   leadController.approveLeadStatusRequest
 );
 
@@ -78,7 +78,7 @@ router.patch(
   "/status-requests/:requestId/reject",
   writeLimiter,
   authMiddleware.protect,
-  authMiddleware.checkRole(["ADMIN"]),
+  authMiddleware.checkRole(["ADMIN", "MANAGER"]),
   leadController.rejectLeadStatusRequest
 );
 
@@ -89,7 +89,7 @@ router.patch(
   "/:leadId/assign",
   writeLimiter,
   authMiddleware.protect,
-  authMiddleware.checkRole(["ADMIN", "MANAGER", "ASSISTANT_MANAGER", "TEAM_LEADER"]),
+  authMiddleware.checkRole(["ADMIN", "MANAGER"]),
   leadController.assignLead
 );
 

@@ -6,7 +6,7 @@ const {
 
 const MANAGEMENT_SET = new Set([USER_ROLES.ADMIN, ...MANAGEMENT_ROLES]);
 const EXECUTIVE_SET = new Set(EXECUTIVE_ROLES);
-const PLATFORM_SET = new Set([USER_ROLES.SUPER_ADMIN]);
+const PLATFORM_SET = new Set();
 
 const toUserView = (user) => ({
   id: user._id,

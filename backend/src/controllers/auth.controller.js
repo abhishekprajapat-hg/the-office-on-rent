@@ -15,14 +15,6 @@ const isValidObjectId = (value) => mongoose.Types.ObjectId.isValid(value);
 const BROKERAGE_MODES = new Set(["FLAT", "PERCENTAGE"]);
 const DEFAULT_BROKERAGE_VALUE = 50000;
 const DEFAULT_BROKERAGE_PERCENTAGE = 2;
-const toBoolean = (value, fallback = false) => {
-  const raw = String(value || "").trim().toLowerCase();
-  if (!raw) return fallback;
-  if (raw === "true" || raw === "1" || raw === "yes") return true;
-  if (raw === "false" || raw === "0" || raw === "no") return false;
-  return fallback;
-};
-
 const toBrokerageConfigView = (config) => {
   const normalizedMode = String(config?.mode || "").trim().toUpperCase();
   const mode = BROKERAGE_MODES.has(normalizedMode) ? normalizedMode : "FLAT";
@@ -49,8 +41,6 @@ const resolveClientIp = (req) =>
     .trim();
 
 const resolveCompanyContextForLogin = async (user) => {
-  if (user.role === USER_ROLES.SUPER_ADMIN) return null;
-
   if (user.companyId) return user.companyId;
 
   if (user.role === USER_ROLES.ADMIN) {
@@ -138,52 +128,34 @@ exports.login = async (req, res) => {
       return res.status(400).json({ message: "Invalid credentials" });
     }
 
-    if (portal === "ADMIN" && ![USER_ROLES.ADMIN, USER_ROLES.SUPER_ADMIN].includes(user.role)) {
+    if (portal === "ADMIN" && user.role !== USER_ROLES.ADMIN) {
       return res.status(403).json({
         message: "Access denied. Admin only.",
       });
     }
 
-    if (portal === "GENERAL" && [USER_ROLES.ADMIN, USER_ROLES.SUPER_ADMIN].includes(user.role)) {
+    if (portal === "GENERAL" && user.role === USER_ROLES.ADMIN) {
       return res.status(403).json({
         message: "Admin must login via admin portal.",
       });
     }
 
-    const isSuperAdmin = user.role === USER_ROLES.SUPER_ADMIN;
-    const requireTenantContext = toBoolean(process.env.SAAS_REQUIRE_TENANT_HOST, false);
     let resolvedTenant = req.tenant || null;
 
-    if (!isSuperAdmin) {
-      const companyId = user.companyId || (await resolveCompanyContextForLogin(user));
-      if (!companyId) {
-        return res.status(403).json({
-          message: "Company context is missing for this account",
-        });
-      }
-
-      if (req.tenant?._id && String(req.tenant._id) !== String(companyId)) {
-        return res.status(403).json({
-          message: "Tenant mismatch. Use your own company route /<company-slug>/login.",
-        });
-      }
-
-      if (requireTenantContext && !req.tenant?._id) {
-        return res.status(403).json({
-          message: "Tenant context is required for this login. Use /<company-slug>/login",
-        });
-      }
-
-      const company = req.tenant?._id && String(req.tenant._id) === String(companyId)
-        ? req.tenant
-        : await Company.findById(companyId).select("_id status name subdomain customDomain").lean();
-      if (!company || company.status !== "ACTIVE") {
-        return res.status(403).json({
-          message: "Tenant is inactive. Please contact platform support.",
-        });
-      }
-      resolvedTenant = company;
+    const companyId = user.companyId || (await resolveCompanyContextForLogin(user));
+    if (!companyId) {
+      return res.status(403).json({
+        message: "Company context is missing for this account",
+      });
     }
+
+    const company = await Company.findById(companyId).select("_id status name subdomain customDomain").lean();
+    if (!company || company.status !== "ACTIVE") {
+      return res.status(403).json({
+        message: "Company is inactive. Please contact support.",
+      });
+    }
+    resolvedTenant = company;
 
     const tokenBundle = await issueAuthTokens({
       user,
@@ -287,7 +259,6 @@ exports.getMe = async (req, res) => {
 
     if (
       !resolvedTenant
-      && req.user?.role !== USER_ROLES.SUPER_ADMIN
       && req.user?.companyId
     ) {
       const company = await Company.findById(req.user.companyId)

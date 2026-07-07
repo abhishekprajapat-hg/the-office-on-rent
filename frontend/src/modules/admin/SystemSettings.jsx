@@ -2,6 +2,7 @@ import React, { useEffect, useMemo, useState } from "react";
 import {
   AlertTriangle,
   CheckCircle2,
+  LayoutGrid,
   MonitorCog,
   RefreshCw,
   Save,
@@ -33,7 +34,7 @@ const Toggle = ({ value, onChange }) => (
   </button>
 );
 
-const Section = ({ icon: Icon, title, subtitle, children }) => (
+const Section = ({ icon, title, subtitle, children }) => (
   <section className="ui-soft-panel rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
     <div className="mb-4 flex items-start justify-between gap-3">
       <div>
@@ -41,7 +42,7 @@ const Section = ({ icon: Icon, title, subtitle, children }) => (
         <p className="mt-1 text-xs uppercase tracking-[0.14em] text-slate-500">{subtitle}</p>
       </div>
       <div className="rounded-lg border border-cyan-200 bg-cyan-50 p-2 text-cyan-700">
-        <Icon size={15} />
+        {React.createElement(icon, { size: 15 })}
       </div>
     </div>
     {children}
@@ -53,6 +54,7 @@ const SystemSettings = () => {
   const [settings, setSettings] = useState(initial);
   const [savedSnapshot, setSavedSnapshot] = useState(JSON.stringify(initial));
   const [saveStatus, setSaveStatus] = useState("idle");
+  const [activeSection, setActiveSection] = useState("ALL");
 
   const isDirty = useMemo(
     () => JSON.stringify(settings) !== savedSnapshot,
@@ -110,16 +112,8 @@ const SystemSettings = () => {
 
   return (
     <div className="ui-page-shell custom-scrollbar pb-10">
-      <div className="ui-hero-card mb-6">
-        <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-          <div>
-            <h1 className="font-display text-3xl font-semibold text-slate-900">System Settings</h1>
-            <p className="mt-1 text-xs uppercase tracking-[0.14em] text-slate-500">
-              Essential controls only (fully active)
-            </p>
-          </div>
-
-          <div className="flex flex-wrap items-center gap-2">
+      <div className="flex flex-col gap-3">
+        <div className="flex flex-wrap items-center justify-end gap-2">
             <span
               className={`rounded-full border px-3 py-1 text-[10px] font-semibold uppercase tracking-[0.14em] ${
                 isDirty
@@ -146,7 +140,6 @@ const SystemSettings = () => {
               <Save size={14} />
               Save Changes
             </button>
-          </div>
         </div>
 
         {saveStatus === "saved" ? (
@@ -155,9 +148,33 @@ const SystemSettings = () => {
             Settings saved
           </div>
         ) : null}
+
+        <div className="mt-5 flex flex-wrap gap-2 rounded-2xl border border-slate-200 bg-white/80 p-2">
+          {[
+            { id: "ALL", label: "All", icon: LayoutGrid },
+            { id: "APPEARANCE", label: "Appearance", icon: MonitorCog },
+            { id: "SECURITY", label: "Security", icon: ShieldCheck },
+            { id: "MAINTENANCE", label: "Maintenance", icon: Settings2 },
+          ].map((tab) => (
+            <button
+              key={tab.id}
+              type="button"
+              onClick={() => setActiveSection(tab.id)}
+              className={`inline-flex h-10 items-center gap-2 rounded-xl px-3 text-xs font-bold uppercase tracking-[0.12em] transition ${
+                activeSection === tab.id
+                  ? "bg-slate-900 text-white shadow-sm"
+                  : "text-slate-600 hover:bg-slate-100 hover:text-slate-900"
+              }`}
+            >
+              {React.createElement(tab.icon, { size: 14 })}
+              {tab.label}
+            </button>
+          ))}
+        </div>
       </div>
 
       <div className="grid grid-cols-1 gap-5 xl:grid-cols-2">
+        {(activeSection === "ALL" || activeSection === "APPEARANCE") && (
         <Section
           icon={MonitorCog}
           title="Accessibility and UI"
@@ -196,7 +213,9 @@ const SystemSettings = () => {
             </div>
           </div>
         </Section>
+        )}
 
+        {(activeSection === "ALL" || activeSection === "SECURITY") && (
         <Section
           icon={ShieldCheck}
           title="Session Security"
@@ -224,7 +243,9 @@ const SystemSettings = () => {
             </div>
           </div>
         </Section>
+        )}
 
+        {(activeSection === "ALL" || activeSection === "MAINTENANCE") && (
         <Section
           icon={Settings2}
           title="Maintenance"
@@ -247,6 +268,7 @@ const SystemSettings = () => {
             </button>
           </div>
         </Section>
+        )}
       </div>
     </div>
   );

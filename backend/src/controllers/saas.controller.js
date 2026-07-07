@@ -21,6 +21,8 @@ const ChatCallHistory = require("../models/ChatCallHistory");
 const ChatConversation = require("../models/ChatConversation");
 const { revokeAllUserRefreshTokens } = require("../services/authToken.service");
 const { USER_ROLES } = require("../constants/role.constants");
+const TENANT_ADMIN_ROLES = [USER_ROLES.ADMIN, USER_ROLES.MANAGER];
+const canUseTenantAdminTools = (role) => TENANT_ADMIN_ROLES.includes(role);
 
 const toPositiveInt = (value, fallback) => {
   const parsed = Number.parseInt(value, 10);
@@ -1671,8 +1673,8 @@ exports.getGlobalAnalytics = async (req, res) => {
     ] = await Promise.all([
       Company.countDocuments({}),
       Company.countDocuments({ status: "ACTIVE" }),
-      User.countDocuments({ role: { $ne: USER_ROLES.SUPER_ADMIN } }),
-      User.countDocuments({ role: { $ne: USER_ROLES.SUPER_ADMIN }, isActive: true }),
+      User.countDocuments({}),
+      User.countDocuments({ isActive: true }),
       Lead.countDocuments({}),
       Inventory.countDocuments({}),
       TenantSubscription.find({ isCurrent: true, status: { $in: ["TRIAL", "ACTIVE", "PAST_DUE"] } })
@@ -1680,7 +1682,7 @@ exports.getGlobalAnalytics = async (req, res) => {
         .lean(),
       Company.find({}).select("_id name subdomain status").lean(),
       User.aggregate([
-        { $match: { companyId: { $ne: null }, role: { $ne: USER_ROLES.SUPER_ADMIN } } },
+        { $match: { companyId: { $ne: null } } },
         { $group: { _id: "$companyId", totalUsers: { $sum: 1 }, activeUsers: { $sum: { $cond: ["$isActive", 1, 0] } } } },
       ]),
       Inventory.aggregate([
@@ -1757,8 +1759,8 @@ exports.getGlobalAnalytics = async (req, res) => {
 
 exports.getMyTenantMetaIntegration = async (req, res) => {
   try {
-    if (req.user.role !== USER_ROLES.ADMIN) {
-      return res.status(403).json({ message: "Only tenant ADMIN can view Meta integration" });
+    if (!canUseTenantAdminTools(req.user.role)) {
+      return res.status(403).json({ message: "Only tenant admin users can view Meta integration" });
     }
     if (!req.user.companyId) {
       return res.status(403).json({ message: "Company context is required" });
@@ -1784,8 +1786,8 @@ exports.getMyTenantMetaIntegration = async (req, res) => {
 
 exports.updateMyTenantMetaIntegration = async (req, res) => {
   try {
-    if (req.user.role !== USER_ROLES.ADMIN) {
-      return res.status(403).json({ message: "Only tenant ADMIN can update Meta integration" });
+    if (!canUseTenantAdminTools(req.user.role)) {
+      return res.status(403).json({ message: "Only tenant admin users can update Meta integration" });
     }
     if (!req.user.companyId) {
       return res.status(403).json({ message: "Company context is required" });
@@ -1821,8 +1823,8 @@ exports.updateMyTenantMetaIntegration = async (req, res) => {
 
 exports.getMyTenantSettings = async (req, res) => {
   try {
-    if (req.user.role !== USER_ROLES.ADMIN) {
-      return res.status(403).json({ message: "Only tenant ADMIN can view tenant settings" });
+    if (!canUseTenantAdminTools(req.user.role)) {
+      return res.status(403).json({ message: "Only tenant admin users can view tenant settings" });
     }
     if (!req.user.companyId) {
       return res.status(403).json({ message: "Company context is required" });
@@ -1852,8 +1854,8 @@ exports.getMyTenantSettings = async (req, res) => {
 
 exports.updateMyTenantSettings = async (req, res) => {
   try {
-    if (req.user.role !== USER_ROLES.ADMIN) {
-      return res.status(403).json({ message: "Only tenant ADMIN can update tenant settings" });
+    if (!canUseTenantAdminTools(req.user.role)) {
+      return res.status(403).json({ message: "Only tenant admin users can update tenant settings" });
     }
     if (!req.user.companyId) {
       return res.status(403).json({ message: "Company context is required" });

@@ -80,7 +80,7 @@ export const SamvidBotScreen = () => {
 
   useSpeechRecognitionEvent("error", (event) => {
     setIsListening(false);
-    const message = String(event?.message || "").trim() || "Voice input start nahi ho paaya. Dobara try karein.";
+    const message = String(event?.message || "").trim() || "Voice input could not start. Please try again.";
     setError(message);
   });
 
@@ -164,7 +164,7 @@ export const SamvidBotScreen = () => {
         continuous: false,
       });
     } catch {
-      setError("Voice input start nahi ho paaya. Dobara try karein.");
+      setError("Voice input could not start. Please try again.");
       setIsListening(false);
     }
   };

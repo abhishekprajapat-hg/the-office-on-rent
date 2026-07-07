@@ -11,19 +11,20 @@ import {
   Users,
   MapPin,
 } from "lucide-react";
-import { getMyProfile, updateMyProfile } from "../../services/userService";
+import {
+  getMyProfile,
+  updateMyProfile,
+} from "../../services/userService";
 import { toErrorMessage } from "../../utils/errorMessage";
 
 const ROLE_LABELS = {
   ADMIN: "Admin",
   MANAGER: "Manager",
-  ASSISTANT_MANAGER: "Assistant Manager",
-  TEAM_LEADER: "Team Leader",
   EXECUTIVE: "Executive",
   FIELD_EXECUTIVE: "Field Executive",
   CHANNEL_PARTNER: "Channel Partner",
 };
-const MANAGEMENT_ROLES = ["MANAGER", "ASSISTANT_MANAGER", "TEAM_LEADER"];
+const MANAGEMENT_ROLES = ["MANAGER"];
 
 const formatDate = (value) => {
   if (!value) return "-";
@@ -43,13 +44,6 @@ const toSummaryCards = (role, summary = {}) => {
     return [
       { key: "users", label: "Active Users", value: summary.users ?? 0, icon: Users },
       { key: "managers", label: "Managers", value: summary.managers ?? 0, icon: Briefcase },
-      {
-        key: "assistantManagers",
-        label: "Assistant Managers",
-        value: summary.assistantManagers ?? 0,
-        icon: Briefcase,
-      },
-      { key: "teamLeaders", label: "Team Leaders", value: summary.teamLeaders ?? 0, icon: Users },
       { key: "executives", label: "Executives", value: summary.executives ?? 0, icon: Users },
       {
         key: "fieldExecutives",
@@ -65,13 +59,6 @@ const toSummaryCards = (role, summary = {}) => {
   if (MANAGEMENT_ROLES.includes(role)) {
     return [
       { key: "teamMembers", label: "Team Members", value: summary.teamMembers ?? 0, icon: Users },
-      {
-        key: "assistantManagers",
-        label: "Assistant Managers",
-        value: summary.assistantManagers ?? 0,
-        icon: Briefcase,
-      },
-      { key: "teamLeaders", label: "Team Leaders", value: summary.teamLeaders ?? 0, icon: Users },
       { key: "executives", label: "Executives", value: summary.executives ?? 0, icon: Briefcase },
       {
         key: "fieldExecutives",
@@ -79,6 +66,7 @@ const toSummaryCards = (role, summary = {}) => {
         value: summary.fieldExecutives ?? 0,
         icon: MapPin,
       },
+      { key: "channelPartners", label: "Channel Partners", value: summary.channelPartners ?? 0, icon: Users },
       { key: "teamLeads", label: "Team Leads", value: summary.teamLeads ?? 0, icon: Shield },
       {
         key: "dueFollowUpsToday",
@@ -203,15 +191,6 @@ const UserProfile = () => {
 
   return (
     <div className="ui-page-shell custom-scrollbar space-y-6">
-      <div className="ui-hero-card">
-        <h1 className="font-display text-2xl sm:text-4xl text-slate-900 tracking-tight">
-          User Profile
-        </h1>
-        <p className="text-slate-500 mt-2 font-mono text-xs uppercase tracking-widest">
-          Personal account details and role summary
-        </p>
-      </div>
-
       {error && (
         <div className="ui-soft-panel rounded-xl border border-red-200 bg-red-50 text-red-700 text-sm px-3 py-2">
           {error}

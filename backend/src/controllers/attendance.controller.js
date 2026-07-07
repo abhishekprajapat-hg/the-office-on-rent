@@ -555,7 +555,6 @@ const getScopedUsersForAttendanceViewer = async (viewer) => {
     return User.find({
       companyId: viewer.companyId,
       isActive: true,
-      role: { $ne: USER_ROLES.SUPER_ADMIN },
     })
       .select("_id name email role")
       .sort({ name: 1 })

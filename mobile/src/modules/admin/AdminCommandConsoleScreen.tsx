@@ -39,16 +39,12 @@ const NAV_ITEMS = [
 const ROLE_LABELS: Record<string, string> = {
   ADMIN: "Admin",
   MANAGER: "Manager",
-  ASSISTANT_MANAGER: "Assistant Manager",
-  TEAM_LEADER: "Team Leader",
   EXECUTIVE: "Executive",
   FIELD_EXECUTIVE: "Field Executive",
   CHANNEL_PARTNER: "Channel Partner",
 };
 
 const ROLE_PATTERNS = [
-  { role: "ASSISTANT_MANAGER", aliases: ["assistant manager", "assistant_manager"] },
-  { role: "TEAM_LEADER", aliases: ["team leader", "team_leader", "tl"] },
   { role: "FIELD_EXECUTIVE", aliases: ["field executive", "field agent", "field_exec", "fe"] },
   { role: "CHANNEL_PARTNER", aliases: ["channel partner", "partner"] },
   { role: "EXECUTIVE", aliases: ["executive"] },

@@ -6,16 +6,16 @@ import {
   Building2,
   CalendarClock,
   Check,
-  Copy,
   FileText,
   Hash,
   History,
   Image as ImageIcon,
   Link,
   Loader,
+  MapPin,
   Share2,
-  ShieldCheck,
   User,
+  WalletCards,
 } from "lucide-react";
 import {
   getInventoryAssetActivity,
@@ -23,6 +23,7 @@ import {
   createInventoryShareLink,
 } from "../../services/inventoryService";
 import { toErrorMessage } from "../../utils/errorMessage";
+import { PropertyStatusBadge } from "./components/PropertyWorkspace";
 
 const formatPrice = (value) => {
   const parsed = Number(value);
@@ -91,13 +92,6 @@ const formatSoldPaymentType = (value) => {
   return normalized || "-";
 };
 
-const statusClass = (status) => {
-  if (status === "Available") return "bg-emerald-100 text-emerald-700";
-  if (status === "Blocked" || status === "Reserved") return "bg-amber-100 text-amber-700";
-  if (status === "Sold") return "bg-slate-900 text-white";
-  return "bg-slate-100 text-slate-700";
-};
-
 const FieldRow = ({ label, value }) => (
   <div className="flex items-start justify-between gap-4 border-b border-slate-100 py-2">
     <span className="text-xs font-bold uppercase tracking-widest text-slate-400">{label}</span>
@@ -115,8 +109,6 @@ const InventoryDetails = () => {
   const canViewActivity = [
     "ADMIN",
     "MANAGER",
-    "ASSISTANT_MANAGER",
-    "TEAM_LEADER",
   ].includes(role);
 
   const [loading, setLoading] = useState(true);
@@ -270,6 +262,46 @@ const InventoryDetails = () => {
     inventory?.unitNumber,
     statusValue,
   ]);
+  const summaryCards = useMemo(
+    () => [
+      {
+        label: String(transactionType || "").trim().toUpperCase() === "RENT" ? "Monthly Rent" : "Asking Price",
+        value: formatPrice(inventory?.price ?? asset?.price),
+        icon: WalletCards,
+      },
+      {
+        label: "Area",
+        value: formatArea(inventory?.totalArea ?? asset?.totalArea, inventory?.areaUnit || asset?.areaUnit),
+        icon: Building2,
+      },
+      {
+        label: "Location",
+        value: [inventory?.area || asset?.area, inventory?.city || asset?.city].filter(Boolean).join(", ") || "-",
+        icon: MapPin,
+      },
+      {
+        label: "Media",
+        value: `${images.length} images | ${documents.length + floorPlans.length} files`,
+        icon: FileText,
+      },
+    ],
+    [
+      asset?.area,
+      asset?.areaUnit,
+      asset?.city,
+      asset?.price,
+      asset?.totalArea,
+      documents.length,
+      floorPlans.length,
+      images.length,
+      inventory?.area,
+      inventory?.areaUnit,
+      inventory?.city,
+      inventory?.price,
+      inventory?.totalArea,
+      transactionType,
+    ],
+  );
 
   const handleShareToChat = () => {
     if (!sharePayload) return;
@@ -340,30 +372,20 @@ const InventoryDetails = () => {
 
   return (
     <div className="ui-page-shell custom-scrollbar space-y-6">
-      <div className="ui-hero-card flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+      <div className="overflow-hidden rounded-[1.35rem] border border-slate-200 bg-white shadow-sm">
+        <div className="flex flex-col gap-5 border-b border-slate-100 bg-gradient-to-br from-slate-50 to-white p-5 lg:flex-row lg:items-start lg:justify-between">
         <div>
           <button
             onClick={() => navigate(-1)}
-            className="mb-2 inline-flex items-center gap-2 text-sm font-semibold text-slate-500 hover:text-slate-800"
+            className="inline-flex items-center gap-2 text-sm font-semibold text-slate-500 hover:text-slate-800"
           >
             <ArrowLeft size={16} />
             Back
           </button>
-          <h1 className="font-display text-3xl tracking-wide text-slate-900">{pageTitle || "Property Details"}</h1>
-          <p className="text-xs font-bold uppercase tracking-widest text-slate-400 mt-1">
-            Full inventory profile
-          </p>
         </div>
 
         <div className="flex flex-wrap items-center gap-2">
-          <div
-            className={`inline-flex items-center gap-2 px-3 py-1.5 rounded-full text-xs font-bold uppercase tracking-widest ${statusClass(
-              statusValue,
-            )}`}
-          >
-            <ShieldCheck size={14} />
-            {statusValue}
-          </div>
+          <PropertyStatusBadge status={statusValue} />
           {sharePayload && (
             <button
               onClick={handleShareToChat}
@@ -394,6 +416,19 @@ const InventoryDetails = () => {
           {shareError && (
             <span className="text-xs text-red-500 ml-1">{shareError}</span>
           )}
+        </div>
+      </div>
+
+        <div className="grid grid-cols-1 gap-3 p-4 sm:grid-cols-2 xl:grid-cols-4">
+          {summaryCards.map(({ label, value, icon }) => (
+            <div key={label} className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3">
+              <div className="flex items-center gap-2 text-[10px] font-bold uppercase tracking-widest text-slate-400">
+                {React.createElement(icon, { size: 14 })}
+                {label}
+              </div>
+              <div className="mt-2 truncate text-base font-bold text-slate-900">{value}</div>
+            </div>
+          ))}
         </div>
       </div>
 

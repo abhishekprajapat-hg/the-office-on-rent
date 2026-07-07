@@ -3,6 +3,7 @@ import {
   Building2,
   Calendar,
   CheckCircle,
+  Clock3,
   LayoutGrid,
   MessageSquare,
   Target,
@@ -95,17 +96,8 @@ const ExecutiveDashboard = () => {
 
   return (
     <div className="ui-page-shell flex h-full w-full flex-col overflow-hidden">
-      <div className="ui-hero-card shrink-0 px-4 pb-4 pt-5 sm:px-6 lg:px-8">
-        <p className="text-[11px] uppercase tracking-[0.2em] text-cyan-700">
-          Executive Command Center
-        </p>
-        <h2 className="mt-1 font-display text-2xl text-slate-900">
-          Daily Sales Desk
-        </h2>
-        <p className="mt-1 text-[11px] uppercase tracking-[0.16em] text-slate-500">
-          Active View: {tabLabel}
-        </p>
-        <div className="mt-4 flex flex-wrap gap-2">
+      <div className="shrink-0">
+        <div className="flex flex-wrap gap-2">
           {TABS.map((tab) => {
             const Icon = tab.icon;
             const active = activeTab === tab.id;
@@ -168,6 +160,8 @@ const ExecutiveOverview = ({ stats, leads, onOpen }) => (
       />
     </div>
 
+    <ExecutiveCommandSnapshot leads={leads} onOpen={onOpen} />
+
     <div className="ui-soft-panel mt-6 p-3 sm:p-4">
       <LeadPerformancePanel
         leads={leads}
@@ -213,7 +207,123 @@ const ExecutiveOverview = ({ stats, leads, onOpen }) => (
   </div>
 );
 
-const StatCard = ({ title, value, hint, icon: Icon, onClick }) => (
+const ExecutiveCommandSnapshot = ({ leads, onOpen }) => {
+  const snapshot = useMemo(() => {
+    const now = new Date();
+    const todayStart = new Date(now);
+    todayStart.setHours(0, 0, 0, 0);
+    const todayEnd = new Date(now);
+    todayEnd.setHours(23, 59, 59, 999);
+
+    const toDate = (value) => {
+      if (!value) return null;
+      const parsed = new Date(value);
+      return Number.isNaN(parsed.getTime()) ? null : parsed;
+    };
+
+    const dueToday = leads
+      .map((lead) => ({ ...lead, followUpAt: toDate(lead.nextFollowUp) }))
+      .filter((lead) => lead.followUpAt && lead.followUpAt >= todayStart && lead.followUpAt <= todayEnd)
+      .sort((left, right) => left.followUpAt - right.followUpAt)
+      .slice(0, 4);
+
+    const stages = ["NEW", "CONTACTED", "INTERESTED", "SITE_VISIT", "REQUESTED", "CLOSED"];
+    const funnel = stages.map((stage) => ({
+      stage,
+      count: leads.filter((lead) => String(lead.status || "") === stage).length,
+    }));
+
+    const recent = [...leads]
+      .sort((left, right) => {
+        const leftDate = toDate(left.updatedAt || left.createdAt)?.getTime() || 0;
+        const rightDate = toDate(right.updatedAt || right.createdAt)?.getTime() || 0;
+        return rightDate - leftDate;
+      })
+      .slice(0, 4);
+
+    return { dueToday, funnel, recent };
+  }, [leads]);
+
+  return (
+    <div className="mt-6 grid grid-cols-1 gap-4 xl:grid-cols-3">
+      <section className="ui-soft-panel rounded-2xl border border-slate-200 bg-white p-4">
+        <h3 className="text-sm font-bold text-slate-900">Today's Follow-ups</h3>
+        <p className="mt-1 text-[10px] uppercase tracking-[0.14em] text-slate-500">
+          {snapshot.dueToday.length} scheduled
+        </p>
+        <div className="mt-3 space-y-2">
+          {snapshot.dueToday.length ? snapshot.dueToday.map((lead) => (
+            <button
+              key={lead._id}
+              type="button"
+              onClick={() => onOpen("leads")}
+              className="w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-left"
+            >
+              <p className="truncate text-sm font-semibold text-slate-900">{lead.name || lead.phone || "Lead"}</p>
+              <p className="mt-1 flex items-center gap-1 text-xs text-slate-500">
+                <Clock3 size={12} />
+                {lead.followUpAt.toLocaleTimeString("en-IN", { hour: "2-digit", minute: "2-digit" })}
+              </p>
+            </button>
+          )) : (
+            <p className="rounded-xl border border-dashed border-slate-300 px-3 py-6 text-center text-sm text-slate-500">
+              No follow-ups due today.
+            </p>
+          )}
+        </div>
+      </section>
+
+      <section className="ui-soft-panel rounded-2xl border border-slate-200 bg-white p-4">
+        <h3 className="text-sm font-bold text-slate-900">Lead Funnel Snapshot</h3>
+        <p className="mt-1 text-[10px] uppercase tracking-[0.14em] text-slate-500">
+          Current assigned pipeline
+        </p>
+        <div className="mt-3 space-y-2">
+          {snapshot.funnel.map((row) => (
+            <div key={row.stage}>
+              <div className="mb-1 flex items-center justify-between text-xs">
+                <span className="font-semibold text-slate-600">{row.stage.replace("_", " ")}</span>
+                <span className="text-slate-500">{row.count}</span>
+              </div>
+              <div className="h-2 rounded-full bg-slate-100">
+                <div
+                  className="h-full rounded-full bg-gradient-to-r from-cyan-500 to-emerald-500"
+                  style={{ width: `${leads.length ? Math.min((row.count / leads.length) * 100, 100) : 0}%` }}
+                />
+              </div>
+            </div>
+          ))}
+        </div>
+      </section>
+
+      <section className="ui-soft-panel rounded-2xl border border-slate-200 bg-white p-4">
+        <h3 className="text-sm font-bold text-slate-900">Recent Activity</h3>
+        <p className="mt-1 text-[10px] uppercase tracking-[0.14em] text-slate-500">
+          Latest lead updates
+        </p>
+        <div className="mt-3 space-y-2">
+          {snapshot.recent.length ? snapshot.recent.map((lead) => (
+            <button
+              key={lead._id}
+              type="button"
+              onClick={() => onOpen("leads")}
+              className="w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-left"
+            >
+              <p className="truncate text-sm font-semibold text-slate-900">{lead.name || lead.phone || "Lead"}</p>
+              <p className="mt-1 text-xs text-slate-500">{lead.status || "-"}</p>
+            </button>
+          )) : (
+            <p className="rounded-xl border border-dashed border-slate-300 px-3 py-6 text-center text-sm text-slate-500">
+              No recent lead activity.
+            </p>
+          )}
+        </div>
+      </section>
+    </div>
+  );
+};
+
+const StatCard = ({ title, value, hint, icon, onClick }) => (
   <button
     type="button"
     onClick={onClick}
@@ -224,7 +334,7 @@ const StatCard = ({ title, value, hint, icon: Icon, onClick }) => (
         {title}
       </p>
       <div className="rounded-lg bg-emerald-50 p-2 text-emerald-600">
-        <Icon size={14} />
+        {React.createElement(icon, { size: 14 })}
       </div>
     </div>
     <p className="mt-3 font-display text-3xl text-slate-900">{value}</p>
@@ -232,14 +342,14 @@ const StatCard = ({ title, value, hint, icon: Icon, onClick }) => (
   </button>
 );
 
-const QuickPageCard = ({ title, subtitle, icon: Icon, onClick }) => (
+const QuickPageCard = ({ title, subtitle, icon, onClick }) => (
   <button
     type="button"
     onClick={onClick}
     className="ui-soft-panel rounded-2xl p-5 text-left transition-all hover:-translate-y-0.5 hover:border-cyan-300/70"
   >
     <div className="mb-3 inline-flex rounded-lg bg-slate-100 p-2 text-slate-700">
-      <Icon size={16} />
+      {React.createElement(icon, { size: 16 })}
     </div>
     <p className="text-sm font-semibold text-slate-900">{title}</p>
     <p className="mt-1 text-xs text-slate-500">{subtitle}</p>

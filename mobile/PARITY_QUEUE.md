@@ -2,7 +2,7 @@
 
 ## Status
 - Completed in this batch:
-  - Role model parity (assistant manager, team leader, channel partner)
+  - Role model parity (manager, executive, field executive, channel partner)
   - Role navigation parity baseline
   - Admin Console screen (mobile)
   - User Details Editor screen (mobile)
@@ -37,7 +37,7 @@
 - Color/spacing/token unification for shared modules
 
 ### P3 - QA and Hardening
-- Role-wise regression checklist (Admin, Manager, Assistant Manager, Team Leader, Executive, Field Executive, Channel Partner)
+- Role-wise regression checklist (Admin, Manager, Executive, Field Executive, Channel Partner)
 - Android crash watchlist + error boundary improvements
 - Optional: add automated smoke checks for key routes/screens
 

@@ -73,6 +73,13 @@ export const deleteInventoryAsset = async (assetId) => {
   await api.delete(`/inventory/${assetId}`);
 };
 
+export const requestInventoryDelete = async (assetId, requestNote = "") => {
+  const res = await api.post(`/inventory-request/delete/${assetId}`, {
+    requestNote,
+  });
+  return res.data?.request || null;
+};
+
 export const requestInventoryStatusChange = async (
   assetId,
   status,

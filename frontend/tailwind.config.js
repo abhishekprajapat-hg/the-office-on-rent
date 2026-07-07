@@ -1,5 +1,6 @@
 /** @type {import('tailwindcss').Config} */
 export default {
+  darkMode: ['selector', 'html.theme-dark'],
   content: [
     "./index.html",
     "./src/**/*.{js,ts,jsx,tsx}",
@@ -8,6 +9,15 @@ export default {
     extend: {
       colors: {
         void: "#f6f8fb",
+        crm: {
+          bg: "#f6f8fb",
+          surface: "#ffffff",
+          muted: "#f1f5f9",
+          border: "#e2e8f0",
+          ink: "#0f172a",
+          subtle: "#64748b",
+          accent: "#2563eb",
+        },
 
         text: {
           primary: "#0f172a",
@@ -39,6 +49,9 @@ export default {
         'glass-light': '0 18px 48px -36px rgba(37, 99, 235, 0.65)',
         'glass-light-hover': '0 22px 56px -34px rgba(37, 99, 235, 0.72)',
         'flat-card': '0 1px 2px rgba(15, 23, 42, 0.06), 0 10px 30px -24px rgba(15, 23, 42, 0.3)',
+        'crm-soft': '0 1px 2px rgba(15, 23, 42, 0.06), 0 10px 24px -22px rgba(15, 23, 42, 0.32)',
+        'crm-card': '0 1px 2px rgba(15, 23, 42, 0.06), 0 16px 34px -30px rgba(15, 23, 42, 0.32)',
+        'crm-panel': '0 18px 48px -34px rgba(15, 23, 42, 0.42)',
       }
     },
   },

@@ -50,30 +50,24 @@ type TeamLead = {
 
 const ROLE_OPTIONS = [
   { label: "Manager", value: "MANAGER" },
-  { label: "Assistant Manager", value: "ASSISTANT_MANAGER" },
-  { label: "Team Leader", value: "TEAM_LEADER" },
   { label: "Executive", value: "EXECUTIVE" },
   { label: "Field Executive", value: "FIELD_EXECUTIVE" },
   { label: "Channel Partner", value: "CHANNEL_PARTNER" },
 ];
 const EDIT_ROLE_OPTIONS = [
   { label: "Manager", value: "MANAGER" },
-  { label: "Assistant Manager", value: "ASSISTANT_MANAGER" },
-  { label: "Team Leader", value: "TEAM_LEADER" },
   { label: "Executive", value: "EXECUTIVE" },
   { label: "Field Executive", value: "FIELD_EXECUTIVE" },
   { label: "Channel Partner", value: "CHANNEL_PARTNER" },
 ];
 
 const EXECUTIVE_ROLES = new Set(["EXECUTIVE", "FIELD_EXECUTIVE"]);
-const MANAGEMENT_ROLES = new Set(["MANAGER", "ASSISTANT_MANAGER", "TEAM_LEADER"]);
+const MANAGEMENT_ROLES = new Set(["MANAGER"]);
 const REPORTING_PARENT_ROLES: Record<string, string[]> = {
   MANAGER: ["ADMIN"],
-  ASSISTANT_MANAGER: ["MANAGER"],
-  TEAM_LEADER: ["ASSISTANT_MANAGER"],
-  EXECUTIVE: ["TEAM_LEADER"],
-  FIELD_EXECUTIVE: ["TEAM_LEADER"],
-  CHANNEL_PARTNER: ["ADMIN"],
+  EXECUTIVE: ["MANAGER"],
+  FIELD_EXECUTIVE: ["MANAGER"],
+  CHANNEL_PARTNER: ["MANAGER"],
 };
 const getRefId = (value: { _id?: string } | string | null | undefined) => {
   if (!value) return "";
@@ -162,7 +156,7 @@ export const TeamManagerScreen = () => {
   const editManagerOptions = useMemo(
     () =>
       users.filter((u) =>
-        ["MANAGER", "ASSISTANT_MANAGER", "TEAM_LEADER"].includes(String(u.role || "")) && u.isActive !== false,
+        String(u.role || "") === "MANAGER" && u.isActive !== false,
       ),
     [users],
   );

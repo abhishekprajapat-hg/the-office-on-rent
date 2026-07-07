@@ -6,103 +6,32 @@ const { USER_ROLES } = require("../constants/role.constants");
 const { writeLimiter } = require("../middleware/rateLimit.middleware");
 
 const router = express.Router();
+const TENANT_ADMIN_ROLES = [USER_ROLES.ADMIN, USER_ROLES.MANAGER];
 
 router.use(authMiddleware.protect);
 
-// Tenant admin self-service settings
+// Single-client admin self-service settings.
 router.get(
   "/tenant/settings",
-  authMiddleware.checkRole([USER_ROLES.ADMIN]),
+  authMiddleware.checkRole(TENANT_ADMIN_ROLES),
   saasController.getMyTenantSettings,
 );
 router.patch(
   "/tenant/settings",
   writeLimiter,
-  authMiddleware.checkRole([USER_ROLES.ADMIN]),
+  authMiddleware.checkRole(TENANT_ADMIN_ROLES),
   saasController.updateMyTenantSettings,
 );
 router.get(
   "/tenant/meta",
-  authMiddleware.checkRole([USER_ROLES.ADMIN]),
+  authMiddleware.checkRole(TENANT_ADMIN_ROLES),
   saasController.getMyTenantMetaIntegration,
 );
 router.patch(
   "/tenant/meta",
   writeLimiter,
-  authMiddleware.checkRole([USER_ROLES.ADMIN]),
+  authMiddleware.checkRole(TENANT_ADMIN_ROLES),
   saasController.updateMyTenantMetaIntegration,
-);
-
-// Super admin platform controls
-router.get(
-  "/tenant/resolve",
-  authMiddleware.checkRole([USER_ROLES.SUPER_ADMIN]),
-  saasController.resolveTenantByHost,
-);
-router.get(
-  "/companies",
-  authMiddleware.checkRole([USER_ROLES.SUPER_ADMIN]),
-  saasController.listCompanies,
-);
-router.post(
-  "/companies",
-  writeLimiter,
-  authMiddleware.checkRole([USER_ROLES.SUPER_ADMIN]),
-  saasController.createCompany,
-);
-router.patch(
-  "/companies/:companyId",
-  writeLimiter,
-  authMiddleware.checkRole([USER_ROLES.SUPER_ADMIN]),
-  saasController.updateCompany,
-);
-router.delete(
-  "/companies/:companyId",
-  writeLimiter,
-  authMiddleware.checkRole([USER_ROLES.SUPER_ADMIN]),
-  saasController.deleteCompany,
-);
-router.post(
-  "/companies/:companyId/admin/reset-password",
-  writeLimiter,
-  authMiddleware.checkRole([USER_ROLES.SUPER_ADMIN]),
-  saasController.resetCompanyAdminPassword,
-);
-
-router.get(
-  "/plans",
-  authMiddleware.checkRole([USER_ROLES.SUPER_ADMIN]),
-  saasController.listPlans,
-);
-router.post(
-  "/plans",
-  writeLimiter,
-  authMiddleware.checkRole([USER_ROLES.SUPER_ADMIN]),
-  saasController.createPlan,
-);
-router.patch(
-  "/plans/:planId",
-  writeLimiter,
-  authMiddleware.checkRole([USER_ROLES.SUPER_ADMIN]),
-  saasController.updatePlan,
-);
-
-router.post(
-  "/subscriptions/assign",
-  writeLimiter,
-  authMiddleware.checkRole([USER_ROLES.SUPER_ADMIN]),
-  saasController.assignSubscription,
-);
-
-router.get(
-  "/usage/:companyId",
-  authMiddleware.checkRole([USER_ROLES.SUPER_ADMIN]),
-  saasController.getCompanyUsage,
-);
-router.get(
-  "/analytics/global",
-  authMiddleware.checkRole([USER_ROLES.SUPER_ADMIN]),
-  saasController.getGlobalAnalytics,
 );
 
 module.exports = router;

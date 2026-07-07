@@ -234,7 +234,7 @@ const queryInventory = async ({
   const scope = getInventoryScopeForUser(user);
   if (!scope) {
     return {
-      answer: "Aapke role me inventory access allowed nahi hai.",
+      answer: "Inventory access is not allowed for your role.",
       data: { inventory: [] },
     };
   }
@@ -286,7 +286,7 @@ const queryInventory = async ({
 
   if (!items.length) {
     return {
-      answer: "Is inventory query ke liye koi matching property nahi mili.",
+      answer: "No matching property was found for this inventory query.",
       data: { inventory: [] },
     };
   }
@@ -300,13 +300,13 @@ const queryInventory = async ({
       )
       .join("\n");
     return {
-      answer: `${items.length} asset record mile:\n${previewLines}`,
+      answer: `${items.length} asset records found:\n${previewLines}`,
       data: { inventory: items },
     };
   }
 
   return {
-    answer: `${items.length} matching inventory record mile. Top match: ${items[0].label} (${items[0].status}, Rs ${formatMoney(items[0].price)}).`,
+    answer: `${items.length} matching inventory records found. Top match: ${items[0].label} (${items[0].status}, Rs ${formatMoney(items[0].price)}).`,
     data: { inventory: items },
   };
 };
@@ -321,7 +321,7 @@ const queryLeads = async ({
   const scope = await getLeadScopeForUser(user);
   if (!scope) {
     return {
-      answer: "Aapke role me lead access available nahi hai.",
+      answer: "Lead access is not available for your role.",
       data: { leads: [] },
     };
   }
@@ -365,7 +365,7 @@ const queryLeads = async ({
 
   if (!leads.length) {
     return {
-      answer: "Is lead query ke liye koi matching result nahi mila.",
+      answer: "No matching result was found for this lead query.",
       data: { leads: [] },
     };
   }
@@ -379,13 +379,13 @@ const queryLeads = async ({
       )
       .join("\n");
     return {
-      answer: `${leads.length} lead record mile:\n${previewLines}`,
+      answer: `${leads.length} lead records found:\n${previewLines}`,
       data: { leads },
     };
   }
 
   return {
-    answer: `${leads.length} matching leads mile. Top result: ${leads[0].name} (${leads[0].status}) assigned to ${leads[0].assignee}.`,
+    answer: `${leads.length} matching leads found. Top result: ${leads[0].name} (${leads[0].status}) assigned to ${leads[0].assignee}.`,
     data: { leads },
   };
 };
@@ -394,7 +394,7 @@ const queryBestPerformer = async ({ user, query }) => {
   const scope = await getLeadScopeForUser(user);
   if (!scope) {
     return {
-      answer: "Performance calculate karne ke liye lead scope available nahi hai.",
+      answer: "Lead scope is not available to calculate performance.",
       data: { performers: [] },
     };
   }
@@ -445,7 +445,7 @@ const queryBestPerformer = async ({ user, query }) => {
 
   if (!rows.length) {
     return {
-      answer: "Abhi performance ranking ke liye data available nahi hai.",
+      answer: "Performance ranking data is not available right now.",
       data: { performers: [] },
     };
   }
@@ -569,7 +569,7 @@ const querySalesInterestedSnapshot = async ({ user }) => {
 
   if (!inventoryScope || !leadScope) {
     return {
-      answer: "Sales/interest snapshot ke liye required access available nahi hai.",
+      answer: "Required access is not available for the sales/interest snapshot.",
       data: { soldInventory: [], interestedLeads: [] },
     };
   }
@@ -619,7 +619,7 @@ const querySalesInterestedSnapshot = async ({ user }) => {
   }));
 
   return {
-    answer: `Snapshot ready: ${soldInventory.length} sold properties aur ${interestedLeads.length} interested leads mile.`,
+    answer: `Snapshot ready: ${soldInventory.length} sold properties and ${interestedLeads.length} interested leads found.`,
     data: { soldInventory, interestedLeads },
   };
 };

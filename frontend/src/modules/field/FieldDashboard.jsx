@@ -147,16 +147,8 @@ const FieldDashboard = () => {
 
   return (
     <div className="ui-page-shell flex h-full w-full flex-col overflow-hidden">
-      <div className="ui-hero-card shrink-0 px-4 pb-4 pt-5 sm:px-6 lg:px-8">
-        <p className="text-[11px] uppercase tracking-[0.2em] text-cyan-700">
-          Ground Command
-        </p>
-        <h2 className="mt-1 font-display text-2xl text-slate-900">Field Executive Desk</h2>
-        <p className="mt-1 text-[11px] uppercase tracking-[0.18em] text-slate-500">
-          Active View: {tabLabel}
-        </p>
-
-        <div className="mt-4 flex flex-wrap gap-2">
+      <div className="shrink-0">
+        <div className="flex flex-wrap gap-2">
           {TABS.map((tab) => {
             const Icon = tab.icon;
             const active = activeTab === tab.id;

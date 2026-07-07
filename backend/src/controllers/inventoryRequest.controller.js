@@ -1,5 +1,6 @@
 const {
   createInventoryCreateRequest,
+  createInventoryDeleteRequest,
   createInventoryUpdateRequest,
   getMyRequests,
 } = require("../services/inventoryWorkflow.service");
@@ -49,6 +50,24 @@ exports.updateRequest = async (req, res) => {
     });
   } catch (error) {
     return handleControllerError(res, error, "Failed to submit update request");
+  }
+};
+
+exports.deleteRequest = async (req, res) => {
+  try {
+    const request = await createInventoryDeleteRequest({
+      user: req.user,
+      inventoryId: req.params.inventoryId,
+      requestNote: req.body?.requestNote || req.body?.reason,
+      io: req.app.get("io"),
+    });
+
+    return res.status(201).json({
+      message: "Inventory delete request submitted",
+      request,
+    });
+  } catch (error) {
+    return handleControllerError(res, error, "Failed to submit delete request");
   }
 };
 

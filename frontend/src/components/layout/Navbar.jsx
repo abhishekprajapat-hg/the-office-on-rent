@@ -30,9 +30,6 @@ import { useChatNotifications } from "../../context/useChatNotifications";
 import BrandLogo from "../common/BrandLogo";
 
 const MENU_CONFIG = {
-  super_admin: [
-    { name: "Platform", icon: ShieldCheck, path: "/super-admin" },
-  ],
   admin: [
     { name: "Home", icon: Home, path: "/dashboard" },
     { name: "Pipeline", icon: Users, path: "/leads" },
@@ -61,6 +58,7 @@ const MENU_CONFIG = {
     { name: "Inventory", icon: Building2, path: "/inventory" },
     { name: "Field Ops", icon: Map, path: "/map" },
     { name: "Chat", icon: MessageSquare, path: "/chat" },
+    { name: "Alerts", icon: Bell, path: "/admin/notifications" },
     { name: "Reports", icon: ClipboardList, path: "/reports" },
     { name: "Leaderboard", icon: Trophy, path: "/leaderboard" },
     { name: "Targets", icon: PieChart, path: "/targets" },
@@ -112,11 +110,8 @@ const Navbar = ({ userRole = "manager", onLogout, theme = "light", onToggleTheme
   const canChannelPartnerViewInventory = Boolean(storedUser?.canViewInventory);
 
   const roleKeyMap = {
-    SUPER_ADMIN: "super_admin",
     ADMIN: "admin",
     MANAGER: "manager",
-    ASSISTANT_MANAGER: "manager",
-    TEAM_LEADER: "manager",
     EXECUTIVE: "executive",
     FIELD_EXECUTIVE: "field_agent",
     CHANNEL_PARTNER: "partner",
@@ -136,7 +131,7 @@ const Navbar = ({ userRole = "manager", onLogout, theme = "light", onToggleTheme
   const currentMenu = normalizedRole === "partner"
     ? partnerMenu
     : (MENU_CONFIG[normalizedRole] || MENU_CONFIG.manager);
-  const hasAdminAlerts = userRole === "ADMIN" && adminRequestUnread > 0;
+  const hasAdminAlerts = ["ADMIN", "MANAGER"].includes(userRole) && adminRequestUnread > 0;
 
   const handleCloseMenus = () => {
     setMobileMenuOpen(false);
@@ -155,8 +150,10 @@ const Navbar = ({ userRole = "manager", onLogout, theme = "light", onToggleTheme
         }`}
       >
         <div className="h-full flex items-center gap-2 sm:gap-3 px-2 sm:px-4">
-          <div className="relative flex-none flex items-center justify-center w-16 h-16">
-            <BrandLogo className="h-16 w-16" />
+          <div className="relative flex-none flex h-16 w-28 items-center justify-center sm:w-36">
+            <div className="flex h-12 w-full items-center justify-center rounded-xl border border-slate-200 bg-white p-1.5 shadow-sm">
+              <BrandLogo className="h-full w-full" />
+            </div>
           </div>
 
           <nav className="hidden md:flex flex-1 items-center justify-center gap-4 lg:gap-5 py-1">

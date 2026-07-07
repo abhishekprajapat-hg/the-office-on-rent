@@ -761,22 +761,10 @@ const FinancialCore = () => {
   }
 
   return (
-    <div className="ui-page-shell custom-scrollbar space-y-6">
-      <div className="ui-hero-card flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
-        <div>
-          <h1 className="font-display text-3xl font-semibold text-slate-900">Finance Dashboard</h1>
-          <p className="mt-1 text-xs uppercase tracking-[0.16em] text-slate-500">
-            Real-time view from lead pipeline, closures and broker payouts
-          </p>
-          <p className="mt-2 text-xs text-slate-500">
-            Click any card or row to drill down into lead workspace.
-            {lastUpdatedAt ? ` Updated ${formatDateTime(lastUpdatedAt)}.` : ""}
-          </p>
-        </div>
-
-        <div className="flex flex-col items-start gap-2 sm:items-end">
-          <div className="ui-soft-panel inline-flex flex-wrap items-center gap-2 rounded-2xl border border-slate-200 bg-white p-2 shadow-sm">
-            <div className="inline-flex flex-wrap items-center gap-1 rounded-xl bg-slate-100/90 p-1">
+    <div className="ui-page-shell custom-scrollbar space-y-5">
+      <div className="flex flex-col items-stretch gap-2 sm:items-end">
+        <div className="ui-soft-panel flex w-full flex-wrap items-center gap-2 rounded-2xl border border-slate-200 bg-white p-2 shadow-sm sm:w-auto">
+          <div className="grid w-full grid-cols-2 gap-1 rounded-xl bg-slate-100/90 p-1 sm:inline-flex sm:w-auto sm:flex-wrap">
               {RANGE_OPTIONS.map((range) => (
                 <button
                   key={range.key}
@@ -796,7 +784,7 @@ const FinancialCore = () => {
               type="button"
               onClick={() => loadFinanceData(true)}
               disabled={refreshing}
-              className="h-9 rounded-xl border border-slate-300 bg-white px-3 text-xs font-semibold text-slate-700 hover:border-cyan-400 hover:text-cyan-700 disabled:opacity-60 inline-flex items-center gap-2"
+              className="inline-flex h-9 w-full items-center justify-center gap-2 rounded-xl border border-slate-300 bg-white px-3 text-xs font-semibold text-slate-700 hover:border-cyan-400 hover:text-cyan-700 disabled:opacity-60 sm:w-auto"
             >
               <RefreshCw size={14} className={refreshing ? "animate-spin" : ""} />
               Refresh
@@ -843,7 +831,6 @@ const FinancialCore = () => {
               </label>
             </div>
           ) : null}
-        </div>
       </div>
 
       {error && (
@@ -853,7 +840,7 @@ const FinancialCore = () => {
         </div>
       )}
 
-      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4 2xl:grid-cols-8">
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
         {statCards.map((card) => (
           <StatCard
             key={card.title}

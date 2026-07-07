@@ -107,7 +107,7 @@ export const InventoryDetailsScreen = () => {
   const normalizedRole = String(role || "").toUpperCase();
   const isAdmin = normalizedRole === "ADMIN";
   const canManage = ["ADMIN", "MANAGER", "CHANNEL_PARTNER"].includes(normalizedRole);
-  const canRequestStatusChange = ["FIELD_EXECUTIVE", "EXECUTIVE", "TEAM_LEADER", "ASSISTANT_MANAGER"].includes(normalizedRole);
+  const canRequestStatusChange = ["FIELD_EXECUTIVE", "EXECUTIVE"].includes(normalizedRole);
   const canEditAsset = canManage || canRequestStatusChange;
 
   const [loading, setLoading] = useState(true);

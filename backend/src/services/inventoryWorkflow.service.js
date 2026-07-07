@@ -47,6 +47,16 @@ const INVENTORY_UPDATE_REQUEST_ROLES = Object.freeze([
   USER_ROLES.EXECUTIVE,
   USER_ROLES.FIELD_EXECUTIVE,
 ]);
+const INVENTORY_DIRECT_MANAGE_ROLES = Object.freeze([
+  USER_ROLES.ADMIN,
+  USER_ROLES.MANAGER,
+]);
+const INVENTORY_DELETE_REQUEST_ROLES = Object.freeze([
+  USER_ROLES.MANAGER,
+  USER_ROLES.EXECUTIVE,
+  USER_ROLES.FIELD_EXECUTIVE,
+  USER_ROLES.CHANNEL_PARTNER,
+]);
 const INVENTORY_TYPE_OPTIONS = Object.freeze(["COMMERCIAL", "RESIDENTIAL"]);
 const FURNISHING_STATUS_OPTIONS = Object.freeze([
   "",
@@ -786,6 +796,10 @@ const getInventoryRequestEventTitle = ({ status, stage }) => {
 };
 
 const resolveDirectCreateTeamId = async ({ user, payload, companyId }) => {
+  if (isManagementRole(user.role)) {
+    return user._id;
+  }
+
   const requestedTeamId = payload?.teamId || null;
   if (requestedTeamId) {
     await ensureManagerExistsInCompany({
@@ -1448,8 +1462,8 @@ const getInventoryById = async ({ user, inventoryId }) => {
 };
 
 const createInventoryDirect = async ({ user, payload }) => {
-  if (user.role !== USER_ROLES.ADMIN) {
-    throw createHttpError(403, "Only ADMIN can create inventory directly");
+  if (!INVENTORY_DIRECT_MANAGE_ROLES.includes(user.role)) {
+    throw createHttpError(403, "Only ADMIN or MANAGER can create inventory directly");
   }
 
   const companyId = getCompanyIdForUser(user);
@@ -1490,8 +1504,8 @@ const createInventoryDirect = async ({ user, payload }) => {
 };
 
 const updateInventoryDirect = async ({ user, inventoryId, payload }) => {
-  if (user.role !== USER_ROLES.ADMIN) {
-    throw createHttpError(403, "Only ADMIN can update inventory directly");
+  if (!INVENTORY_DIRECT_MANAGE_ROLES.includes(user.role)) {
+    throw createHttpError(403, "Only ADMIN or MANAGER can update inventory directly");
   }
 
   if (!isValidObjectId(inventoryId)) {
@@ -1599,8 +1613,8 @@ const deleteInventoryDirect = async ({ user, inventoryId }) => {
 };
 
 const bulkCreateInventoryDirect = async ({ user, payload = [] }) => {
-  if (user.role !== USER_ROLES.ADMIN) {
-    throw createHttpError(403, "Only ADMIN can bulk upload inventory");
+  if (!INVENTORY_DIRECT_MANAGE_ROLES.includes(user.role)) {
+    throw createHttpError(403, "Only ADMIN or MANAGER can bulk upload inventory");
   }
 
   if (!Array.isArray(payload) || payload.length === 0) {
@@ -1849,6 +1863,83 @@ const createInventoryUpdateRequest = async ({
   return applyRequestPopulates(InventoryRequest.findById(request._id));
 };
 
+const createInventoryDeleteRequest = async ({
+  user, inventoryId, requestNote, io,
+}) => {
+  if (!INVENTORY_DELETE_REQUEST_ROLES.includes(user.role)) {
+    throw createHttpError(403, "Admins can delete directly; other roles must submit a delete request");
+  }
+
+  if (!isValidObjectId(inventoryId)) {
+    throw createHttpError(400, "Invalid inventory id");
+  }
+
+  const companyId = getCompanyIdForUser(user);
+  const inventory = await Inventory.findOne({
+    _id: inventoryId,
+    companyId,
+  }).lean();
+
+  if (!inventory) {
+    throw createHttpError(404, "Inventory not found");
+  }
+
+  const existingRequest = await InventoryRequest.findOne({
+    companyId,
+    inventoryId,
+    type: "delete",
+    status: REQUEST_STATUS_PENDING,
+  }).select("_id").lean();
+
+  if (existingRequest) {
+    throw createHttpError(409, "A delete request is already pending for this inventory");
+  }
+
+  const teamId = getTeamIdForUser(user) || inventory.teamId || null;
+  const cleanRequestNote = sanitizeString(requestNote)
+    .slice(0, MAX_INVENTORY_REQUEST_NOTE_LENGTH);
+
+  const request = await InventoryRequest.create({
+    companyId,
+    requestedBy: user._id,
+    inventoryId: inventory._id,
+    type: "delete",
+    proposedData: {
+      projectName: inventory.projectName,
+      towerName: inventory.towerName,
+      unitNumber: inventory.unitNumber,
+      propertyId: inventory.propertyId,
+      status: inventory.status,
+      location: inventory.location,
+      price: inventory.price,
+      type: inventory.type,
+    },
+    requestNote: cleanRequestNote,
+    status: REQUEST_STATUS_PENDING,
+    teamId,
+  });
+
+  await logInventoryActivity({
+    companyId,
+    inventoryId: inventory._id,
+    changedBy: user._id,
+    role: user.role,
+    actionType: INVENTORY_ACTIVITY_ACTIONS.REQUEST_CREATED,
+    oldValue: inventory,
+    newValue: { deleteRequested: true, reason: cleanRequestNote },
+    requestId: request._id,
+  });
+
+  notifyRequestCreated({
+    io,
+    request,
+    companyId,
+    teamId,
+  });
+
+  return applyRequestPopulates(InventoryRequest.findById(request._id));
+};
+
 const getPendingRequests = async ({ user }) => {
   if (![USER_ROLES.ADMIN, ...MANAGEMENT_ROLES].includes(user.role)) {
     throw createHttpError(403, "Access denied");
@@ -2023,6 +2114,33 @@ const approveRequest = async ({ user, requestId, io }) => {
       newValue: diff.newValue,
       requestId: request._id,
     });
+  } else if (request.type === "delete") {
+    if (!request.inventoryId) {
+      throw createHttpError(400, "Inventory reference is required for delete request");
+    }
+
+    inventory = await Inventory.findOne({
+      _id: request.inventoryId,
+      companyId,
+    });
+
+    if (!inventory) {
+      throw createHttpError(404, "Inventory not found for delete request");
+    }
+
+    const snapshot = inventory.toObject();
+    await Inventory.deleteOne({ _id: inventory._id, companyId });
+
+    await logInventoryActivity({
+      companyId,
+      inventoryId: inventory._id,
+      changedBy: user._id,
+      role: user.role,
+      actionType: INVENTORY_ACTIVITY_ACTIONS.REQUEST_APPROVED_DELETE,
+      oldValue: snapshot,
+      newValue: null,
+      requestId: request._id,
+    });
   } else {
     throw createHttpError(400, "Unsupported request type");
   }
@@ -2051,7 +2169,7 @@ const approveRequest = async ({ user, requestId, io }) => {
 
   return {
     request: await applyRequestPopulates(InventoryRequest.findById(request._id)),
-    inventory: inventory
+    inventory: inventory && request.type !== "delete"
       ? await applyInventoryPopulates(Inventory.findById(inventory._id))
       : null,
   };
@@ -2155,6 +2273,7 @@ module.exports = {
   bulkCreateInventoryDirect,
   createInventoryCreateRequest,
   createInventoryUpdateRequest,
+  createInventoryDeleteRequest,
   getPendingRequests,
   preApproveRequestByManager,
   approveRequest,

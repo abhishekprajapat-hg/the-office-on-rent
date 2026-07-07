@@ -16,9 +16,7 @@ router.post(
   authMiddleware.checkRole([
     "ADMIN",
     "MANAGER",
-    "ASSISTANT_MANAGER",
-    "TEAM_LEADER",
-    "EXECUTIVE",
+            "EXECUTIVE",
     "FIELD_EXECUTIVE",
     "CHANNEL_PARTNER",
   ]),
@@ -33,9 +31,7 @@ router.post(
   authMiddleware.checkRole([
     "ADMIN",
     "MANAGER",
-    "ASSISTANT_MANAGER",
-    "TEAM_LEADER",
-    "EXECUTIVE",
+            "EXECUTIVE",
     "FIELD_EXECUTIVE",
     "CHANNEL_PARTNER",
   ]),
@@ -45,14 +41,14 @@ router.post(
 
 router.get(
   "/pending",
-  authMiddleware.checkRole(["ADMIN", "MANAGER", "ASSISTANT_MANAGER", "TEAM_LEADER"]),
+  authMiddleware.checkRole(["ADMIN", "MANAGER"]),
   inventoryApprovalController.getPending,
 );
 
 router.patch(
   "/:id/pre-approve",
   writeLimiter,
-  authMiddleware.checkRole(["MANAGER", "ASSISTANT_MANAGER", "TEAM_LEADER"]),
+  authMiddleware.checkRole(["MANAGER"]),
   inventoryApprovalController.preApprove,
 );
 
@@ -76,9 +72,7 @@ router.get(
   authMiddleware.checkRole([
     "FIELD_EXECUTIVE",
     "EXECUTIVE",
-    "TEAM_LEADER",
-    "ASSISTANT_MANAGER",
-    "MANAGER",
+            "MANAGER",
     "ADMIN",
     "CHANNEL_PARTNER",
   ]),
@@ -91,12 +85,24 @@ router.post(
   authMiddleware.checkRole([
     "FIELD_EXECUTIVE",
     "EXECUTIVE",
-    "TEAM_LEADER",
-    "ASSISTANT_MANAGER",
-    "MANAGER",
+            "MANAGER",
     "ADMIN",
   ]),
   inventoryRequestController.updateRequest,
 );
 
+router.post(
+  "/delete/:inventoryId",
+  writeLimiter,
+  authMiddleware.checkRole([
+    "FIELD_EXECUTIVE",
+    "EXECUTIVE",
+            "MANAGER",
+    "ADMIN",
+    "CHANNEL_PARTNER",
+  ]),
+  inventoryRequestController.deleteRequest,
+);
+
 module.exports = router;
+

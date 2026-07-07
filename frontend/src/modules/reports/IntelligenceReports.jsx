@@ -285,7 +285,7 @@ const IntelligenceReports = () => {
       closeAges.length > 0 ? closeAges.reduce((sum, days) => sum + days, 0) / closeAges.length : 0;
 
     const reservedOrSold = scopedData.inventory.filter((asset) =>
-      ["Reserved", "Sold"].includes(String(asset.status || "")),
+      ["Reserved", "Blocked", "Sold"].includes(String(asset.status || "")),
     ).length;
     const inventoryUtilization =
       scopedData.inventory.length > 0 ? (reservedOrSold / scopedData.inventory.length) * 100 : 0;
@@ -562,6 +562,15 @@ const IntelligenceReports = () => {
           {error}
         </div>
       )}
+
+      {!error && scopedData.leads.length === 0 && scopedData.inventory.length === 0 ? (
+        <div className="ui-soft-panel rounded-2xl border border-dashed border-slate-300 bg-white px-4 py-6 text-center shadow-sm">
+          <p className="text-sm font-semibold text-slate-800">No report data in this window</p>
+          <p className="mt-1 text-xs text-slate-500">
+            Change the date filter or refresh once new leads and inventory are available.
+          </p>
+        </div>
+      ) : null}
 
       <ReportSummaryCards topMetrics={topMetrics} formatPercent={formatPercent} />
 

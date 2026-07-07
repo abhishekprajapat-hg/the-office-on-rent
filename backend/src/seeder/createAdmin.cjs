@@ -22,29 +22,36 @@ async function createAdmin() {
     process.exit(0);
   }
 
+  const adminEmail = String(process.env.ADMIN_EMAIL || "admin@test.com").trim().toLowerCase();
+  const adminPassword = String(process.env.ADMIN_PASSWORD || "123456");
+  const adminName = String(process.env.ADMIN_NAME || "Client Admin").trim();
+  const adminPhone = String(process.env.ADMIN_PHONE || "9999999999").trim();
+  const companyName = String(process.env.CLIENT_COMPANY_NAME || "Client Company").trim();
+
   const admin = new User({
-    name: "Company Admin",
-    email: "admin@test.com",
-    phone: "9999999999",
-    password: "123456",
+    name: adminName,
+    email: adminEmail,
+    phone: adminPhone,
+    password: adminPassword,
     role: USER_ROLES.ADMIN,
     companyId: new mongoose.Types.ObjectId(),
   });
   admin.companyId = admin._id;
   await admin.save();
 
-  const subdomain = sanitizeSubdomain(admin.email.split("@")[0])
-    || `tenant-${String(admin._id).slice(-6)}`;
+  const subdomain = sanitizeSubdomain(process.env.CLIENT_COMPANY_SLUG || companyName)
+    || sanitizeSubdomain(admin.email.split("@")[0])
+    || "client";
 
   await Company.create({
     _id: admin.companyId,
-    name: "Default Company",
+    name: companyName,
     subdomain,
     ownerUserId: admin._id,
     status: "ACTIVE",
   });
 
-  console.log("Admin created successfully");
+  console.log(`Single-client admin created successfully: ${admin.email}`);
   process.exit(0);
 }
 

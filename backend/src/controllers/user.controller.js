@@ -1,9 +1,9 @@
 const User = require("../models/User");
 const Lead = require("../models/Lead");
 const Inventory = require("../models/Inventory");
+const UserDeleteRequest = require("../models/UserDeleteRequest");
 const LeadActivity = require("../models/leadActivity.model");
 const LeadDiary = require("../models/leadDiary.model");
-const TenantSubscription = require("../models/TenantSubscription");
 const mongoose = require("mongoose");
 const logger = require("../config/logger");
 const {
@@ -46,10 +46,8 @@ const LEAD_STATUSES = [
   "LOST",
 ];
 const TEAM_HIERARCHY_CHILD_ROLES = {
-  [USER_ROLES.MANAGER]: [USER_ROLES.ASSISTANT_MANAGER],
-  [USER_ROLES.ASSISTANT_MANAGER]: [USER_ROLES.TEAM_LEADER],
-  [USER_ROLES.TEAM_LEADER]: [...EXECUTIVE_ROLES],
-  [USER_ROLES.ADMIN]: [USER_ROLES.MANAGER, USER_ROLES.CHANNEL_PARTNER],
+  [USER_ROLES.MANAGER]: [...EXECUTIVE_ROLES, USER_ROLES.CHANNEL_PARTNER],
+  [USER_ROLES.ADMIN]: [USER_ROLES.MANAGER],
 };
 const USER_SELECTABLE_FIELDS = [
   "_id",
@@ -69,37 +67,23 @@ const USER_SELECTABLE_FIELDS = [
   "updatedAt",
 ];
 const USER_ROLE_VALUES = Object.values(USER_ROLES);
+const ADMIN_TOOL_ROLES = [USER_ROLES.ADMIN, USER_ROLES.MANAGER];
+const canUseAdminTools = (role) => ADMIN_TOOL_ROLES.includes(role);
 const BROKERAGE_MODES = Object.freeze(["FLAT", "PERCENTAGE"]);
 const DEFAULT_BROKERAGE_VALUE = 50000;
 const DEFAULT_BROKERAGE_PERCENTAGE = 2;
 const MAX_BROKERAGE_NOTES_LENGTH = 240;
-const BILLABLE_SUBSCRIPTION_STATUSES = ["TRIAL", "ACTIVE", "PAST_DUE"];
 const LEADERBOARD_ROLE_OPTIONS_BY_ACTOR = Object.freeze({
   [USER_ROLES.ADMIN]: [
     USER_ROLES.MANAGER,
-    USER_ROLES.ASSISTANT_MANAGER,
-    USER_ROLES.TEAM_LEADER,
     USER_ROLES.EXECUTIVE,
     USER_ROLES.FIELD_EXECUTIVE,
     USER_ROLES.CHANNEL_PARTNER,
   ],
   [USER_ROLES.MANAGER]: [
-    USER_ROLES.MANAGER,
-    USER_ROLES.ASSISTANT_MANAGER,
-    USER_ROLES.TEAM_LEADER,
     USER_ROLES.EXECUTIVE,
     USER_ROLES.FIELD_EXECUTIVE,
-  ],
-  [USER_ROLES.ASSISTANT_MANAGER]: [
-    USER_ROLES.ASSISTANT_MANAGER,
-    USER_ROLES.TEAM_LEADER,
-    USER_ROLES.EXECUTIVE,
-    USER_ROLES.FIELD_EXECUTIVE,
-  ],
-  [USER_ROLES.TEAM_LEADER]: [
-    USER_ROLES.TEAM_LEADER,
-    USER_ROLES.EXECUTIVE,
-    USER_ROLES.FIELD_EXECUTIVE,
+    USER_ROLES.CHANNEL_PARTNER,
   ],
   [USER_ROLES.EXECUTIVE]: [USER_ROLES.EXECUTIVE],
   [USER_ROLES.FIELD_EXECUTIVE]: [USER_ROLES.FIELD_EXECUTIVE],
@@ -207,36 +191,6 @@ const normalizeBrokerageConfigInput = (input, fallbackConfig = null) => {
       value,
       notes,
     },
-  };
-};
-
-const getCompanySeatSnapshot = async (companyId) => {
-  if (!isValidObjectId(companyId)) return null;
-
-  const [subscription, activeUsers] = await Promise.all([
-    TenantSubscription.findOne({
-      companyId,
-      isCurrent: true,
-      status: { $in: BILLABLE_SUBSCRIPTION_STATUSES },
-    })
-      .select("_id seats status")
-      .lean(),
-    User.countDocuments({
-      companyId,
-      isActive: true,
-    }),
-  ]);
-
-  if (!subscription) return null;
-
-  const seatLimit = Number.parseInt(subscription.seats, 10);
-  if (!Number.isFinite(seatLimit) || seatLimit < 1) return null;
-
-  return {
-    seatLimit,
-    activeUsers: Number(activeUsers || 0),
-    status: String(subscription.status || "").trim().toUpperCase(),
-    remainingSeats: Math.max(0, seatLimit - Number(activeUsers || 0)),
   };
 };
 
@@ -371,6 +325,87 @@ const parseWindowDays = (value, fallback = 30, max = 365) => {
   const parsed = Number.parseInt(value, 10);
   if (!Number.isFinite(parsed) || parsed <= 0) return fallback;
   return Math.min(parsed, max);
+};
+
+const toUserDeleteRequestView = (request) => ({
+  _id: request._id,
+  companyId: request.companyId,
+  requestedBy: request.requestedBy,
+  targetUser: request.targetUser,
+  reason: request.reason || "",
+  snapshot: request.snapshot || {},
+  status: request.status,
+  reviewedBy: request.reviewedBy || null,
+  reviewedAt: request.reviewedAt || null,
+  reviewNote: request.reviewNote || "",
+  createdAt: request.createdAt || null,
+  updatedAt: request.updatedAt || null,
+});
+
+const emitUserDeleteRequestCreated = ({ req, request }) => {
+  const io = req.app.get("io");
+  if (!io || !request?.companyId) return;
+
+  const companyId = String(request.companyId);
+  const payload = {
+    eventId: `user-delete:${request._id}`,
+    source: "user-delete",
+    requestType: "USER_DELETE",
+    requestId: request._id,
+    status: request.status,
+    companyId,
+    targetUser: request.targetUser || null,
+    requestedBy: request.requestedBy || null,
+    createdAt: request.createdAt,
+    message: "New user delete request",
+  };
+
+  io.to(`company:${companyId}:role:${USER_ROLES.ADMIN}`).emit("admin:request:new", payload);
+  io.to(`company:${companyId}:role:${USER_ROLES.ADMIN}`).emit(
+    "user-delete:request:created",
+    payload,
+  );
+};
+
+const deleteUserForAdmin = async ({ adminUser, targetUserId }) => {
+  if (String(adminUser._id) === String(targetUserId)) {
+    return { statusCode: 400, payload: { message: "You cannot delete your own account" } };
+  }
+
+  const user = await User.findOne({
+    _id: targetUserId,
+    companyId: adminUser.companyId,
+  })
+    .select("_id role")
+    .lean();
+  if (!user) {
+    return { statusCode: 404, payload: { message: "User not found" } };
+  }
+
+  if (isManagementRole(user.role)) {
+    const hasTeam = await User.exists({
+      parentId: user._id,
+      companyId: adminUser.companyId,
+    });
+
+    if (hasTeam) {
+      return {
+        statusCode: 400,
+        payload: {
+          message: "User has active direct reports. Reassign team before deleting.",
+        },
+      };
+    }
+  }
+
+  await Lead.updateMany(
+    { assignedTo: user._id, companyId: adminUser.companyId },
+    { $set: { assignedTo: null } },
+  );
+
+  await User.deleteOne({ _id: targetUserId, companyId: adminUser.companyId });
+
+  return { statusCode: 200, payload: { message: "User deleted successfully" } };
 };
 
 const getLeaderboardAllowedRolesForActor = (actorRole) => {
@@ -565,8 +600,6 @@ const buildProfileSummary = async (userDoc) => {
     const [
       users,
       managers,
-      assistantManagers,
-      teamLeaders,
       executives,
       fieldExecutives,
       leads,
@@ -574,12 +607,6 @@ const buildProfileSummary = async (userDoc) => {
     ] = await Promise.all([
       User.countDocuments({ companyId, isActive: true }),
       User.countDocuments({ companyId, role: USER_ROLES.MANAGER, isActive: true }),
-      User.countDocuments({
-        companyId,
-        role: USER_ROLES.ASSISTANT_MANAGER,
-        isActive: true,
-      }),
-      User.countDocuments({ companyId, role: USER_ROLES.TEAM_LEADER, isActive: true }),
       User.countDocuments({ companyId, role: USER_ROLES.EXECUTIVE, isActive: true }),
       User.countDocuments({
         companyId,
@@ -593,8 +620,6 @@ const buildProfileSummary = async (userDoc) => {
     return {
       users,
       managers,
-      assistantManagers,
-      teamLeaders,
       executives,
       fieldExecutives,
       leads,
@@ -607,10 +632,9 @@ const buildProfileSummary = async (userDoc) => {
       rootUserId: userId,
       companyId,
       roles: [
-        USER_ROLES.ASSISTANT_MANAGER,
-        USER_ROLES.TEAM_LEADER,
         USER_ROLES.EXECUTIVE,
         USER_ROLES.FIELD_EXECUTIVE,
+        USER_ROLES.CHANNEL_PARTNER,
       ],
     });
     const executiveIds = await getDescendantExecutiveIds({
@@ -634,21 +658,17 @@ const buildProfileSummary = async (userDoc) => {
       ])
       : [0, 0];
 
-    const assistantManagers = Number(
-      descendantCounts[USER_ROLES.ASSISTANT_MANAGER] || 0,
-    );
-    const teamLeaders = Number(descendantCounts[USER_ROLES.TEAM_LEADER] || 0);
     const executives = Number(descendantCounts[USER_ROLES.EXECUTIVE] || 0);
     const fieldExecutives = Number(
       descendantCounts[USER_ROLES.FIELD_EXECUTIVE] || 0,
     );
+    const channelPartners = Number(descendantCounts[USER_ROLES.CHANNEL_PARTNER] || 0);
 
     return {
-      teamMembers: assistantManagers + teamLeaders + executives + fieldExecutives,
-      assistantManagers,
-      teamLeaders,
+      teamMembers: executives + fieldExecutives + channelPartners,
       executives,
       fieldExecutives,
+      channelPartners,
       teamLeads,
       dueFollowUpsToday,
     };
@@ -1015,7 +1035,7 @@ exports.getMyProfile = async (req, res) => {
 
 exports.getUserProfileForAdmin = async (req, res) => {
   try {
-    if (req.user.role !== USER_ROLES.ADMIN) {
+    if (!canUseAdminTools(req.user.role)) {
       return res.status(403).json({ message: "Only ADMIN can view this profile" });
     }
 
@@ -1159,9 +1179,9 @@ exports.createUserByRole = async (req, res) => {
       reportingToId,
     } = req.body;
 
-    if (req.user.role !== USER_ROLES.ADMIN) {
+    if (!canUseAdminTools(req.user.role)) {
       return res.status(403).json({
-        message: "Only ADMIN can create users",
+        message: "Only ADMIN or MANAGER can create users",
       });
     }
 
@@ -1180,23 +1200,9 @@ exports.createUserByRole = async (req, res) => {
       });
     }
 
-    if ([USER_ROLES.ADMIN, USER_ROLES.SUPER_ADMIN].includes(role)) {
+    if (role === USER_ROLES.ADMIN) {
       return res.status(400).json({
-        message: "Admin or Super Admin role cannot be created from this endpoint",
-      });
-    }
-
-    const seatSnapshot = await getCompanySeatSnapshot(req.user.companyId);
-    if (!seatSnapshot) {
-      return res.status(403).json({
-        message:
-          "No active subscription seats found for your company. Ask Super Admin to assign seats first.",
-      });
-    }
-
-    if (seatSnapshot.activeUsers >= seatSnapshot.seatLimit) {
-      return res.status(400).json({
-        message: `Seat limit reached (${seatSnapshot.seatLimit} total users including admin).`,
+        message: "Admin role cannot be created from this endpoint",
       });
     }
 
@@ -1295,9 +1301,9 @@ exports.createUserByRole = async (req, res) => {
 
 exports.updateUserByAdmin = async (req, res) => {
   try {
-    if (req.user.role !== USER_ROLES.ADMIN) {
+    if (!canUseAdminTools(req.user.role)) {
       return res.status(403).json({
-        message: "Only ADMIN can update user details",
+        message: "Only ADMIN or MANAGER can update user details",
       });
     }
 
@@ -1396,9 +1402,9 @@ exports.updateUserByAdmin = async (req, res) => {
         return res.status(400).json({ message: "Invalid role" });
       }
 
-      if ([USER_ROLES.ADMIN, USER_ROLES.SUPER_ADMIN].includes(requestedRole)) {
+      if (requestedRole === USER_ROLES.ADMIN) {
         return res.status(400).json({
-          message: "Role cannot be changed to ADMIN or SUPER_ADMIN",
+          message: "Role cannot be changed to ADMIN",
         });
       }
 
@@ -1408,22 +1414,6 @@ exports.updateUserByAdmin = async (req, res) => {
 
     if (Object.prototype.hasOwnProperty.call(req.body || {}, "isActive")) {
       patch.isActive = Boolean(req.body?.isActive);
-    }
-
-    if (patch.isActive === true && !user.isActive) {
-      const seatSnapshot = await getCompanySeatSnapshot(req.user.companyId);
-      if (!seatSnapshot) {
-        return res.status(403).json({
-          message:
-            "No active subscription seats found for your company. Ask Super Admin to assign seats first.",
-        });
-      }
-
-      if (seatSnapshot.activeUsers >= seatSnapshot.seatLimit) {
-        return res.status(400).json({
-          message: `Seat limit reached (${seatSnapshot.seatLimit} total users including admin).`,
-        });
-      }
     }
 
     if (Object.prototype.hasOwnProperty.call(req.body || {}, "password")) {
@@ -1631,9 +1621,9 @@ exports.updateUserByAdmin = async (req, res) => {
 
 exports.updateUserDesignation = async (req, res) => {
   try {
-    if (req.user.role !== USER_ROLES.ADMIN) {
+    if (!canUseAdminTools(req.user.role)) {
       return res.status(403).json({
-        message: "Only ADMIN can change user designation",
+        message: "Only ADMIN or MANAGER can change user designation",
       });
     }
 
@@ -1661,9 +1651,9 @@ exports.updateUserDesignation = async (req, res) => {
       return res.status(400).json({ message: "Invalid role" });
     }
 
-    if ([USER_ROLES.ADMIN, USER_ROLES.SUPER_ADMIN].includes(requestedRole)) {
+    if (requestedRole === USER_ROLES.ADMIN) {
       return res.status(400).json({
-        message: "Designation cannot be changed to ADMIN or SUPER_ADMIN",
+        message: "Designation cannot be changed to ADMIN",
       });
     }
 
@@ -1845,9 +1835,9 @@ exports.updateUserDesignation = async (req, res) => {
 
 exports.updateChannelPartnerInventoryAccess = async (req, res) => {
   try {
-    if (req.user.role !== USER_ROLES.ADMIN) {
+    if (!canUseAdminTools(req.user.role)) {
       return res.status(403).json({
-        message: "Only ADMIN can change channel partner inventory access",
+        message: "Only ADMIN or MANAGER can change channel partner inventory access",
       });
     }
 
@@ -1908,16 +1898,16 @@ exports.updateChannelPartnerInventoryAccess = async (req, res) => {
 
 exports.rebalanceExecutives = async (req, res) => {
   try {
-    if (req.user.role !== USER_ROLES.ADMIN) {
-      return res.status(403).json({ message: "Only ADMIN can rebalance team" });
+    if (!canUseAdminTools(req.user.role)) {
+      return res.status(403).json({ message: "Only ADMIN or MANAGER can rebalance team" });
     }
 
     if (!req.user.companyId) {
       return res.status(403).json({ message: "Company context is required" });
     }
 
-    const teamLeaders = await User.find({
-      role: USER_ROLES.TEAM_LEADER,
+    const managers = await User.find({
+      role: USER_ROLES.MANAGER,
       isActive: true,
       companyId: req.user.companyId,
     })
@@ -1925,8 +1915,8 @@ exports.rebalanceExecutives = async (req, res) => {
       .sort({ createdAt: 1 })
       .lean();
 
-    if (!teamLeaders.length) {
-      return res.status(400).json({ message: "No active team leader found" });
+    if (!managers.length) {
+      return res.status(400).json({ message: "No active manager found" });
     }
 
     const executives = await User.find({
@@ -1944,12 +1934,12 @@ exports.rebalanceExecutives = async (req, res) => {
 
     const bulkOps = [];
     for (let i = 0; i < executives.length; i += 1) {
-      const teamLeader = teamLeaders[i % teamLeaders.length];
-      if (String(executives[i].parentId || "") !== String(teamLeader._id)) {
+      const manager = managers[i % managers.length];
+      if (String(executives[i].parentId || "") !== String(manager._id)) {
         bulkOps.push({
           updateOne: {
             filter: { _id: executives[i]._id },
-            update: { $set: { parentId: teamLeader._id } },
+            update: { $set: { parentId: manager._id } },
           },
         });
       }
@@ -1970,7 +1960,7 @@ exports.rebalanceExecutives = async (req, res) => {
     const distribution = await User.aggregate([
       {
         $match: {
-          parentId: { $in: teamLeaders.map((leader) => leader._id) },
+          parentId: { $in: managers.map((manager) => manager._id) },
           role: { $in: EXECUTIVE_ROLES },
           isActive: true,
         },
@@ -1983,15 +1973,15 @@ exports.rebalanceExecutives = async (req, res) => {
       },
     ]);
 
-    const rowByLeaderId = new Map(
+    const rowByManagerId = new Map(
       distribution.map((item) => [String(item._id), Number(item.count || 0)]),
     );
 
-    const distributionByLeader = teamLeaders.map((leader) => {
-      const count = rowByLeaderId.get(String(leader._id)) || 0;
+    const distributionByManager = managers.map((manager) => {
+      const count = rowByManagerId.get(String(manager._id)) || 0;
       return {
-        leaderId: leader._id,
-        leaderName: leader.name,
+        managerId: manager._id,
+        managerName: manager.name,
         executives: count,
       };
     });
@@ -2038,10 +2028,10 @@ exports.rebalanceExecutives = async (req, res) => {
     });
 
     res.json({
-      message: "Executives and leads rebalanced successfully across team leaders",
+      message: "Executives and leads rebalanced successfully across managers",
       updated: bulkOps.length,
       leadsUpdated: leadRebalance.updated,
-      distribution: distributionByLeader,
+      distribution: distributionByManager,
       leadDistribution: leadDistributionByExecutive,
     });
   } catch (error) {
@@ -2054,49 +2044,216 @@ exports.rebalanceExecutives = async (req, res) => {
   }
 };
 
+exports.createUserDeleteRequest = async (req, res) => {
+  try {
+    if (!isManagementRole(req.user.role)) {
+      return res.status(403).json({ message: "Only MANAGER can request user deletion" });
+    }
+
+    const { userId } = req.params;
+    if (!isValidObjectId(userId)) {
+      return res.status(400).json({ message: "Invalid user id" });
+    }
+
+    if (String(req.user._id) === String(userId)) {
+      return res.status(400).json({ message: "You cannot request deletion of your own account" });
+    }
+
+    const targetUser = await User.findOne({
+      _id: userId,
+      companyId: req.user.companyId,
+    })
+      .populate("parentId", "name role")
+      .select("_id name email phone role parentId isActive")
+      .lean();
+
+    if (!targetUser) {
+      return res.status(404).json({ message: "User not found" });
+    }
+
+    if (targetUser.role === USER_ROLES.ADMIN) {
+      return res.status(403).json({ message: "Admin account cannot be deleted by request" });
+    }
+
+    const descendants = await getDescendantUsers({
+      rootUserId: req.user._id,
+      companyId: req.user.companyId,
+      includeInactive: true,
+      select: "_id role parentId isActive",
+    });
+    const allowedIds = new Set(descendants.map((row) => String(row._id)));
+    if (!allowedIds.has(String(targetUser._id))) {
+      return res.status(403).json({ message: "You can request deletion only for users under your hierarchy" });
+    }
+
+    const existingRequest = await UserDeleteRequest.findOne({
+      companyId: req.user.companyId,
+      targetUser: userId,
+      status: "PENDING",
+    })
+      .populate("requestedBy", "name email phone role")
+      .populate("targetUser", "name email phone role parentId isActive")
+      .lean();
+
+    if (existingRequest) {
+      return res.status(409).json({
+        message: "A delete request is already pending for this user",
+        request: toUserDeleteRequestView(existingRequest),
+      });
+    }
+
+    const request = await UserDeleteRequest.create({
+      companyId: req.user.companyId,
+      requestedBy: req.user._id,
+      targetUser: targetUser._id,
+      reason: String(req.body?.reason || "").trim().slice(0, 500),
+      snapshot: {
+        name: targetUser.name || "",
+        email: targetUser.email || "",
+        phone: targetUser.phone || "",
+        role: targetUser.role || "",
+        parentName: targetUser.parentId?.name || "",
+        parentRole: targetUser.parentId?.role || "",
+        isActive: Boolean(targetUser.isActive),
+      },
+    });
+
+    const populated = await UserDeleteRequest.findById(request._id)
+      .populate("requestedBy", "name email phone role")
+      .populate("targetUser", "name email phone role parentId isActive")
+      .populate("reviewedBy", "name email role")
+      .lean();
+
+    emitUserDeleteRequestCreated({ req, request: populated || request });
+
+    return res.status(201).json({
+      message: "User delete request sent to admin",
+      request: toUserDeleteRequestView(populated || request),
+    });
+  } catch (error) {
+    logger.error({
+      requestId: req.requestId || null,
+      error: error.message,
+      message: "createUserDeleteRequest failed",
+    });
+    return res.status(500).json({ message: "Server error" });
+  }
+};
+
+exports.getAdminUserDeleteRequests = async (req, res) => {
+  try {
+    if (req.user.role !== USER_ROLES.ADMIN) {
+      return res.status(403).json({ message: "Only ADMIN can view user delete requests" });
+    }
+
+    const status = String(req.query?.status || "PENDING").trim().toUpperCase();
+    const query = { companyId: req.user.companyId };
+    if (["PENDING", "APPROVED", "REJECTED"].includes(status)) {
+      query.status = status;
+    }
+
+    const requests = await UserDeleteRequest.find(query)
+      .populate("requestedBy", "name email phone role")
+      .populate("targetUser", "name email phone role parentId isActive")
+      .populate("reviewedBy", "name email role")
+      .sort({ createdAt: -1 })
+      .limit(200)
+      .lean();
+
+    return res.json({
+      count: requests.length,
+      requests: requests.map(toUserDeleteRequestView),
+    });
+  } catch (error) {
+    logger.error({
+      requestId: req.requestId || null,
+      error: error.message,
+      message: "getAdminUserDeleteRequests failed",
+    });
+    return res.status(500).json({ message: "Server error" });
+  }
+};
+
+exports.reviewUserDeleteRequest = async (req, res) => {
+  try {
+    if (req.user.role !== USER_ROLES.ADMIN) {
+      return res.status(403).json({ message: "Only ADMIN can review user delete requests" });
+    }
+
+    const { requestId } = req.params;
+    if (!isValidObjectId(requestId)) {
+      return res.status(400).json({ message: "Invalid request id" });
+    }
+
+    const action = String(req.body?.action || req.body?.status || "").trim().toUpperCase();
+    if (!["APPROVED", "REJECTED"].includes(action)) {
+      return res.status(400).json({ message: "action must be APPROVED or REJECTED" });
+    }
+
+    const request = await UserDeleteRequest.findOne({
+      _id: requestId,
+      companyId: req.user.companyId,
+    });
+
+    if (!request) {
+      return res.status(404).json({ message: "User delete request not found" });
+    }
+
+    if (request.status !== "PENDING") {
+      return res.status(400).json({ message: "Request has already been reviewed" });
+    }
+
+    if (action === "APPROVED") {
+      const result = await deleteUserForAdmin({
+        adminUser: req.user,
+        targetUserId: request.targetUser,
+      });
+      if (result.statusCode !== 200) {
+        return res.status(result.statusCode).json(result.payload);
+      }
+    }
+
+    request.status = action;
+    request.reviewedBy = req.user._id;
+    request.reviewedAt = new Date();
+    request.reviewNote = String(req.body?.reviewNote || "").trim().slice(0, 500);
+    await request.save();
+
+    const populated = await UserDeleteRequest.findById(request._id)
+      .populate("requestedBy", "name email phone role")
+      .populate("targetUser", "name email phone role parentId isActive")
+      .populate("reviewedBy", "name email role")
+      .lean();
+
+    return res.json({
+      message:
+        action === "APPROVED"
+          ? "User delete request approved and user deleted"
+          : "User delete request rejected",
+      request: toUserDeleteRequestView(populated || request),
+    });
+  } catch (error) {
+    logger.error({
+      requestId: req.requestId || null,
+      error: error.message,
+      message: "reviewUserDeleteRequest failed",
+    });
+    return res.status(500).json({ message: "Server error" });
+  }
+};
+
 exports.deleteUser = async (req, res) => {
   try {
     if (req.user.role !== USER_ROLES.ADMIN) {
       return res.status(403).json({ message: "Only ADMIN can delete users" });
     }
 
-    const { userId } = req.params;
+    const result = await deleteUserForAdmin({
+      adminUser: req.user,
+      targetUserId: req.params.userId,
+    });
 
-    if (String(req.user._id) === String(userId)) {
-      return res.status(400).json({ message: "You cannot delete your own account" });
-    }
-
-    const user = await User.findOne({
-      _id: userId,
-      companyId: req.user.companyId,
-    })
-      .select("_id role")
-      .lean();
-    if (!user) {
-      return res.status(404).json({ message: "User not found" });
-    }
-
-    if (isManagementRole(user.role)) {
-      const hasTeam = await User.exists({
-        parentId: user._id,
-        companyId: req.user.companyId,
-      });
-
-      if (hasTeam) {
-        return res.status(400).json({
-          message: "User has active direct reports. Reassign team before deleting.",
-        });
-      }
-    }
-
-    await Lead.updateMany(
-      { assignedTo: user._id, companyId: req.user.companyId },
-      { $set: { assignedTo: null } },
-    );
-
-    await User.deleteOne({ _id: userId });
-
-    res.json({ message: "User deleted successfully" });
+    return res.status(result.statusCode).json(result.payload);
   } catch (error) {
     logger.error({
       requestId: req.requestId || null,
@@ -2187,22 +2344,6 @@ exports.updateUserByRole = async (req, res) => {
       patch.isActive = Boolean(req.body.isActive);
     }
 
-    if (patch.isActive === true && !targetUser.isActive) {
-      const seatSnapshot = await getCompanySeatSnapshot(req.user.companyId);
-      if (!seatSnapshot) {
-        return res.status(403).json({
-          message:
-            "No active subscription seats found for your company. Ask Super Admin to assign seats first.",
-        });
-      }
-
-      if (seatSnapshot.activeUsers >= seatSnapshot.seatLimit) {
-        return res.status(400).json({
-          message: `Seat limit reached (${seatSnapshot.seatLimit} total users including admin).`,
-        });
-      }
-    }
-
     if (canEditAsAdmin) {
       const nextRole = Object.prototype.hasOwnProperty.call(req.body || {}, "role")
         ? String(req.body.role || "").trim()
@@ -2211,8 +2352,8 @@ exports.updateUserByRole = async (req, res) => {
       if (nextRole && !Object.values(USER_ROLES).includes(nextRole)) {
         return res.status(400).json({ message: "Invalid role" });
       }
-      if ([USER_ROLES.ADMIN, USER_ROLES.SUPER_ADMIN].includes(nextRole)) {
-        return res.status(400).json({ message: "Cannot assign ADMIN or SUPER_ADMIN role" });
+      if (nextRole === USER_ROLES.ADMIN) {
+        return res.status(400).json({ message: "Cannot assign ADMIN role" });
       }
 
       if (nextRole && nextRole !== targetUser.role) {

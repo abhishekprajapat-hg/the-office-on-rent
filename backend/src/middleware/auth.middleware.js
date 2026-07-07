@@ -5,17 +5,7 @@ const Company = require("../models/Company");
 const { USER_ROLES } = require("../constants/role.constants");
 
 const isValidObjectId = (value) => mongoose.Types.ObjectId.isValid(value);
-const toBoolean = (value, fallback = false) => {
-  const raw = String(value || "").trim().toLowerCase();
-  if (!raw) return fallback;
-  if (raw === "true" || raw === "1" || raw === "yes") return true;
-  if (raw === "false" || raw === "0" || raw === "no") return false;
-  return fallback;
-};
-
 const resolveCompanyContext = async (user) => {
-  if (user.role === USER_ROLES.SUPER_ADMIN) return null;
-
   if (user.companyId) return user.companyId;
 
   if (user.role === USER_ROLES.ADMIN) {
@@ -78,37 +68,18 @@ exports.protect = async (req, res, next) => {
       });
     }
 
-    const isSuperAdmin = user.role === USER_ROLES.SUPER_ADMIN;
-    const requireTenantContext = toBoolean(process.env.SAAS_REQUIRE_TENANT_HOST, false);
+    const companyId = user.companyId || (await resolveCompanyContext(user));
+    if (!companyId) {
+      return res.status(403).json({
+        message: "Company context is missing for this account",
+      });
+    }
 
-    if (!isSuperAdmin) {
-      const companyId = user.companyId || (await resolveCompanyContext(user));
-      if (!companyId) {
-        return res.status(403).json({
-          message: "Company context is missing for this account",
-        });
-      }
-
-      if (req.tenant?._id && String(req.tenant._id) !== String(companyId)) {
-        return res.status(403).json({
-          message: "Tenant mismatch. Use your own company route /<company-slug>/...",
-        });
-      }
-
-      if (requireTenantContext && !req.tenant?._id) {
-        return res.status(403).json({
-          message: "Tenant context is required. Use /<company-slug>/login",
-        });
-      }
-
-      const company = req.tenant?._id && String(req.tenant._id) === String(companyId)
-        ? req.tenant
-        : await Company.findById(companyId).select("_id status").lean();
-      if (!company || company.status !== "ACTIVE") {
-        return res.status(403).json({
-          message: "Tenant is inactive. Access denied.",
-        });
-      }
+    const company = await Company.findById(companyId).select("_id status").lean();
+    if (!company || company.status !== "ACTIVE") {
+      return res.status(403).json({
+        message: "Company is inactive. Access denied.",
+      });
     }
 
     req.user = user;

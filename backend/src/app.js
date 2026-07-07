@@ -98,7 +98,6 @@ app.use("/api/inventory-request", require("./routes/inventoryRequest.routes"));
 app.use("/api/webhook", require("./routes/webhook.routes"));
 app.use("/api/chat", require("./routes/chat.routes"));
 app.use("/api/samvid", require("./routes/samvid.routes"));
-app.use("/api/saas", require("./routes/saas.routes"));
 app.use("/api/tasks", require("./routes/task.routes"));
 
 app.use((req, res) => {

@@ -387,7 +387,7 @@ export const LeadDetailsScreen = () => {
     : null) as Lead | null;
   const { role, user } = useAuth();
   const normalizedRole = String(role || "").toUpperCase();
-  const canManage = ["ADMIN", "MANAGER", "ASSISTANT_MANAGER", "TEAM_LEADER"].includes(normalizedRole);
+  const canManage = ["ADMIN", "MANAGER"].includes(normalizedRole);
   const canLinkProperties = canManage || ["EXECUTIVE", "FIELD_EXECUTIVE"].includes(normalizedRole);
 
   const [loading, setLoading] = useState(!initialRouteLead);
@@ -905,16 +905,16 @@ export const LeadDetailsScreen = () => {
     if (!lead?.assignedTo?._id) return "Unassigned";
     return lead.assignedTo.name || "Assigned";
   }, [lead]);
-  const teamLeaderName = useMemo(() => {
+  const reportingManagerName = useMemo(() => {
     const directParent = (lead as any)?.assignedTo?.parentId;
     const mappedManager = (lead as any)?.assignedManager;
     const parentRole = String(directParent?.role || "").toUpperCase();
     const mappedRole = String(mappedManager?.role || "").toUpperCase();
 
-    if (parentRole === "TEAM_LEADER" || parentRole === "ASSISTANT_MANAGER") {
+    if (parentRole === "MANAGER") {
       return String(directParent?.name || "").trim() || "Not mapped";
     }
-    if (mappedRole === "TEAM_LEADER" || mappedRole === "ASSISTANT_MANAGER") {
+    if (mappedRole === "MANAGER") {
       return String(mappedManager?.name || "").trim() || "Not mapped";
     }
     return "Not mapped";
@@ -2538,7 +2538,7 @@ export const LeadDetailsScreen = () => {
             </View>
           </>
         )}
-        <Text style={styles.meta}>Team Leader: {teamLeaderName}</Text>
+        <Text style={styles.meta}>Reporting Manager: {reportingManagerName}</Text>
         <Text style={styles.meta}>Manager: {managerName}</Text>
         <AppButton
           title={saving ? "Saving..." : "Save Lead Update"}

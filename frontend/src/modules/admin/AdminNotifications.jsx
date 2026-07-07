@@ -15,6 +15,10 @@ import {
 } from "lucide-react";
 import { getLeadPaymentRequests, updateLeadStatus } from "../../services/leadService";
 import {
+  getAdminUserDeleteRequests,
+  reviewUserDeleteRequest,
+} from "../../services/userService";
+import {
   approveInventoryRequest,
   getPendingInventoryRequests,
   rejectInventoryRequest,
@@ -204,6 +208,7 @@ const resolveAlertInventoryId = (alert = {}) => {
 const AdminNotifications = () => {
   const navigate = useNavigate();
   const { adminRequestPulseAt, markAdminRequestsRead, recentAdminRequests } = useChatNotifications();
+  const userRole = String(localStorage.getItem("role") || "").trim().toUpperCase();
   const [isDark, setIsDark] = useState(() =>
     document.documentElement.classList.contains("theme-dark"),
   );
@@ -215,10 +220,13 @@ const AdminNotifications = () => {
   const [approvalFilter, setApprovalFilter] = useState("ALL");
   const [leadRequests, setLeadRequests] = useState([]);
   const [inventoryRequests, setInventoryRequests] = useState([]);
+  const [userDeleteRequests, setUserDeleteRequests] = useState([]);
   const [reviewingLeadId, setReviewingLeadId] = useState("");
   const [reviewingInventoryRequestId, setReviewingInventoryRequestId] = useState("");
+  const [reviewingUserDeleteRequestId, setReviewingUserDeleteRequestId] = useState("");
   const leadSectionRef = useRef(null);
   const inventorySectionRef = useRef(null);
+  const userDeleteSectionRef = useRef(null);
 
   const isDirectInteractiveTarget = useCallback((target) => {
     if (!target || typeof target.closest !== "function") return false;
@@ -228,6 +236,10 @@ const AdminNotifications = () => {
   const scrollToSection = useCallback((sectionKey) => {
     if (sectionKey === "inventory") {
       inventorySectionRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+      return;
+    }
+    if (sectionKey === "user-delete") {
+      userDeleteSectionRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
       return;
     }
     leadSectionRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
@@ -243,21 +255,40 @@ const AdminNotifications = () => {
       setError("");
       setSuccess("");
 
-      const [leadRows, inventoryRows] = await Promise.all([
+      const [leadResult, inventoryResult, userDeleteResult] = await Promise.allSettled([
         getLeadPaymentRequests({
           approvalStatus: approvalFilter,
           limit: 300,
         }),
         getPendingInventoryRequests(),
+        userRole === "ADMIN"
+          ? getAdminUserDeleteRequests({ status: "PENDING" })
+          : Promise.resolve([]),
       ]);
 
-      setLeadRequests(Array.isArray(leadRows) ? leadRows : []);
-      setInventoryRequests(Array.isArray(inventoryRows) ? inventoryRows : []);
+      if (leadResult.status === "fulfilled") {
+        setLeadRequests(Array.isArray(leadResult.value) ? leadResult.value : []);
+      } else {
+        setLeadRequests([]);
+      }
+
+      if (inventoryResult.status === "fulfilled") {
+        setInventoryRequests(Array.isArray(inventoryResult.value) ? inventoryResult.value : []);
+      } else {
+        setInventoryRequests([]);
+      }
+
+      if (userDeleteResult.status === "fulfilled") {
+        setUserDeleteRequests(Array.isArray(userDeleteResult.value) ? userDeleteResult.value : []);
+      } else {
+        setUserDeleteRequests([]);
+      }
     } catch (fetchError) {
       const message = toErrorMessage(fetchError, "Failed to load notifications");
       setError(message);
       setLeadRequests([]);
       setInventoryRequests([]);
+      setUserDeleteRequests([]);
     } finally {
       setLoading(false);
       setRefreshing(false);
@@ -359,6 +390,30 @@ const AdminNotifications = () => {
     });
   }, [inventoryRequests, normalizedQuery]);
 
+  const filteredUserDeleteRequests = useMemo(() => {
+    if (!normalizedQuery) return userDeleteRequests;
+
+    return userDeleteRequests.filter((request) => {
+      const target = request?.targetUser || request?.snapshot || {};
+      const requestedBy = request?.requestedBy || {};
+      const searchableText = [
+        target?.name,
+        target?.email,
+        target?.phone,
+        target?.role,
+        request?.snapshot?.name,
+        request?.snapshot?.email,
+        request?.snapshot?.role,
+        requestedBy?.name,
+        requestedBy?.email,
+        request?.reason,
+      ]
+        .join(" ")
+        .toLowerCase();
+      return searchableText.includes(normalizedQuery);
+    });
+  }, [normalizedQuery, userDeleteRequests]);
+
   const filteredRecentAlerts = useMemo(() => {
     if (!normalizedQuery) return recentAdminRequests;
 
@@ -410,8 +465,9 @@ const AdminNotifications = () => {
       approvedLead,
       rejectedLead,
       pendingInventory: inventoryRequests.length,
+      pendingUserDelete: userDeleteRequests.length,
     };
-  }, [leadRequests, inventoryRequests.length]);
+  }, [leadRequests, inventoryRequests.length, userDeleteRequests.length]);
 
   const handleApproveLeadRequest = useCallback(async (lead) => {
     const leadId = String(lead?._id || "");
@@ -517,6 +573,56 @@ const AdminNotifications = () => {
     }
   }, [loadNotifications]);
 
+  const handleApproveUserDeleteRequest = useCallback(async (requestId) => {
+    const resolvedId = String(requestId || "");
+    if (!resolvedId) return;
+
+    try {
+      setReviewingUserDeleteRequestId(resolvedId);
+      setError("");
+      setSuccess("");
+      await reviewUserDeleteRequest(resolvedId, {
+        action: "APPROVED",
+        reviewNote: "Approved from notifications",
+      });
+      setSuccess("User delete request approved and user deleted");
+      await loadNotifications(true);
+    } catch (reviewError) {
+      setError(toErrorMessage(reviewError, "Failed to approve user delete request"));
+    } finally {
+      setReviewingUserDeleteRequestId("");
+    }
+  }, [loadNotifications]);
+
+  const handleRejectUserDeleteRequest = useCallback(async (requestId) => {
+    const resolvedId = String(requestId || "");
+    if (!resolvedId) return;
+
+    const reason = window.prompt("Rejection reason", "Rejected from notifications");
+    if (reason === null) return;
+    const trimmedReason = String(reason || "").trim();
+    if (!trimmedReason) {
+      setError("Rejection reason is required");
+      return;
+    }
+
+    try {
+      setReviewingUserDeleteRequestId(resolvedId);
+      setError("");
+      setSuccess("");
+      await reviewUserDeleteRequest(resolvedId, {
+        action: "REJECTED",
+        reviewNote: trimmedReason,
+      });
+      setSuccess("User delete request rejected");
+      await loadNotifications(true);
+    } catch (reviewError) {
+      setError(toErrorMessage(reviewError, "Failed to reject user delete request"));
+    } finally {
+      setReviewingUserDeleteRequestId("");
+    }
+  }, [loadNotifications]);
+
   const handleOpenAlertTarget = useCallback((alert) => {
     if (String(alert?.source || "").toLowerCase() === "lead") {
       navigate("/leads");
@@ -538,41 +644,23 @@ const AdminNotifications = () => {
         isDark ? "bg-slate-950/45" : "bg-slate-50/80"
       }`}
     >
-      <div className={`ui-hero-card mb-5 rounded-2xl border p-5 ${
-        isDark ? "border-slate-700 bg-slate-900/80" : "border-slate-200 bg-white"
-      }`}>
-        <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
-          <div>
-            <p className={`text-[11px] font-semibold uppercase tracking-[0.16em] ${
-              isDark ? "text-cyan-200" : "text-cyan-700"
-            }`}>
-              Admin Desk
-            </p>
-            <h1 className={`font-display text-3xl font-bold ${isDark ? "text-slate-100" : "text-slate-900"}`}>
-              Notification Center
-            </h1>
-            <p className={`mt-1 text-xs ${isDark ? "text-slate-400" : "text-slate-500"}`}>
-              Central view for payment approvals and inventory requests.
-            </p>
-          </div>
-
-          <button
-            type="button"
-            onClick={() => loadNotifications(true)}
-            disabled={refreshing}
-            className={`h-10 rounded-lg border px-4 text-xs font-semibold inline-flex items-center gap-2 ${
-              isDark
-                ? "border-slate-700 bg-slate-900 text-slate-200 hover:border-cyan-300/45"
-                : "border-slate-300 bg-white text-slate-700 hover:border-cyan-300"
-            } disabled:opacity-60`}
-          >
-            {refreshing ? <Loader size={14} className="animate-spin" /> : <RefreshCw size={14} />}
-            Refresh
-          </button>
-        </div>
+      <div className="flex justify-end">
+        <button
+          type="button"
+          onClick={() => loadNotifications(true)}
+          disabled={refreshing}
+          className={`h-10 rounded-lg border px-4 text-xs font-semibold inline-flex items-center gap-2 shadow-sm ${
+            isDark
+              ? "border-slate-700 bg-slate-900 text-slate-200 hover:border-cyan-300/45"
+              : "border-slate-300 bg-white text-slate-700 hover:border-cyan-300"
+          } disabled:opacity-60`}
+        >
+          {refreshing ? <Loader size={14} className="animate-spin" /> : <RefreshCw size={14} />}
+          Refresh
+        </button>
       </div>
 
-      <div className="mb-5 grid grid-cols-2 gap-2 lg:grid-cols-4">
+      <div className="grid grid-cols-2 gap-2 lg:grid-cols-5">
         <button
           type="button"
           onClick={() => {
@@ -649,9 +737,30 @@ const AdminNotifications = () => {
             {metrics.pendingInventory}
           </p>
         </button>
+        {userRole === "ADMIN" ? (
+          <button
+            type="button"
+            onClick={() => {
+              setApprovalFilter("ALL");
+              scrollToSection("user-delete");
+            }}
+            className={`ui-soft-panel rounded-xl border p-3 text-left transition-colors ${
+              isDark
+                ? "border-slate-700 bg-slate-900/80 hover:border-rose-300/40"
+                : "border-slate-200 bg-white hover:border-rose-300"
+            }`}
+          >
+            <p className={`text-[10px] uppercase tracking-[0.14em] ${isDark ? "text-slate-400" : "text-slate-500"}`}>
+              User Delete
+            </p>
+            <p className={`mt-1 text-2xl font-semibold ${isDark ? "text-rose-200" : "text-rose-700"}`}>
+              {metrics.pendingUserDelete}
+            </p>
+          </button>
+        ) : null}
       </div>
 
-      <div className={`ui-soft-panel mb-5 rounded-xl border p-3 ${isDark ? "border-slate-700 bg-slate-900/75" : "border-slate-200 bg-white"}`}>
+      <div className={`ui-soft-panel rounded-xl border p-3 ${isDark ? "border-slate-700 bg-slate-900/75" : "border-slate-200 bg-white"}`}>
         <div className="grid grid-cols-1 gap-2 md:grid-cols-3">
           <div className="relative md:col-span-2">
             <Search size={14} className={`absolute left-3 top-1/2 -translate-y-1/2 ${isDark ? "text-slate-500" : "text-slate-400"}`} />
@@ -682,21 +791,21 @@ const AdminNotifications = () => {
       </div>
 
       {error && (
-        <div className={`mb-4 rounded-xl border px-3 py-2 text-sm ${
+        <div className={`rounded-xl border px-3 py-2 text-sm ${
           isDark ? "border-rose-500/30 bg-rose-500/10 text-rose-200" : "border-rose-200 bg-rose-50 text-rose-700"
         }`}>
           {error}
         </div>
       )}
       {success && (
-        <div className={`mb-4 rounded-xl border px-3 py-2 text-sm ${
+        <div className={`rounded-xl border px-3 py-2 text-sm ${
           isDark ? "border-emerald-500/30 bg-emerald-500/10 text-emerald-200" : "border-emerald-200 bg-emerald-50 text-emerald-700"
         }`}>
           {success}
         </div>
       )}
 
-      <section className={`ui-soft-panel mb-5 rounded-2xl border p-4 ${
+      <section className={`ui-soft-panel rounded-2xl border p-4 ${
         isDark ? "border-slate-700 bg-slate-900/75" : "border-slate-200 bg-white"
       }`}>
         <div className="mb-3 flex items-center justify-between gap-2">
@@ -1293,6 +1402,124 @@ const AdminNotifications = () => {
           )}
         </section>
       </div>
+
+      {userRole === "ADMIN" ? (
+        <section ref={userDeleteSectionRef} className={`mt-5 rounded-2xl border p-4 ${
+          isDark ? "border-slate-700 bg-slate-900/75" : "border-slate-200 bg-white"
+        }`}>
+          <div className="mb-3 flex items-center justify-between gap-2">
+            <div className="inline-flex items-center gap-2">
+              <UserRound size={16} className={isDark ? "text-rose-300" : "text-rose-700"} />
+              <h2 className={`text-base font-semibold ${isDark ? "text-slate-100" : "text-slate-900"}`}>
+                User Delete Requests
+              </h2>
+            </div>
+            <span className={`text-xs ${isDark ? "text-slate-400" : "text-slate-500"}`}>
+              {filteredUserDeleteRequests.length}
+            </span>
+          </div>
+
+          {loading ? (
+            <div className={`h-24 flex items-center justify-center gap-2 text-sm ${isDark ? "text-slate-400" : "text-slate-500"}`}>
+              <Loader size={14} className="animate-spin" />
+              Loading user delete requests...
+            </div>
+          ) : filteredUserDeleteRequests.length === 0 ? (
+            <div className={`rounded-xl border p-3 text-sm ${isDark ? "border-slate-700 text-slate-400" : "border-slate-200 text-slate-500"}`}>
+              No pending user delete requests found.
+            </div>
+          ) : (
+            <div className="space-y-2 max-h-[420px] overflow-y-auto pr-1 custom-scrollbar">
+              {filteredUserDeleteRequests.map((request) => {
+                const requestId = String(request?._id || "");
+                const target = request?.targetUser || request?.snapshot || {};
+                const snapshot = request?.snapshot || {};
+                const isReviewingUserDelete = reviewingUserDeleteRequestId === requestId;
+                const targetName = target?.name || snapshot?.name || "User";
+                const targetRole = target?.role || snapshot?.role || "-";
+                const targetEmail = target?.email || snapshot?.email || "-";
+
+                return (
+                  <div
+                    key={requestId}
+                    className={`rounded-xl border p-3 ${
+                      isDark ? "border-slate-700 bg-slate-950/70" : "border-slate-200 bg-slate-50"
+                    }`}
+                  >
+                    <div className="mb-2 flex items-start justify-between">
+                      <div>
+                        <p className={`text-sm font-semibold ${isDark ? "text-slate-100" : "text-slate-800"}`}>
+                          Delete {targetName}
+                        </p>
+                        <p className={`text-[11px] ${isDark ? "text-slate-400" : "text-slate-500"}`}>
+                          {targetRole} | {targetEmail}
+                        </p>
+                      </div>
+                      <span className={`rounded-full border px-2 py-0.5 text-[10px] ${
+                        isDark
+                          ? "border-rose-400/35 bg-rose-500/10 text-rose-200"
+                          : "border-rose-200 bg-rose-50 text-rose-700"
+                      }`}>
+                        PENDING
+                      </span>
+                    </div>
+
+                    <div className="space-y-1 text-[11px]">
+                      <div>
+                        <span className={isDark ? "text-slate-400" : "text-slate-500"}>Requested By:</span>{" "}
+                        <span className={isDark ? "text-slate-200" : "text-slate-700"}>
+                          {formatUserWithRole(request?.requestedBy)}
+                        </span>
+                      </div>
+                      <div>
+                        <span className={isDark ? "text-slate-400" : "text-slate-500"}>Requested At:</span>{" "}
+                        <span className={isDark ? "text-slate-200" : "text-slate-700"}>
+                          {formatDate(request?.createdAt)}
+                        </span>
+                      </div>
+                      <div>
+                        <span className={isDark ? "text-slate-400" : "text-slate-500"}>Reason:</span>{" "}
+                        <span className={isDark ? "text-slate-200" : "text-slate-700"}>
+                          {request?.reason || "-"}
+                        </span>
+                      </div>
+                    </div>
+
+                    <div className="mt-3 flex flex-wrap items-center gap-2">
+                      <button
+                        type="button"
+                        onClick={() => handleApproveUserDeleteRequest(requestId)}
+                        disabled={isReviewingUserDelete}
+                        className={`h-7 rounded-lg border px-2 text-[10px] font-semibold inline-flex items-center gap-1 ${
+                          isDark
+                            ? "border-emerald-500/40 bg-emerald-500/10 text-emerald-200 hover:border-emerald-300/55"
+                            : "border-emerald-200 bg-emerald-50 text-emerald-700 hover:border-emerald-300"
+                        } disabled:opacity-60`}
+                      >
+                        {isReviewingUserDelete ? <Loader size={11} className="animate-spin" /> : <CheckCircle2 size={11} />}
+                        Approve
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => handleRejectUserDeleteRequest(requestId)}
+                        disabled={isReviewingUserDelete}
+                        className={`h-7 rounded-lg border px-2 text-[10px] font-semibold inline-flex items-center gap-1 ${
+                          isDark
+                            ? "border-rose-500/40 bg-rose-500/10 text-rose-200 hover:border-rose-300/55"
+                            : "border-rose-200 bg-rose-50 text-rose-700 hover:border-rose-300"
+                        } disabled:opacity-60`}
+                      >
+                        <XCircle size={11} />
+                        Reject
+                      </button>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </section>
+      ) : null}
 
       {!loading && !error && (
         <div className={`mt-5 rounded-xl border px-3 py-2 text-xs ${

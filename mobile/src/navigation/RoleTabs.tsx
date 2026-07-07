@@ -119,7 +119,7 @@ const RoleMainTabs = ({ role }: { role: UserRole }) => {
     );
   }
 
-  if (role === "MANAGER" || role === "ASSISTANT_MANAGER" || role === "TEAM_LEADER") {
+  if (role === "MANAGER") {
     return (
       <Tab.Navigator
         screenOptions={({ route }) => ({

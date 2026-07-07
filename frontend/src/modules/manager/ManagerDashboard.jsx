@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState } from "react";
-import { motion } from "framer-motion";
+import { motion as Motion } from "framer-motion";
 import { useNavigate } from "react-router-dom";
 import {
   Activity,
@@ -40,6 +40,7 @@ const ManagerDashboard = ({ theme = "light" }) => {
   });
   const [leadRows, setLeadRows] = useState([]);
   const [userRows, setUserRows] = useState([]);
+  const [inventoryRows, setInventoryRows] = useState([]);
 
   const currentUser = useMemo(() => {
     try {
@@ -73,6 +74,7 @@ const ManagerDashboard = ({ theme = "light" }) => {
         const usersData = usersRes?.data?.users || [];
         setLeadRows(Array.isArray(leadsData) ? leadsData : []);
         setUserRows(Array.isArray(usersData) ? usersData : []);
+        setInventoryRows(Array.isArray(inventoryAssets) ? inventoryAssets : []);
 
         const closedLeadCount = leadsData.filter((lead) => lead.status === "CLOSED").length;
         const siteVisitCount = leadsData.filter((lead) => lead.status === "SITE_VISIT").length;
@@ -96,6 +98,7 @@ const ManagerDashboard = ({ theme = "light" }) => {
         setError(message);
         setLeadRows([]);
         setUserRows([]);
+        setInventoryRows([]);
       } finally {
         setLoading(false);
       }
@@ -129,7 +132,6 @@ const ManagerDashboard = ({ theme = "light" }) => {
     const childrenByParent = new Map();
     const isExecutiveRole = (role) =>
       role === "EXECUTIVE" || role === "FIELD_EXECUTIVE";
-    const isTeamLeadRole = (role) => role === "TEAM_LEADER";
 
     activeUsers.forEach((user) => {
       const parentId = toEntityId(user.parentId);
@@ -140,98 +142,34 @@ const ManagerDashboard = ({ theme = "light" }) => {
     });
 
     const leadAssigneeId = (lead) => toEntityId(lead?.assignedTo);
-    const getDirectTeamLeads = (parentId) =>
-      (childrenByParent.get(parentId) || []).filter((child) =>
-        isTeamLeadRole(String(child?.role || "")));
-    const collectExecutiveIdsUnderTeamLead = (teamLeadId) => {
-      const executiveIds = new Set();
-      const visited = new Set([teamLeadId]);
-      const stack = [...(childrenByParent.get(teamLeadId) || [])];
-
-      while (stack.length) {
-        const node = stack.pop();
-        const nodeId = toEntityId(node?._id);
-        if (!nodeId || visited.has(nodeId)) continue;
-        visited.add(nodeId);
-
-        const role = String(node?.role || "");
-        if (isExecutiveRole(role)) {
-          executiveIds.add(nodeId);
-        }
-
-        const children = childrenByParent.get(nodeId) || [];
-        children.forEach((child) => {
-          const childId = toEntityId(child?._id);
-          if (childId && !visited.has(childId)) {
-            stack.push(child);
-          }
-        });
-      }
-
-      return executiveIds;
-    };
 
     if (currentUserRole === "MANAGER") {
-      const directAssistantManagers = activeUsers.filter((user) => {
-        if (String(user.role || "") !== "ASSISTANT_MANAGER") return false;
+      const directExecutives = activeUsers.filter((user) => {
+        if (!isExecutiveRole(String(user.role || ""))) return false;
         return toEntityId(user.parentId) === currentUserId;
       });
 
-      const rows = directAssistantManagers.map((assistantManager) => {
-        const assistantManagerId = toEntityId(assistantManager._id);
-        const directTeamLeads = getDirectTeamLeads(assistantManagerId);
-        const executiveIds = new Set();
-
-        directTeamLeads.forEach((teamLead) => {
-          const teamLeadId = toEntityId(teamLead._id);
-          const scopedExecutiveIds = collectExecutiveIdsUnderTeamLead(teamLeadId);
-          scopedExecutiveIds.forEach((executiveId) => executiveIds.add(executiveId));
-        });
+      const rows = directExecutives.map((executive) => {
+        const executiveId = toEntityId(executive._id);
 
         const scopedLeads = leadRows.filter((lead) => {
           const assigneeId = leadAssigneeId(lead);
-          return assigneeId && executiveIds.has(assigneeId);
+          return assigneeId && assigneeId === executiveId;
         });
 
         return {
-          id: assistantManagerId,
-          name: assistantManager?.name || "Assistant Manager",
+          id: executiveId,
+          name: executive?.name || "Executive",
           leads: scopedLeads,
-          subtitle: `Team leaders: ${directTeamLeads.length} | Active executives: ${executiveIds.size}`,
+          subtitle: String(executive?.role || "") === "FIELD_EXECUTIVE"
+            ? "Field Executive"
+            : "Executive",
         };
       });
 
       return {
-        title: "Assistant Manager Performance",
+        title: "Team Performance",
         countLabel: "Direct reports",
-        rows,
-      };
-    }
-
-    if (currentUserRole === "ASSISTANT_MANAGER") {
-      const directTeamLeads = getDirectTeamLeads(currentUserId).sort((left, right) =>
-        String(left?.name || "").localeCompare(String(right?.name || "")),
-      );
-
-      const rows = directTeamLeads.map((teamLead) => {
-        const teamLeadId = toEntityId(teamLead._id);
-        const executiveIds = collectExecutiveIdsUnderTeamLead(teamLeadId);
-        const scopedLeads = leadRows.filter((lead) => {
-          const assigneeId = leadAssigneeId(lead);
-          return assigneeId && executiveIds.has(assigneeId);
-        });
-
-        return {
-          id: teamLeadId,
-          name: teamLead?.name || "Team Leader",
-          leads: scopedLeads,
-          subtitle: `Executives: ${executiveIds.size}`,
-        };
-      });
-
-      return {
-        title: "Team Leader Performance",
-        countLabel: "Team leads",
         rows,
       };
     }
@@ -364,6 +302,51 @@ const ManagerDashboard = ({ theme = "light" }) => {
     [derived.conversionPercent, derived.negotiationShare, derived.visitShare, stats.closed, stats.leads, stats.negotiation, stats.visits],
   );
 
+  const commandCenterRows = useMemo(() => {
+    const now = new Date();
+    const todayStart = new Date(now);
+    todayStart.setHours(0, 0, 0, 0);
+    const todayEnd = new Date(now);
+    todayEnd.setHours(23, 59, 59, 999);
+
+    const toDate = (value) => {
+      if (!value) return null;
+      const parsed = new Date(value);
+      return Number.isNaN(parsed.getTime()) ? null : parsed;
+    };
+
+    const todayFollowUps = leadRows
+      .map((lead) => ({ ...lead, followUpAt: toDate(lead.nextFollowUp) }))
+      .filter((lead) => lead.followUpAt && lead.followUpAt >= todayStart && lead.followUpAt <= todayEnd)
+      .sort((left, right) => left.followUpAt - right.followUpAt)
+      .slice(0, 5);
+
+    const pendingApprovals = leadRows.filter((lead) =>
+      String(lead?.status || "").toUpperCase() === "REQUESTED").length;
+
+    const inventoryStatusRows = ["Available", "Blocked", "Sold"].map((status) => ({
+      label: status,
+      count: inventoryRows.filter((asset) => String(asset?.status || "") === status).length,
+    }));
+
+    const activeUsers = userRows.filter((user) => user?.isActive !== false).length;
+    const recentActivity = [...leadRows]
+      .sort((left, right) => {
+        const leftDate = toDate(left.updatedAt || left.createdAt)?.getTime() || 0;
+        const rightDate = toDate(right.updatedAt || right.createdAt)?.getTime() || 0;
+        return rightDate - leftDate;
+      })
+      .slice(0, 5);
+
+    return {
+      todayFollowUps,
+      pendingApprovals,
+      inventoryStatusRows,
+      activeUsers,
+      recentActivity,
+    };
+  }, [inventoryRows, leadRows, userRows]);
+
   const containerMotion = {
     hidden: { opacity: 0, y: 16 },
     visible: {
@@ -394,73 +377,42 @@ const ManagerDashboard = ({ theme = "light" }) => {
   }
 
   return (
-    <motion.div
+    <Motion.div
       initial="hidden"
       animate="visible"
       variants={containerMotion}
-      className={`ui-page-shell relative h-full w-full overflow-y-auto custom-scrollbar pb-10 pt-5 ${
+      className={`ui-page-shell relative h-full w-full overflow-y-auto custom-scrollbar ${
         isDark ? "bg-slate-950" : "bg-slate-100"
       }`}
     >
-      <div className="pointer-events-none absolute inset-0 -z-10 overflow-hidden">
-        <div className={`absolute -left-16 top-6 h-64 w-64 rounded-full blur-3xl ${isDark ? "bg-sky-500/20" : "bg-sky-300/40"}`} />
-        <div className={`absolute right-2 top-24 h-72 w-72 rounded-full blur-3xl ${isDark ? "bg-amber-500/15" : "bg-amber-300/35"}`} />
-        <div className={`absolute bottom-0 left-1/3 h-56 w-56 rounded-full blur-3xl ${isDark ? "bg-emerald-500/10" : "bg-emerald-200/30"}`} />
-      </div>
-
-      <motion.section
+      <Motion.section
         variants={itemMotion}
-        className={`ui-hero-card rounded-[30px] px-4 py-5 sm:px-6 sm:py-6 ${
-          isDark
-            ? "border-slate-700 bg-slate-900/90 shadow-[0_24px_70px_-40px_rgba(2,6,23,0.9)]"
-            : "border-slate-200 bg-white shadow-[0_20px_55px_-35px_rgba(15,23,42,0.35)]"
-        }`}
+        className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-4"
       >
-        <div className="grid grid-cols-1 gap-5 xl:grid-cols-[1.6fr_1fr]">
-          <div>
-            <div className={`inline-flex items-center gap-2 rounded-full border px-3 py-1 text-[10px] font-semibold uppercase tracking-[0.18em] ${
+        {deckChips.map((chip) => (
+          <button
+            key={chip.label}
+            type="button"
+            onClick={() => navigate(chip.to)}
+            className={`min-h-28 rounded-2xl border p-4 text-left shadow-sm transition-all hover:-translate-y-0.5 ${
               isDark
-                ? "border-sky-300/35 bg-sky-500/10 text-sky-100"
-                : "border-sky-200 bg-sky-50 text-sky-700"
-            }`}>
-              <Sparkles size={12} />
-              Operations Home
-            </div>
-
-            <h1 className={`mt-3 font-display text-3xl tracking-tight sm:text-4xl ${isDark ? "text-slate-50" : "text-slate-900"}`}>
-              Revenue and Pipeline Radar
-            </h1>
-
-            <p className={`mt-2 max-w-2xl text-sm ${isDark ? "text-slate-300" : "text-slate-600"}`}>
-              Team performance, closure health, and pipeline velocity in one clean tactical view.
+                ? "border-slate-700 bg-slate-900/85 hover:border-sky-300/40"
+                : "border-slate-200 bg-white hover:border-sky-300"
+            }`}
+          >
+            <p className={`text-[10px] font-semibold uppercase tracking-[0.14em] ${isDark ? "text-slate-400" : "text-slate-500"}`}>
+              {chip.label}
             </p>
+            <p className={`mt-3 text-2xl font-display ${isDark ? "text-slate-100" : "text-slate-900"}`}>
+              {chip.value}
+            </p>
+          </button>
+        ))}
 
-            <div className="mt-5 grid grid-cols-1 gap-2 sm:grid-cols-3">
-              {deckChips.map((chip) => (
-                <button
-                  key={chip.label}
-                  type="button"
-                  onClick={() => navigate(chip.to)}
-                  className={`rounded-2xl border px-4 py-3 text-left transition-all hover:-translate-y-0.5 ${
-                    isDark
-                      ? "border-slate-700 bg-slate-950/70 hover:border-sky-300/40"
-                      : "border-slate-200 bg-slate-50 hover:border-sky-300"
-                  }`}
-                >
-                  <p className={`text-[10px] font-semibold uppercase tracking-[0.14em] ${isDark ? "text-slate-400" : "text-slate-500"}`}>
-                    {chip.label}
-                  </p>
-                  <p className={`mt-1 text-2xl font-display ${isDark ? "text-slate-100" : "text-slate-900"}`}>
-                    {chip.value}
-                  </p>
-                </button>
-              ))}
-            </div>
-          </div>
-
-          <div className={`rounded-3xl border p-4 ${
-            isDark ? "border-slate-700 bg-slate-950/70" : "border-slate-200 bg-slate-50/80"
-          }`}>
+        <div className={`min-h-28 rounded-2xl border p-4 shadow-sm ${
+          isDark ? "border-slate-700 bg-slate-900/85" : "border-slate-200 bg-white"
+        }`}>
+          <div className="flex items-center justify-between gap-3">
             <div className={`inline-flex items-center gap-2 rounded-full border px-3 py-1 text-[10px] font-semibold uppercase tracking-[0.14em] ${
               isDark
                 ? "border-emerald-300/35 bg-emerald-500/10 text-emerald-100"
@@ -469,37 +421,34 @@ const ManagerDashboard = ({ theme = "light" }) => {
               <BarChart3 size={14} />
               Live Intelligence
             </div>
+            <Clock3 size={13} className={isDark ? "text-slate-400" : "text-slate-500"} />
+          </div>
 
-            <div className="mt-4 space-y-2">
-              <div className={`rounded-xl border px-3 py-2 ${isDark ? "border-slate-700 bg-slate-900/80" : "border-slate-200 bg-white"}`}>
-                <p className={`text-[10px] uppercase tracking-[0.14em] ${isDark ? "text-slate-400" : "text-slate-500"}`}>Close Efficiency</p>
-                <p className={`mt-1 text-2xl font-display ${isDark ? "text-emerald-100" : "text-emerald-700"}`}>
-                  {derived.conversionPercent}%
-                </p>
-              </div>
-              <div className={`rounded-xl border px-3 py-2 ${isDark ? "border-slate-700 bg-slate-900/80" : "border-slate-200 bg-white"}`}>
-                <p className={`text-[10px] uppercase tracking-[0.14em] ${isDark ? "text-slate-400" : "text-slate-500"}`}>Pipeline Volume</p>
-                <p className={`mt-1 text-2xl font-display ${isDark ? "text-sky-100" : "text-sky-700"}`}>
-                  {derived.activePipeline}
-                </p>
-              </div>
-              <div className={`rounded-xl border px-3 py-2 ${isDark ? "border-slate-700 bg-slate-900/80" : "border-slate-200 bg-white"}`}>
-                <p className={`text-[10px] uppercase tracking-[0.14em] ${isDark ? "text-slate-400" : "text-slate-500"}`}>Average Ticket</p>
-                <p className={`mt-1 text-2xl font-display ${isDark ? "text-amber-100" : "text-amber-700"}`}>
-                  {derived.avgTicket ? `Rs ${(derived.avgTicket / 1000).toFixed(1)}k` : "Rs 0"}
-                </p>
-              </div>
+          <div className="mt-4 grid grid-cols-3 gap-2">
+            <div>
+              <p className={`text-[9px] uppercase tracking-[0.12em] ${isDark ? "text-slate-400" : "text-slate-500"}`}>Close</p>
+              <p className={`mt-1 text-lg font-display ${isDark ? "text-emerald-100" : "text-emerald-700"}`}>
+                {derived.conversionPercent}%
+              </p>
             </div>
-
-            <div className={`mt-3 flex items-center justify-end gap-2 text-xs ${isDark ? "text-slate-400" : "text-slate-500"}`}>
-              <Clock3 size={12} /> Auto sync active
+            <div>
+              <p className={`text-[9px] uppercase tracking-[0.12em] ${isDark ? "text-slate-400" : "text-slate-500"}`}>Pipeline</p>
+              <p className={`mt-1 text-lg font-display ${isDark ? "text-sky-100" : "text-sky-700"}`}>
+                {derived.activePipeline}
+              </p>
+            </div>
+            <div>
+              <p className={`text-[9px] uppercase tracking-[0.12em] ${isDark ? "text-slate-400" : "text-slate-500"}`}>Ticket</p>
+              <p className={`mt-1 text-lg font-display ${isDark ? "text-amber-100" : "text-amber-700"}`}>
+                {derived.avgTicket ? `Rs ${(derived.avgTicket / 1000).toFixed(1)}k` : "Rs 0"}
+              </p>
             </div>
           </div>
         </div>
-      </motion.section>
+      </Motion.section>
 
       {error && (
-        <motion.div
+        <Motion.div
           variants={itemMotion}
           className={`mt-4 rounded-2xl border px-4 py-3 text-sm ${
             isDark
@@ -508,10 +457,10 @@ const ManagerDashboard = ({ theme = "light" }) => {
           }`}
         >
           {error}
-        </motion.div>
+        </Motion.div>
       )}
 
-      <motion.section variants={itemMotion} className="mt-5 grid grid-cols-1 gap-3 xl:grid-cols-3">
+      <Motion.section variants={itemMotion} className="grid grid-cols-1 gap-3 xl:grid-cols-3">
         {kpiCards.map((card) => (
           <button
             key={card.label}
@@ -547,9 +496,9 @@ const ManagerDashboard = ({ theme = "light" }) => {
             </div>
           </button>
         ))}
-      </motion.section>
+      </Motion.section>
 
-      <motion.div variants={itemMotion} className="mt-6">
+      <Motion.div variants={itemMotion}>
         <div className={`rounded-3xl border p-3 sm:p-4 ${
           isDark ? "border-slate-700 bg-slate-900/80" : "border-slate-200 bg-white"
         }`}>
@@ -561,10 +510,107 @@ const ManagerDashboard = ({ theme = "light" }) => {
             subtitle="Live stage distribution for your accessible pipeline"
           />
         </div>
-      </motion.div>
+      </Motion.div>
+
+      <Motion.section variants={itemMotion} className="grid grid-cols-1 gap-4 xl:grid-cols-4">
+        <CommandPanel
+          title="Today's Follow-ups"
+          subtitle={`${commandCenterRows.todayFollowUps.length} scheduled`}
+          isDark={isDark}
+        >
+          {commandCenterRows.todayFollowUps.length ? (
+            <div className="space-y-2">
+              {commandCenterRows.todayFollowUps.map((lead) => (
+                <button
+                  key={lead._id}
+                  type="button"
+                  onClick={() => navigate("/leads")}
+                  className={`w-full rounded-xl border px-3 py-2 text-left ${
+                    isDark ? "border-slate-700 bg-slate-950/70" : "border-slate-200 bg-slate-50"
+                  }`}
+                >
+                  <p className={isDark ? "text-sm font-semibold text-slate-100" : "text-sm font-semibold text-slate-900"}>
+                    {lead.name || lead.phone || "Lead"}
+                  </p>
+                  <p className={isDark ? "text-xs text-slate-400" : "text-xs text-slate-500"}>
+                    {lead.followUpAt.toLocaleTimeString("en-IN", { hour: "2-digit", minute: "2-digit" })} | {lead.status || "-"}
+                  </p>
+                </button>
+              ))}
+            </div>
+          ) : (
+            <EmptyCommandState text="No follow-ups scheduled for today." isDark={isDark} />
+          )}
+        </CommandPanel>
+
+        <CommandPanel title="Pending Approvals" subtitle="Lead requests" isDark={isDark}>
+          <button
+            type="button"
+            onClick={() => navigate("/admin/notifications")}
+            className={`w-full rounded-2xl border px-4 py-5 text-left ${
+              isDark ? "border-amber-500/30 bg-amber-500/10" : "border-amber-200 bg-amber-50"
+            }`}
+          >
+            <p className={isDark ? "text-3xl font-bold text-amber-100" : "text-3xl font-bold text-amber-800"}>
+              {commandCenterRows.pendingApprovals}
+            </p>
+            <p className={isDark ? "mt-1 text-xs text-amber-200" : "mt-1 text-xs text-amber-700"}>
+              Leads waiting for decision
+            </p>
+          </button>
+        </CommandPanel>
+
+        <CommandPanel title="Inventory Snapshot" subtitle={`${inventoryRows.length} properties`} isDark={isDark}>
+          <div className="space-y-2">
+            {commandCenterRows.inventoryStatusRows.map((row) => (
+              <div key={row.label} className="flex items-center justify-between gap-3">
+                <span className={isDark ? "text-sm text-slate-300" : "text-sm text-slate-600"}>{row.label}</span>
+                <span className={isDark ? "font-semibold text-slate-100" : "font-semibold text-slate-900"}>{row.count}</span>
+              </div>
+            ))}
+          </div>
+        </CommandPanel>
+
+        <CommandPanel title="Team Summary" subtitle="Active coverage" isDark={isDark}>
+          <div className="grid grid-cols-2 gap-2">
+            <MiniCommandMetric label="Active" value={commandCenterRows.activeUsers} isDark={isDark} />
+            <MiniCommandMetric label="Total" value={userRows.length} isDark={isDark} />
+            <MiniCommandMetric label="Closed" value={stats.closed} isDark={isDark} />
+            <MiniCommandMetric label="Visits" value={stats.visits} isDark={isDark} />
+          </div>
+        </CommandPanel>
+      </Motion.section>
+
+      <Motion.section variants={itemMotion} className="mt-6">
+        <CommandPanel title="Recent Activity" subtitle="Latest lead movement" isDark={isDark}>
+          {commandCenterRows.recentActivity.length ? (
+            <div className="grid grid-cols-1 gap-2 lg:grid-cols-5">
+              {commandCenterRows.recentActivity.map((lead) => (
+                <button
+                  key={lead._id}
+                  type="button"
+                  onClick={() => navigate("/leads")}
+                  className={`rounded-xl border px-3 py-2 text-left ${
+                    isDark ? "border-slate-700 bg-slate-950/70" : "border-slate-200 bg-slate-50"
+                  }`}
+                >
+                  <p className={isDark ? "truncate text-sm font-semibold text-slate-100" : "truncate text-sm font-semibold text-slate-900"}>
+                    {lead.name || lead.phone || "Lead"}
+                  </p>
+                  <p className={isDark ? "mt-1 text-xs text-slate-400" : "mt-1 text-xs text-slate-500"}>
+                    {lead.status || "-"}
+                  </p>
+                </button>
+              ))}
+            </div>
+          ) : (
+            <EmptyCommandState text="No recent activity available." isDark={isDark} />
+          )}
+        </CommandPanel>
+      </Motion.section>
 
       {subordinatePerformance.rows.length > 0 && (
-        <motion.section variants={itemMotion} className="mt-6">
+        <Motion.section variants={itemMotion} className="mt-6">
           <div className="mb-3 flex items-center justify-between gap-2">
             <h2 className={`text-lg font-semibold ${isDark ? "text-slate-100" : "text-slate-900"}`}>
               {subordinatePerformance.title}
@@ -594,10 +640,10 @@ const ManagerDashboard = ({ theme = "light" }) => {
               </div>
             ))}
           </div>
-        </motion.section>
+        </Motion.section>
       )}
 
-      <motion.section variants={itemMotion} className="mt-6 grid grid-cols-1 gap-4 xl:grid-cols-[1.7fr_1fr]">
+      <Motion.section variants={itemMotion} className="mt-6 grid grid-cols-1 gap-4 xl:grid-cols-[1.7fr_1fr]">
         <div
           className={`rounded-3xl border p-4 sm:p-5 ${
             isDark ? "border-slate-700 bg-slate-900/80" : "border-slate-200 bg-white"
@@ -678,9 +724,48 @@ const ManagerDashboard = ({ theme = "light" }) => {
             ))}
           </div>
         </div>
-      </motion.section>
-    </motion.div>
+      </Motion.section>
+    </Motion.div>
   );
 };
 
 export default ManagerDashboard;
+
+const CommandPanel = ({ title, subtitle, isDark, children }) => (
+  <section className={`rounded-3xl border p-4 ${
+    isDark ? "border-slate-700 bg-slate-900/80" : "border-slate-200 bg-white"
+  }`}>
+    <div className="mb-3 flex items-start justify-between gap-3">
+      <div>
+        <h2 className={isDark ? "text-sm font-bold text-slate-100" : "text-sm font-bold text-slate-900"}>
+          {title}
+        </h2>
+        <p className={isDark ? "mt-1 text-[10px] uppercase tracking-[0.14em] text-slate-400" : "mt-1 text-[10px] uppercase tracking-[0.14em] text-slate-500"}>
+          {subtitle}
+        </p>
+      </div>
+    </div>
+    {children}
+  </section>
+);
+
+const MiniCommandMetric = ({ label, value, isDark }) => (
+  <div className={`rounded-xl border px-3 py-2 ${
+    isDark ? "border-slate-700 bg-slate-950/70" : "border-slate-200 bg-slate-50"
+  }`}>
+    <p className={isDark ? "text-[10px] uppercase tracking-[0.12em] text-slate-400" : "text-[10px] uppercase tracking-[0.12em] text-slate-500"}>
+      {label}
+    </p>
+    <p className={isDark ? "mt-1 text-lg font-bold text-slate-100" : "mt-1 text-lg font-bold text-slate-900"}>
+      {value}
+    </p>
+  </div>
+);
+
+const EmptyCommandState = ({ text, isDark }) => (
+  <div className={`rounded-xl border border-dashed px-4 py-6 text-center text-sm ${
+    isDark ? "border-slate-700 text-slate-400" : "border-slate-300 text-slate-500"
+  }`}>
+    {text}
+  </div>
+);

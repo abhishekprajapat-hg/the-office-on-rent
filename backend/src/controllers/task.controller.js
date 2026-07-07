@@ -6,14 +6,11 @@ const { USER_ROLES } = require("../constants/role.constants");
 
 // Helper to check access permissions
 const checkTaskAccess = (task, user) => {
-  if (user.role === USER_ROLES.SUPER_ADMIN) return true;
   if (String(task.companyId) !== String(user.companyId)) return false;
   
   // Admin and Managers can access all company tasks
   if (user.role === USER_ROLES.ADMIN || 
-      user.role === USER_ROLES.MANAGER || 
-      user.role === USER_ROLES.ASSISTANT_MANAGER || 
-      user.role === USER_ROLES.TEAM_LEADER) {
+      user.role === USER_ROLES.MANAGER) {
     return true;
   }
   
@@ -100,11 +97,8 @@ exports.getTasks = async (req, res) => {
     const query = { companyId };
 
     // Role-based restrictions
-    if (req.user.role !== USER_ROLES.SUPER_ADMIN && 
-        req.user.role !== USER_ROLES.ADMIN && 
-        req.user.role !== USER_ROLES.MANAGER && 
-        req.user.role !== USER_ROLES.ASSISTANT_MANAGER && 
-        req.user.role !== USER_ROLES.TEAM_LEADER) {
+    if (req.user.role !== USER_ROLES.ADMIN && 
+        req.user.role !== USER_ROLES.MANAGER) {
       // Executives can only see their own tasks (assigned to or created by)
       query.$or = [
         { assignedTo: req.user._id },
@@ -303,7 +297,7 @@ exports.deleteTask = async (req, res) => {
 
     // Access check: Admin or creator can delete
     const isCreator = String(task.createdBy) === String(req.user._id);
-    const isAdmin = req.user.role === USER_ROLES.ADMIN || req.user.role === USER_ROLES.SUPER_ADMIN;
+    const isAdmin = req.user.role === USER_ROLES.ADMIN;
 
     if (!isAdmin && !isCreator) {
       return res.status(403).json({ message: "Access denied. Only the creator or an Admin can delete this task" });
@@ -339,11 +333,8 @@ exports.getTaskStats = async (req, res) => {
     const query = { companyId };
 
     // Apply role filter (Executives only see their tasks)
-    if (req.user.role !== USER_ROLES.SUPER_ADMIN && 
-        req.user.role !== USER_ROLES.ADMIN && 
-        req.user.role !== USER_ROLES.MANAGER && 
-        req.user.role !== USER_ROLES.ASSISTANT_MANAGER && 
-        req.user.role !== USER_ROLES.TEAM_LEADER) {
+    if (req.user.role !== USER_ROLES.ADMIN && 
+        req.user.role !== USER_ROLES.MANAGER) {
       query.$or = [
         { assignedTo: req.user._id },
         { createdBy: req.user._id }

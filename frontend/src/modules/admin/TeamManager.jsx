@@ -1,7 +1,8 @@
 import React, { useEffect, useMemo, useState } from "react";
-import { Plus, RefreshCw, Search, Sparkles, X } from "lucide-react";
+import { GitBranch, Plus, RefreshCw, Search, ShieldCheck, Sparkles, X } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import {
+  createUserDeleteRequest,
   createUser,
   deleteUser,
   getUsers,
@@ -20,33 +21,34 @@ import {
 
 const ROLE_OPTIONS = [
   { label: "Manager", value: "MANAGER" },
-  { label: "Assistant Manager", value: "ASSISTANT_MANAGER" },
-  { label: "Team Leader", value: "TEAM_LEADER" },
   { label: "Executive", value: "EXECUTIVE" },
   { label: "Field Executive", value: "FIELD_EXECUTIVE" },
   { label: "Channel Partner", value: "CHANNEL_PARTNER" },
 ];
 
-const MANAGEMENT_ROLES = ["MANAGER", "ASSISTANT_MANAGER", "TEAM_LEADER"];
+const MANAGEMENT_ROLES = ["MANAGER"];
 const EXECUTIVE_ROLES = ["EXECUTIVE", "FIELD_EXECUTIVE"];
 const REPORTING_PARENT_ROLES = {
   MANAGER: ["ADMIN"],
-  ASSISTANT_MANAGER: ["MANAGER"],
-  TEAM_LEADER: ["ASSISTANT_MANAGER"],
-  EXECUTIVE: ["TEAM_LEADER"],
-  FIELD_EXECUTIVE: ["TEAM_LEADER"],
-  CHANNEL_PARTNER: ["ADMIN"],
+  EXECUTIVE: ["MANAGER"],
+  FIELD_EXECUTIVE: ["MANAGER"],
+  CHANNEL_PARTNER: ["MANAGER"],
 };
 const ROLE_LABELS = {
   ADMIN: "Admin",
   MANAGER: "Manager",
-  ASSISTANT_MANAGER: "Assistant Manager",
-  TEAM_LEADER: "Team Leader",
   EXECUTIVE: "Executive",
   FIELD_EXECUTIVE: "Field Executive",
   CHANNEL_PARTNER: "Channel Partner",
 };
 const DEFAULT_BROKERAGE_VALUE = 50000;
+const ROLE_HIERARCHY = [
+  { role: "ADMIN", reportsTo: "Platform Owner", scope: "Global controls" },
+  { role: "MANAGER", reportsTo: "Admin", scope: "Team and portfolio controls" },
+  { role: "EXECUTIVE", reportsTo: "Manager", scope: "Assigned leads" },
+  { role: "FIELD_EXECUTIVE", reportsTo: "Manager", scope: "Field visits" },
+  { role: "CHANNEL_PARTNER", reportsTo: "Manager", scope: "Partner-created leads" },
+];
 
 const normalizeBrokerageMode = (value) =>
   String(value || "").trim().toUpperCase() === "PERCENTAGE" ? "PERCENTAGE" : "FLAT";
@@ -87,7 +89,8 @@ const TeamManager = ({ theme = "light" }) => {
 
   const currentRole = localStorage.getItem("role");
   const isAdmin = currentRole === "ADMIN";
-  const canViewTeamAccess = isAdmin || MANAGEMENT_ROLES.includes(currentRole);
+  const canUseAdminTools = isAdmin || currentRole === "MANAGER";
+  const canViewTeamAccess = canUseAdminTools || MANAGEMENT_ROLES.includes(currentRole);
   const isDarkTheme = theme === "dark";
   const currentUser = JSON.parse(localStorage.getItem("user") || "{}");
   const currentUserId = currentUser?.id || currentUser?._id || "";
@@ -315,13 +318,13 @@ const TeamManager = ({ theme = "light" }) => {
   };
 
   const handleOpenUserProfile = (userId) => {
-    if (!isAdmin) return;
+    if (!canUseAdminTools) return;
     if (!userId) return;
     navigate(`/admin/users/${userId}`);
   };
 
   const handleCreateUser = async () => {
-    if (!isAdmin) return;
+    if (!canUseAdminTools) return;
 
     if (!formData.name || !formData.email || !formData.password || !formData.role) {
       setFormError("Name, email, password and role are required.");
@@ -376,7 +379,7 @@ const TeamManager = ({ theme = "light" }) => {
   };
 
   const handleRebalance = async () => {
-    if (!isAdmin) return;
+    if (!canUseAdminTools) return;
     try {
       setRebalancing(true);
       await rebalanceExecutives();
@@ -389,27 +392,36 @@ const TeamManager = ({ theme = "light" }) => {
   };
 
   const handleDeleteUser = async (user) => {
-    if (!isAdmin) return;
+    if (!canUseAdminTools) return;
     if (String(user._id) === String(currentUserId)) return;
 
     const confirmed = window.confirm(
-      `Delete user "${user.name}" (${user.role})? This will unassign their leads.`,
+      isAdmin
+        ? `Delete user "${user.name}" (${user.role})? This will unassign their leads.`
+        : `Send delete request for "${user.name}" (${user.role}) to Admin?`,
     );
     if (!confirmed) return;
 
     try {
       setDeletingUserId(user._id);
-      await deleteUser(user._id);
-      await loadData();
+      if (isAdmin) {
+        await deleteUser(user._id);
+        await loadData();
+      } else {
+        await createUserDeleteRequest(user._id, {
+          reason: "Delete requested from team access workspace",
+        });
+        setError("Delete request sent to Admin for approval.");
+      }
     } catch (err) {
-      setError(toErrorMessage(err, "Failed to delete user"));
+      setError(toErrorMessage(err, isAdmin ? "Failed to delete user" : "Failed to send delete request"));
     } finally {
       setDeletingUserId("");
     }
   };
 
   const handleToggleChannelPartnerInventoryAccess = async (user) => {
-    if (!isAdmin || user?.role !== "CHANNEL_PARTNER") return;
+    if (!canUseAdminTools || user?.role !== "CHANNEL_PARTNER") return;
 
     try {
       setError("");
@@ -458,7 +470,7 @@ const TeamManager = ({ theme = "light" }) => {
   }
 
   return (
-    <div className={`ui-page-shell custom-scrollbar overflow-x-hidden flex flex-col gap-4 pt-4 md:pt-6 ${
+    <div className={`ui-page-shell custom-scrollbar overflow-x-hidden flex flex-col gap-4 ${
       isDarkTheme ? "bg-slate-950/40" : "bg-slate-50/70"
     }`}>
       <section className={`ui-hero-card rounded-2xl border p-4 ${
@@ -476,7 +488,7 @@ const TeamManager = ({ theme = "light" }) => {
                   : "border-slate-300 bg-slate-100 text-slate-700"
             }`}>
               <Sparkles size={13} />
-              {isAdmin ? "Admin Command Mode" : "Leadership View Mode"}
+              {isAdmin ? "Admin Command Mode" : "Manager Command Mode"}
             </div>
             <span className={`rounded-full border px-3 py-1 text-xs ${
               isDarkTheme ? "border-slate-700 bg-slate-950/70 text-slate-300" : "border-slate-200 bg-slate-50 text-slate-600"
@@ -512,7 +524,7 @@ const TeamManager = ({ theme = "light" }) => {
               <RefreshCw size={15} />
               Refresh
             </button>
-            {isAdmin ? (
+            {canUseAdminTools ? (
               <>
                 <button
                   onClick={handleRebalance}
@@ -545,6 +557,62 @@ const TeamManager = ({ theme = "light" }) => {
           {error}
         </div>
       ) : null}
+
+      <section className={`rounded-2xl border p-4 ${
+        isDarkTheme ? "border-slate-700 bg-slate-900/70" : "border-slate-200 bg-white"
+      }`}>
+        <div className="mb-4 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+          <div>
+            <div className={`inline-flex items-center gap-2 rounded-full border px-3 py-1 text-[10px] font-bold uppercase tracking-[0.14em] ${
+              isDarkTheme ? "border-cyan-400/30 bg-cyan-500/10 text-cyan-100" : "border-cyan-200 bg-cyan-50 text-cyan-700"
+            }`}>
+              <GitBranch size={13} />
+              Role hierarchy
+            </div>
+            <p className={`mt-2 text-sm ${isDarkTheme ? "text-slate-400" : "text-slate-600"}`}>
+              Reporting structure and lead visibility boundaries for the team workspace.
+            </p>
+          </div>
+          <div className={`inline-flex items-center gap-2 rounded-xl border px-3 py-2 text-xs font-semibold ${
+            isDarkTheme ? "border-slate-700 bg-slate-950 text-slate-300" : "border-slate-200 bg-slate-50 text-slate-600"
+          }`}>
+            <ShieldCheck size={14} />
+            {isAdmin ? "Full controls enabled" : "Full controls; deletes require Admin approval"}
+          </div>
+        </div>
+
+        <div className="grid grid-cols-1 gap-2 md:grid-cols-2 xl:grid-cols-5">
+          {ROLE_HIERARCHY.map((row) => (
+            <button
+              key={row.role}
+              type="button"
+              onClick={() => setRoleFilter(row.role)}
+              className={`rounded-2xl border p-3 text-left transition hover:-translate-y-0.5 ${
+                roleFilter === row.role
+                  ? isDarkTheme
+                    ? "border-cyan-300/45 bg-cyan-500/15"
+                    : "border-cyan-300 bg-cyan-50"
+                  : isDarkTheme
+                    ? "border-slate-700 bg-slate-950/70"
+                    : "border-slate-200 bg-slate-50"
+              }`}
+            >
+              <p className={`text-sm font-bold ${isDarkTheme ? "text-slate-100" : "text-slate-900"}`}>
+                {ROLE_LABELS[row.role] || row.role}
+              </p>
+              <p className={`mt-1 text-[10px] uppercase tracking-[0.12em] ${isDarkTheme ? "text-slate-500" : "text-slate-500"}`}>
+                {Number(roleBreakdown[row.role] || 0)} users
+              </p>
+              <p className={`mt-2 text-xs ${isDarkTheme ? "text-slate-400" : "text-slate-600"}`}>
+                Reports to {row.reportsTo}
+              </p>
+              <p className={`mt-1 text-xs ${isDarkTheme ? "text-cyan-200" : "text-cyan-700"}`}>
+                {row.scope}
+              </p>
+            </button>
+          ))}
+        </div>
+      </section>
 
       <section className={`ui-soft-panel rounded-2xl border p-4 ${
         isDarkTheme ? "border-slate-700 bg-slate-900/70" : "border-slate-200 bg-white"
@@ -638,8 +706,10 @@ const TeamManager = ({ theme = "light" }) => {
       />
 
       <div className={`text-xs ${isDarkTheme ? "text-slate-400" : "text-slate-500"}`}>
-        {isAdmin
-          ? "Admin mode: full user controls and profile edit navigation are enabled."
+        {canUseAdminTools
+          ? isAdmin
+            ? "Admin mode: user controls, profile edit navigation and direct delete are enabled."
+            : "Manager mode: admin controls are enabled. Delete actions are sent to Admin for approval."
           : "Leadership mode: view-only visibility for your hierarchy team details."}
       </div>
 
@@ -651,8 +721,10 @@ const TeamManager = ({ theme = "light" }) => {
         deletingUserId={deletingUserId}
         currentUserId={currentUserId}
         roleLabels={ROLE_LABELS}
-        canManageUsers={isAdmin}
-        canOpenUserProfile={isAdmin}
+        canManageUsers={canUseAdminTools}
+        canDeleteUsers={canUseAdminTools}
+        canDeleteDirect={isAdmin}
+        canOpenUserProfile={canUseAdminTools}
         onOpenUserProfile={handleOpenUserProfile}
         onDeleteUser={handleDeleteUser}
         onToggleChannelPartnerInventoryAccess={handleToggleChannelPartnerInventoryAccess}
@@ -660,7 +732,7 @@ const TeamManager = ({ theme = "light" }) => {
         getLeadScopeLabel={getLeadScopeLabel}
       />
 
-      {isAdmin ? (
+      {canUseAdminTools ? (
         <UserFormPanel
           isOpen={panelOpen}
           onClose={() => {

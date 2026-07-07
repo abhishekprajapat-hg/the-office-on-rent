@@ -62,16 +62,6 @@ const roleBadgeTone = (role, isDarkTheme) => {
       ? "border-cyan-400/40 bg-cyan-500/15 text-cyan-100"
       : "border-cyan-200 bg-cyan-50 text-cyan-700";
   }
-  if (role === "ASSISTANT_MANAGER") {
-    return isDarkTheme
-      ? "border-indigo-400/40 bg-indigo-500/15 text-indigo-100"
-      : "border-indigo-200 bg-indigo-50 text-indigo-700";
-  }
-  if (role === "TEAM_LEADER") {
-    return isDarkTheme
-      ? "border-violet-400/40 bg-violet-500/15 text-violet-100"
-      : "border-violet-200 bg-violet-50 text-violet-700";
-  }
   if (role === "CHANNEL_PARTNER") {
     return isDarkTheme
       ? "border-amber-400/40 bg-amber-500/15 text-amber-100"
@@ -142,8 +132,6 @@ export const TeamLeadOverviewCards = ({
 
   const mixRows = [
     { key: "MANAGER", label: "Managers" },
-    { key: "ASSISTANT_MANAGER", label: "Assistant Managers" },
-    { key: "TEAM_LEADER", label: "Team Leaders" },
     { key: "EXECUTIVE", label: "Executives" },
     { key: "FIELD_EXECUTIVE", label: "Field Executives" },
     { key: "CHANNEL_PARTNER", label: "Channel Partners" },
@@ -204,6 +192,8 @@ export const TeamUserGrid = ({
   currentUserId,
   roleLabels,
   canManageUsers,
+  canDeleteUsers,
+  canDeleteDirect,
   canOpenUserProfile,
   onOpenUserProfile,
   onDeleteUser,
@@ -255,6 +245,8 @@ export const TeamUserGrid = ({
             currentUserId={currentUserId}
             roleLabels={roleLabels}
             canManageUsers={canManageUsers}
+            canDeleteUsers={canDeleteUsers}
+            canDeleteDirect={canDeleteDirect}
             canOpenUserProfile={canOpenUserProfile}
             onOpenUserProfile={onOpenUserProfile}
             onDeleteUser={onDeleteUser}
@@ -277,6 +269,8 @@ const TeamUserCard = ({
   currentUserId,
   roleLabels,
   canManageUsers,
+  canDeleteUsers,
+  canDeleteDirect,
   canOpenUserProfile,
   onOpenUserProfile,
   onDeleteUser,
@@ -343,7 +337,7 @@ const TeamUserCard = ({
           <span className={`rounded-full px-2 py-1 text-[10px] font-bold ${statusTone(user.isActive, isDarkTheme)}`}>
             {user.isActive ? "ACTIVE" : "INACTIVE"}
           </span>
-          {canManageUsers ? (
+          {canDeleteUsers ? (
             <button
               type="button"
               onClick={(event) => {
@@ -357,7 +351,9 @@ const TeamUserCard = ({
               title={
                 String(user._id) === String(currentUserId)
                   ? "You cannot delete your own account"
-                  : "Delete user"
+                  : canDeleteDirect
+                    ? "Delete user"
+                    : "Request admin approval to delete user"
               }
             >
               <Trash2 size={14} />

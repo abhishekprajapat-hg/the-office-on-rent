@@ -47,8 +47,13 @@ const LEAD_SORT_OPTIONS = {
   NAME: "NAME",
 };
 
+const LEAD_VIEW_MODES = {
+  TABLE: "TABLE",
+  KANBAN: "KANBAN",
+};
+
 const EXECUTIVE_ROLES = ["EXECUTIVE", "FIELD_EXECUTIVE"];
-const MANAGEMENT_ROLES = ["MANAGER", "ASSISTANT_MANAGER", "TEAM_LEADER"];
+const MANAGEMENT_ROLES = ["MANAGER"];
 const SITE_VISIT_RADIUS_METERS = 200;
 const DEAL_PAYMENT_MODES = [
   { value: "UPI", label: "UPI" },
@@ -626,6 +631,8 @@ const LeadsMatrix = () => {
   const [statusFilter, setStatusFilter] = useState("ALL");
   const [sortBy, setSortBy] = useState(LEAD_SORT_OPTIONS.RECENT);
   const [showDueOnly, setShowDueOnly] = useState(false);
+  const [viewMode, setViewMode] = useState(LEAD_VIEW_MODES.TABLE);
+  const [nowMs, setNowMs] = useState(0);
 
   const [selectedLead, setSelectedLead] = useState(null);
   const [isDetailsOpen, setIsDetailsOpen] = useState(false);
@@ -747,6 +754,12 @@ const LeadsMatrix = () => {
     fetchExecutives();
     fetchInventoryOptions();
   }, [fetchLeads, fetchExecutives, fetchInventoryOptions]);
+
+  useEffect(() => {
+    setNowMs(Date.now());
+    const intervalId = window.setInterval(() => setNowMs(Date.now()), 60000);
+    return () => window.clearInterval(intervalId);
+  }, []);
 
   useEffect(() => {
     if (success) {
@@ -898,7 +911,7 @@ const LeadsMatrix = () => {
 
   const filteredLeads = useMemo(() => {
     const normalized = query.trim().toLowerCase();
-    const now = Date.now();
+    const now = nowMs;
 
     const filtered = leads.filter((lead) => {
       const statusMatch = statusFilter === "ALL" || lead.status === statusFilter;
@@ -952,7 +965,7 @@ const LeadsMatrix = () => {
       return bMs - aMs;
     });
     return sorted;
-  }, [leads, query, showDueOnly, sortBy, statusFilter]);
+  }, [leads, nowMs, query, showDueOnly, sortBy, statusFilter]);
 
   const metrics = useMemo(() => {
     const closed = statusBreakdown.CLOSED || 0;
@@ -961,7 +974,7 @@ const LeadsMatrix = () => {
     const fresh = statusBreakdown.NEW || 0;
     const dueFollowUps = leads.filter((lead) => {
       const followUpMs = getDateMs(lead.nextFollowUp);
-      return followUpMs > 0 && followUpMs <= Date.now() && !["REQUESTED", "CLOSED", "LOST"].includes(String(lead.status || ""));
+      return followUpMs > 0 && followUpMs <= nowMs && !["REQUESTED", "CLOSED", "LOST"].includes(String(lead.status || ""));
     }).length;
 
     const total = leads.length;
@@ -976,7 +989,7 @@ const LeadsMatrix = () => {
       dueFollowUps,
       conversionRate,
     };
-  }, [leads, statusBreakdown]);
+  }, [leads, nowMs, statusBreakdown]);
 
   const handleMetricSelect = useCallback((metricKey) => {
     switch (metricKey) {
@@ -1112,14 +1125,15 @@ const LeadsMatrix = () => {
   const handleOpenLeadDetailsPage = useCallback((lead) => {
     const resolvedLeadId = String(lead?._id || "").trim();
     if (!resolvedLeadId) return;
+    if (!isRouteDetailsView) {
+      openLeadDetails(lead);
+      return;
+    }
     navigate(`${currentLeadRouteBase}/${resolvedLeadId}`);
-  }, [currentLeadRouteBase, navigate]);
+  }, [currentLeadRouteBase, isRouteDetailsView, navigate, openLeadDetails]);
 
   useEffect(() => {
     if (!isRouteDetailsView) {
-      if (isDetailsOpen) {
-        closeDetails();
-      }
       return;
     }
 
@@ -1922,7 +1936,7 @@ const LeadsMatrix = () => {
 
   return (
     <div
-      className={`ui-page-shell relative h-full w-full overflow-x-hidden overflow-y-auto px-2.5 pb-6 pt-3 custom-scrollbar sm:px-6 sm:pt-8 md:pt-10 lg:px-10 ${
+      className={`ui-page-shell relative h-full w-full overflow-x-hidden overflow-y-auto custom-scrollbar ${
         isDark ? "bg-slate-950" : ""
       }`}
     >
@@ -1981,25 +1995,31 @@ const LeadsMatrix = () => {
               onMetricSelect={handleMetricSelect}
             />
 
-            <LeadsMatrixFilters
-              isDark={isDark}
-              query={query}
-              onQueryChange={setQuery}
-              statusFilter={statusFilter}
-              onStatusFilterChange={setStatusFilter}
-              leadStatuses={LEAD_STATUSES}
-              statusBreakdown={statusBreakdown}
-              sortBy={sortBy}
-              onSortByChange={setSortBy}
-              showDueOnly={showDueOnly}
-              onShowDueOnlyChange={setShowDueOnly}
-              getStatusLabel={getStatusLabel}
-            />
+            <div className="sticky top-0 z-30 -mx-2.5 px-2.5 pb-2 pt-1 backdrop-blur-xl sm:-mx-6 sm:px-6 lg:-mx-10 lg:px-10">
+              <LeadsMatrixFilters
+                isDark={isDark}
+                query={query}
+                onQueryChange={setQuery}
+                statusFilter={statusFilter}
+                onStatusFilterChange={setStatusFilter}
+                leadStatuses={LEAD_STATUSES}
+                statusBreakdown={statusBreakdown}
+                sortBy={sortBy}
+                onSortByChange={setSortBy}
+                showDueOnly={showDueOnly}
+                onShowDueOnlyChange={setShowDueOnly}
+                viewMode={viewMode}
+                onViewModeChange={setViewMode}
+                getStatusLabel={getStatusLabel}
+              />
+            </div>
 
             <LeadsMatrixTable
               isDark={isDark}
               loading={loading}
               filteredLeads={filteredLeads}
+              statusBreakdown={statusBreakdown}
+              viewMode={viewMode}
               onOpenLeadDetails={handleOpenLeadDetailsPage}
               onInlineStatusChange={handleInlineStatusChange}
               updatingInlineStatusId={updatingInlineStatusId}
@@ -2007,6 +2027,7 @@ const LeadsMatrix = () => {
               getStatusColor={getStatusColor}
               getStatusLabel={getStatusLabel}
               formatDate={formatDate}
+              nowMs={nowMs}
             />
           </>
         )}
@@ -2044,11 +2065,33 @@ const LeadsMatrix = () => {
       </AnimatePresence>
 
       <AnimatePresence>
-        {isRouteDetailsView && isDetailsOpen && selectedLead && (
-          <LeadDetailsRebuilt
-            isDark={isDark}
-            selectedLead={selectedLead}
-            onClose={closeDetails}
+        {isDetailsOpen && selectedLead && (
+          <div
+            className={
+              isRouteDetailsView
+                ? ""
+                : "fixed inset-0 z-[90] flex justify-end bg-slate-950/42 backdrop-blur-[2px]"
+            }
+          >
+            {!isRouteDetailsView ? (
+              <button
+                type="button"
+                aria-label="Close lead details"
+                className="absolute inset-0"
+                onClick={closeDetails}
+              />
+            ) : null}
+            <div
+              className={
+                isRouteDetailsView
+                  ? "w-full"
+                  : "mobile-fullscreen-panel relative h-full w-full max-w-6xl overflow-y-auto p-2 custom-scrollbar sm:p-4"
+              }
+            >
+              <LeadDetailsRebuilt
+                isDark={isDark}
+                selectedLead={selectedLead}
+                onClose={closeDetails}
             selectedLeadDialerHref={selectedLeadDialerHref}
             selectedLeadWhatsAppHref={selectedLeadWhatsAppHref}
             selectedLeadMailHref={selectedLeadMailHref}
@@ -2137,7 +2180,9 @@ const LeadsMatrix = () => {
             getInventoryLeadLabel={getInventoryLeadLabel}
             toObjectIdString={toObjectIdString}
             WhatsAppIcon={WhatsAppIcon}
-          />
+              />
+            </div>
+          </div>
         )}
       </AnimatePresence>
     </div>

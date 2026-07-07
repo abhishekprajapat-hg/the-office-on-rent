@@ -728,14 +728,7 @@ const FieldOps = () => {
       <div className="space-y-5 sm:space-y-6">
         <section className="ui-hero-card overflow-hidden">
           <div className="bg-gradient-to-r from-slate-900 via-slate-800 to-cyan-900 px-4 py-5 sm:px-6">
-            <div className="flex flex-col gap-4 xl:flex-row xl:items-start xl:justify-between">
-              <div>
-                <h1 className="text-xl font-semibold text-white sm:text-2xl">Field Ops Command Center</h1>
-                <p className="mt-1 text-xs uppercase tracking-[0.18em] text-cyan-100/80">
-                  Live coordination for visit teams, dispatch load, and ground coverage
-                </p>
-              </div>
-
+            <div className="flex flex-col gap-4 xl:flex-row xl:items-start xl:justify-end">
               <div className="grid w-full grid-cols-2 gap-2 sm:flex sm:w-auto sm:flex-wrap sm:items-center sm:gap-2">
                 <button
                   type="button"

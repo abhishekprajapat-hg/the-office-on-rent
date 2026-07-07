@@ -4,7 +4,6 @@ import { ChevronRight, Lock, ScanFace } from "lucide-react";
 import { Link } from "react-router-dom";
 import api from "../../services/api";
 import { toErrorMessage } from "../../utils/errorMessage";
-import { persistTenantSlug } from "../../utils/tenantRouting";
 import BrandLogo from "../common/BrandLogo";
 
 const Login = ({ onLogin, portal = "GENERAL" }) => {
@@ -26,7 +25,6 @@ const Login = ({ onLogin, portal = "GENERAL" }) => {
       });
 
       const { token, refreshToken, user } = res.data;
-      const tenantSlug = String(res.data?.tenant?.subdomain || "").trim().toLowerCase();
 
       localStorage.setItem("token", token);
       if (refreshToken) {
@@ -36,7 +34,6 @@ const Login = ({ onLogin, portal = "GENERAL" }) => {
       }
       localStorage.setItem("role", user.role);
       localStorage.setItem("user", JSON.stringify(user));
-      persistTenantSlug(tenantSlug);
 
       onLogin(user.role);
     } catch (err) {
@@ -61,7 +58,9 @@ const Login = ({ onLogin, portal = "GENERAL" }) => {
         className="relative w-full max-w-md rounded-[28px] border border-slate-700/70 bg-slate-900/88 p-6 shadow-[0_28px_70px_-36px_rgba(2,6,23,0.95)] backdrop-blur-xl sm:p-8"
       >
         <div className="mb-6 text-center">
-          <BrandLogo className="mx-auto mb-4 h-20 w-20" />
+          <div className="mx-auto mb-4 flex h-24 w-64 max-w-full items-center justify-center rounded-xl border border-slate-200 bg-white p-2 shadow-sm">
+            <BrandLogo className="h-full w-full" />
+          </div>
           <div className="inline-flex items-center rounded-full border border-cyan-300/35 bg-cyan-400/10 px-3 py-1 text-[10px] font-semibold uppercase tracking-[0.2em] text-cyan-100">
             {portal}
           </div>

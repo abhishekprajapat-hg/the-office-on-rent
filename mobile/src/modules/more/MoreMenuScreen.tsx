@@ -32,7 +32,7 @@ export const MoreMenuScreen = ({ navigation }: any) => {
   const { role } = useAuth();
   const { chatUnreadTotal, markAllChatRead } = useRealtimeAlerts();
   const isAdmin = role === "ADMIN";
-  const isManagement = role === "ADMIN" || role === "MANAGER" || role === "ASSISTANT_MANAGER" || role === "TEAM_LEADER";
+  const isManagement = role === "ADMIN" || role === "MANAGER";
   const open = (screen: string) => {
     const parent = navigation?.getParent?.();
     if (parent?.navigate) {

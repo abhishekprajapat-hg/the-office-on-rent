@@ -52,12 +52,6 @@ const roleBadgeClass = (role, isDark) => {
   if (role === "MANAGER") {
     return isDark ? "bg-cyan-500/15 text-cyan-200" : "bg-cyan-100 text-cyan-700";
   }
-  if (role === "ASSISTANT_MANAGER") {
-    return isDark ? "bg-sky-500/15 text-sky-200" : "bg-sky-100 text-sky-700";
-  }
-  if (role === "TEAM_LEADER") {
-    return isDark ? "bg-indigo-500/15 text-indigo-200" : "bg-indigo-100 text-indigo-700";
-  }
   if (role === "FIELD_EXECUTIVE") {
     return isDark ? "bg-violet-500/15 text-violet-200" : "bg-violet-100 text-violet-700";
   }
@@ -2443,6 +2437,15 @@ const TeamChat = ({ theme = "light" }) => {
     setMessages([]);
   };
 
+  const handleMobilePageBack = () => {
+    if (window.history.length > 1) {
+      navigate(-1);
+      return;
+    }
+
+    navigate("/dashboard", { replace: true });
+  };
+
   const handleOpenMediaPicker = () => {
     mediaInputRef.current?.click();
   };
@@ -2598,6 +2601,23 @@ const TeamChat = ({ theme = "light" }) => {
       className="ui-page-shell chat-page h-full min-h-0 w-full overflow-hidden p-0 sm:p-3"
     >
       <div className="mx-auto flex h-full min-h-0 w-full max-w-[1600px] flex-col gap-2 sm:gap-3">
+        {mobileSidebarVisible ? (
+          <div className="flex items-center px-2 pt-2 sm:hidden">
+            <button
+              type="button"
+              onClick={handleMobilePageBack}
+              className={`inline-flex h-9 items-center gap-2 rounded-xl border px-3 text-xs font-semibold shadow-sm ${
+                isDark
+                  ? "border-slate-700 bg-slate-900 text-slate-200"
+                  : "border-slate-200 bg-white text-slate-700"
+              }`}
+            >
+              <ArrowLeft size={15} />
+              Back
+            </button>
+          </div>
+        ) : null}
+
         <section
           className="ui-hero-card hidden px-3 py-2.5 sm:block sm:px-4"
           style={{

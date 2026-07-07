@@ -120,8 +120,6 @@ export const LeadsMatrixScreen = () => {
   const canAddLead = [
     "ADMIN",
     "MANAGER",
-    "ASSISTANT_MANAGER",
-    "TEAM_LEADER",
     "EXECUTIVE",
     "FIELD_EXECUTIVE",
     "CHANNEL_PARTNER",

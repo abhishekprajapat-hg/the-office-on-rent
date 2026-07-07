@@ -9,8 +9,6 @@ import { toErrorMessage } from "../../utils/errorMessage";
 
 const ROLE_OPTIONS = [
   { label: "Manager", value: "MANAGER" },
-  { label: "Assistant Manager", value: "ASSISTANT_MANAGER" },
-  { label: "Team Leader", value: "TEAM_LEADER" },
   { label: "Executive", value: "EXECUTIVE" },
   { label: "Field Executive", value: "FIELD_EXECUTIVE" },
   { label: "Channel Partner", value: "CHANNEL_PARTNER" },
@@ -18,18 +16,14 @@ const ROLE_OPTIONS = [
 
 const REPORTING_PARENT_ROLES: Record<string, string[]> = {
   MANAGER: ["ADMIN"],
-  ASSISTANT_MANAGER: ["MANAGER"],
-  TEAM_LEADER: ["ASSISTANT_MANAGER"],
-  EXECUTIVE: ["TEAM_LEADER"],
-  FIELD_EXECUTIVE: ["TEAM_LEADER"],
-  CHANNEL_PARTNER: ["ADMIN"],
+  EXECUTIVE: ["MANAGER"],
+  FIELD_EXECUTIVE: ["MANAGER"],
+  CHANNEL_PARTNER: ["MANAGER"],
 };
 
 const ROLE_LABELS: Record<string, string> = {
   ADMIN: "Admin",
   MANAGER: "Manager",
-  ASSISTANT_MANAGER: "Assistant Manager",
-  TEAM_LEADER: "Team Leader",
   EXECUTIVE: "Executive",
   FIELD_EXECUTIVE: "Field Executive",
   CHANNEL_PARTNER: "Channel Partner",
@@ -215,7 +209,7 @@ export const UserDetailsEditorScreen = () => {
         <ScrollView showsVerticalScrollIndicator={false}>
           {isEditingSelf ? (
             <AppCard style={styles.warningCard as object}>
-              <Text style={styles.warningText}>Own account edit yahan se blocked hai. Profile page se update karo.</Text>
+              <Text style={styles.warningText}>Editing your own account is blocked here. Please update your account from the profile page.</Text>
             </AppCard>
           ) : null}
 

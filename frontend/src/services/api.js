@@ -1,5 +1,4 @@
 import axios from "axios";
-import { buildTenantAwarePath, resolveTenantSlug } from "../utils/tenantRouting";
 
 const configuredBaseUrl = String(import.meta.env.VITE_API_BASE_URL || "").trim();
 const defaultBaseUrl = import.meta.env.DEV
@@ -24,24 +23,10 @@ const clearSession = () => {
   localStorage.removeItem("refreshToken");
   localStorage.removeItem("role");
   localStorage.removeItem("user");
-  localStorage.removeItem("tenantSlug");
-};
-
-const applyTenantHeader = (config = {}) => {
-  const tenantSlug = resolveTenantSlug();
-  const headers = { ...(config.headers || {}) };
-
-  if (tenantSlug) {
-    headers["X-Tenant-Slug"] = tenantSlug;
-  } else {
-    delete headers["X-Tenant-Slug"];
-  }
-
-  return { ...config, headers };
 };
 
 const redirectToLogin = () => {
-  window.location.href = buildTenantAwarePath("/login");
+  window.location.href = "/login";
 };
 
 const persistAuthPayload = (payload = {}) => {
@@ -83,22 +68,22 @@ const refreshAccessToken = async () => {
   return nextToken;
 };
 
-// Attach auth + tenant context for all API calls.
+// Attach auth for all API calls.
 api.interceptors.request.use((config) => {
-  const tenantAwareConfig = applyTenantHeader(config);
-  if (tenantAwareConfig.headers?.Authorization) {
-    return tenantAwareConfig;
+  if (config.headers?.Authorization) {
+    return config;
   }
 
   const token = localStorage.getItem("token");
   if (token) {
-    tenantAwareConfig.headers.Authorization = `Bearer ${token}`;
+    config.headers = {
+      ...(config.headers || {}),
+      Authorization: `Bearer ${token}`,
+    };
   }
 
-  return tenantAwareConfig;
+  return config;
 });
-
-refreshClient.interceptors.request.use((config) => applyTenantHeader(config));
 
 api.interceptors.response.use(
   (response) => response,

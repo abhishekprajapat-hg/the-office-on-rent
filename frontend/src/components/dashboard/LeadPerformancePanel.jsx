@@ -257,26 +257,26 @@ const toDeltaTone = (delta) => {
 
 const createInsight = ({ totalLeads, conversionPercent, leakagePercent, closeVelocity, activeLeads }) => {
   if (!totalLeads) {
-    return "Pipeline abhi empty hai. Fresh lead inflow push karo for better trend visibility.";
+    return "The pipeline is currently empty. Add fresh lead inflow for better trend visibility.";
   }
 
   if (conversionPercent >= 35 && leakagePercent <= 20) {
-    return "Closure quality strong hai. Next lift ke liye contacted-to-visit transition scale karo.";
+    return "Closure quality is strong. For the next lift, scale the contacted-to-visit transition.";
   }
 
   if (leakagePercent >= 35) {
-    return "Leakage elevated hai. Qualification checklist tighten karke early drop reduce karo.";
+    return "Leakage is elevated. Tighten the qualification checklist to reduce early drops.";
   }
 
   if (closeVelocity >= 30) {
-    return "Recent close velocity healthy hai. Deal desk follow-ups maintain rakho.";
+    return "Recent close velocity is healthy. Maintain deal desk follow-ups.";
   }
 
   if (activeLeads >= totalLeads * 0.7) {
-    return "Pipeline heavy hai, lekin conversion nikalne ke liye weekly visit cadence accelerate karo.";
+    return "The pipeline is heavy, but weekly visit cadence needs to accelerate to drive conversions.";
   }
 
-  return "Balanced pipeline hai. Highest impact move: interested leads ko fast site-visit me convert karo.";
+  return "The pipeline is balanced. Highest impact move: convert interested leads into site visits faster.";
 };
 
 const LeadPerformancePanel = ({

@@ -1,6 +1,5 @@
 import React, { useState, lazy, Suspense, useMemo, useEffect, useRef, useCallback } from "react";
 import { Routes, Route, useLocation, useNavigate, Navigate } from "react-router-dom";
-import { motion } from "framer-motion";
 import api from "./services/api";
 import ErrorBoundary from "./components/ErrorBoundary";
 import { ChatNotificationProvider } from "./context/chatNotificationProvider";
@@ -12,16 +11,11 @@ import {
   readSystemSettings,
   SYSTEM_SETTINGS_UPDATED_EVENT,
 } from "./utils/systemSettings";
-import {
-  persistTenantSlug,
-  resolveTenantSlugFromPath,
-  resolveTenantSlugFromStorage,
-} from "./utils/tenantRouting";
 
 /* =======================
    LAZY IMPORTS
 ======================= */
-const Sidebar = lazy(() => import("./components/layout/Sidebar"));
+const WorkbenchShell = lazy(() => import("./components/workbench/WorkbenchShell"));
 const Login = lazy(() => import("./components/auth/Login"));
 
 const ManagerDashboard = lazy(() => import("./modules/manager/ManagerDashboard"));
@@ -32,7 +26,6 @@ const UserDetailsEditor = lazy(() => import("./modules/admin/UserDetailsEditor")
 const AdminNotifications = lazy(() => import("./modules/admin/AdminNotifications"));
 const AdminCommandConsole = lazy(() => import("./modules/admin/AdminCommandConsole"));
 const AdminMetaAdsPanel = lazy(() => import("./modules/admin/AdminMetaAdsPanel"));
-const SuperAdminPanel = lazy(() => import("./modules/admin/SuperAdminPanel"));
 const TeamChat = lazy(() => import("./modules/chat/TeamChat"));
 
 const LeadsMatrix = lazy(() => import("./modules/leads/LeadsMatrix"));
@@ -70,14 +63,11 @@ const FORCE_LIGHT_ROUTE_PREFIXES = [
   "/service-terms",
   "/shared",
 ];
-const MANAGEMENT_ROLES = ["MANAGER", "ASSISTANT_MANAGER", "TEAM_LEADER"];
+const MANAGEMENT_ROLES = ["MANAGER"];
 const CHAT_REFRESH_FALLBACK_ROLES = ["EXECUTIVE", "FIELD_EXECUTIVE"];
 const ROLE_LABELS = {
-  SUPER_ADMIN: "Super Admin",
   ADMIN: "Admin",
   MANAGER: "Manager",
-  ASSISTANT_MANAGER: "Assistant Manager",
-  TEAM_LEADER: "Team Leader",
   EXECUTIVE: "Executive",
   FIELD_EXECUTIVE: "Field Executive",
   CHANNEL_PARTNER: "Channel Partner",
@@ -85,12 +75,6 @@ const ROLE_LABELS = {
 
 const resolveHomeHeader = (userRole) => {
   switch (userRole) {
-    case "SUPER_ADMIN":
-      return {
-        title: "Platform Command Center",
-        subtitle: "Tenant lifecycle, plans, subscriptions and global oversight",
-        scopeLabel: "Platform",
-      };
     case "ADMIN":
       return {
         title: "Admin Command Center",
@@ -98,8 +82,6 @@ const resolveHomeHeader = (userRole) => {
         scopeLabel: "Home",
       };
     case "MANAGER":
-    case "ASSISTANT_MANAGER":
-    case "TEAM_LEADER":
       return {
         title: "Management Command Center",
         subtitle: "Portfolio progress, team activity and execution signals",
@@ -129,14 +111,6 @@ const resolveHomeHeader = (userRole) => {
 const resolvePageHeader = (pathname, userRole) => {
   if (!pathname) return null;
   if (pathname === "/" || pathname === "/dashboard") return resolveHomeHeader(userRole);
-
-  if (pathname.startsWith("/super-admin")) {
-    return {
-      title: "Super Admin Command Center",
-      subtitle: "Tenant control, pricing governance and platform analytics",
-      scopeLabel: "Platform",
-    };
-  }
 
   if (pathname.startsWith("/leads") || pathname.startsWith("/my-leads")) {
     return {
@@ -203,7 +177,7 @@ const resolvePageHeader = (pathname, userRole) => {
   if (pathname.startsWith("/admin/notifications")) {
     return {
       title: "Alerts Command Center",
-      subtitle: "Pending approvals, escalation signals and admin actions",
+      subtitle: "Pending approvals, escalation signals and manager actions",
       scopeLabel: "Alerts",
     };
   }
@@ -372,7 +346,6 @@ export default function App() {
     localStorage.removeItem("refreshToken");
     localStorage.removeItem("role");
     localStorage.removeItem("user");
-    localStorage.removeItem("tenantSlug");
     delete api.defaults.headers.common.Authorization;
     setIsLoggedIn(false);
     setUserRole(null);
@@ -548,103 +521,12 @@ export default function App() {
     };
   }, [isLoggedIn, userRole]);
 
-  useEffect(() => {
-    if (!sessionReady || !isLoggedIn) return undefined;
-
-    const browserPathname =
-      typeof window !== "undefined"
-        ? String(window.location?.pathname || "")
-        : String(location.pathname || "");
-
-    if (resolveTenantSlugFromPath(browserPathname)) return undefined;
-    if (resolveTenantSlugFromStorage()) return undefined;
-    if (userRole === "SUPER_ADMIN") return undefined;
-
-    let cancelled = false;
-
-    const hydrateTenantSlug = async () => {
-      try {
-        const response = await api.get("/auth/me");
-        if (cancelled) return;
-
-        const tenantSlug = persistTenantSlug(response?.data?.tenant?.subdomain || "");
-        if (!tenantSlug) return;
-
-        const normalizedPath = location.pathname.startsWith("/")
-          ? location.pathname
-          : `/${location.pathname}`;
-        const nextPath = `/${tenantSlug}${normalizedPath}`;
-        const nextUrl = `${nextPath}${location.search || ""}${location.hash || ""}`;
-
-        if (typeof window !== "undefined") {
-          const currentUrl = `${window.location.pathname}${window.location.search}${window.location.hash}`;
-          if (currentUrl !== nextUrl) {
-            window.location.replace(nextUrl);
-          }
-        }
-      } catch {
-        // Keep UI usable even if tenant bootstrap request fails.
-      }
-    };
-
-    hydrateTenantSlug();
-
-    return () => {
-      cancelled = true;
-    };
-  }, [
-    isLoggedIn,
-    location.hash,
-    location.pathname,
-    location.search,
-    sessionReady,
-    userRole,
-  ]);
-
-  useEffect(() => {
-    if (!sessionReady || !isLoggedIn) return;
-
-    const browserPathname =
-      typeof window !== "undefined"
-        ? String(window.location?.pathname || "")
-        : String(location.pathname || "");
-
-    const tenantSlugInPath = resolveTenantSlugFromPath(browserPathname);
-    if (tenantSlugInPath) return;
-
-    const storedTenantSlug = resolveTenantSlugFromStorage();
-    if (!storedTenantSlug) return;
-
-    const normalizedPath = location.pathname.startsWith("/")
-      ? location.pathname
-      : `/${location.pathname}`;
-    const nextPath = `/${storedTenantSlug}${normalizedPath}`;
-    const nextUrl = `${nextPath}${location.search || ""}${location.hash || ""}`;
-
-    if (typeof window !== "undefined") {
-      const currentUrl = `${window.location.pathname}${window.location.search}${window.location.hash}`;
-      if (currentUrl !== nextUrl) {
-        window.location.replace(nextUrl);
-      }
-    }
-  }, [
-    isLoggedIn,
-    location.hash,
-    location.pathname,
-    location.search,
-    sessionReady,
-  ]);
-
   /* 🔥 Dashboard by role */
   const DashboardByRole = useMemo(() => {
     switch (userRole) {
-      case "SUPER_ADMIN":
-        return <Navigate to="/super-admin" />;
       case "ADMIN":
         return <ManagerDashboard theme={theme} />;
       case "MANAGER":
-      case "ASSISTANT_MANAGER":
-      case "TEAM_LEADER":
         return <ManagerDashboard theme={theme} />;
       case "EXECUTIVE":
         return <ExecutiveDashboard />;
@@ -673,7 +555,6 @@ export default function App() {
     localStorage.removeItem("refreshToken");
     localStorage.removeItem("role");
     localStorage.removeItem("user");
-    localStorage.removeItem("tenantSlug");
     delete api.defaults.headers.common["Authorization"];
     setIsLoggedIn(false);
     setUserRole(null);
@@ -686,6 +567,140 @@ export default function App() {
   const toggleTheme = () => {
     setTheme((prev) => (prev === "dark" ? "light" : "dark"));
   };
+
+  const pageHeader = resolvePageHeader(location.pathname, userRole);
+  const roleLabel = ROLE_LABELS[userRole] || userRole || "Workspace";
+  const appRoutes = (
+    <Routes>
+      <Route path="/" element={DashboardByRole} />
+      <Route path="/dashboard" element={DashboardByRole} />
+      <Route
+        path="/leads"
+        element={canAccess(["ADMIN", ...MANAGEMENT_ROLES, "EXECUTIVE", "CHANNEL_PARTNER"]) ? <LeadsMatrix /> : <Navigate to="/" />}
+      />
+      <Route
+        path="/leads/:leadId"
+        element={canAccess(["ADMIN", ...MANAGEMENT_ROLES, "EXECUTIVE", "FIELD_EXECUTIVE", "CHANNEL_PARTNER"]) ? <LeadsMatrix /> : <Navigate to="/" />}
+      />
+      <Route
+        path="/my-leads"
+        element={
+          canAccess(["EXECUTIVE", "FIELD_EXECUTIVE"]) ? <LeadsMatrix /> : <Navigate to="/" />
+        }
+      />
+      <Route
+        path="/my-leads/:leadId"
+        element={canAccess(["EXECUTIVE", "FIELD_EXECUTIVE"]) ? <LeadsMatrix /> : <Navigate to="/" />}
+      />
+      <Route
+        path="/inventory"
+        element={(
+          canAccess(["ADMIN", ...MANAGEMENT_ROLES, "EXECUTIVE", "FIELD_EXECUTIVE", "CHANNEL_PARTNER"])
+          && (userRole !== "CHANNEL_PARTNER" || canChannelPartnerViewInventory)
+        ) ? <AssetVault /> : <Navigate to="/" />}
+      />
+      <Route
+        path="/inventory/:id"
+        element={(
+          canAccess(["ADMIN", ...MANAGEMENT_ROLES, "EXECUTIVE", "FIELD_EXECUTIVE", "CHANNEL_PARTNER"])
+          && (userRole !== "CHANNEL_PARTNER" || canChannelPartnerViewInventory)
+        ) ? <InventoryDetails /> : <Navigate to="/" />}
+      />
+      <Route
+        path="/finance"
+        element={canAccess([
+          ...MANAGEMENT_ROLES,
+          "EXECUTIVE",
+          "FIELD_EXECUTIVE",
+          "CHANNEL_PARTNER",
+        ]) ? <FinancialCore /> : <Navigate to="/" />}
+      />
+      <Route
+        path="/map"
+        element={canAccess(["ADMIN", ...MANAGEMENT_ROLES, "FIELD_EXECUTIVE"]) ? <FieldOps /> : <Navigate to="/" />}
+      />
+      <Route
+        path="/reports"
+        element={canAccess(["ADMIN", "MANAGER"]) ? <IntelligenceReports /> : <Navigate to="/" />}
+      />
+      <Route
+        path="/leaderboard"
+        element={canAccess(["ADMIN", ...MANAGEMENT_ROLES, "EXECUTIVE", "FIELD_EXECUTIVE", "CHANNEL_PARTNER"]) ? <RoleLeaderboard /> : <Navigate to="/" />}
+      />
+      <Route
+        path="/calendar"
+        element={canAccess(["ADMIN", ...MANAGEMENT_ROLES, "EXECUTIVE", "FIELD_EXECUTIVE"]) ? <MasterSchedule /> : <Navigate to="/" />}
+      />
+      <Route
+        path="/tasks"
+        element={
+          canAccess(["ADMIN", ...MANAGEMENT_ROLES, "EXECUTIVE", "FIELD_EXECUTIVE"])
+            ? <TaskManager theme={theme} />
+            : <Navigate to="/" />
+        }
+      />
+      <Route
+        path="/attendance"
+        element={canAccess(["ADMIN", ...MANAGEMENT_ROLES, "EXECUTIVE", "FIELD_EXECUTIVE", "CHANNEL_PARTNER"]) ? <AttendanceHub /> : <Navigate to="/" />}
+      />
+      <Route
+        path="/admin/notifications"
+        element={["ADMIN", "MANAGER"].includes(userRole) ? <AdminNotifications /> : <Navigate to="/" />}
+      />
+      <Route
+        path="/admin/users"
+        element={canAccess(["ADMIN", ...MANAGEMENT_ROLES]) ? <TeamManager theme={theme} /> : <Navigate to="/" />}
+      />
+      <Route
+        path="/admin/users/:userId"
+        element={["ADMIN", "MANAGER"].includes(userRole) ? <UserDetailsEditor theme={theme} /> : <Navigate to="/" />}
+      />
+      <Route
+        path="/admin/console"
+        element={["ADMIN", "MANAGER"].includes(userRole) ? <AdminCommandConsole /> : <Navigate to="/" />}
+      />
+      <Route
+        path="/admin/meta-ads"
+        element={["ADMIN", "MANAGER"].includes(userRole) ? <AdminMetaAdsPanel theme={theme} /> : <Navigate to="/" />}
+      />
+      <Route
+        path="/settings"
+        element={canAccess(["ADMIN", "MANAGER"]) ? <SystemSettings /> : <Navigate to="/" />}
+      />
+      <Route
+        path="/targets"
+        element={canAccess(["ADMIN", ...MANAGEMENT_ROLES, "EXECUTIVE", "FIELD_EXECUTIVE"]) ? <Performance /> : <Navigate to="/" />}
+      />
+      <Route
+        path="/chat"
+        element={
+          canAccess(["ADMIN", ...MANAGEMENT_ROLES, "EXECUTIVE", "FIELD_EXECUTIVE"])
+            ? <TeamChat theme={theme} />
+            : <Navigate to="/" />
+        }
+      />
+      <Route
+        path="/profile"
+        element={
+          canAccess([
+            "ADMIN",
+            ...MANAGEMENT_ROLES,
+            "EXECUTIVE",
+            "FIELD_EXECUTIVE",
+            "CHANNEL_PARTNER",
+          ])
+            ? <UserProfile />
+            : <Navigate to="/" />
+        }
+      />
+      <Route path="/privacy-policy" element={<DataUseNotice />} />
+      <Route path="/terms-and-conditions" element={<ServiceTermsNotice />} />
+      <Route path="/data-use-notice" element={<DataUseNotice />} />
+      <Route path="/service-terms" element={<ServiceTermsNotice />} />
+      <Route path="/shared/inventory/:shareToken" element={<SharedInventoryView />} />
+      <Route path="/portal/*" element={<Navigate to="/" replace />} />
+    </Routes>
+  );
 
   if (!sessionReady && !isPublicPage) {
     return (
@@ -743,167 +758,30 @@ export default function App() {
             path="/*"
             element={
               isLoggedIn || isPublicPage ? (
-                <motion.div
-                  initial={{ opacity: 0 }}
-                  animate={{ opacity: 1 }}
-                  className={`workspace-shell flex w-full ${
-                    shouldLockDocumentScroll ? "h-dvh overflow-hidden" : "min-h-screen"
-                  }`}
-                >
-                  {!isPublicPage && (
-                    <>
-                      <Sidebar
-                        userRole={userRole}
-                        onLogout={handleLogout}
-                        theme={theme}
-                        onToggleTheme={toggleTheme}
-                      />
-                      <AdminRequestAlertToast userRole={userRole} />
-                    </>
-                  )}
-
-                  <main
-                    className={`workspace-main relative min-h-0 flex flex-1 flex-col overflow-hidden app-page-bg ${
-                      !isPublicPage ? "pt-14 md:pl-12 md:pt-0" : ""
-                    }`}
-                  >
+                isPublicPage ? (
+                  <main className="workspace-main relative min-h-0 flex flex-1 flex-col overflow-hidden app-page-bg">
                     <div className={routeViewportClass}>
-                      <Routes>
-                        <Route path="/" element={DashboardByRole} />
-                        <Route path="/dashboard" element={DashboardByRole} />
-                        <Route
-                          path="/super-admin"
-                          element={userRole === "SUPER_ADMIN" ? <SuperAdminPanel theme={theme} /> : <Navigate to="/" />}
-                        />
-                        <Route
-                          path="/leads"
-                          element={canAccess(["ADMIN", ...MANAGEMENT_ROLES, "EXECUTIVE", "CHANNEL_PARTNER"]) ? <LeadsMatrix /> : <Navigate to="/" />}
-                        />
-                        <Route
-                          path="/leads/:leadId"
-                          element={canAccess(["ADMIN", ...MANAGEMENT_ROLES, "EXECUTIVE", "FIELD_EXECUTIVE", "CHANNEL_PARTNER"]) ? <LeadsMatrix /> : <Navigate to="/" />}
-                        />
-                        <Route
-                          path="/my-leads"
-                          element={
-                            canAccess(["EXECUTIVE", "FIELD_EXECUTIVE"]) ? <LeadsMatrix /> : <Navigate to="/" />
-                          }
-                        />
-                        <Route
-                          path="/my-leads/:leadId"
-                          element={canAccess(["EXECUTIVE", "FIELD_EXECUTIVE"]) ? <LeadsMatrix /> : <Navigate to="/" />}
-                        />
-                        <Route
-                          path="/inventory"
-                          element={(
-                            canAccess(["ADMIN", ...MANAGEMENT_ROLES, "EXECUTIVE", "FIELD_EXECUTIVE", "CHANNEL_PARTNER"])
-                            && (userRole !== "CHANNEL_PARTNER" || canChannelPartnerViewInventory)
-                          ) ? <AssetVault /> : <Navigate to="/" />}
-                        />
-                        <Route
-                          path="/inventory/:id"
-                          element={(
-                            canAccess(["ADMIN", ...MANAGEMENT_ROLES, "EXECUTIVE", "FIELD_EXECUTIVE", "CHANNEL_PARTNER"])
-                            && (userRole !== "CHANNEL_PARTNER" || canChannelPartnerViewInventory)
-                          ) ? <InventoryDetails /> : <Navigate to="/" />}
-                        />
-                        <Route
-                          path="/finance"
-                          element={canAccess([
-                            ...MANAGEMENT_ROLES,
-                            "EXECUTIVE",
-                            "FIELD_EXECUTIVE",
-                            "CHANNEL_PARTNER",
-                          ]) ? <FinancialCore /> : <Navigate to="/" />}
-                        />
-                        <Route
-                          path="/map"
-                          element={canAccess(["ADMIN", ...MANAGEMENT_ROLES, "FIELD_EXECUTIVE"]) ? <FieldOps /> : <Navigate to="/" />}
-                        />
-                        <Route
-                          path="/reports"
-                          element={canAccess(["ADMIN", "MANAGER", "ASSISTANT_MANAGER", "TEAM_LEADER"]) ? <IntelligenceReports /> : <Navigate to="/" />}
-                        />
-                        <Route
-                          path="/leaderboard"
-                          element={canAccess(["ADMIN", ...MANAGEMENT_ROLES, "EXECUTIVE", "FIELD_EXECUTIVE", "CHANNEL_PARTNER"]) ? <RoleLeaderboard /> : <Navigate to="/" />}
-                        />
-                        <Route
-                          path="/calendar"
-                          element={canAccess(["ADMIN", ...MANAGEMENT_ROLES, "EXECUTIVE", "FIELD_EXECUTIVE"]) ? <MasterSchedule /> : <Navigate to="/" />}
-                        />
-                        <Route
-                          path="/tasks"
-                          element={
-                            canAccess(["ADMIN", ...MANAGEMENT_ROLES, "EXECUTIVE", "FIELD_EXECUTIVE"])
-                              ? <TaskManager theme={theme} />
-                              : <Navigate to="/" />
-                          }
-                        />
-                        <Route
-                          path="/attendance"
-                          element={canAccess(["ADMIN", ...MANAGEMENT_ROLES, "EXECUTIVE", "FIELD_EXECUTIVE", "CHANNEL_PARTNER"]) ? <AttendanceHub /> : <Navigate to="/" />}
-                        />
-                        <Route
-                          path="/admin/notifications"
-                          element={userRole === "ADMIN" ? <AdminNotifications /> : <Navigate to="/" />}
-                        />
-                        <Route
-                          path="/admin/users"
-                          element={canAccess(["ADMIN", ...MANAGEMENT_ROLES]) ? <TeamManager theme={theme} /> : <Navigate to="/" />}
-                        />
-                        <Route
-                          path="/admin/users/:userId"
-                          element={userRole === "ADMIN" ? <UserDetailsEditor theme={theme} /> : <Navigate to="/" />}
-                        />
-                        <Route
-                          path="/admin/console"
-                          element={userRole === "ADMIN" ? <AdminCommandConsole /> : <Navigate to="/" />}
-                        />
-                        <Route
-                          path="/admin/meta-ads"
-                          element={userRole === "ADMIN" ? <AdminMetaAdsPanel theme={theme} /> : <Navigate to="/" />}
-                        />
-                        <Route
-                          path="/settings"
-                          element={canAccess(["ADMIN", "MANAGER", "ASSISTANT_MANAGER", "TEAM_LEADER"]) ? <SystemSettings /> : <Navigate to="/" />}
-                        />
-                        <Route
-                          path="/targets"
-                          element={canAccess(["ADMIN", ...MANAGEMENT_ROLES, "EXECUTIVE", "FIELD_EXECUTIVE"]) ? <Performance /> : <Navigate to="/" />}
-                        />
-                        <Route
-                          path="/chat"
-                          element={
-                            canAccess(["ADMIN", ...MANAGEMENT_ROLES, "EXECUTIVE", "FIELD_EXECUTIVE"])
-                              ? <TeamChat theme={theme} />
-                              : <Navigate to="/" />
-                          }
-                        />
-                        <Route
-                          path="/profile"
-                          element={
-                            canAccess([
-                              "ADMIN",
-                              ...MANAGEMENT_ROLES,
-                              "EXECUTIVE",
-                              "FIELD_EXECUTIVE",
-                              "CHANNEL_PARTNER",
-                            ])
-                              ? <UserProfile />
-                              : <Navigate to="/" />
-                          }
-                        />
-                        <Route path="/privacy-policy" element={<DataUseNotice />} />
-                        <Route path="/terms-and-conditions" element={<ServiceTermsNotice />} />
-                        <Route path="/data-use-notice" element={<DataUseNotice />} />
-                        <Route path="/service-terms" element={<ServiceTermsNotice />} />
-                        <Route path="/shared/inventory/:shareToken" element={<SharedInventoryView />} />
-                        <Route path="/portal/*" element={<Navigate to="/" replace />} />
-                      </Routes>
+                      {appRoutes}
                     </div>
                   </main>
-                </motion.div>
+                ) : (
+                  <>
+                    <WorkbenchShell
+                      userRole={userRole}
+                      user={authUser}
+                      roleLabel={roleLabel}
+                      theme={theme}
+                      onToggleTheme={toggleTheme}
+                      onLogout={handleLogout}
+                      pageHeader={pageHeader}
+                      isChatPage={isChatPage}
+                      shouldLockDocumentScroll={shouldLockDocumentScroll}
+                    >
+                      {appRoutes}
+                    </WorkbenchShell>
+                    <AdminRequestAlertToast userRole={userRole} />
+                  </>
+                )
               ) : (
                 <Navigate to="/login" />
               )

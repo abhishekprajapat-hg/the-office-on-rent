@@ -1,8 +1,6 @@
 export type UserRole =
   | "ADMIN"
   | "MANAGER"
-  | "ASSISTANT_MANAGER"
-  | "TEAM_LEADER"
   | "EXECUTIVE"
   | "FIELD_EXECUTIVE"
   | "CHANNEL_PARTNER";

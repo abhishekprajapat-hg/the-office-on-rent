@@ -13,7 +13,7 @@ router.get("/rooms", chatController.getRooms);
 router.post("/rooms/direct", chatController.createDirectRoom);
 router.post(
   "/rooms/group",
-  requireChatRoles(["ADMIN", "MANAGER", "ASSISTANT_MANAGER", "TEAM_LEADER"]),
+  requireChatRoles(["ADMIN", "MANAGER"]),
   chatController.createGroup,
 );
 router.post("/rooms/lead", chatController.createLeadRoom);
@@ -30,7 +30,7 @@ router.get("/escalations/:roomId/logs", chatController.getEscalationLogs);
 router.post(
   "/broadcasts",
   chatMessageLimiter,
-  requireChatRoles(["ADMIN", "MANAGER", "ASSISTANT_MANAGER", "TEAM_LEADER"]),
+  requireChatRoles(["ADMIN", "MANAGER"]),
   broadcastController.createBroadcast,
 );
 router.get("/broadcasts", broadcastController.getBroadcastRooms);

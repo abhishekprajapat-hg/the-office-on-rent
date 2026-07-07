@@ -10,6 +10,7 @@ import {
   Eye,
   Filter,
   History,
+  LayoutGrid,
   Loader,
   Mail,
   Mic,
@@ -22,11 +23,14 @@ import {
   Search,
   SlidersHorizontal,
   Sparkles,
+  Table2,
   Trash2,
   UploadCloud,
   Users2,
   X,
 } from "lucide-react";
+import { EmptyState, Skeleton } from "../../../components/ui";
+import { StatusBadge } from "../../../components/crm";
 
 const INR_CURRENCY_FORMATTER = new Intl.NumberFormat("en-IN", {
   style: "currency",
@@ -47,6 +51,56 @@ const getLeadPendingAmount = (lead) => {
   if (paymentType !== "PARTIAL") return null;
   if (!Number.isFinite(amount) || amount <= 0) return null;
   return amount;
+};
+
+const CLOSED_STATUS_SET = new Set(["REQUESTED", "CLOSED", "LOST"]);
+
+const isLeadFollowUpDue = (lead, nowMs) => {
+  if (!lead?.nextFollowUp || !nowMs) return false;
+  const followUpMs = new Date(lead.nextFollowUp).getTime();
+  return (
+    Number.isFinite(followUpMs)
+    && followUpMs <= nowMs
+    && !CLOSED_STATUS_SET.has(String(lead.status || ""))
+  );
+};
+
+const getLeadInitials = (leadName) =>
+  String(leadName || "")
+    .trim()
+    .split(/\s+/)
+    .slice(0, 2)
+    .map((part) => part.charAt(0).toUpperCase())
+    .join("") || "LD";
+
+const getLeadSourceMeta = (lead = {}) => {
+  const rawSource = String(
+    lead.source
+    || lead.leadSource
+    || lead.createdBySource
+    || lead.metaLeadId
+    || lead.metaLeadgenId
+    || "",
+  ).trim();
+  const normalized = rawSource.toUpperCase();
+  const isMeta =
+    normalized.includes("META")
+    || normalized.includes("FACEBOOK")
+    || normalized.includes("INSTAGRAM")
+    || Boolean(lead.metaLeadId || lead.metaLeadgenId || lead.metaAdId);
+
+  return isMeta
+    ? { label: "META", className: "border-blue-200 bg-blue-50 text-blue-700 dark:border-blue-500/30 dark:bg-blue-500/10 dark:text-blue-200" }
+    : { label: "MANUAL", className: "border-slate-300 bg-slate-100 text-slate-700 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-200" };
+};
+
+const LeadSourceBadge = ({ lead }) => {
+  const source = getLeadSourceMeta(lead);
+  return (
+    <span className={`inline-flex w-fit items-center rounded-full border px-2 py-0.5 text-[9px] font-bold uppercase tracking-[0.12em] ${source.className}`}>
+      {source.label}
+    </span>
+  );
 };
 
 const toTitleCaseLabel = (value) =>
@@ -154,7 +208,7 @@ export const LeadsMatrixToolbar = ({
 
   return (
     <div
-      className={`ui-hero-card relative mb-6 overflow-hidden rounded-[28px] px-4 py-4 sm:px-6 sm:py-6 ${
+      className={`ui-hero-card relative overflow-hidden rounded-2xl px-4 py-4 sm:px-6 sm:py-5 ${
         isDark
           ? "border-slate-700/80 bg-slate-900/90 shadow-[0_20px_80px_rgba(2,6,23,0.55)]"
           : "border-slate-200 bg-white shadow-[0_18px_55px_rgba(15,23,42,0.12)]"
@@ -172,29 +226,7 @@ export const LeadsMatrixToolbar = ({
 
       <div className="relative z-10 grid grid-cols-1 gap-5 lg:grid-cols-12">
         <div className="lg:col-span-8">
-          <div className={`inline-flex items-center gap-2 rounded-full border px-3 py-1 text-[10px] font-bold uppercase tracking-[0.18em] ${
-            isDark
-              ? "border-emerald-300/35 bg-emerald-500/15 text-emerald-100"
-              : "border-emerald-300 bg-emerald-50 text-emerald-700"
-          }`}>
-            <Sparkles size={12} />
-            Pipeline Operations Deck
-          </div>
-
-          <h1 className={`mt-2 font-display text-3xl tracking-tight sm:text-4xl ${
-            isDark ? "text-slate-50" : "text-slate-900"
-          }`}>
-            Lead Matrix Command Grid
-          </h1>
-
-          <p className={`mt-2 max-w-2xl text-sm ${
-            isDark ? "text-slate-300" : "text-slate-600"
-          }`}>
-            Fast triage view for follow-ups, ownership, and conversion momentum.
-            Click any card or row to drill down instantly.
-          </p>
-
-          <div className="mt-4 grid grid-cols-1 gap-2 sm:grid-cols-3">
+          <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">
             <div className={`rounded-2xl border px-3 py-2 ${
               isDark ? "border-slate-700/80 bg-slate-950/70" : "border-slate-200 bg-white/80"
             }`}>
@@ -446,7 +478,7 @@ export const LeadsMatrixMetrics = ({
   };
 
   return (
-    <div className="mb-5 grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-4 2xl:grid-cols-7">
+    <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-4 2xl:grid-cols-7">
       {cards.map(({
         key,
         label,
@@ -454,7 +486,7 @@ export const LeadsMatrixMetrics = ({
         tone,
         darkTone,
         accent,
-        icon: Icon,
+        icon,
       }) => (
         <button
           key={key}
@@ -481,7 +513,7 @@ export const LeadsMatrixMetrics = ({
             <div className={`rounded-lg border p-1.5 ${
               isDark ? "border-slate-700 bg-slate-950/80 text-slate-300" : "border-slate-200 bg-slate-50 text-slate-600"
             }`}>
-              <Icon size={13} />
+              {React.createElement(icon, { size: 13 })}
             </div>
           </div>
 
@@ -512,6 +544,8 @@ export const LeadsMatrixFilters = ({
   onSortByChange,
   showDueOnly,
   onShowDueOnlyChange,
+  viewMode = "TABLE",
+  onViewModeChange,
   getStatusLabel,
 }) => (
   <div className={`ui-soft-panel relative mb-4 overflow-hidden rounded-3xl p-3 sm:p-4 ${
@@ -544,7 +578,7 @@ export const LeadsMatrixFilters = ({
       </div>
 
       <div className="grid grid-cols-1 gap-3 lg:grid-cols-12">
-      <div className="relative lg:col-span-5">
+      <div className="relative lg:col-span-4">
         <Search className={`absolute left-3 top-1/2 -translate-y-1/2 ${isDark ? "text-slate-400" : "text-slate-500"}`} size={15} />
         <input
           type="text"
@@ -571,7 +605,7 @@ export const LeadsMatrixFilters = ({
         )}
       </div>
 
-      <div className="lg:col-span-3">
+      <div className="lg:col-span-2">
         <select
           value={statusFilter}
           onChange={(event) => onStatusFilterChange(event.target.value)}
@@ -625,6 +659,37 @@ export const LeadsMatrixFilters = ({
           {showDueOnly ? "Due Mode On" : "Due Follow-ups"}
         </span>
       </button>
+
+      <div className={`grid grid-cols-2 gap-1 rounded-2xl border p-1 lg:col-span-2 ${
+        isDark ? "border-slate-700 bg-slate-950/90" : "border-slate-300 bg-white"
+      }`}>
+        <button
+          type="button"
+          onClick={() => onViewModeChange?.("TABLE")}
+          aria-pressed={viewMode === "TABLE"}
+          className={`inline-flex h-9 items-center justify-center gap-1.5 rounded-xl text-[11px] font-bold uppercase tracking-[0.1em] transition-colors ${
+            viewMode === "TABLE"
+              ? isDark ? "bg-slate-800 text-cyan-100" : "bg-slate-100 text-blue-700 shadow-sm"
+              : isDark ? "text-slate-400 hover:text-slate-100" : "text-slate-500 hover:text-slate-900"
+          }`}
+        >
+          <Table2 size={13} />
+          Table
+        </button>
+        <button
+          type="button"
+          onClick={() => onViewModeChange?.("KANBAN")}
+          aria-pressed={viewMode === "KANBAN"}
+          className={`inline-flex h-9 items-center justify-center gap-1.5 rounded-xl text-[11px] font-bold uppercase tracking-[0.1em] transition-colors ${
+            viewMode === "KANBAN"
+              ? isDark ? "bg-slate-800 text-cyan-100" : "bg-slate-100 text-blue-700 shadow-sm"
+              : isDark ? "text-slate-400 hover:text-slate-100" : "text-slate-500 hover:text-slate-900"
+          }`}
+        >
+          <LayoutGrid size={13} />
+          Kanban
+        </button>
+      </div>
     </div>
 
     <div className="mt-3 flex gap-2 overflow-x-auto pb-1 custom-scrollbar">
@@ -670,6 +735,8 @@ export const LeadsMatrixTable = ({
   isDark,
   loading,
   filteredLeads,
+  statusBreakdown = {},
+  viewMode = "TABLE",
   onOpenLeadDetails,
   onInlineStatusChange,
   updatingInlineStatusId,
@@ -677,22 +744,13 @@ export const LeadsMatrixTable = ({
   getStatusColor,
   getStatusLabel,
   formatDate,
+  nowMs,
 }) => {
   const [openStatusMenuId, setOpenStatusMenuId] = React.useState("");
 
   const isFollowUpDue = (lead) => {
-    if (!lead?.nextFollowUp) return false;
-    const followUpMs = new Date(lead.nextFollowUp).getTime();
-    return Number.isFinite(followUpMs) && followUpMs <= Date.now() && !["REQUESTED", "CLOSED", "LOST"].includes(String(lead.status || ""));
+    return isLeadFollowUpDue(lead, nowMs);
   };
-
-  const getLeadInitials = (leadName) =>
-    String(leadName || "")
-      .trim()
-      .split(/\s+/)
-      .slice(0, 2)
-      .map((part) => part.charAt(0).toUpperCase())
-      .join("") || "LD";
 
   const handleRowKeyDown = (event, lead) => {
     if (event.key !== "Enter" && event.key !== " ") return;
@@ -802,17 +860,106 @@ export const LeadsMatrixTable = ({
       </div>
 
       {loading ? (
-        <div className={`relative z-10 flex h-56 items-center justify-center gap-2 text-sm ${
-          isDark ? "text-slate-400" : "text-slate-500"
-        }`}>
-          <Loader className="animate-spin" size={18} /> Loading leads...
+        <div className="relative z-10 space-y-3 p-4" aria-busy="true" aria-live="polite">
+          <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
+            <Skeleton className="h-24" />
+            <Skeleton className="h-24" />
+            <Skeleton className="h-24" />
+          </div>
+          <Skeleton className="h-14" />
+          <Skeleton className="h-14" />
+          <Skeleton className="h-14" />
         </div>
       ) : filteredLeads.length === 0 ? (
-        <div className={`relative z-10 flex h-64 flex-col items-center justify-center ${
-          isDark ? "text-slate-400" : "text-slate-500"
-        }`}>
-          <Filter size={40} className="mb-3 opacity-40" />
-          <p className="text-sm">No leads found for current filters.</p>
+        <EmptyState
+          className="relative z-10 m-4"
+          icon={Filter}
+          title="No leads found"
+          description="Try clearing the search, switching status tabs, or turning off due follow-up mode."
+        />
+      ) : viewMode === "KANBAN" ? (
+        <div className="relative z-10 overflow-x-auto p-3 custom-scrollbar">
+          <div className="grid min-w-[980px] grid-cols-7 gap-3">
+            {leadStatuses.map((status) => {
+              const rows = filteredLeads.filter(
+                (lead) => String(lead?.status || "NEW").toUpperCase() === status,
+              );
+
+              return (
+                <section
+                  key={status}
+                  className={`flex max-h-[66vh] min-h-[380px] flex-col rounded-2xl border ${
+                    isDark ? "border-slate-700 bg-slate-950/60" : "border-slate-200 bg-slate-50"
+                  }`}
+                >
+                  <div className={`sticky top-0 z-10 border-b px-3 py-2 ${
+                    isDark ? "border-slate-700 bg-slate-950/95" : "border-slate-200 bg-white/95"
+                  }`}>
+                    <div className="flex items-center justify-between gap-2">
+                      <StatusBadge status={status} />
+                      <span className={`text-xs font-bold ${isDark ? "text-slate-400" : "text-slate-500"}`}>
+                        {rows.length || statusBreakdown[status] || 0}
+                      </span>
+                    </div>
+                  </div>
+
+                  <div className="custom-scrollbar min-h-0 flex-1 space-y-2 overflow-y-auto p-2">
+                    {rows.length === 0 ? (
+                      <div className={`rounded-xl border border-dashed px-3 py-8 text-center text-xs ${
+                        isDark ? "border-slate-700 text-slate-500" : "border-slate-300 text-slate-400"
+                      }`}>
+                        No leads
+                      </div>
+                    ) : rows.map((lead) => {
+                      const pendingAmount = getLeadPendingAmount(lead);
+                      const followUpDue = isFollowUpDue(lead);
+                      return (
+                        <button
+                          type="button"
+                          key={lead._id}
+                          onClick={() => onOpenLeadDetails(lead)}
+                          className={`w-full rounded-xl border p-3 text-left transition hover:-translate-y-0.5 ${
+                            isDark
+                              ? "border-slate-700 bg-slate-900/80 hover:border-cyan-300/45"
+                              : "border-slate-200 bg-white hover:border-cyan-300"
+                          }`}
+                        >
+                          <div className="flex items-start justify-between gap-2">
+                            <div className="min-w-0">
+                              <p className={`truncate text-sm font-bold ${isDark ? "text-slate-100" : "text-slate-900"}`}>
+                                {lead.name || "Unnamed lead"}
+                              </p>
+                              <p className={`mt-0.5 truncate text-xs ${isDark ? "text-slate-400" : "text-slate-500"}`}>
+                                {lead.projectInterested || "Project not set"}
+                              </p>
+                            </div>
+                            <LeadSourceBadge lead={lead} />
+                          </div>
+                          <div className="mt-3 space-y-1 text-xs">
+                            <p className={`truncate ${isDark ? "text-slate-300" : "text-slate-600"}`}>
+                              {lead.phone || "No phone"}
+                            </p>
+                            <p className={`truncate font-semibold ${isDark ? "text-cyan-100" : "text-cyan-700"}`}>
+                              {lead.assignedTo?.name || "Unassigned"}
+                            </p>
+                            <p className={followUpDue ? "font-bold text-rose-600" : (isDark ? "text-slate-400" : "text-slate-500")}>
+                              {followUpDue ? "Overdue: " : "Next: "}
+                              {formatDate(lead.nextFollowUp)}
+                            </p>
+                            {pendingAmount ? (
+                              <p className={isDark ? "font-semibold text-amber-200" : "font-semibold text-amber-700"}>
+                                Pending {formatCurrencyInr(pendingAmount)}
+                              </p>
+                            ) : null}
+                          </div>
+                        </button>
+                      );
+                    })}
+                  </div>
+                </section>
+              );
+            })}
+          </div>
         </div>
       ) : (
         <>
@@ -856,6 +1003,14 @@ export const LeadsMatrixTable = ({
                           <p className={`mt-0.5 truncate text-xs ${isDark ? "text-slate-400" : "text-slate-500"}`}>
                             {lead.projectInterested || "Project not set"}
                           </p>
+                          <div className="mt-1.5 flex flex-wrap items-center gap-1.5">
+                            <LeadSourceBadge lead={lead} />
+                            {followUpDue ? (
+                              <span className="inline-flex rounded-full border border-rose-200 bg-rose-50 px-2 py-0.5 text-[9px] font-bold uppercase tracking-[0.12em] text-rose-700 dark:border-rose-500/30 dark:bg-rose-500/10 dark:text-rose-200">
+                                Overdue
+                              </span>
+                            ) : null}
+                          </div>
                         </div>
                       </div>
 
@@ -955,6 +1110,14 @@ export const LeadsMatrixTable = ({
                         <p className={`mt-0.5 truncate text-xs ${isDark ? "text-slate-400" : "text-slate-500"}`}>
                           {lead.projectInterested || "Project not set"}
                         </p>
+                        <div className="mt-1.5 flex flex-wrap items-center gap-1.5">
+                          <LeadSourceBadge lead={lead} />
+                          {followUpDue ? (
+                            <span className="inline-flex rounded-full border border-rose-200 bg-rose-50 px-2 py-0.5 text-[9px] font-bold uppercase tracking-[0.12em] text-rose-700 dark:border-rose-500/30 dark:bg-rose-500/10 dark:text-rose-200">
+                              Overdue
+                            </span>
+                          ) : null}
+                        </div>
                       </div>
                       </div>
 
@@ -1049,7 +1212,7 @@ export const AddLeadModal = ({
       initial={{ opacity: 0 }}
       animate={{ opacity: 1 }}
       exit={{ opacity: 0 }}
-      className={`fixed inset-0 z-50 flex items-center justify-center p-4 ${
+      className={`fixed inset-0 z-50 flex items-center justify-center p-3 pb-[calc(6.75rem+env(safe-area-inset-bottom))] sm:p-4 ${
         isDark ? "bg-slate-950/70" : "bg-slate-900/40"
       }`}
     >
@@ -1057,11 +1220,11 @@ export const AddLeadModal = ({
         initial={{ scale: 0.96, y: 10 }}
         animate={{ scale: 1, y: 0 }}
         exit={{ scale: 0.96, y: 10 }}
-        className={`ui-soft-panel w-full max-w-3xl max-h-[92vh] overflow-y-auto rounded-2xl p-5 shadow-2xl ${
+        className={`ui-soft-panel flex w-full max-w-3xl max-h-[calc(100dvh-8rem-env(safe-area-inset-bottom))] flex-col overflow-hidden rounded-2xl shadow-2xl sm:max-h-[92vh] ${
           isDark ? "border-slate-700 bg-slate-900" : "border-slate-200 bg-white"
         }`}
       >
-        <div className="mb-3 flex items-center justify-between">
+        <div className="flex shrink-0 items-center justify-between border-b border-slate-200 px-4 py-3 dark:border-slate-700 sm:px-5">
           <h3 className={`text-lg font-bold ${isDark ? "text-slate-100" : "text-slate-900"}`}>Add New Lead</h3>
           <button
             onClick={onClose}
@@ -1071,7 +1234,7 @@ export const AddLeadModal = ({
           </button>
         </div>
 
-        <div className="space-y-3">
+        <div className="custom-scrollbar min-h-0 flex-1 space-y-3 overflow-y-auto px-4 py-3 sm:px-5">
           <select
             value={formData.inventoryId}
             onChange={(event) => onInventorySelection(event.target.value)}
@@ -1190,7 +1353,9 @@ export const AddLeadModal = ({
           </div>
         </div>
 
-        <div className="mt-4 flex gap-2">
+        <div className={`sticky bottom-0 flex shrink-0 gap-2 border-t px-4 py-3 sm:px-5 ${
+          isDark ? "border-slate-700 bg-slate-900" : "border-slate-200 bg-white"
+        }`}>
           <button
             onClick={onClose}
             className={`h-10 flex-1 rounded-lg text-sm font-semibold ${

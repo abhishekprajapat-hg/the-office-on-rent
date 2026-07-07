@@ -1,12 +1,12 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   AlertCircle,
-  ChevronRight,
   Languages,
   MessageSquare,
   Mic,
   MicOff,
   RefreshCw,
+  Send,
   UserCircle2,
 } from "lucide-react";
 import { useNavigate } from "react-router-dom";
@@ -89,16 +89,12 @@ const NAV_ITEMS = [
 const ROLE_LABELS = {
   ADMIN: "Admin",
   MANAGER: "Manager",
-  ASSISTANT_MANAGER: "Assistant Manager",
-  TEAM_LEADER: "Team Leader",
   EXECUTIVE: "Executive",
   FIELD_EXECUTIVE: "Field Executive",
   CHANNEL_PARTNER: "Channel Partner",
 };
 
 const ROLE_PATTERNS = [
-  { role: "ASSISTANT_MANAGER", aliases: ["assistant manager", "assistant_manager"] },
-  { role: "TEAM_LEADER", aliases: ["team leader", "team_leader", "tl"] },
   { role: "FIELD_EXECUTIVE", aliases: ["field executive", "field agent", "field_exec", "fe"] },
   { role: "CHANNEL_PARTNER", aliases: ["channel partner", "partner"] },
   { role: "EXECUTIVE", aliases: ["executive"] },
@@ -180,7 +176,7 @@ const SUBSCRIPTION_METRICS = {
 };
 
 const MUTATION_ALLOWED_ROLES = new Set(["ADMIN"]);
-const EXPORT_ALLOWED_ROLES = new Set(["ADMIN", "MANAGER", "ASSISTANT_MANAGER", "TEAM_LEADER"]);
+const EXPORT_ALLOWED_ROLES = new Set(["ADMIN", "MANAGER"]);
 
 const PERFORMANCE_INTENT_TERMS = [
   "best",
@@ -211,8 +207,6 @@ const PERFORMANCE_ALL_ROLE_TERMS = [
 
 const PERFORMANCE_ROLE_ORDER = [
   "MANAGER",
-  "ASSISTANT_MANAGER",
-  "TEAM_LEADER",
   "EXECUTIVE",
   "FIELD_EXECUTIVE",
   "CHANNEL_PARTNER",
@@ -2384,7 +2378,7 @@ const buildHelpReply = () =>
     "I can help you with natural language prompts.",
     "Voice input:",
     "- Select `Hindi (India)` and click `Start Mic`",
-    "- Say commands like `सबसे अच्छा मैनेजर कौन है` or `इस महीने के closed deals`",
+    "- Say commands like `who is the best manager` or `closed deals this month`",
     "Examples:",
     "- Give me full system overview",
     "- How many deals are closed this month?",
@@ -3581,23 +3575,31 @@ const AdminCommandConsole = () => {
   };
 
   return (
-    <div className="ui-page-shell custom-scrollbar space-y-4 pt-20 md:pt-24">
-      <section className="ui-soft-panel flex max-h-[calc(100dvh-210px)] flex-col overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
-        <div className="border-b border-slate-200 bg-slate-50/90 px-4 py-3 sm:px-6">
-          <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-            <div className="inline-flex items-center gap-2 text-sm font-semibold text-slate-800">
-              <MessageSquare size={16} className="text-cyan-600" />
-              Admin Assistant
+    <div className="ui-page-shell admin-chat-page custom-scrollbar">
+      <section className="flex h-full min-h-0 flex-col overflow-hidden border border-slate-200 bg-[#f7f7f8] shadow-sm sm:rounded-2xl">
+        <div className="shrink-0 border-b border-slate-200 bg-white/95 px-3 py-3 backdrop-blur sm:px-5">
+          <div className="mx-auto flex w-full max-w-4xl items-center justify-between gap-3">
+            <div className="min-w-0">
+              <div className="inline-flex items-center gap-2 text-sm font-semibold text-slate-900">
+                <span className="inline-flex h-8 w-8 items-center justify-center rounded-full border border-slate-200 bg-white shadow-sm">
+                  <MessageSquare size={16} className="text-cyan-600" />
+                </span>
+                Admin Assistant
+              </div>
+              <div className="mt-1 flex items-center gap-2 truncate text-[11px] text-slate-500">
+                <span className={`inline-flex h-2 w-2 shrink-0 rounded-full ${snapshotLoaded ? "bg-emerald-500" : "bg-amber-500"}`} />
+                <span className="truncate">
+                  {snapshotLoaded ? `Snapshot ${formatDateTime(snapshot.loadedAt)}` : "Snapshot loading..."}
+                </span>
+              </div>
             </div>
 
-            <div className="inline-flex items-center gap-2 text-xs text-slate-600">
-              <span className={`inline-flex h-2.5 w-2.5 rounded-full ${snapshotLoaded ? "bg-emerald-500" : "bg-amber-500"}`} />
-              {snapshotLoaded ? `Snapshot ${formatDateTime(snapshot.loadedAt)}` : "Snapshot loading..."}
+            <div className="shrink-0">
               <button
                 type="button"
                 onClick={() => handleAsk("refresh")}
                 disabled={running || loadingSnapshot}
-                className="inline-flex h-8 items-center gap-1 rounded-lg border border-slate-300 bg-white px-2.5 text-[11px] font-semibold text-slate-700 transition hover:border-cyan-400 hover:text-cyan-700 disabled:cursor-not-allowed disabled:opacity-60"
+                className="inline-flex h-9 items-center gap-1.5 rounded-full border border-slate-200 bg-white px-3 text-xs font-semibold text-slate-700 shadow-sm transition hover:border-cyan-400 hover:text-cyan-700 disabled:cursor-not-allowed disabled:opacity-60"
               >
                 <RefreshCw size={12} className={loadingSnapshot ? "animate-spin" : ""} />
                 Refresh
@@ -3606,66 +3608,110 @@ const AdminCommandConsole = () => {
           </div>
         </div>
 
-        <div className="min-h-0 flex flex-1 flex-col bg-slate-100/75">
+        <div className="min-h-0 flex flex-1 flex-col">
           <div
             ref={chatRef}
-            className="min-h-0 flex-1 space-y-3 overflow-y-auto px-3 py-4 custom-scrollbar sm:px-4"
+            className="min-h-0 flex-1 overflow-y-auto px-3 py-4 custom-scrollbar sm:px-5 sm:py-6"
           >
-            {messages.map((message) => {
-              const isUser = message.role === "user";
-              return (
-                <div
-                  key={message.id}
-                  className={`flex w-full ${isUser ? "justify-end" : "justify-start"}`}
-                >
+            <div className="mx-auto flex w-full max-w-4xl flex-col gap-4">
+              {messages.map((message) => {
+                const isUser = message.role === "user";
+                return (
                   <div
-                    className={`max-w-[92%] rounded-2xl px-3 py-2 text-sm leading-6 whitespace-pre-wrap sm:max-w-[80%] ${
-                      isUser
-                        ? "bg-cyan-700 text-white"
-                        : "border border-slate-200 bg-white text-slate-700"
-                    }`}
+                    key={message.id}
+                    className={`flex w-full items-start gap-2 ${isUser ? "justify-end" : "justify-start"}`}
                   >
-                    <div className="mb-1 inline-flex items-center gap-1 text-[10px] font-semibold uppercase tracking-[0.12em] opacity-70">
-                      {isUser ? <UserCircle2 size={12} /> : <MessageSquare size={12} />}
-                      {isUser ? "Admin" : "Assistant"}
+                    {!isUser ? (
+                      <span className="mt-1 hidden h-8 w-8 shrink-0 items-center justify-center rounded-full border border-slate-200 bg-white text-cyan-700 shadow-sm sm:inline-flex">
+                        <MessageSquare size={15} />
+                      </span>
+                    ) : null}
+                    <div
+                      className={`max-w-[88%] whitespace-pre-wrap rounded-[1.35rem] px-4 py-3 text-sm leading-6 shadow-sm sm:max-w-[76%] ${
+                        isUser
+                          ? "rounded-br-md bg-slate-900 text-white"
+                          : "rounded-bl-md border border-slate-200 bg-white text-slate-800"
+                      }`}
+                    >
+                      <div className={`mb-1 flex items-center gap-1 text-[10px] font-semibold uppercase tracking-[0.11em] ${
+                        isUser ? "text-white/65" : "text-slate-400"
+                      }`}>
+                        {isUser ? <UserCircle2 size={12} /> : <MessageSquare size={12} />}
+                        {isUser ? "You" : "Assistant"}
+                      </div>
+                      <div>{message.text}</div>
                     </div>
-                    <div>{message.text}</div>
+                    {isUser ? (
+                      <span className="mt-1 hidden h-8 w-8 shrink-0 items-center justify-center rounded-full bg-slate-900 text-white shadow-sm sm:inline-flex">
+                        <UserCircle2 size={15} />
+                      </span>
+                    ) : null}
+                  </div>
+                );
+              })}
+
+              {running ? (
+                <div className="flex justify-start gap-2">
+                  <span className="mt-1 hidden h-8 w-8 shrink-0 items-center justify-center rounded-full border border-slate-200 bg-white text-cyan-700 shadow-sm sm:inline-flex">
+                    <MessageSquare size={15} />
+                  </span>
+                  <div className="rounded-[1.35rem] rounded-bl-md border border-slate-200 bg-white px-4 py-3 text-sm text-slate-600 shadow-sm">
+                    Assistant is thinking...
                   </div>
                 </div>
-              );
-            })}
-
-            {running ? (
-              <div className="flex justify-start">
-                <div className="max-w-[80%] rounded-2xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-600">
-                  Assistant is thinking...
-                </div>
-              </div>
-            ) : null}
+              ) : null}
+            </div>
           </div>
 
-          <form onSubmit={handleSubmit} className="border-t border-slate-200 bg-white p-3 sm:p-4">
-            <div className="space-y-1.5">
-              <label className="flex flex-wrap items-center gap-2 rounded-xl border border-slate-300 bg-white px-3 py-2">
-                <ChevronRight size={14} className="text-cyan-600" />
-                <input
+          <form onSubmit={handleSubmit} className="shrink-0 border-t border-slate-200 bg-white/95 px-3 py-3 backdrop-blur sm:px-5 sm:py-4">
+            <div className="mx-auto w-full max-w-4xl space-y-2">
+              <div className="flex gap-2 overflow-x-auto pb-1 scrollbar-hide">
+                {SUGGESTED_PROMPTS.slice(0, 8).map((prompt) => (
+                  <button
+                    key={prompt}
+                    type="button"
+                    onClick={() => handleAsk(prompt)}
+                    disabled={running}
+                    className="shrink-0 rounded-full border border-slate-200 bg-white px-3 py-1.5 text-[11px] font-semibold text-slate-700 shadow-sm transition hover:border-cyan-300 hover:text-cyan-700 disabled:cursor-not-allowed disabled:opacity-60"
+                  >
+                    {prompt}
+                  </button>
+                ))}
+                <button
+                  type="button"
+                  onClick={() => {
+                    setMessages(initialMessages());
+                    setPendingAction(null);
+                  }}
+                  className="shrink-0 rounded-full border border-slate-200 bg-white px-3 py-1.5 text-[11px] font-semibold text-slate-600 shadow-sm transition hover:border-slate-300"
+                >
+                  Clear Chat
+                </button>
+              </div>
+
+              <div className="rounded-[1.55rem] border border-slate-200 bg-white p-2 shadow-[0_12px_35px_-24px_rgba(15,23,42,0.55)]">
+                <div className="flex items-end gap-2">
+                  <textarea
                   autoFocus
-                  type="text"
+                  rows={1}
                   value={input}
                   onChange={(event) => setInput(event.target.value)}
-                  placeholder="Type or use mic (Hindi/English) for commands..."
+                  onKeyDown={(event) => {
+                    if (event.key === "Enter" && !event.shiftKey) {
+                      event.preventDefault();
+                      event.currentTarget.form?.requestSubmit();
+                    }
+                  }}
+                  placeholder="Message Admin Assistant..."
                   disabled={running}
-                  className="min-w-[180px] flex-1 bg-transparent text-sm text-slate-800 outline-none placeholder:text-slate-400"
+                  className="max-h-28 min-h-10 flex-1 resize-none bg-transparent px-2 py-2 text-sm leading-6 text-slate-900 outline-none placeholder:text-slate-400"
                 />
 
-                <span className="inline-flex shrink-0 items-center gap-1 rounded-md border border-slate-200 bg-slate-50 px-2 py-1 text-[11px] font-medium text-slate-600">
-                  <Languages size={12} />
-                  Speech
-                </span>
                 <select
                   value={speechLocale}
                   onChange={(event) => setSpeechLocale(event.target.value)}
-                  className="h-8 shrink-0 rounded-md border border-slate-300 bg-white px-2 text-xs font-medium text-slate-700 outline-none"
+                  className="hidden h-10 shrink-0 rounded-full border border-slate-200 bg-slate-50 px-3 text-xs font-semibold text-slate-700 outline-none sm:block"
+                  aria-label="Speech language"
                 >
                   <option value="hi-IN">Hindi</option>
                   <option value="en-IN">English</option>
@@ -3675,27 +3721,35 @@ const AdminCommandConsole = () => {
                   type="button"
                   onClick={toggleVoiceCapture}
                   disabled={running || !speechSupported}
-                  className={`inline-flex h-8 shrink-0 items-center gap-1 rounded-md border px-2.5 text-[11px] font-semibold transition disabled:cursor-not-allowed disabled:opacity-60 ${
+                  className={`inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-full border transition disabled:cursor-not-allowed disabled:opacity-60 ${
                     isListening
                       ? "border-rose-300 bg-rose-50 text-rose-700 hover:border-rose-400"
-                      : "border-cyan-300 bg-cyan-50 text-cyan-700 hover:border-cyan-400"
+                      : "border-slate-200 bg-slate-50 text-slate-700 hover:border-cyan-400 hover:text-cyan-700"
                   }`}
+                  aria-label={isListening ? "Stop voice input" : "Start voice input"}
                 >
                   {isListening ? <MicOff size={13} /> : <Mic size={13} />}
-                  {isListening ? "Stop" : "Mic"}
                 </button>
                 <button
                   type="submit"
                   disabled={running || !input.trim()}
-                  className="inline-flex h-8 shrink-0 items-center rounded-lg border border-slate-300 bg-slate-50 px-3 text-xs font-semibold text-slate-700 transition hover:border-cyan-400 hover:bg-cyan-50 disabled:cursor-not-allowed disabled:opacity-60"
+                  className="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-slate-900 text-white transition hover:bg-cyan-700 disabled:cursor-not-allowed disabled:bg-slate-200 disabled:text-slate-400"
+                  aria-label="Send message"
                 >
-                  Send
+                  <Send size={15} />
                 </button>
-              </label>
+                </div>
+              </div>
 
-              {isListening ? <p className="text-[11px] text-cyan-700">Listening... Hindi ya English me command boliye.</p> : null}
-              {speechSupported ? null : <p className="text-[11px] text-amber-700">Voice input browser me available nahi hai. Chrome/Edge use karein.</p>}
-              {speechError ? <p className="text-[11px] text-rose-700">{speechError}</p> : null}
+              <div className="flex flex-wrap items-center gap-2 px-1 text-[11px] text-slate-500">
+                <span className="inline-flex items-center gap-1">
+                  <Languages size={12} />
+                  {speechLocale === "hi-IN" ? "Hindi" : speechLocale === "en-IN" ? "English" : "English US"}
+                </span>
+                {isListening ? <span className="font-medium text-cyan-700">Listening... Speak a command.</span> : null}
+                {speechSupported ? null : <span className="text-amber-700">Voice input is not available in this browser.</span>}
+                {speechError ? <span className="text-rose-700">{speechError}</span> : null}
+              </div>
             </div>
           </form>
 
@@ -3726,33 +3780,6 @@ const AdminCommandConsole = () => {
               </div>
             </div>
           ) : null}
-        </div>
-
-        <div className="border-t border-slate-200 bg-white px-4 py-3 sm:px-6">
-          <p className="text-[11px] font-semibold uppercase tracking-[0.12em] text-slate-500">Try Asking</p>
-          <div className="mt-2 flex gap-2 overflow-x-auto pb-1">
-            {SUGGESTED_PROMPTS.map((prompt) => (
-              <button
-                key={prompt}
-                type="button"
-                onClick={() => handleAsk(prompt)}
-                disabled={running}
-                className="shrink-0 rounded-md border border-slate-300 bg-slate-50 px-2.5 py-1 text-[11px] font-semibold text-slate-700 transition hover:border-slate-400 hover:bg-white disabled:cursor-not-allowed disabled:opacity-60"
-              >
-                {prompt}
-              </button>
-            ))}
-            <button
-              type="button"
-              onClick={() => {
-                setMessages(initialMessages());
-                setPendingAction(null);
-              }}
-              className="shrink-0 rounded-md border border-slate-300 bg-white px-2.5 py-1 text-[11px] font-semibold text-slate-600 transition hover:border-slate-400"
-            >
-              Clear Chat
-            </button>
-          </div>
         </div>
       </section>
 

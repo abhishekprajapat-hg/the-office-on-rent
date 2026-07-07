@@ -17,7 +17,7 @@ const inventoryRequestSchema = new mongoose.Schema(
     },
     type: {
       type: String,
-      enum: ["create", "update"],
+      enum: ["create", "update", "delete"],
       default: "create",
       required: true,
       index: true,

@@ -3,15 +3,11 @@ import { useNavigate } from "react-router-dom";
 import { motion as Motion, AnimatePresence } from "framer-motion";
 import {
   MapPin,
-  Home,
-  Pencil,
   X,
   Loader,
-  Image as ImageIcon,
   UploadCloud,
   Trash2,
   AlertCircle,
-  Share2,
 } from "lucide-react";
 import {
   getInventoryAssets,
@@ -19,6 +15,7 @@ import {
   createInventoryCreateRequest,
   updateInventoryAsset,
   deleteInventoryAsset,
+  requestInventoryDelete,
   requestInventoryStatusChange,
   requestInventoryUpdateChange,
   getPendingInventoryRequests,
@@ -32,11 +29,16 @@ import {
   AssetVaultToolbar,
   PendingInventoryRequestsPanel,
 } from "./components/AssetVaultSections";
+import {
+  InventoryKpiGrid,
+  PropertyWorkspace,
+} from "./components/PropertyWorkspace";
+import { buildInventoryMetrics } from "./components/propertyWorkspaceUtils";
 
-const STATUS_OPTIONS = ["Available", "Reserved", "Sold"];
+const STATUS_OPTIONS = ["Available", "Blocked", "Sold"];
 const STATUS_UPDATE_OPTIONS = [
   { label: "Available", value: "Available" },
-  { label: "Reserved", value: "Blocked" },
+  { label: "Blocked", value: "Blocked" },
   { label: "Sold", value: "Sold" },
 ];
 const SOLD_PAYMENT_MODE_OPTIONS = [
@@ -274,26 +276,6 @@ const hasAmenity = (asset, amenityToken) => {
   return false;
 };
 
-const statusPillClass = (status) => {
-  if (status === "Available") {
-    return "bg-emerald-100 text-emerald-700";
-  }
-
-  if (status === "Reserved") {
-    return "bg-amber-100 text-amber-700";
-  }
-
-  if (status === "Sold") {
-    return "bg-slate-900 text-white";
-  }
-
-  if (status === "Rented") {
-    return "bg-blue-100 text-blue-700";
-  }
-
-  return "bg-slate-100 text-slate-600";
-};
-
 const formatPrice = (asset) => {
   const value = Number(asset.price) || 0;
 
@@ -402,8 +384,6 @@ const REQUEST_FIELD_LABELS = {
 const CREATE_REQUEST_ROLES = new Set([
   "ADMIN",
   "MANAGER",
-  "ASSISTANT_MANAGER",
-  "TEAM_LEADER",
   "EXECUTIVE",
   "FIELD_EXECUTIVE",
   "CHANNEL_PARTNER",
@@ -412,8 +392,6 @@ const CREATE_REQUEST_ROLES = new Set([
 const UPDATE_STATUS_REQUEST_ROLES = new Set([
   "ADMIN",
   "MANAGER",
-  "ASSISTANT_MANAGER",
-  "TEAM_LEADER",
   "EXECUTIVE",
   "FIELD_EXECUTIVE",
 ]);
@@ -492,6 +470,8 @@ const AssetVault = () => {
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
   const [editingAssetId, setEditingAssetId] = useState("");
   const [modeType, setModeType] = useState("sale");
+  const [viewMode, setViewMode] = useState("cards");
+  const [advancedFiltersOpen, setAdvancedFiltersOpen] = useState(false);
   const [uploading, setUploading] = useState(false);
   const [saving, setSaving] = useState(false);
   const [resolvingLocation, setResolvingLocation] = useState(false);
@@ -541,7 +521,10 @@ const AssetVault = () => {
   const googleGeocoderRef = useRef(null);
 
   const role = String(localStorage.getItem("role") || "").trim().toUpperCase();
-  const canManage = role === "ADMIN";
+  const canManage = role === "ADMIN" || role === "MANAGER";
+  const canDeleteDirect = role === "ADMIN";
+  const canRequestDelete = role !== "ADMIN" && UPDATE_STATUS_REQUEST_ROLES.has(role);
+  const canReviewInventoryRequests = role === "ADMIN";
   const canRequestCreate = CREATE_REQUEST_ROLES.has(role);
   const canOpenCreateModal = canManage || canRequestCreate;
   const canRequestEdit = UPDATE_STATUS_REQUEST_ROLES.has(role);
@@ -551,6 +534,7 @@ const AssetVault = () => {
     () => assets.find((asset) => String(asset?._id || "") === String(reserveAssetId || "")) || null,
     [assets, reserveAssetId],
   );
+  const inventoryMetrics = useMemo(() => buildInventoryMetrics(assets), [assets]);
 
   const sortedLeadOptions = useMemo(
     () =>
@@ -593,7 +577,7 @@ const AssetVault = () => {
 
       const [list, requests] = await Promise.all([
         getInventoryAssets(),
-        canManage ? getPendingInventoryRequests() : Promise.resolve([]),
+        canReviewInventoryRequests ? getPendingInventoryRequests() : Promise.resolve([]),
       ]);
 
       setAssets(Array.isArray(list) ? list : []);
@@ -606,7 +590,7 @@ const AssetVault = () => {
     } finally {
       setLoading(false);
     }
-  }, [canManage]);
+  }, [canReviewInventoryRequests]);
 
   useEffect(() => {
     fetchAssets();
@@ -702,7 +686,10 @@ const AssetVault = () => {
 
     return assets.filter((asset) => {
       const typeMatch = modeType === "sale" ? asset.type === "Sale" : asset.type === "Rent";
-      const statusMatch = statusFilter === "all" ? true : asset.status === statusFilter;
+      const statusMatch =
+        statusFilter === "all"
+          ? true
+          : toApiStatus(asset.status) === toApiStatus(statusFilter);
       const inventoryTypeMatch = inventoryTypeFilter === "all"
         ? true
         : String(asset.inventoryType || "").toUpperCase() === inventoryTypeFilter;
@@ -711,12 +698,16 @@ const AssetVault = () => {
         !normalizedSearch ||
         [
           getAssetTitle(asset),
+          asset.projectName,
+          asset.towerName,
+          asset.unitNumber,
           asset.location,
           asset.category,
           asset.propertyId,
           asset.city,
           asset.area,
           asset.pincode,
+          asset.buildingName,
         ].some((value) =>
           String(value || "")
             .toLowerCase()
@@ -1428,7 +1419,7 @@ const AssetVault = () => {
 
     const trimmedReservationReason = String(formData.reservationReason || "").trim();
     if (isReservedStatusValue(formData.status) && !trimmedReservationReason) {
-      setError("Reservation reason is required when status is Reserved");
+      setError("Block reason is required when status is Blocked");
       return;
     }
 
@@ -1661,7 +1652,7 @@ const AssetVault = () => {
 
       const trimmedReservationReason = String(formData.reservationReason || "").trim();
       if (isReservedStatusValue(formData.status) && !trimmedReservationReason) {
-        setError("Reservation reason is required when status is Reserved");
+        setError("Block reason is required when status is Blocked");
         return;
       }
 
@@ -1699,9 +1690,13 @@ const AssetVault = () => {
   };
 
   const handleDeleteAsset = async (assetId) => {
-    if (!canManage) return;
+    if (!canDeleteDirect && !canRequestDelete) return;
 
-    const shouldDelete = window.confirm("Delete this asset from inventory?");
+    const shouldDelete = window.confirm(
+      canDeleteDirect
+        ? "Delete this asset from inventory?"
+        : "Submit delete request to Admin for approval?",
+    );
     if (!shouldDelete) return;
 
     try {
@@ -1709,12 +1704,17 @@ const AssetVault = () => {
       setError("");
       setSuccess("");
 
-      await deleteInventoryAsset(assetId);
-      setAssets((prev) => prev.filter((asset) => asset._id !== assetId));
-      setSuccess("Asset deleted");
+      if (canDeleteDirect) {
+        await deleteInventoryAsset(assetId);
+        setAssets((prev) => prev.filter((asset) => asset._id !== assetId));
+        setSuccess("Asset deleted");
+      } else {
+        await requestInventoryDelete(assetId, "Delete requested from inventory workspace");
+        setSuccess("Delete request submitted for admin approval");
+      }
     } catch (deleteError) {
       console.error(`Delete asset failed: ${toErrorMessage(deleteError, "Unknown error")}`);
-      setError(toErrorMessage(deleteError, "Failed to delete asset"));
+      setError(toErrorMessage(deleteError, "Failed to delete or request delete"));
     } finally {
       setDeletingId("");
     }
@@ -1803,12 +1803,12 @@ const AssetVault = () => {
     const normalizedReason = String(reserveReason || "").trim();
 
     if (!normalizedLeadId) {
-      setError("Lead selection is required when status is Reserved");
+      setError("Lead selection is required when status is Blocked");
       return;
     }
 
     if (!normalizedReason) {
-      setError("Reservation reason is required when status is Reserved");
+      setError("Block reason is required when status is Blocked");
       return;
     }
 
@@ -1823,7 +1823,7 @@ const AssetVault = () => {
           leadId: normalizedLeadId,
           reservationReason: normalizedReason,
         });
-        setSuccess("Reserve request submitted for admin approval");
+        setSuccess("Block request submitted for admin approval");
       } else {
         setUpdatingStatusId(reserveAssetId);
         const updated = await updateInventoryAsset(reserveAssetId, {
@@ -1833,13 +1833,13 @@ const AssetVault = () => {
         });
         setAssets((prev) =>
           prev.map((asset) => (String(asset._id) === String(reserveAssetId) ? updated : asset)));
-        setSuccess("Property reserved successfully");
+        setSuccess("Property blocked successfully");
       }
 
       closeReserveModal();
     } catch (reserveError) {
-      console.error(`Reserve property failed: ${toErrorMessage(reserveError, "Unknown error")}`);
-      setError(toErrorMessage(reserveError, "Failed to reserve property"));
+      console.error(`Block property failed: ${toErrorMessage(reserveError, "Unknown error")}`);
+      setError(toErrorMessage(reserveError, "Failed to block property"));
     } finally {
       setReserveSubmitting(false);
       setUpdatingStatusId("");
@@ -1852,16 +1852,6 @@ const AssetVault = () => {
     navigate(`/inventory/${assetId}`);
   };
 
-  const stopCardClick = (e) => {
-    e.stopPropagation();
-  };
-
-  const handleCardKeyDown = (e, assetId) => {
-    if (e.key !== "Enter" && e.key !== " ") return;
-    e.preventDefault();
-    handleOpenDetails(assetId);
-  };
-
   const handleShareAsset = (asset) => {
     const shareProperty = toSharePayload(asset);
     if (!shareProperty) return;
@@ -1872,7 +1862,7 @@ const AssetVault = () => {
   };
 
   const handleApproveRequest = async (requestId) => {
-    if (!canManage || !requestId) return;
+    if (!canReviewInventoryRequests || !requestId) return;
 
     try {
       setReviewingRequestId(requestId);
@@ -1891,7 +1881,7 @@ const AssetVault = () => {
   };
 
   const handleRejectRequest = async (requestId) => {
-    if (!canManage || !requestId) return;
+    if (!canReviewInventoryRequests || !requestId) return;
 
     const reason = window.prompt("Reject reason:");
     if (!reason || !reason.trim()) return;
@@ -1913,7 +1903,7 @@ const AssetVault = () => {
   };
 
   return (
-    <div className="ui-page-shell custom-scrollbar relative flex flex-col gap-8 bg-slate-50/50">
+    <div className="ui-page-shell asset-vault-page custom-scrollbar relative flex flex-col bg-slate-50/50">
       <AssetVaultToolbar
         modeType={modeType}
         onModeChange={setModeType}
@@ -1922,9 +1912,15 @@ const AssetVault = () => {
         onOpenAddModal={openAddModal}
       />
 
+      <InventoryKpiGrid metrics={inventoryMetrics} />
+
       <AssetVaultFilters
         searchTerm={searchTerm}
         onSearchChange={setSearchTerm}
+        viewMode={viewMode}
+        onViewModeChange={setViewMode}
+        advancedFiltersOpen={advancedFiltersOpen}
+        onToggleAdvancedFilters={() => setAdvancedFiltersOpen((prev) => !prev)}
         statusFilter={statusFilter}
         onStatusFilterChange={setStatusFilter}
         statusOptions={STATUS_OPTIONS}
@@ -1965,7 +1961,7 @@ const AssetVault = () => {
       )}
 
       <PendingInventoryRequestsPanel
-        canManage={canManage}
+        canManage={canReviewInventoryRequests}
         pendingRequests={pendingRequests}
         reviewingRequestId={reviewingRequestId}
         requestFieldLabels={REQUEST_FIELD_LABELS}
@@ -1977,190 +1973,42 @@ const AssetVault = () => {
         onViewInventory={(inventoryId) => navigate(`/inventory/${inventoryId}`)}
       />
 
-      {loading ? (
-        <div className="flex items-center justify-center h-64 text-slate-400 gap-2">
-          <Loader className="animate-spin" size={24} /> Accessing Vault...
-        </div>
-      ) : filteredAssets.length === 0 ? (
-        <div className="flex flex-col items-center justify-center h-64 text-slate-400 border-2 border-dashed border-slate-200 rounded-3xl">
-          <Home size={48} className="mb-4 opacity-20" />
-          <p className="text-sm font-bold">No assets match current filters</p>
-        </div>
-      ) : (
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6 pb-8 z-0">
-          {filteredAssets.map((asset) => (
-            <Motion.div
-              initial={{ opacity: 0, y: 20 }}
-              animate={{ opacity: 1, y: 0 }}
-              key={asset._id}
-              role="button"
-              tabIndex={0}
-              onClick={() => handleOpenDetails(asset._id)}
-              onKeyDown={(e) => handleCardKeyDown(e, asset._id)}
-              className="group bg-white border border-slate-200 rounded-2xl overflow-hidden hover:shadow-xl hover:border-emerald-500/30 transition-all duration-300 flex flex-col h-[360px] cursor-pointer"
-            >
-              <div className="relative h-52 bg-slate-100 flex items-center justify-center overflow-hidden">
-                {asset.images && asset.images.length > 0 ? (
-                  <img
-                    src={asset.images[0]}
-                    className="w-full h-full object-cover transition-transform duration-700 group-hover:scale-110"
-                    alt={getAssetTitle(asset)}
-                  />
-                ) : (
-                  <div className="text-slate-300 flex flex-col items-center">
-                    <ImageIcon size={32} />
-                    <span className="text-[10px] font-bold uppercase mt-2 tracking-widest">
-                      No Image
-                    </span>
-                  </div>
-                )}
-
-                {asset.images && asset.images.length > 1 && (
-                  <div className="absolute bottom-2 right-2 bg-slate-900/70 text-white text-[9px] font-bold px-2 py-0.5 rounded-full">
-                    +{asset.images.length - 1} more
-                  </div>
-                )}
-
-                <div className="absolute top-3 right-3 flex items-center gap-1.5">
-                  {canOpenEditModal && (
-                    <button
-                      type="button"
-                      onClick={(e) => {
-                        stopCardClick(e);
-                        handleOpenEditModal(asset);
-                      }}
-                      className="p-1.5 rounded-lg bg-white/90 text-slate-600 hover:bg-slate-900 hover:text-white transition-colors"
-                      title={canManage ? "Edit property" : "Request edit"}
-                    >
-                      <Pencil size={12} />
-                    </button>
-                  )}
-                  <button
-                    type="button"
-                    onClick={(e) => {
-                      stopCardClick(e);
-                      handleShareAsset(asset);
-                    }}
-                    className="p-1.5 rounded-lg bg-white/90 text-cyan-700 hover:bg-cyan-600 hover:text-white transition-colors"
-                    title="Share to chat"
-                  >
-                    <Share2 size={12} />
-                  </button>
-                  <div
-                    className={`px-2 py-1 rounded text-[9px] font-bold uppercase tracking-widest ${statusPillClass(
-                      asset.status,
-                    )}`}
-                  >
-                    {asset.status}
-                  </div>
-                </div>
-
-                {canManage && (
-                  <button
-                    type="button"
-                    onClick={(e) => {
-                      stopCardClick(e);
-                      handleDeleteAsset(asset._id);
-                    }}
-                    disabled={deletingId === asset._id}
-                    className="absolute top-3 left-3 p-1.5 rounded-lg bg-white/90 text-red-500 hover:bg-red-500 hover:text-white transition-colors disabled:opacity-50"
-                  >
-                    {deletingId === asset._id ? (
-                      <Loader size={13} className="animate-spin" />
-                    ) : (
-                      <Trash2 size={13} />
-                    )}
-                  </button>
-                )}
-              </div>
-
-              <div className="p-5 flex-1 flex flex-col justify-between gap-3">
-                <div>
-                  <h3 className="font-display text-lg tracking-wide text-slate-800 truncate">
-                    {getAssetTitle(asset)}
-                  </h3>
-                  <div className="flex items-center gap-1 text-[11px] text-slate-400 mt-1">
-                    <MapPin size={12} /> {asset.location || "-"}
-                  </div>
-                  {toApiStatus(asset.status) === "Blocked" && asset.reservationReason ? (
-                    <p className="mt-1 text-[11px] text-amber-700 font-semibold">
-                      Reserved reason: {asset.reservationReason}
-                    </p>
-                  ) : null}
-                  {toApiStatus(asset.status) === "Sold" && asset.saleDetails ? (
-                    <div className="mt-1 text-[11px] text-slate-600">
-                      <p className="font-semibold text-slate-700">
-                        Sold to lead: {formatSoldLeadLabel(asset.saleDetails?.leadId)}
-                      </p>
-                      <p>
-                        {formatSoldPaymentModeLabel(asset.saleDetails?.paymentMode)} | {formatSoldPaymentTypeLabel(asset.saleDetails?.paymentType)}
-                      </p>
-                    </div>
-                  ) : null}
-                </div>
-
-                <div className="border-t border-slate-100 pt-3">
-                  <div className="flex justify-between items-center">
-                    <span className="text-xs font-bold text-slate-500 uppercase">{asset.category}</span>
-                    <span className="font-mono text-sm font-bold text-slate-900">
-                      {formatPrice(asset)}
-                    </span>
-                  </div>
-                  {String(asset?.type || "").trim().toUpperCase() === "RENT"
-                    && toNumberOrNull(asset?.deposit) !== null ? (
-                    <div className="mt-1 text-[11px] font-semibold text-slate-600">
-                      Deposit: {formatCurrency(asset.deposit)}
-                    </div>
-                    ) : null}
-
-                  {canManage ? (
-                    <>
-                      <select
-                        value={toApiStatus(asset.status)}
-                        disabled={updatingStatusId === asset._id}
-                        onChange={(e) => handleStatusChange(asset._id, e.target.value)}
-                        onClick={stopCardClick}
-                        className="mt-3 w-full h-9 px-3 rounded-lg border border-slate-200 text-xs font-semibold text-slate-700 focus:outline-none focus:border-emerald-500"
-                      >
-                        {STATUS_UPDATE_OPTIONS.map((statusOption) => (
-                          <option key={statusOption.value} value={statusOption.value}>
-                            {statusOption.label}
-                          </option>
-                        ))}
-                      </select>
-                    </>
-                  ) : canRequestStatusChange ? (
-                    <>
-                      <select
-                        value={toApiStatus(asset.status)}
-                        disabled={requestingStatusId === asset._id}
-                        onChange={(e) => handleStatusChangeRequest(asset._id, e.target.value)}
-                        onClick={stopCardClick}
-                        className="mt-3 w-full h-9 px-3 rounded-lg border border-slate-200 text-xs font-semibold text-slate-700 focus:outline-none focus:border-emerald-500"
-                      >
-                        {STATUS_UPDATE_OPTIONS.map((statusOption) => (
-                          <option key={statusOption.value} value={statusOption.value}>
-                            {statusOption.label}
-                          </option>
-                        ))}
-                      </select>
-                      <div className="mt-2 text-[10px] font-bold uppercase tracking-widest text-emerald-600">
-                        Admin approval required
-                      </div>
-                    </>
-                  ) : (
-                    <>
-                      <div className="mt-3 text-[10px] font-bold uppercase tracking-widest text-slate-400">
-                        View-only access
-                      </div>
-                    </>
-                  )}
-                </div>
-              </div>
-            </Motion.div>
-          ))}
-        </div>
-      )}
+      <PropertyWorkspace
+        loading={loading}
+        assets={filteredAssets}
+        viewMode={viewMode}
+        emptyAction={
+          canOpenCreateModal
+            ? {
+              label: canManage ? "Add Asset" : "Add Request",
+              onClick: openAddModal,
+            }
+            : undefined
+        }
+        actionProps={{
+          canManage,
+          canDeleteDirect,
+          canRequestDelete,
+          canOpenEditModal,
+          canRequestStatusChange,
+          deletingId,
+          updatingStatusId,
+          requestingStatusId,
+          statusOptions: STATUS_UPDATE_OPTIONS,
+          getAssetTitle,
+          formatPrice,
+          formatCurrency,
+          formatSoldLeadLabel,
+          formatSoldPaymentModeLabel,
+          formatSoldPaymentTypeLabel,
+          onView: handleOpenDetails,
+          onEdit: handleOpenEditModal,
+          onDelete: handleDeleteAsset,
+          onShare: handleShareAsset,
+          onStatusChange: handleStatusChange,
+          onStatusChangeRequest: handleStatusChangeRequest,
+        }}
+      />
 
       <AnimatePresence>
         {((isAddModalOpen && canOpenCreateModal) || (isEditModalOpen && canOpenEditModal)) && (
@@ -2168,7 +2016,7 @@ const AssetVault = () => {
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
-            className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 flex items-center justify-center p-4"
+            className="mobile-bottom-sheet fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 flex items-center justify-center p-4"
           >
             <Motion.div
               initial={{ scale: 0.95, y: 20 }}
@@ -3076,7 +2924,7 @@ const AssetVault = () => {
                   {isReservedStatusValue(formData.status) ? (
                     <div className="col-span-2">
                       <label className="text-[10px] font-bold text-amber-700 uppercase tracking-widest">
-                        Reservation Reason *
+                        Block Reason *
                       </label>
                       <textarea
                         value={formData.reservationReason}
@@ -3086,7 +2934,7 @@ const AssetVault = () => {
                             reservationReason: e.target.value,
                           }))
                         }
-                        placeholder="Mention why this property is reserved"
+                        placeholder="Mention why this property is being blocked"
                         rows={3}
                         className="mt-1 w-full p-3 bg-amber-50 border border-amber-200 rounded-xl text-sm text-slate-900 focus:outline-none focus:border-amber-500 resize-none"
                       />
@@ -3277,7 +3125,7 @@ const AssetVault = () => {
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
-            className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 p-4 backdrop-blur-sm"
+            className="mobile-bottom-sheet fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 p-4 backdrop-blur-sm"
           >
             <Motion.div
               initial={{ scale: 0.95, y: 20 }}
@@ -3285,13 +3133,13 @@ const AssetVault = () => {
               exit={{ scale: 0.95, y: 20 }}
               className="w-full max-w-lg overflow-hidden rounded-2xl bg-white shadow-2xl"
             >
-              <div className="flex items-center justify-between border-b border-slate-100 bg-slate-50/60 p-5">
+              <div className="flex items-center justify-between border-b border-slate-100 bg-slate-50/80 p-5">
                 <div>
                   <h3 className="font-display text-lg text-slate-900">
-                    Reserve Property
+                    Confirm Property Block
                   </h3>
                   <p className="mt-1 text-xs text-slate-500">
-                    Link this property with a lead and add reservation reason.
+                    Link this property with a lead before changing it to Blocked.
                   </p>
                 </div>
                 <button
@@ -3305,7 +3153,7 @@ const AssetVault = () => {
               </div>
 
               <div className="space-y-4 p-5">
-                <div className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-2">
+                <div className="rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3">
                   <p className="text-[10px] font-bold uppercase tracking-widest text-slate-400">
                     Property
                   </p>
@@ -3315,11 +3163,14 @@ const AssetVault = () => {
                   <p className="mt-1 text-xs text-slate-500">
                     {String(reserveTargetAsset?.location || "-").trim() || "-"}
                   </p>
+                  <p className="mt-2 text-xs font-semibold text-amber-800">
+                    This will mark the property as Blocked and keep the lead reference for follow-up.
+                  </p>
                 </div>
 
                 <div>
                   <label className="text-[10px] font-bold uppercase tracking-widest text-slate-400">
-                    Reserve For Lead *
+                    Lead *
                   </label>
                   <select
                     value={reserveLeadId}
@@ -3336,20 +3187,26 @@ const AssetVault = () => {
                       </option>
                     ))}
                   </select>
+                  <p className="mt-1 text-[11px] text-slate-500">
+                    Required for both direct blocks and approval requests.
+                  </p>
                 </div>
 
                 <div>
                   <label className="text-[10px] font-bold uppercase tracking-widest text-slate-400">
-                    Reservation Reason *
+                    Block Reason *
                   </label>
                   <textarea
                     rows={3}
                     value={reserveReason}
                     onChange={(event) => setReserveReason(event.target.value)}
-                    placeholder="Why are you reserving this property?"
+                    placeholder="Mention why this property is being blocked"
                     disabled={reserveSubmitting}
                     className="mt-1 w-full resize-none rounded-xl border border-slate-200 bg-white p-3 text-sm text-slate-900 focus:border-emerald-500 focus:outline-none disabled:opacity-60"
                   />
+                  <p className="mt-1 text-[11px] text-slate-500">
+                    This reason appears in inventory history and pending approval review.
+                  </p>
                 </div>
               </div>
 
@@ -3369,8 +3226,8 @@ const AssetVault = () => {
                   className="flex-1 rounded-xl bg-emerald-600 py-2.5 text-xs font-bold uppercase tracking-widest text-white hover:bg-emerald-700 disabled:cursor-not-allowed disabled:bg-slate-400"
                 >
                   {reserveSubmitting
-                    ? (reserveMode === "request" ? "Submitting..." : "Reserving...")
-                    : (reserveMode === "request" ? "Submit Reserve Request" : "Reserve Property")}
+                    ? (reserveMode === "request" ? "Submitting..." : "Blocking...")
+                    : (reserveMode === "request" ? "Submit Block Request" : "Block Property")}
                 </button>
               </div>
             </Motion.div>
