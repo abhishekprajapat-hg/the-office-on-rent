@@ -66,6 +66,12 @@ router.get(
   leadController.getCompanyPerformanceOverview
 );
 
+router.get(
+  "/:leadId",
+  authMiddleware.protect,
+  leadController.getLeadById
+);
+
 router.patch(
   "/status-requests/:requestId/approve",
   writeLimiter,

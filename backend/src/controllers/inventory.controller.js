@@ -256,6 +256,7 @@ exports.getInventory = async (req, res) => {
       filters: {
         status: req.query?.status,
         search: req.query?.search,
+        type: req.query?.type,
         inventoryType: req.query?.inventoryType,
         propertyType: req.query?.propertyType,
         bhk: req.query?.bhk,

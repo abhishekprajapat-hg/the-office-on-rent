@@ -55,6 +55,15 @@ const httpMetricsMiddleware = (req, res, next) => {
 
   httpRequestsInFlight.inc({ method });
 
+  const originalWriteHead = res.writeHead;
+  res.writeHead = function writeHeadWithResponseTime(...args) {
+    if (!res.hasHeader("X-Response-Time-Ms")) {
+      const durationMs = Number(process.hrtime.bigint() - start) / 1e6;
+      res.setHeader("X-Response-Time-Ms", String(Number(durationMs.toFixed(2))));
+    }
+    return originalWriteHead.apply(this, args);
+  };
+
   const finalize = () => {
     if (completed) return;
     completed = true;
@@ -62,6 +71,7 @@ const httpMetricsMiddleware = (req, res, next) => {
     const durationMs = Number(process.hrtime.bigint() - start) / 1e6;
     const route = resolveRouteLabel(req);
     const statusCode = String(res.statusCode || 200);
+    const roundedDurationMs = Number(durationMs.toFixed(2));
 
     httpRequestsInFlight.dec({ method });
     httpRequestsTotal.inc({ method, route, status_code: statusCode });
@@ -76,7 +86,7 @@ const httpMetricsMiddleware = (req, res, next) => {
         method,
         route,
         statusCode: res.statusCode,
-        durationMs: Number(durationMs.toFixed(2)),
+        durationMs: roundedDurationMs,
         message: "Slow request detected",
       });
     }

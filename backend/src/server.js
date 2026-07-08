@@ -44,6 +44,19 @@ const isAllowedOrigin = (origin) => {
 };
 
 const io = new Server(httpServer, {
+  pingInterval: toPositiveInt(process.env.SOCKET_PING_INTERVAL_MS, 25000),
+  pingTimeout: toPositiveInt(process.env.SOCKET_PING_TIMEOUT_MS, 20000),
+  maxHttpBufferSize: toPositiveInt(
+    process.env.SOCKET_MAX_HTTP_BUFFER_BYTES,
+    1_000_000,
+  ),
+  connectionStateRecovery: {
+    maxDisconnectionDuration: toPositiveInt(
+      process.env.SOCKET_RECOVERY_DURATION_MS,
+      120000,
+    ),
+    skipMiddlewares: false,
+  },
   cors: {
     origin: (origin, callback) => {
       if (isAllowedOrigin(origin)) {

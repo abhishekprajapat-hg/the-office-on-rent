@@ -481,6 +481,12 @@ html.theme-dark .workspace-shell .custom-scrollbar::-webkit-scrollbar-thumb {
   padding: 1rem 0.75rem 1.25rem !important;
 }
 
+html.theme-dark .workspace-main-content:not(.workspace-main-content-chat) > .ui-page-shell:not(.chat-page) {
+  background:
+    radial-gradient(circle at 12% 0%, rgba(37, 99, 235, 0.16), transparent 30%),
+    linear-gradient(180deg, #0f172a 0%, #020617 100%) !important;
+}
+
 @media (min-width: 640px) {
   .workspace-main-content:not(.workspace-main-content-chat) > .ui-page-shell:not(.chat-page) {
     padding-left: 1rem !important;
@@ -1079,6 +1085,24 @@ html.theme-dark .workspace-shell .bg-slate-50\/85,
 html.theme-dark .workspace-shell .bg-slate-100 {
   background: var(--clay-surface) !important;
   border-color: var(--clay-border-strong) !important;
+}
+
+.brand-logo-frame,
+.workspace-shell .brand-logo-frame,
+html.theme-dark .brand-logo-frame,
+html.theme-dark .workspace-shell .brand-logo-frame {
+  background: #ffffff !important;
+  background-color: #ffffff !important;
+  border-color: rgba(203, 213, 225, 0.95) !important;
+  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.12) !important;
+}
+
+.brand-logo,
+.workspace-shell .brand-logo,
+html.theme-dark .brand-logo,
+html.theme-dark .workspace-shell .brand-logo {
+  background: #ffffff !important;
+  background-color: #ffffff !important;
 }
 
 /* Chat workspace polish */

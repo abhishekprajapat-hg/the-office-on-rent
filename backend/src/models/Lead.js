@@ -306,10 +306,21 @@ const leadSchema = new mongoose.Schema(
 
 leadSchema.index({ createdAt: -1 });
 leadSchema.index({ companyId: 1, createdAt: -1 });
+// Speeds duplicate checks and Meta webhook upserts scoped to one tenant.
+leadSchema.index({ companyId: 1, phone: 1 });
 leadSchema.index({ createdBy: 1, createdAt: -1 });
 leadSchema.index({ assignedTo: 1, createdAt: -1 });
 leadSchema.index({ companyId: 1, assignedTo: 1, createdAt: -1 });
 leadSchema.index({ companyId: 1, status: 1, createdAt: -1 });
+// Dashboard and Samvid report cards sort fresh leads by updatedAt within tenant/status scopes.
+leadSchema.index({ companyId: 1, status: 1, updatedAt: -1 });
+leadSchema.index({ companyId: 1, assignedTo: 1, updatedAt: -1 });
+leadSchema.index({ companyId: 1, createdBy: 1, updatedAt: -1 });
+leadSchema.index({ companyId: 1, assignedManager: 1, status: 1, createdAt: -1 });
+leadSchema.index({ companyId: 1, assignedExecutive: 1, status: 1, createdAt: -1 });
+leadSchema.index({ companyId: 1, assignedFieldExecutive: 1, status: 1, createdAt: -1 });
+// Follow-up pages filter by tenant and nextFollowUp ranges, then exclude closed/lost statuses.
+leadSchema.index({ companyId: 1, nextFollowUp: 1, status: 1 });
 leadSchema.index({ assignedManager: 1, createdAt: -1 });
 leadSchema.index({ assignedExecutive: 1, createdAt: -1 });
 leadSchema.index({ assignedFieldExecutive: 1, createdAt: -1 });

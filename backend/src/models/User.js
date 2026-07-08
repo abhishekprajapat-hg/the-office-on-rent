@@ -123,7 +123,11 @@ const userSchema = new mongoose.Schema(
 );
 
 userSchema.index({ companyId: 1, role: 1, isActive: 1, createdAt: 1 });
+// User/admin lists are tenant scoped and sorted newest-first without always filtering role.
+userSchema.index({ companyId: 1, createdAt: -1 });
 userSchema.index({ companyId: 1, parentId: 1, role: 1, isActive: 1 });
+// Team pickers often filter direct reports and sort by display name.
+userSchema.index({ companyId: 1, parentId: 1, isActive: 1, name: 1 });
 userSchema.index({ companyId: 1, role: 1, "liveLocation.updatedAt": -1 });
 
 userSchema.pre("save", async function () {

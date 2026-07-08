@@ -4,7 +4,6 @@ import {
   Calendar,
   CheckCircle,
   Clock3,
-  LayoutGrid,
   MessageSquare,
   Target,
   TrendingUp,
@@ -18,15 +17,6 @@ import Performance from "../reports/Performance";
 import LeadPerformancePanel from "../../components/dashboard/LeadPerformancePanel";
 import api from "../../services/api";
 import { toErrorMessage } from "../../utils/errorMessage";
-
-const TABS = [
-  { id: "dashboard", label: "Dashboard", icon: LayoutGrid },
-  { id: "leads", label: "My Leads", icon: Users },
-  { id: "inventory", label: "Inventory", icon: Building2 },
-  { id: "chat", label: "Chat", icon: MessageSquare },
-  { id: "calendar", label: "Schedule", icon: Calendar },
-  { id: "targets", label: "Targets", icon: Target },
-];
 
 const ExecutiveDashboard = () => {
   const [activeTab, setActiveTab] = useState("dashboard");
@@ -66,11 +56,6 @@ const ExecutiveDashboard = () => {
     fetchStats();
   }, []);
 
-  const tabLabel = useMemo(() => {
-    const found = TABS.find((tab) => tab.id === activeTab);
-    return found ? found.label : "Dashboard";
-  }, [activeTab]);
-
   const renderContent = () => {
     if (activeTab === "dashboard") {
       return <ExecutiveOverview stats={stats} leads={leadRows} onOpen={setActiveTab} />;
@@ -96,30 +81,6 @@ const ExecutiveDashboard = () => {
 
   return (
     <div className="ui-page-shell flex h-full w-full flex-col overflow-hidden">
-      <div className="shrink-0">
-        <div className="flex flex-wrap gap-2">
-          {TABS.map((tab) => {
-            const Icon = tab.icon;
-            const active = activeTab === tab.id;
-            return (
-              <button
-                key={tab.id}
-                type="button"
-                onClick={() => setActiveTab(tab.id)}
-                className={`inline-flex items-center gap-2 rounded-xl border px-3 py-2 text-xs font-semibold transition-colors ${
-                  active
-                    ? "border-cyan-300 bg-cyan-100/70 text-cyan-800"
-                    : "border-slate-200 bg-white/70 text-slate-600 hover:border-cyan-200 hover:text-cyan-700"
-                }`}
-              >
-                <Icon size={14} />
-                {tab.label}
-              </button>
-            );
-          })}
-        </div>
-      </div>
-
       <div className="min-h-0 flex-1 overflow-hidden">
         {renderContent()}
       </div>

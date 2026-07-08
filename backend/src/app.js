@@ -11,6 +11,11 @@ const { resolveTenantContext } = require("./middleware/tenant.middleware");
 const app = express();
 app.disable("x-powered-by");
 
+const jsonBodyLimit = process.env.JSON_BODY_LIMIT || "768kb";
+const urlencodedBodyLimit = process.env.URLENCODED_BODY_LIMIT || jsonBodyLimit;
+const compressionThreshold =
+  Number.parseInt(process.env.COMPRESSION_THRESHOLD_BYTES, 10) || 1024;
+
 const trustProxyRaw = String(process.env.TRUST_PROXY || "").trim().toLowerCase();
 if (trustProxyRaw) {
   if (trustProxyRaw === "true") {
@@ -43,7 +48,13 @@ const isAllowedOrigin = (origin) => {
 };
 
 app.use(helmet());
-app.use(compression({ threshold: 1024 }));
+app.use(compression({
+  threshold: compressionThreshold,
+  filter: (req, res) => {
+    if (req.headers["x-no-compression"]) return false;
+    return compression.filter(req, res);
+  },
+}));
 app.use(
   cors({
     origin: (origin, callback) => {
@@ -59,8 +70,8 @@ app.use(
 app.use(attachRequestId);
 app.use(httpLogger);
 app.use(httpMetricsMiddleware);
-app.use(express.json({ limit: "1mb" }));
-app.use(express.urlencoded({ extended: false, limit: "1mb" }));
+app.use(express.json({ limit: jsonBodyLimit }));
+app.use(express.urlencoded({ extended: false, limit: urlencodedBodyLimit }));
 app.use(resolveTenantContext);
 
 app.get("/api/health", (_req, res) => {
@@ -69,6 +80,12 @@ app.get("/api/health", (_req, res) => {
 
 app.get("/api/metrics", async (req, res) => {
   const requiredToken = String(process.env.METRICS_BEARER_TOKEN || "").trim();
+  const isProduction = process.env.NODE_ENV === "production";
+
+  if (isProduction && !requiredToken) {
+    return res.status(404).json({ message: "Route not found" });
+  }
+
   if (!requiredToken) {
     return metricsHandler(req, res);
   }
@@ -111,7 +128,7 @@ app.use((error, req, res, _next) => {
   req.log?.error({
     requestId: req.requestId || null,
     error: error.message,
-    stack: error.stack,
+    stack: process.env.NODE_ENV === "production" ? undefined : error.stack,
     message: "Unhandled application error",
   });
 

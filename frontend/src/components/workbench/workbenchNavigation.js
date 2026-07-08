@@ -109,7 +109,7 @@ export const WORKBENCH_MENU = {
     {
       group: "Pipeline",
       items: [
-        { label: "Pipeline", path: "/leads", icon: Users, roles: ["ADMIN", "MANAGER", "EXECUTIVE", "CHANNEL_PARTNER"] },
+        { label: "Pipeline", path: "/leads", icon: Users, roles: ["ADMIN", "MANAGER", "CHANNEL_PARTNER"] },
         { label: "My Leads", path: "/my-leads", icon: Briefcase, roles: ["EXECUTIVE", "FIELD_EXECUTIVE"] },
       ],
     },

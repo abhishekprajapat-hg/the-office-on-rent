@@ -1,5 +1,5 @@
-import React, { useEffect, useMemo, useState } from "react";
-import { motion } from "framer-motion";
+import React, { useCallback, useEffect, useMemo, useState } from "react";
+import { motion as Motion } from "framer-motion";
 import {
   Calendar as CalendarIcon,
   ChevronLeft,
@@ -170,11 +170,9 @@ const MasterSchedule = () => {
   });
 
   const isDark = (localStorage.getItem("theme") || "light") === "dark";
-  const userRole = String(localStorage.getItem("role") || "");
-
   const [tasks, setTasks] = useState([]);
 
-  const loadScheduleData = async () => {
+  const loadScheduleData = useCallback(async () => {
     try {
       setLoading(true);
       setError("");
@@ -198,11 +196,11 @@ const MasterSchedule = () => {
     } finally {
       setLoading(false);
     }
-  };
+  }, [form.leadId]);
 
   useEffect(() => {
     loadScheduleData();
-  }, []);
+  }, [loadScheduleData]);
 
   useEffect(() => {
     const now = new Date(selectedDate);
@@ -703,7 +701,7 @@ const MasterSchedule = () => {
 
                           return (
                             <div key={lead._id} className="space-y-3">
-                              <motion.div
+                              <Motion.div
                                 initial={{ opacity: 0, x: 10 }}
                                 animate={{ opacity: 1, x: 0 }}
                                 transition={{ delay: index * 0.04 }}
@@ -773,7 +771,7 @@ const MasterSchedule = () => {
                                     <User size={12} /> {lead.status}
                                   </div>
                                 </div>
-                              </motion.div>
+                              </Motion.div>
 
                               {isActiveLead && isDiaryForLead ? (
                                 <div className={`rounded-xl border p-4 space-y-3 ${isDark ? "border-cyan-500/40 bg-slate-900/70" : "border-sky-300 bg-sky-50/60"}`}>
@@ -868,7 +866,7 @@ const MasterSchedule = () => {
                         selectedDayTasks.map((task, index) => {
                           const isCompleted = task.status === "COMPLETED";
                           return (
-                            <motion.div
+                            <Motion.div
                               key={task._id}
                               initial={{ opacity: 0, x: 10 }}
                               animate={{ opacity: 1, x: 0 }}
@@ -914,7 +912,7 @@ const MasterSchedule = () => {
                                   )}
                                 </div>
                               </div>
-                            </motion.div>
+                            </Motion.div>
                           );
                         })
                       )}
@@ -928,7 +926,7 @@ const MasterSchedule = () => {
 
       {detailsLead ? (
         <div className="fixed inset-0 z-[80] flex justify-end bg-slate-900/40" onClick={handleCloseLeadDetails}>
-          <motion.aside
+          <Motion.aside
             initial={{ opacity: 0, x: 36 }}
             animate={{ opacity: 1, x: 0 }}
             transition={{ duration: 0.2 }}
@@ -1065,7 +1063,7 @@ const MasterSchedule = () => {
                 )}
               </div>
             </div>
-          </motion.aside>
+          </Motion.aside>
         </div>
       ) : null}
     </div>

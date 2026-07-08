@@ -1,3 +1,5 @@
+import { memo } from "react";
+
 const normalizeHeaderTitle = (pageHeader = {}) => {
   const rawTitle = String(pageHeader?.title || "Workspace").trim();
   const cleanTitle = rawTitle
@@ -45,4 +47,4 @@ const AppTopCommandBar = ({
   );
 };
 
-export default AppTopCommandBar;
+export default memo(AppTopCommandBar);

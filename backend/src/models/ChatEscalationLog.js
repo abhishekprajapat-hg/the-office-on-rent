@@ -56,5 +56,8 @@ const chatEscalationLogSchema = new mongoose.Schema(
 );
 
 chatEscalationLogSchema.index({ room: 1, createdAt: -1 });
+// Non-admin escalation history filters by manager or initiator and sorts newest-first.
+chatEscalationLogSchema.index({ managerId: 1, createdAt: -1 });
+chatEscalationLogSchema.index({ initiatedBy: 1, createdAt: -1 });
 
 module.exports = mongoose.model("ChatEscalationLog", chatEscalationLogSchema);

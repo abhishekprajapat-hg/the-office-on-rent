@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useEffect, useState } from "react";
 import {
   Calendar,
   LayoutGrid,
@@ -85,11 +85,6 @@ const FieldDashboard = () => {
 
     fetchDashboardData();
   }, []);
-
-  const tabLabel = useMemo(() => {
-    const found = TABS.find((tab) => tab.id === activeTab);
-    return found ? found.label : "Dashboard";
-  }, [activeTab]);
 
   const completeTask = (taskId) => {
     setTasks((prev) =>

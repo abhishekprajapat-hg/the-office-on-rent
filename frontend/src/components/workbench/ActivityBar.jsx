@@ -1,3 +1,4 @@
+import { memo, useMemo } from "react";
 import { Link, useLocation } from "react-router-dom";
 import { LogOut, Moon, Sun, UserCircle2 } from "lucide-react";
 import { IconButton, Tooltip, cn } from "../ui";
@@ -19,13 +20,16 @@ const ActivityBar = ({
   onMobileMenuOpen,
 }) => {
   const location = useLocation();
-  const sections = getVisibleSections(userRole, user);
-  const activeSectionId = getActiveSectionId(location.pathname, userRole, user);
+  const sections = useMemo(() => getVisibleSections(userRole, user), [userRole, user]);
+  const activeSectionId = useMemo(
+    () => getActiveSectionId(location.pathname, userRole, user),
+    [location.pathname, userRole, user],
+  );
 
   return (
     <aside className="hidden h-full w-14 shrink-0 flex-col border-r border-slate-200 bg-slate-950 text-slate-300 shadow-crm-panel md:flex">
       <div className="flex h-14 items-center justify-center border-b border-white/10 p-1.5">
-        <div className="flex h-10 w-11 items-center justify-center rounded-md border border-slate-200 bg-white p-0.5 shadow-sm">
+        <div className="brand-logo-frame flex h-10 w-11 items-center justify-center rounded-md border border-slate-200 bg-white p-0.5 shadow-sm">
           <BrandLogo className="h-full w-full" />
         </div>
       </div>
@@ -102,4 +106,4 @@ const ActivityBar = ({
   );
 };
 
-export default ActivityBar;
+export default memo(ActivityBar);

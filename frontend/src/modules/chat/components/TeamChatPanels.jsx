@@ -8,7 +8,6 @@ import {
 
 export const TeamChatSidebar = ({
   mobileSidebarVisible,
-  activeContact,
   isDark,
   conversations,
   unreadTotal,

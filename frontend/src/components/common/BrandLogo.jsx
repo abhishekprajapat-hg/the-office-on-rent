@@ -4,7 +4,7 @@ const BrandLogo = ({ className = "", alt = "The Office On Rent logo" }) => (
   <img
     src="/theofficeonrentlogo.png"
     alt={alt}
-    className={`bg-white object-contain ${className}`.trim()}
+    className={`brand-logo bg-white object-contain ${className}`.trim()}
   />
 );
 

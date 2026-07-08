@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback, useMemo } from "react";
-import { motion, AnimatePresence } from "framer-motion";
+import { motion as Motion, AnimatePresence } from "framer-motion";
 import {
   Plus,
   Edit2,
@@ -521,7 +521,7 @@ export default function TaskManager({ theme = "light" }) {
       {/* Real-time Notifications */}
       <AnimatePresence>
         {success && (
-          <motion.div 
+          <Motion.div 
             initial={{ opacity: 0, y: -20 }}
             animate={{ opacity: 1, y: 0 }}
             exit={{ opacity: 0, y: -20 }}
@@ -529,10 +529,10 @@ export default function TaskManager({ theme = "light" }) {
           >
             <CheckCircle size={16} />
             {success}
-          </motion.div>
+          </Motion.div>
         )}
         {error && (
-          <motion.div 
+          <Motion.div 
             initial={{ opacity: 0, y: -20 }}
             animate={{ opacity: 1, y: 0 }}
             exit={{ opacity: 0, y: -20 }}
@@ -540,7 +540,7 @@ export default function TaskManager({ theme = "light" }) {
           >
             <AlertTriangle size={16} />
             {error}
-          </motion.div>
+          </Motion.div>
         )}
       </AnimatePresence>
 
@@ -811,7 +811,7 @@ export default function TaskManager({ theme = "light" }) {
                         const progress = getSubtasksProgress(task);
 
                         return (
-                          <motion.div
+                          <Motion.div
                             key={task._id}
                             layoutId={task._id}
                             draggable
@@ -962,7 +962,7 @@ export default function TaskManager({ theme = "light" }) {
                                 )}
                               </div>
                             )}
-                          </motion.div>
+                          </Motion.div>
                         );
                       })}
                     </AnimatePresence>
@@ -994,7 +994,6 @@ export default function TaskManager({ theme = "light" }) {
                 <tbody className={`divide-y ${isDark ? "divide-white/5" : "divide-slate-200"}`}>
                   {sortedTasks.map((task) => {
                     const priority = PRIORITIES.find(p => p.value === task.priority) || PRIORITIES[1];
-                    const col = STATUS_COLUMNS.find(c => c.id === task.status) || STATUS_COLUMNS[1];
                     const expired = isOverdue(task);
                     const progress = getSubtasksProgress(task);
 
@@ -1108,7 +1107,7 @@ export default function TaskManager({ theme = "light" }) {
         {isModalOpen && (
           <div className="fixed inset-0 z-[70] flex items-center justify-center p-4">
             {/* Backdrop */}
-            <motion.div 
+            <Motion.div 
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}
               exit={{ opacity: 0 }}
@@ -1117,7 +1116,7 @@ export default function TaskManager({ theme = "light" }) {
             />
 
             {/* Modal Box */}
-            <motion.div
+            <Motion.div
               initial={{ opacity: 0, scale: 0.95, y: 10 }}
               animate={{ opacity: 1, scale: 1, y: 0 }}
               exit={{ opacity: 0, scale: 0.95, y: 10 }}
@@ -1393,7 +1392,7 @@ export default function TaskManager({ theme = "light" }) {
                   </button>
                 </div>
               </form>
-            </motion.div>
+            </Motion.div>
           </div>
         )}
       </AnimatePresence>

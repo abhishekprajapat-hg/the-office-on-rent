@@ -95,6 +95,10 @@ const inventoryRequestSchema = new mongoose.Schema(
 
 inventoryRequestSchema.index({ status: 1, companyId: 1, createdAt: -1 });
 inventoryRequestSchema.index({ companyId: 1, requestedBy: 1, createdAt: -1 });
+// Manager approval queues add teamId to the tenant/status filter before newest-first sorting.
+inventoryRequestSchema.index({ companyId: 1, status: 1, teamId: 1, createdAt: -1 });
+// Prevent duplicate pending delete-request scans from walking all requests for an inventory item.
+inventoryRequestSchema.index({ companyId: 1, inventoryId: 1, type: 1, status: 1 });
 
 inventoryRequestSchema.pre("validate", function syncLegacyProposedFields() {
   if (!this.proposedData && this.proposedChanges) {

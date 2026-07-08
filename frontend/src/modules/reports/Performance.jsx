@@ -50,7 +50,7 @@ const safeTarget = (row) => ({
 const MetricCard = ({
   title,
   subtitle,
-  icon: Icon,
+  icon: IconComponent,
   target,
   achieved,
   percent,
@@ -65,7 +65,7 @@ const MetricCard = ({
         <p className="mt-1 text-xs text-slate-500">{subtitle}</p>
       </div>
       <div className="rounded-lg bg-cyan-50 p-2 text-cyan-600">
-        <Icon size={15} />
+        {React.createElement(IconComponent, { size: 15 })}
       </div>
     </div>
 

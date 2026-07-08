@@ -10,6 +10,11 @@ export const getAllLeads = async (params = {}) => {
   return res.data?.leads || [];
 };
 
+export const getLeadById = async (leadId) => {
+  const res = await api.get(`/leads/${leadId}`);
+  return res.data?.lead || null;
+};
+
 export const getLeadPaymentRequests = async (params = {}) => {
   const res = await api.get("/leads/payment-requests", { params });
   return res.data?.requests || [];
@@ -21,7 +26,7 @@ export const createLead = async (payload) => {
 };
 
 export const bulkUploadLeads = async (rows = []) => {
-  const res = await api.post("/leads/bulk", { rows });
+  const res = await api.post("/leads/bulk", { rows }, { timeout: 120000 });
   return res.data || {};
 };
 

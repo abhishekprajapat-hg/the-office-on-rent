@@ -668,7 +668,7 @@ const parseDateRangeFromQuery = (query) => {
   const now = new Date();
 
   const betweenMatch = normalized.match(
-    /\b(?:between|from)\s+([a-z0-9\-\/\s,]+?)\s+(?:and|to)\s+([a-z0-9\-\/\s,]+?)(?:\b|$)/i,
+    /\b(?:between|from)\s+([a-z0-9\-/\s,]+?)\s+(?:and|to)\s+([a-z0-9\-/\s,]+?)(?:\b|$)/i,
   );
   if (betweenMatch?.[1] && betweenMatch?.[2]) {
     const startRaw = parseNaturalDateToken(betweenMatch[1]);

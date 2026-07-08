@@ -8,6 +8,7 @@ This documentation set combines generated code-surface docs with curated workflo
 - [Web Frontend Pages and Components](./FRONTEND_WEB_DOCUMENTATION.md)
 - [Mobile Screens and Components](./MOBILE_APP_DOCUMENTATION.md)
 - [Backend Functionality and API Surface](./BACKEND_FUNCTIONALITY_DOCUMENTATION.md)
+- [VPS MongoDB Connection](./VPS_MONGODB_CONNECTION.md)
 - [Visual System Workflow](./SYSTEM_WORKFLOW_VISUAL.md)
 - [End-to-End Testing Flow](./TESTING_FLOW.md)
 

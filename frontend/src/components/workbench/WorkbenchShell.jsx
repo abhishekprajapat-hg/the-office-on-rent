@@ -1,5 +1,4 @@
-import { useMemo, useState } from "react";
-import { motion as Motion } from "framer-motion";
+import { memo, useCallback, useMemo, useState } from "react";
 import { useChatNotifications } from "../../context/useChatNotifications";
 import { cn } from "../ui";
 import ActivityBar from "./ActivityBar";
@@ -23,11 +22,12 @@ const WorkbenchShell = ({
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const { adminRequestUnread } = useChatNotifications();
   const userForNav = useMemo(() => user || {}, [user]);
+  const handleOpenMobileMenu = useCallback(() => setMobileMenuOpen(true), []);
+  const handleCloseMobileMenu = useCallback(() => setMobileMenuOpen(false), []);
+  const handleToggleSidebar = useCallback(() => setSidebarCollapsed((prev) => !prev), []);
 
   return (
-    <Motion.div
-      initial={{ opacity: 0 }}
-      animate={{ opacity: 1 }}
+    <div
       className={cn(
         "workspace-shell flex w-full bg-slate-100 text-slate-950 dark:bg-slate-950 dark:text-slate-100",
         shouldLockDocumentScroll ? "h-dvh overflow-hidden" : "min-h-screen",
@@ -40,7 +40,7 @@ const WorkbenchShell = ({
         onToggleTheme={onToggleTheme}
         onLogout={onLogout}
         unreadAlerts={adminRequestUnread}
-        onMobileMenuOpen={() => setMobileMenuOpen(true)}
+        onMobileMenuOpen={handleOpenMobileMenu}
       />
       <PrimarySidebar
         userRole={userRole}
@@ -49,9 +49,9 @@ const WorkbenchShell = ({
         onToggleTheme={onToggleTheme}
         onLogout={onLogout}
         collapsed={sidebarCollapsed}
-        onToggleCollapsed={() => setSidebarCollapsed((prev) => !prev)}
+        onToggleCollapsed={handleToggleSidebar}
         mobileOpen={mobileMenuOpen}
-        onMobileClose={() => setMobileMenuOpen(false)}
+        onMobileClose={handleCloseMobileMenu}
       />
 
       <main className="workspace-main app-page-bg relative min-w-0 flex flex-1 flex-col overflow-hidden">
@@ -59,7 +59,7 @@ const WorkbenchShell = ({
           userRole={userRole}
           user={userForNav}
           unreadAlerts={adminRequestUnread}
-          onMenuOpen={() => setMobileMenuOpen(true)}
+          onMenuOpen={handleOpenMobileMenu}
         />
         <AppTopCommandBar
           pageHeader={pageHeader}
@@ -75,8 +75,8 @@ const WorkbenchShell = ({
           {children}
         </div>
       </main>
-    </Motion.div>
+    </div>
   );
 };
 
-export default WorkbenchShell;
+export default memo(WorkbenchShell);

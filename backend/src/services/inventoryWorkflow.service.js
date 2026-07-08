@@ -34,6 +34,8 @@ const MAX_SALE_PAYMENT_REFERENCE_LENGTH = 120;
 const MAX_INVENTORY_REQUEST_NOTE_LENGTH = 500;
 const DEFAULT_SITE_VISIT_RADIUS_METERS =
   Number.parseInt(process.env.SITE_VISIT_RADIUS_METERS, 10) || 200;
+const INVENTORY_REQUEST_LIST_LIMIT =
+  Number.parseInt(process.env.INVENTORY_REQUEST_LIST_LIMIT, 10) || 200;
 const INVENTORY_CREATE_REQUEST_ROLES = Object.freeze([
   USER_ROLES.ADMIN,
   ...MANAGEMENT_ROLES,
@@ -56,6 +58,10 @@ const INVENTORY_DELETE_REQUEST_ROLES = Object.freeze([
   USER_ROLES.EXECUTIVE,
   USER_ROLES.FIELD_EXECUTIVE,
   USER_ROLES.CHANNEL_PARTNER,
+]);
+const INVENTORY_REVIEW_ROLES = Object.freeze([
+  USER_ROLES.ADMIN,
+  ...MANAGEMENT_ROLES,
 ]);
 const INVENTORY_TYPE_OPTIONS = Object.freeze(["COMMERCIAL", "RESIDENTIAL"]);
 const FURNISHING_STATUS_OPTIONS = Object.freeze([
@@ -706,6 +712,27 @@ const getTeamIdForUser = (user) => {
   return null;
 };
 
+const ensureCanReviewInventoryRequests = (user) => {
+  const userRole = String(user?.role || "").trim().toUpperCase();
+
+  if (!INVENTORY_REVIEW_ROLES.includes(userRole)) {
+    throw createHttpError(403, "Only ADMIN or MANAGER can review requests");
+  }
+};
+
+const buildPendingRequestReviewQuery = ({ user, requestId }) => {
+  const query = {
+    companyId: getCompanyIdForUser(user),
+    status: REQUEST_STATUS_PENDING,
+  };
+
+  if (requestId) {
+    query._id = requestId;
+  }
+
+  return query;
+};
+
 const ensureSaleDetailsLeadExists = async (saleDetails) => {
   if (!saleDetails?.leadId) return null;
 
@@ -1221,6 +1248,11 @@ const getInventoryList = async ({
 
   if (filters.status && INVENTORY_STATUSES.includes(filters.status)) {
     query.status = filters.status;
+  }
+
+  const normalizedType = sanitizeString(filters.type);
+  if (INVENTORY_TYPES.includes(normalizedType)) {
+    query.type = normalizedType;
   }
 
   const normalizedInventoryType = toUpperSnake(filters.inventoryType);
@@ -1941,22 +1973,13 @@ const createInventoryDeleteRequest = async ({
 };
 
 const getPendingRequests = async ({ user }) => {
-  if (![USER_ROLES.ADMIN, ...MANAGEMENT_ROLES].includes(user.role)) {
-    throw createHttpError(403, "Access denied");
-  }
-
-  const companyId = getCompanyIdForUser(user);
-  const query = {
-    status: REQUEST_STATUS_PENDING,
-    companyId,
-  };
-
-  if (isManagementRole(user.role)) {
-    query.teamId = user._id;
-  }
+  ensureCanReviewInventoryRequests(user);
+  const query = buildPendingRequestReviewQuery({ user });
 
   return applyRequestPopulates(
-    InventoryRequest.find(query).sort({ createdAt: -1 }),
+    InventoryRequest.find(query)
+      .sort({ createdAt: -1 })
+      .limit(INVENTORY_REQUEST_LIST_LIMIT),
   );
 };
 
@@ -1989,25 +2012,21 @@ const preApproveRequestByManager = async ({ user, requestId }) => {
 };
 
 const approveRequest = async ({ user, requestId, io }) => {
-  if (user.role !== USER_ROLES.ADMIN) {
-    throw createHttpError(403, "Only ADMIN can approve requests");
-  }
+  ensureCanReviewInventoryRequests(user);
 
   if (!isValidObjectId(requestId)) {
     throw createHttpError(400, "Invalid request id");
   }
 
-  const companyId = getCompanyIdForUser(user);
-  const request = await InventoryRequest.findOne({
-    _id: requestId,
-    companyId,
-    status: REQUEST_STATUS_PENDING,
-  }).populate("requestedBy", "_id role parentId companyId");
+  const request = await InventoryRequest.findOne(
+    buildPendingRequestReviewQuery({ user, requestId }),
+  ).populate("requestedBy", "_id role parentId companyId");
 
   if (!request) {
     throw createHttpError(404, "Pending request not found");
   }
 
+  const companyId = getCompanyIdForUser(user);
   let inventory = null;
   let approvedLeadId = null;
   let approvedLeadNote = "";
@@ -2176,9 +2195,7 @@ const approveRequest = async ({ user, requestId, io }) => {
 };
 
 const rejectRequest = async ({ user, requestId, rejectionReason, io }) => {
-  if (user.role !== USER_ROLES.ADMIN) {
-    throw createHttpError(403, "Only ADMIN can reject requests");
-  }
+  ensureCanReviewInventoryRequests(user);
 
   if (!isValidObjectId(requestId)) {
     throw createHttpError(400, "Invalid request id");
@@ -2189,12 +2206,9 @@ const rejectRequest = async ({ user, requestId, rejectionReason, io }) => {
     throw createHttpError(400, "rejectionReason is required");
   }
 
-  const companyId = getCompanyIdForUser(user);
-  const request = await InventoryRequest.findOne({
-    _id: requestId,
-    companyId,
-    status: REQUEST_STATUS_PENDING,
-  });
+  const request = await InventoryRequest.findOne(
+    buildPendingRequestReviewQuery({ user, requestId }),
+  );
 
   if (!request) {
     throw createHttpError(404, "Pending request not found");
@@ -2231,7 +2245,9 @@ const getMyRequests = async ({ user }) => {
     InventoryRequest.find({
       requestedBy: user._id,
       companyId,
-    }).sort({ createdAt: -1 }),
+    })
+      .sort({ createdAt: -1 })
+      .limit(INVENTORY_REQUEST_LIST_LIMIT),
   );
 };
 

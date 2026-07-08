@@ -1,3 +1,4 @@
+import { memo, useCallback, useMemo } from "react";
 import { NavLink, useLocation } from "react-router-dom";
 import { ChevronLeft, ChevronRight, LogOut, Moon, Sun, X } from "lucide-react";
 import { IconButton, cn } from "../ui";
@@ -19,11 +20,20 @@ const PrimarySidebar = ({
   onMobileClose,
 }) => {
   const location = useLocation();
-  const activeSectionId = getActiveSectionId(location.pathname, userRole, user);
-  const desktopGroups = getVisibleMenuGroups(activeSectionId, userRole, user);
-  const drawerGroups = getDrawerMenuGroups(userRole, user);
+  const activeSectionId = useMemo(
+    () => getActiveSectionId(location.pathname, userRole, user),
+    [location.pathname, userRole, user],
+  );
+  const desktopGroups = useMemo(
+    () => getVisibleMenuGroups(activeSectionId, userRole, user),
+    [activeSectionId, userRole, user],
+  );
+  const drawerGroups = useMemo(
+    () => getDrawerMenuGroups(userRole, user),
+    [userRole, user],
+  );
 
-  const renderNavGroups = (groups, isCollapsed = false) => (
+  const renderNavGroups = useCallback((groups, isCollapsed = false) => (
     <nav aria-label="Section navigation" className="custom-scrollbar min-h-0 flex-1 overflow-y-auto p-3">
       {groups.map((group) => (
         <div key={group.group} className="mb-4 last:mb-0">
@@ -63,9 +73,9 @@ const PrimarySidebar = ({
         </div>
       ))}
     </nav>
-  );
+  ), [onMobileClose]);
 
-  const sidebar = (groups, { mobile = false } = {}) => (
+  const sidebar = useCallback((groups, { mobile = false } = {}) => (
     <aside
       className={cn(
         "flex h-full shrink-0 flex-col border-r border-slate-200 bg-white/95 shadow-crm-soft backdrop-blur-xl dark:border-slate-800 dark:bg-slate-950/95",
@@ -128,7 +138,7 @@ const PrimarySidebar = ({
         </button>
       </div>
     </aside>
-  );
+  ), [collapsed, onLogout, onMobileClose, onToggleCollapsed, onToggleTheme, renderNavGroups, theme]);
 
   return (
     <>
@@ -148,4 +158,4 @@ const PrimarySidebar = ({
   );
 };
 
-export default PrimarySidebar;
+export default memo(PrimarySidebar);

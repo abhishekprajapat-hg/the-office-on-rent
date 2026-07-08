@@ -2,6 +2,7 @@ require("dotenv").config();
 const mongoose = require("mongoose");
 const Inventory = require("../models/Inventory");
 const User = require("../models/User");
+const { assertSeedAllowed } = require("./seedSafetyGuard.cjs");
 
 const DEFAULT_PER_TYPE = 2;
 
@@ -230,6 +231,7 @@ async function resolveSeederActors() {
 
 async function seedInventoryByType() {
   try {
+    assertSeedAllowed({ scriptName: "seed:inventory", destructive: true });
     const perType = parsePerTypeCount(
       process.argv[2] || process.env.INVENTORY_SEED_PER_TYPE,
       DEFAULT_PER_TYPE,

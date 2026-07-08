@@ -54,6 +54,10 @@ const getLeadPendingAmount = (lead) => {
 };
 
 const CLOSED_STATUS_SET = new Set(["REQUESTED", "CLOSED", "LOST"]);
+const INITIAL_VISIBLE_LEADS = 80;
+const VISIBLE_LEADS_INCREMENT = 80;
+const INITIAL_KANBAN_COLUMN_LEADS = 35;
+const KANBAN_COLUMN_INCREMENT = 35;
 
 const isLeadFollowUpDue = (lead, nowMs) => {
   if (!lead?.nextFollowUp || !nowMs) return false;
@@ -208,7 +212,7 @@ export const LeadsMatrixToolbar = ({
 
   return (
     <div
-      className={`ui-hero-card relative overflow-hidden rounded-2xl px-4 py-4 sm:px-6 sm:py-5 ${
+      className={`ui-hero-card relative overflow-hidden rounded-2xl px-3 py-3 sm:px-4 sm:py-3 ${
         isDark
           ? "border-slate-700/80 bg-slate-900/90 shadow-[0_20px_80px_rgba(2,6,23,0.55)]"
           : "border-slate-200 bg-white shadow-[0_18px_55px_rgba(15,23,42,0.12)]"
@@ -224,10 +228,10 @@ export const LeadsMatrixToolbar = ({
         <div className={`absolute inset-x-0 bottom-0 h-px ${isDark ? "bg-emerald-300/25" : "bg-emerald-300/60"}`} />
       </div>
 
-      <div className="relative z-10 grid grid-cols-1 gap-5 lg:grid-cols-12">
+      <div className="relative z-10 grid grid-cols-1 gap-3 lg:grid-cols-12">
         <div className="lg:col-span-8">
           <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">
-            <div className={`rounded-2xl border px-3 py-2 ${
+            <div className={`rounded-xl border px-3 py-2 ${
               isDark ? "border-slate-700/80 bg-slate-950/70" : "border-slate-200 bg-white/80"
             }`}>
               <p className={`text-[10px] font-bold uppercase tracking-[0.14em] ${
@@ -240,7 +244,7 @@ export const LeadsMatrixToolbar = ({
               </p>
             </div>
 
-            <div className={`rounded-2xl border px-3 py-2 ${
+            <div className={`rounded-xl border px-3 py-2 ${
               isDark ? "border-slate-700/80 bg-slate-950/70" : "border-slate-200 bg-white/80"
             }`}>
               <p className={`text-[10px] font-bold uppercase tracking-[0.14em] ${
@@ -253,7 +257,7 @@ export const LeadsMatrixToolbar = ({
               </p>
             </div>
 
-            <div className={`rounded-2xl border px-3 py-2 ${
+            <div className={`rounded-xl border px-3 py-2 ${
               isDark ? "border-rose-300/30 bg-rose-500/10" : "border-rose-200 bg-rose-50"
             }`}>
               <p className={`text-[10px] font-bold uppercase tracking-[0.14em] ${
@@ -267,12 +271,12 @@ export const LeadsMatrixToolbar = ({
             </div>
           </div>
 
-          <div className="mt-4">
+          <div className="mt-3">
             <div className="flex items-center justify-between text-[11px] font-semibold uppercase tracking-[0.14em]">
               <span className={isDark ? "text-slate-400" : "text-slate-500"}>View Coverage</span>
               <span className={isDark ? "text-cyan-200" : "text-cyan-700"}>{visibilityRatio}%</span>
             </div>
-            <div className={`mt-1 h-2.5 w-full overflow-hidden rounded-full ${
+            <div className={`mt-1 h-2 w-full overflow-hidden rounded-full ${
               isDark ? "bg-slate-800" : "bg-slate-200"
             }`}>
               <Motion.div
@@ -288,7 +292,7 @@ export const LeadsMatrixToolbar = ({
         </div>
 
         <div className="lg:col-span-4">
-          <div className={`h-full rounded-3xl border p-3 sm:p-4 ${
+          <div className={`h-full rounded-2xl border p-3 ${
             isDark
               ? "border-slate-700 bg-slate-950/70"
               : "border-slate-200 bg-white/80"
@@ -303,7 +307,7 @@ export const LeadsMatrixToolbar = ({
               <button
                 type="button"
                 onClick={onRefresh}
-                className={`h-11 rounded-xl border px-4 text-xs font-bold uppercase tracking-[0.14em] transition-colors ${
+                className={`h-10 rounded-xl border px-4 text-xs font-bold uppercase tracking-[0.14em] transition-colors ${
                   isDark
                     ? "border-slate-600 bg-slate-900 text-slate-100 hover:border-emerald-300/60 hover:text-emerald-100"
                     : "border-slate-300 bg-white text-slate-700 hover:border-emerald-400 hover:text-emerald-700"
@@ -317,7 +321,7 @@ export const LeadsMatrixToolbar = ({
                 <button
                   type="button"
                   onClick={onOpenAddModal}
-                  className={`h-11 rounded-xl px-4 text-xs font-bold uppercase tracking-[0.14em] text-white transition-colors ${
+                  className={`h-10 rounded-xl px-4 text-xs font-bold uppercase tracking-[0.14em] text-white transition-colors ${
                     isDark ? "bg-emerald-600 hover:bg-emerald-500" : "bg-slate-900 hover:bg-emerald-600"
                   } inline-flex items-center justify-center gap-2`}
                 >
@@ -330,7 +334,7 @@ export const LeadsMatrixToolbar = ({
                 <button
                   type="button"
                   onClick={onOpenBulkUploadModal}
-                  className={`h-11 rounded-xl border px-4 text-xs font-bold uppercase tracking-[0.14em] transition-colors ${
+                  className={`h-10 rounded-xl border px-4 text-xs font-bold uppercase tracking-[0.14em] transition-colors ${
                     isDark
                       ? "border-cyan-300/50 bg-cyan-500/10 text-cyan-100 hover:bg-cyan-500/20"
                       : "border-cyan-300 bg-cyan-50 text-cyan-700 hover:bg-cyan-100"
@@ -747,6 +751,19 @@ export const LeadsMatrixTable = ({
   nowMs,
 }) => {
   const [openStatusMenuId, setOpenStatusMenuId] = React.useState("");
+  const [visibleLeadCount, setVisibleLeadCount] = React.useState(INITIAL_VISIBLE_LEADS);
+  const [kanbanVisibleByStatus, setKanbanVisibleByStatus] = React.useState({});
+
+  React.useEffect(() => {
+    setVisibleLeadCount(INITIAL_VISIBLE_LEADS);
+    setKanbanVisibleByStatus({});
+  }, [filteredLeads.length, viewMode]);
+
+  const visibleLeads = React.useMemo(
+    () => filteredLeads.slice(0, visibleLeadCount),
+    [filteredLeads, visibleLeadCount],
+  );
+  const hiddenLeadCount = Math.max(0, filteredLeads.length - visibleLeads.length);
 
   const isFollowUpDue = (lead) => {
     return isLeadFollowUpDue(lead, nowMs);
@@ -884,6 +901,10 @@ export const LeadsMatrixTable = ({
               const rows = filteredLeads.filter(
                 (lead) => String(lead?.status || "NEW").toUpperCase() === status,
               );
+              const columnVisibleCount =
+                kanbanVisibleByStatus[status] || INITIAL_KANBAN_COLUMN_LEADS;
+              const visibleRows = rows.slice(0, columnVisibleCount);
+              const hiddenRowsCount = Math.max(0, rows.length - visibleRows.length);
 
               return (
                 <section
@@ -910,7 +931,7 @@ export const LeadsMatrixTable = ({
                       }`}>
                         No leads
                       </div>
-                    ) : rows.map((lead) => {
+                    ) : visibleRows.map((lead) => {
                       const pendingAmount = getLeadPendingAmount(lead);
                       const followUpDue = isFollowUpDue(lead);
                       return (
@@ -955,6 +976,24 @@ export const LeadsMatrixTable = ({
                         </button>
                       );
                     })}
+                    {hiddenRowsCount > 0 ? (
+                      <button
+                        type="button"
+                        onClick={() =>
+                          setKanbanVisibleByStatus((prev) => ({
+                            ...prev,
+                            [status]: columnVisibleCount + KANBAN_COLUMN_INCREMENT,
+                          }))
+                        }
+                        className={`w-full rounded-xl border border-dashed px-3 py-2 text-[11px] font-bold uppercase tracking-[0.12em] transition-colors ${
+                          isDark
+                            ? "border-slate-700 text-slate-400 hover:border-cyan-300/40 hover:text-cyan-100"
+                            : "border-slate-300 text-slate-500 hover:border-cyan-300 hover:text-cyan-700"
+                        }`}
+                      >
+                        Show {Math.min(KANBAN_COLUMN_INCREMENT, hiddenRowsCount)} more
+                      </button>
+                    ) : null}
                   </div>
                 </section>
               );
@@ -965,17 +1004,15 @@ export const LeadsMatrixTable = ({
         <>
           <div className="relative z-10 max-h-[68vh] overflow-y-auto p-2.5 custom-scrollbar md:hidden">
             <div className="space-y-2.5">
-              {filteredLeads.map((lead) => {
+              {visibleLeads.map((lead) => {
                 const pendingAmount = getLeadPendingAmount(lead);
                 const followUpDue = isFollowUpDue(lead);
                 const isStatusMenuOpen = openStatusMenuId === String(lead._id || "");
                 return (
-                  <Motion.div
+                  <div
                     role="button"
                     tabIndex={0}
                     key={lead._id}
-                    initial={{ opacity: 0, y: 6 }}
-                    animate={{ opacity: 1, y: 0 }}
                     onClick={() => onOpenLeadDetails(lead)}
                     onKeyDown={(event) => handleRowKeyDown(event, lead)}
                     className={`relative w-full rounded-2xl border p-3.5 text-left transition-all ${
@@ -1045,10 +1082,25 @@ export const LeadsMatrixTable = ({
                       Open profile
                       <ArrowUpRight size={12} />
                     </div>
-                  </Motion.div>
+                  </div>
                 );
               })}
             </div>
+            {hiddenLeadCount > 0 ? (
+              <div className="mt-3 flex justify-center">
+                <button
+                  type="button"
+                  onClick={() => setVisibleLeadCount((count) => count + VISIBLE_LEADS_INCREMENT)}
+                  className={`h-10 rounded-xl border px-4 text-xs font-bold uppercase tracking-widest transition-colors ${
+                    isDark
+                      ? "border-slate-700 bg-slate-950 text-slate-300 hover:border-cyan-300/40 hover:text-cyan-100"
+                      : "border-slate-200 bg-white text-slate-600 hover:border-cyan-300 hover:text-cyan-700"
+                  }`}
+                >
+                  Show {Math.min(VISIBLE_LEADS_INCREMENT, hiddenLeadCount)} more leads
+                </button>
+              </div>
+            ) : null}
           </div>
 
           <div className="relative z-10 hidden flex-1 flex-col md:flex">
@@ -1064,17 +1116,15 @@ export const LeadsMatrixTable = ({
 
             <div className="max-h-[66vh] overflow-y-auto p-2.5 custom-scrollbar">
               <div className="space-y-2">
-                {filteredLeads.map((lead) => {
+                {visibleLeads.map((lead) => {
                   const pendingAmount = getLeadPendingAmount(lead);
                   const followUpDue = isFollowUpDue(lead);
                   const isStatusMenuOpen = openStatusMenuId === String(lead._id || "");
                   return (
-                    <Motion.div
+                    <div
                       role="button"
                       tabIndex={0}
                       key={lead._id}
-                      initial={{ opacity: 0, y: 6 }}
-                      animate={{ opacity: 1, y: 0 }}
                       onClick={() => onOpenLeadDetails(lead)}
                       onKeyDown={(event) => handleRowKeyDown(event, lead)}
                       className={`group relative grid w-full grid-cols-12 items-center gap-3 overflow-visible rounded-2xl border px-4 py-3 text-left transition-all ${
@@ -1163,10 +1213,25 @@ export const LeadsMatrixTable = ({
                           <ArrowUpRight size={13} className={isDark ? "text-slate-500 group-hover:text-cyan-200" : "text-slate-400 group-hover:text-cyan-600"} />
                         </div>
                       </div>
-                    </Motion.div>
+                    </div>
                   );
                 })}
               </div>
+              {hiddenLeadCount > 0 ? (
+                <div className="mt-3 flex justify-center">
+                  <button
+                    type="button"
+                    onClick={() => setVisibleLeadCount((count) => count + VISIBLE_LEADS_INCREMENT)}
+                    className={`h-10 rounded-xl border px-4 text-xs font-bold uppercase tracking-widest transition-colors ${
+                      isDark
+                        ? "border-slate-700 bg-slate-950 text-slate-300 hover:border-cyan-300/40 hover:text-cyan-100"
+                        : "border-slate-200 bg-white text-slate-600 hover:border-cyan-300 hover:text-cyan-700"
+                    }`}
+                  >
+                    Show {Math.min(VISIBLE_LEADS_INCREMENT, hiddenLeadCount)} more leads
+                  </button>
+                </div>
+              ) : null}
             </div>
           </div>
         </>
@@ -1425,10 +1490,10 @@ export const BulkLeadUploadModal = ({
         }`}
         >
           <UploadCloud size={16} />
-          <span>{selectedFileName ? `Selected: ${selectedFileName}` : "Choose CSV File"}</span>
+          <span>{selectedFileName ? `Selected: ${selectedFileName}` : "Choose Excel / CSV File"}</span>
           <input
             type="file"
-            accept=".csv,text/csv"
+            accept=".xlsx,.xls,.csv,text/csv,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/vnd.ms-excel"
             className="hidden"
             onChange={(event) => onFileSelect(event.target.files?.[0] || null)}
           />
@@ -1438,19 +1503,19 @@ export const BulkLeadUploadModal = ({
           <p className={`mb-1 text-[11px] font-semibold uppercase tracking-[0.12em] ${
             isDark ? "text-slate-400" : "text-slate-500"
           }`}>
-            CSV Template
+            Bulk Sheet Format
           </p>
           <p className={`rounded-lg border px-3 py-2 text-xs font-mono ${
             isDark ? "border-slate-700 bg-slate-950 text-slate-300" : "border-slate-200 bg-slate-50 text-slate-600"
           }`}>
-            name,phone,email,city,projectInterested,inventoryId,siteLat,siteLng
+            NAME, CONTACT/NUMBER, COMMENT, COMPANY, REQUIREMENT, BUDGET, LOCATION, VISIT, HANDLE, SOURCE
           </p>
         </div>
 
         <textarea
           value={csvText}
           onChange={(event) => onCsvTextChange(event.target.value)}
-          placeholder="Paste CSV content here (with header row)"
+          placeholder="Paste CSV content here, or choose the PRE - SALES - LEADS Excel workbook"
           rows={10}
           className={`w-full resize-y rounded-xl border px-3 py-2 text-sm ${
             isDark

@@ -654,6 +654,7 @@ const getContactUsers = async (user) => {
 };
 
 const getRoomByIdForUser = async ({ user, roomId, requireParticipantForSend = false }) => {
+  ensureObjectId(roomId, "room id");
   const room = await applyRoomPopulates(ChatRoom.findById(roomId));
 
   if (!room) {
@@ -666,8 +667,13 @@ const getRoomByIdForUser = async ({ user, roomId, requireParticipantForSend = fa
   return room;
 };
 
-const listRoomsForUser = async ({ user, type = null }) => {
+const listRoomsForUser = async ({ user, type = null, limit = 80 }) => {
   const query = {};
+  const resolvedLimit = toPositiveInt(
+    limit,
+    Number.parseInt(process.env.CHAT_ROOMS_PAGE_LIMIT, 10) || 80,
+    Number.parseInt(process.env.CHAT_ROOMS_PAGE_MAX_LIMIT, 10) || 200,
+  );
 
   if (type) {
     query.type = type;
@@ -683,7 +689,9 @@ const listRoomsForUser = async ({ user, type = null }) => {
   }
 
   const rooms = await applyRoomPopulates(
-    ChatRoom.find(query).sort({ lastMessageAt: -1, updatedAt: -1 }),
+    ChatRoom.find(query)
+      .sort({ lastMessageAt: -1, updatedAt: -1 })
+      .limit(resolvedLimit),
   ).lean();
 
   return rooms.map((room) => toRoomDto(room, user._id));

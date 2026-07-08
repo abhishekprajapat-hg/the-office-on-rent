@@ -33,12 +33,20 @@ export default defineConfig(({ mode }) => {
           manualChunks(id) {
             if (!id.includes('node_modules')) return
 
-            if (id.includes('react-dom') || id.includes('react-router-dom') || id.includes('react')) {
+            if (/[\\/]node_modules[\\/](react|react-dom|react-router|react-router-dom|scheduler)[\\/]/.test(id)) {
               return 'react-core'
             }
 
             if (id.includes('leaflet') || id.includes('react-leaflet')) {
               return 'maps'
+            }
+
+            if (id.includes('xlsx')) {
+              return 'spreadsheet'
+            }
+
+            if (id.includes('jspdf')) {
+              return 'pdf'
             }
 
             if (id.includes('socket.io-client')) {
@@ -47,6 +55,14 @@ export default defineConfig(({ mode }) => {
 
             if (id.includes('framer-motion')) {
               return 'motion'
+            }
+
+            if (id.includes('lucide-react')) {
+              return 'icons'
+            }
+
+            if (id.includes('axios')) {
+              return 'http'
             }
 
             return 'vendor'

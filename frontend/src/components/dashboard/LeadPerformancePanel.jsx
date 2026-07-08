@@ -297,7 +297,7 @@ const LeadPerformancePanel = ({
     : 8;
   const [windowSize, setWindowSize] = useState(normalizedWindow);
 
-  const safeLeads = Array.isArray(leads) ? leads : [];
+  const safeLeads = useMemo(() => (Array.isArray(leads) ? leads : []), [leads]);
   const totalLeads = safeLeads.length;
 
   const statusCounts = useMemo(() => countLeadsByStatus(safeLeads), [safeLeads]);
@@ -317,9 +317,18 @@ const LeadPerformancePanel = ({
   const engagementPercent = totalLeads ? Math.round((engagedLeads / totalLeads) * 100) : 0;
 
   const weeklyTrend = useMemo(() => buildWeeklyTrend(safeLeads, windowSize), [safeLeads, windowSize]);
-  const createdSeries = weeklyTrend.map((bucket) => bucket.created);
-  const closedSeries = weeklyTrend.map((bucket) => bucket.closed);
-  const openSeries = weeklyTrend.map((bucket) => bucket.open);
+  const createdSeries = useMemo(
+    () => weeklyTrend.map((bucket) => bucket.created),
+    [weeklyTrend],
+  );
+  const closedSeries = useMemo(
+    () => weeklyTrend.map((bucket) => bucket.closed),
+    [weeklyTrend],
+  );
+  const openSeries = useMemo(
+    () => weeklyTrend.map((bucket) => bucket.open),
+    [weeklyTrend],
+  );
 
   const recentSpan = Math.min(3, weeklyTrend.length);
   const recentBuckets = weeklyTrend.slice(-recentSpan);

@@ -182,7 +182,7 @@ const MAX_CLOSURE_DOCUMENT_NAME_LENGTH = 180;
 const MAX_CLOSURE_DOCUMENT_MIME_LENGTH = 120;
 const MAX_CLOSURE_DOCUMENT_SIZE_BYTES = 25 * 1024 * 1024;
 const MAX_LEAD_STATUS_REQUEST_NOTE_LENGTH = 500;
-const MAX_BULK_LEAD_UPLOAD_ROWS = 500;
+const MAX_BULK_LEAD_UPLOAD_ROWS = 5000;
 const LEAD_REQUIREMENT_INVENTORY_TYPES = Object.freeze(["COMMERCIAL", "RESIDENTIAL"]);
 const LEAD_REQUIREMENT_TRANSACTION_TYPES = Object.freeze(["SALE", "RENT"]);
 const LEAD_REQUIREMENT_AREA_UNITS = Object.freeze(["SQ_FT", "SQ_M"]);
@@ -333,6 +333,12 @@ const normalizeRadiusMeters = (value) => {
   const parsed = toFiniteNumber(value);
   if (parsed === null || parsed < 50 || parsed > 2000) return null;
   return Math.round(parsed);
+};
+
+const parseBulkLeadDate = (value) => {
+  if (value === undefined || value === null || value === "") return null;
+  const parsed = new Date(value);
+  return Number.isNaN(parsed.getTime()) ? null : parsed;
 };
 
 const normalizeLeadRequirementEnum = (value, allowedValues = []) => {
@@ -581,6 +587,64 @@ const normalizeEnumValue = (value) =>
   String(value || "").trim().toUpperCase();
 
 const isValidHttpUrl = (value) => /^https?:\/\//i.test(String(value || "").trim());
+
+const escapeRegex = (value) =>
+  String(value || "").replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+
+const addLeadAndClause = (query, clause) => {
+  if (!clause || typeof clause !== "object") return;
+  query.$and = [...(Array.isArray(query.$and) ? query.$and : []), clause];
+};
+
+const applyLeadListFilters = (query, rawQuery = {}) => {
+  const status = normalizeEnumValue(rawQuery.status);
+  if (status && LEAD_STATUS_VALUES.includes(status)) {
+    query.status = status;
+  }
+
+  const source = normalizeEnumValue(rawQuery.source);
+  if (["META", "MANUAL"].includes(source)) {
+    query.source = source;
+  }
+
+  const assignedTo = String(rawQuery.assignedTo || "").trim();
+  if (assignedTo) {
+    if (assignedTo.toUpperCase() === "UNASSIGNED") {
+      query.assignedTo = null;
+    } else if (isValidObjectId(assignedTo)) {
+      query.assignedTo = assignedTo;
+    }
+  }
+
+  const dateFrom = normalizeDateBoundary(
+    rawQuery.dateFrom || rawQuery.startDate || rawQuery.createdFrom,
+    "start",
+  );
+  const dateTo = normalizeDateBoundary(
+    rawQuery.dateTo || rawQuery.endDate || rawQuery.createdTo,
+    "end",
+  );
+  if (dateFrom || dateTo) {
+    query.createdAt = {
+      ...(dateFrom ? { $gte: dateFrom } : {}),
+      ...(dateTo ? { $lte: dateTo } : {}),
+    };
+  }
+
+  const search = String(rawQuery.search || rawQuery.q || "").trim();
+  if (search) {
+    const safeSearch = escapeRegex(search).slice(0, 80);
+    addLeadAndClause(query, {
+      $or: [
+        { name: { $regex: safeSearch, $options: "i" } },
+        { phone: { $regex: safeSearch, $options: "i" } },
+        { email: { $regex: safeSearch, $options: "i" } },
+        { city: { $regex: safeSearch, $options: "i" } },
+        { projectInterested: { $regex: safeSearch, $options: "i" } },
+      ],
+    });
+  }
+};
 
 const detectClosureDocumentKind = ({ kind, mimeType = "", url = "" } = {}) => {
   const normalizedKind = String(kind || "").trim().toLowerCase();
@@ -1281,6 +1345,55 @@ const applyLeadQueryOptions = ({
   return queryBuilder.lean();
 };
 
+const getLeadRoleCounts = async (query) => {
+  const rows = await Lead.aggregate([
+    { $match: query },
+    {
+      $lookup: {
+        from: "users",
+        localField: "assignedTo",
+        foreignField: "_id",
+        as: "assignedUser",
+      },
+    },
+    {
+      $lookup: {
+        from: "users",
+        localField: "createdBy",
+        foreignField: "_id",
+        as: "createdUser",
+      },
+    },
+    {
+      $addFields: {
+        ownerRole: {
+          $ifNull: [
+            { $arrayElemAt: ["$assignedUser.role", 0] },
+            {
+              $ifNull: [
+                { $arrayElemAt: ["$createdUser.role", 0] },
+                "UNASSIGNED",
+              ],
+            },
+          ],
+        },
+      },
+    },
+    {
+      $group: {
+        _id: "$ownerRole",
+        count: { $sum: 1 },
+      },
+    },
+  ]);
+
+  return rows.reduce((acc, row) => {
+    const role = String(row?._id || "UNASSIGNED").trim().toUpperCase() || "UNASSIGNED";
+    acc[role] = Number(row?.count || 0);
+    return acc;
+  }, {});
+};
+
 exports.createLead = async (req, res) => {
   try {
     const {
@@ -1673,12 +1786,17 @@ exports.bulkUploadLeads = async (req, res) => {
     const seenPhones = new Set(
       existingRows.map((row) => String(row?.phone || "").trim()).filter(Boolean),
     );
+    const existingPhoneSet = new Set(seenPhones);
+    const uploadedPhoneSet = new Set();
     const inventoryById = new Map(
       inventoryRows.map((row) => [String(row._id), row]),
     );
 
     const createdIds = [];
+    const updatedPhones = [];
     const failures = [];
+    const pendingCreates = [];
+    const pendingUpdates = [];
 
     for (let index = 0; index < rows.length; index += 1) {
       const rowNumber = index + 1;
@@ -1696,6 +1814,14 @@ exports.bulkUploadLeads = async (req, res) => {
         const projectInterested = String(
           row.projectInterested || row.project || row.project_name || "",
         ).trim();
+        const source = String(row.source || "").trim().toUpperCase() === "META"
+          ? "META"
+          : "MANUAL";
+        const status = LEAD_STATUS_VALUES.includes(String(row.status || "").trim().toUpperCase())
+          ? String(row.status || "").trim().toUpperCase()
+          : "NEW";
+        const nextFollowUp = parseBulkLeadDate(row.nextFollowUp || row.next_follow_up);
+        const lastContactedAt = parseBulkLeadDate(row.lastContactedAt || row.last_contacted_at);
         const inventoryId = String(
           row.inventoryId
           || row.inventory_id
@@ -1710,9 +1836,10 @@ exports.bulkUploadLeads = async (req, res) => {
         if (!phone) {
           throw new Error("phone is required");
         }
-        if (seenPhones.has(phone)) {
-          throw new Error("Lead already exists for this phone");
+        if (uploadedPhoneSet.has(phone)) {
+          throw new Error("Duplicate phone in uploaded sheet");
         }
+        const isExistingLead = existingPhoneSet.has(phone);
 
         let inventory = null;
         if (inventoryId) {
@@ -1759,7 +1886,7 @@ exports.bulkUploadLeads = async (req, res) => {
           }
         }
 
-        const createPayload = {
+        const writePayload = {
           name,
           phone,
           email,
@@ -1771,22 +1898,30 @@ exports.bulkUploadLeads = async (req, res) => {
             inventory,
           }),
           companyId,
-          source: "MANUAL",
+          source,
+          status,
           createdBy: req.user._id,
         };
 
+        if (nextFollowUp) {
+          writePayload.nextFollowUp = nextFollowUp;
+        }
+        if (lastContactedAt) {
+          writePayload.lastContactedAt = lastContactedAt;
+        }
+
         if (inventory) {
-          createPayload.inventoryId = inventory._id;
-          createPayload.relatedInventoryIds = [inventory._id];
+          writePayload.inventoryId = inventory._id;
+          writePayload.relatedInventoryIds = [inventory._id];
         }
 
         if (parsedSiteLocation.provided) {
-          createPayload.siteLocation = parsedSiteLocation.value;
+          writePayload.siteLocation = parsedSiteLocation.value;
         } else {
           const inventorySiteLat = normalizeLatitude(inventory?.siteLocation?.lat);
           const inventorySiteLng = normalizeLongitude(inventory?.siteLocation?.lng);
           if (inventorySiteLat !== null && inventorySiteLng !== null) {
-            createPayload.siteLocation = {
+            writePayload.siteLocation = {
               lat: inventorySiteLat,
               lng: inventorySiteLng,
               radiusMeters: DEFAULT_SITE_VISIT_RADIUS_METERS,
@@ -1794,15 +1929,24 @@ exports.bulkUploadLeads = async (req, res) => {
           }
         }
 
-        const lead = await Lead.create(createPayload);
-        await autoAssignLead({
-          lead,
-          requester: req.user,
-          performedBy: req.user._id,
-        });
-
         seenPhones.add(phone);
-        createdIds.push(lead._id);
+        uploadedPhoneSet.add(phone);
+        if (isExistingLead) {
+          const updatePayload = { ...writePayload };
+          delete updatePayload.phone;
+          delete updatePayload.companyId;
+          delete updatePayload.createdBy;
+          pendingUpdates.push({
+            row: rowNumber,
+            phone,
+            payload: updatePayload,
+          });
+        } else {
+          pendingCreates.push({
+            row: rowNumber,
+            payload: writePayload,
+          });
+        }
       } catch (rowError) {
         failures.push({
           row: rowNumber,
@@ -1811,11 +1955,128 @@ exports.bulkUploadLeads = async (req, res) => {
       }
     }
 
+    let createdLeads = [];
+    if (pendingCreates.length) {
+      try {
+        createdLeads = await Lead.insertMany(
+          pendingCreates.map((item) => item.payload),
+          { ordered: false },
+        );
+      } catch (insertError) {
+        createdLeads = Array.isArray(insertError?.insertedDocs)
+          ? insertError.insertedDocs
+          : [];
+
+        const writeErrors = Array.isArray(insertError?.writeErrors)
+          ? insertError.writeErrors
+          : [];
+        writeErrors.forEach((writeError) => {
+          const rowIndex = Number(writeError?.index);
+          const sourceRow = Number.isInteger(rowIndex)
+            ? pendingCreates[rowIndex]?.row
+            : null;
+          failures.push({
+            row: sourceRow || "unknown",
+            message:
+              writeError?.errmsg
+              || writeError?.err?.errmsg
+              || writeError?.message
+              || "Failed to insert lead",
+          });
+        });
+
+        if (!createdLeads.length && !writeErrors.length) {
+          throw insertError;
+        }
+      }
+
+      createdIds.push(...createdLeads.map((lead) => lead._id));
+    }
+
+    if (pendingUpdates.length) {
+      try {
+        const updateResult = await Lead.bulkWrite(
+          pendingUpdates.map((item) => ({
+            updateOne: {
+              filter: {
+                companyId,
+                phone: item.phone,
+              },
+              update: {
+                $set: item.payload,
+              },
+            },
+          })),
+          { ordered: false },
+        );
+
+        const modifiedCount =
+          Number(updateResult?.matchedCount || 0)
+          || Number(updateResult?.modifiedCount || 0)
+          || Number(updateResult?.upsertedCount || 0);
+        updatedPhones.push(
+          ...pendingUpdates
+            .slice(0, modifiedCount || pendingUpdates.length)
+            .map((item) => item.phone),
+        );
+      } catch (updateError) {
+        const writeErrors = Array.isArray(updateError?.writeErrors)
+          ? updateError.writeErrors
+          : [];
+        writeErrors.forEach((writeError) => {
+          const rowIndex = Number(writeError?.index);
+          const sourceRow = Number.isInteger(rowIndex)
+            ? pendingUpdates[rowIndex]?.row
+            : null;
+          failures.push({
+            row: sourceRow || "unknown",
+            message:
+              writeError?.errmsg
+              || writeError?.err?.errmsg
+              || writeError?.message
+              || "Failed to update lead",
+          });
+        });
+
+        if (!writeErrors.length) {
+          throw updateError;
+        }
+      }
+    }
+
+    if (createdLeads.length) {
+      const requester = {
+        _id: req.user._id,
+        role: req.user.role,
+        companyId: req.user.companyId,
+      };
+      setImmediate(async () => {
+        for (const lead of createdLeads) {
+          try {
+            await autoAssignLead({
+              lead,
+              requester,
+              performedBy: requester._id,
+            });
+          } catch (assignmentError) {
+            logger.error({
+              requestId: req.requestId || null,
+              leadId: lead?._id || null,
+              error: assignmentError.message,
+              message: "Bulk lead auto assignment failed",
+            });
+          }
+        }
+      });
+    }
+
     return res.status(201).json({
       message: "Bulk lead upload processed",
       createdCount: createdIds.length,
+      updatedCount: updatedPhones.length,
       failedCount: failures.length,
       createdIds,
+      updatedPhones,
       failures,
     });
   } catch (error) {
@@ -1834,6 +2095,7 @@ exports.getAllLeads = async (req, res) => {
     if (!query) {
       return res.status(403).json({ message: "Access denied" });
     }
+    applyLeadListFilters(query, req.query || {});
 
     const pagination = parsePagination(req.query, {
       defaultLimit: Number.parseInt(process.env.LEADS_PAGE_LIMIT, 10) || 50,
@@ -1851,18 +2113,24 @@ exports.getAllLeads = async (req, res) => {
     });
 
     if (!pagination.enabled) {
-      const leads = (await leadsQuery).map((lead) => toLeadView(lead));
-      return res.json({ leads });
+      const [leadRows, roleCounts] = await Promise.all([
+        leadsQuery,
+        getLeadRoleCounts(query),
+      ]);
+      const leads = leadRows.map((lead) => toLeadView(lead));
+      return res.json({ leads, roleCounts });
     }
 
-    const [leadRows, totalCount] = await Promise.all([
+    const [leadRows, totalCount, roleCounts] = await Promise.all([
       leadsQuery,
       Lead.countDocuments(query),
+      getLeadRoleCounts(query),
     ]);
     const leads = leadRows.map((lead) => toLeadView(lead));
 
     return res.json({
       leads,
+      roleCounts,
       pagination: buildPaginationMeta({
         page: pagination.page,
         limit: pagination.limit,
@@ -1874,6 +2142,34 @@ exports.getAllLeads = async (req, res) => {
       requestId: req.requestId || null,
       error: error.message,
       message: "getAllLeads failed",
+    });
+    return res.status(500).json({ message: "Server error" });
+  }
+};
+
+exports.getLeadById = async (req, res) => {
+  try {
+    const { leadId } = req.params;
+    if (!isValidObjectId(leadId)) {
+      return res.status(400).json({ message: "Invalid lead id" });
+    }
+
+    const accessibleLead = await findAccessibleLeadById({ leadId, user: req.user });
+    if (!accessibleLead) {
+      return res.status(404).json({ message: "Lead not found" });
+    }
+
+    const lead = await getLeadViewById(leadId, req.user.companyId);
+    if (!lead) {
+      return res.status(404).json({ message: "Lead not found" });
+    }
+
+    return res.json({ lead });
+  } catch (error) {
+    logger.error({
+      requestId: req.requestId || null,
+      error: error.message,
+      message: "getLeadById failed",
     });
     return res.status(500).json({ message: "Server error" });
   }
@@ -3269,6 +3565,7 @@ exports.getPendingLeadStatusRequests = async (req, res) => {
       .populate("requestedBy", "name role")
       .populate("lead", "name status nextFollowUp")
       .sort({ createdAt: -1 })
+      .limit(Number.parseInt(process.env.LEAD_STATUS_REQUEST_PAGE_MAX_LIMIT, 10) || 200)
       .lean();
 
     return res.json({ requests });

@@ -6,8 +6,17 @@ const {
 } = require("../services/inventoryWorkflow.service");
 
 const handleControllerError = (res, error, fallbackMessage) => {
-  const statusCode = error.statusCode || 500;
-  const message = statusCode >= 500 ? fallbackMessage : error.message;
+  let statusCode = error.statusCode || 500;
+  let message = error.message;
+
+  if (error.name === "ValidationError") {
+    statusCode = 400;
+  } else if (error.code === 11000) {
+    statusCode = 409;
+    message = "Inventory already exists for this project, tower, and unit";
+  }
+
+  message = statusCode >= 500 ? fallbackMessage : message;
 
   if (statusCode >= 500) {
     console.error(fallbackMessage, error);

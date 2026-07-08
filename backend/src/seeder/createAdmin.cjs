@@ -3,6 +3,7 @@ const mongoose = require("mongoose");
 const User = require("../models/User.js");
 const Company = require("../models/Company.js");
 const { USER_ROLES } = require("../constants/role.constants");
+const { assertSeedAllowed } = require("./seedSafetyGuard.cjs");
 
 const sanitizeSubdomain = (value) =>
   String(value || "")
@@ -14,6 +15,7 @@ const sanitizeSubdomain = (value) =>
     .slice(0, 63);
 
 async function createAdmin() {
+  assertSeedAllowed({ scriptName: "seed:admin", destructive: false });
   await mongoose.connect(process.env.MONGO_URI);
 
   const existing = await User.findOne({ role: USER_ROLES.ADMIN });

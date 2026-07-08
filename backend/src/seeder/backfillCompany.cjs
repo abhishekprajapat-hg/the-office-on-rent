@@ -4,6 +4,7 @@ const User = require("../models/User");
 const Inventory = require("../models/Inventory");
 const InventoryRequest = require("../models/InventoryRequest");
 const InventoryActivity = require("../models/InventoryActivity");
+const { assertSeedAllowed } = require("./seedSafetyGuard.cjs");
 
 const toId = (value) => String(value || "");
 
@@ -25,6 +26,7 @@ const resolveUserCompanyId = (user, byId, stack = new Set()) => {
 
 async function backfillCompany() {
   try {
+    assertSeedAllowed({ scriptName: "migrate:company", destructive: false });
     await mongoose.connect(process.env.MONGO_URI);
 
     const allUsers = await User.find({})

@@ -11,6 +11,10 @@ const {
 const { getTeamIdForUser } = require("../services/chatAccess.service");
 
 const toId = (value) => String(value || "").trim();
+const SOCKET_TYPING_THROTTLE_MS =
+  Number.parseInt(process.env.SOCKET_TYPING_THROTTLE_MS, 10) || 700;
+const SOCKET_RECEIPT_THROTTLE_MS =
+  Number.parseInt(process.env.SOCKET_RECEIPT_THROTTLE_MS, 10) || 1200;
 
 const parseToken = (raw) => {
   if (typeof raw !== "string") return "";
@@ -73,7 +77,9 @@ const authenticateSocket = async (socket, next) => {
     }
 
     const decoded = jwt.verify(token, process.env.JWT_SECRET);
-    const user = await User.findById(decoded.id).select("-password");
+    const user = await User.findById(decoded.id)
+      .select("_id name role parentId companyId isActive")
+      .lean();
 
     if (!user || !user.isActive) {
       return next(new Error("Unauthorized: invalid user"));
@@ -92,9 +98,10 @@ const registerChatSocketHandlers = (io) => {
   io.on("connection", (socket) => {
     const accessibleRoomIds = new Set();
     const activelyTypingRoomIds = new Set();
+    const lastEventAtByKey = new Map();
+    const typingStateByRoom = new Map();
 
     const userRoom = `user:${socket.user._id}`;
-    const roleRoom = `role:${socket.user.role}`;
     const companyId = socket.user.companyId ? String(socket.user.companyId) : null;
     const companyRoom = companyId ? `company:${companyId}` : null;
     const companyRoleRoom = companyId ? `company:${companyId}:role:${socket.user.role}` : null;
@@ -102,7 +109,6 @@ const registerChatSocketHandlers = (io) => {
     const teamRoom = teamId ? `team:${teamId}` : null;
 
     socket.join(userRoom);
-    socket.join(roleRoom);
     if (companyRoom) socket.join(companyRoom);
     if (companyRoleRoom) socket.join(companyRoleRoom);
     if (teamRoom) socket.join(teamRoom);
@@ -144,6 +150,17 @@ const registerChatSocketHandlers = (io) => {
       return toId(room?._id || requestedRoomId);
     };
 
+    const shouldProcessThrottledEvent = (key, windowMs) => {
+      const now = Date.now();
+      const previousAt = lastEventAtByKey.get(key) || 0;
+      if (now - previousAt < windowMs) return false;
+      lastEventAtByKey.set(key, now);
+      if (lastEventAtByKey.size > 500) {
+        lastEventAtByKey.clear();
+      }
+      return true;
+    };
+
     socket.on("chat:room:join", async (payload = {}, ack) => {
       try {
         const roomId = await resolveAccessibleRoomId(payload.roomId);
@@ -160,6 +177,22 @@ const registerChatSocketHandlers = (io) => {
       try {
         const roomId = await resolveAccessibleRoomId(payload.roomId || payload.conversationId);
         const isTyping = payload.isTyping !== false;
+        const previousTypingState = typingStateByRoom.get(roomId);
+        if (
+          previousTypingState === isTyping
+          && !shouldProcessThrottledEvent(
+            `typing:${roomId}:${isTyping ? "1" : "0"}`,
+            SOCKET_TYPING_THROTTLE_MS,
+          )
+        ) {
+          return sendAck(ack, {
+            ok: true,
+            roomId,
+            userId: String(socket.user._id),
+            isTyping,
+          });
+        }
+
         const eventPayload = {
           roomId,
           userId: String(socket.user._id),
@@ -172,6 +205,7 @@ const registerChatSocketHandlers = (io) => {
         } else {
           activelyTypingRoomIds.delete(roomId);
         }
+        typingStateByRoom.set(roomId, isTyping);
 
         socket.to(`room:${roomId}`).emit("chat:typing", eventPayload);
         return sendAck(ack, { ok: true, ...eventPayload });
@@ -233,9 +267,19 @@ const registerChatSocketHandlers = (io) => {
 
     socket.on("chat:message:delivered", async (payload = {}, ack) => {
       try {
+        const messageId = toId(payload.messageId);
+        if (
+          messageId
+          && !shouldProcessThrottledEvent(
+            `delivered:${messageId}`,
+            SOCKET_RECEIPT_THROTTLE_MS,
+          )
+        ) {
+          return sendAck(ack, { ok: true, throttled: true });
+        }
         const result = await markMessageDelivered({
           user: socket.user,
-          messageId: payload.messageId,
+          messageId,
         });
 
         io.to(`room:${result.roomId}`).emit("chat:message:delivered", result);
@@ -250,9 +294,19 @@ const registerChatSocketHandlers = (io) => {
 
     socket.on("chat:message:seen", async (payload = {}, ack) => {
       try {
+        const messageId = toId(payload.messageId);
+        if (
+          messageId
+          && !shouldProcessThrottledEvent(
+            `seen:${messageId}`,
+            SOCKET_RECEIPT_THROTTLE_MS,
+          )
+        ) {
+          return sendAck(ack, { ok: true, throttled: true });
+        }
         const result = await markMessageSeen({
           user: socket.user,
-          messageId: payload.messageId,
+          messageId,
         });
 
         io.to(`room:${result.roomId}`).emit("chat:message:seen", result);
@@ -322,6 +376,8 @@ const registerChatSocketHandlers = (io) => {
         });
       });
       activelyTypingRoomIds.clear();
+      typingStateByRoom.clear();
+      lastEventAtByKey.clear();
     });
   });
 };

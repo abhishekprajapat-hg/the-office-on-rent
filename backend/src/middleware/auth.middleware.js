@@ -3,8 +3,25 @@ const mongoose = require("mongoose");
 const User = require("../models/User");
 const Company = require("../models/Company");
 const { USER_ROLES } = require("../constants/role.constants");
+const { createTtlCache } = require("../utils/ttlCache");
 
 const isValidObjectId = (value) => mongoose.Types.ObjectId.isValid(value);
+const companyStatusCache = createTtlCache({
+  ttlMs: process.env.COMPANY_STATUS_CACHE_TTL_MS || 30000,
+  maxEntries: process.env.COMPANY_STATUS_CACHE_MAX_ENTRIES || 1000,
+});
+
+const getCachedCompanyStatus = async (companyId) => {
+  const cacheKey = String(companyId || "");
+  const cachedStatus = companyStatusCache.get(cacheKey);
+  if (cachedStatus !== undefined) return cachedStatus;
+
+  const company = await Company.findById(companyId).select("_id status").lean();
+  const status = company?.status || null;
+  companyStatusCache.set(cacheKey, status);
+  return status;
+};
+
 const resolveCompanyContext = async (user) => {
   if (user.companyId) return user.companyId;
 
@@ -75,8 +92,8 @@ exports.protect = async (req, res, next) => {
       });
     }
 
-    const company = await Company.findById(companyId).select("_id status").lean();
-    if (!company || company.status !== "ACTIVE") {
+    const companyStatus = await getCachedCompanyStatus(companyId);
+    if (companyStatus !== "ACTIVE") {
       return res.status(403).json({
         message: "Company is inactive. Access denied.",
       });
@@ -92,8 +109,12 @@ exports.protect = async (req, res, next) => {
 };
 
 exports.checkRole = (roles) => (req, res, next) => {
-  if (!roles.includes(req.user.role)) {
+  const userRole = String(req.user?.role || "").trim().toUpperCase();
+  const allowedRoles = roles.map((role) => String(role || "").trim().toUpperCase());
+
+  if (!allowedRoles.includes(userRole)) {
     return res.status(403).json({ message: "Access denied" });
   }
+
   return next();
 };

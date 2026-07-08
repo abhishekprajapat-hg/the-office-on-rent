@@ -2,6 +2,7 @@ require("dotenv").config();
 const mongoose = require("mongoose");
 const Lead = require("../models/Lead");
 const User = require("../models/User");
+const { assertSeedAllowed } = require("./seedSafetyGuard.cjs");
 
 const EXECUTIVE_ROLES = ["EXECUTIVE", "FIELD_EXECUTIVE"];
 const DEFAULT_SEED_COUNT = 30;
@@ -39,6 +40,7 @@ function buildLead(index, assignedTo, companyId) {
 
 async function seedLeads() {
   try {
+    assertSeedAllowed({ scriptName: "seed:leads", destructive: false });
     const seedCount = parseSeedCount(
       process.argv[2] || process.env.LEAD_SEED_COUNT,
       DEFAULT_SEED_COUNT,

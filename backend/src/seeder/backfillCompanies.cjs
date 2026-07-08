@@ -3,6 +3,7 @@ const mongoose = require("mongoose");
 const User = require("../models/User");
 const Company = require("../models/Company");
 const { USER_ROLES } = require("../constants/role.constants");
+const { assertSeedAllowed } = require("./seedSafetyGuard.cjs");
 
 const sanitizeSubdomain = (value) =>
   String(value || "")
@@ -37,6 +38,7 @@ async function ensureUniqueSubdomain(base, takenSet) {
 }
 
 async function run() {
+  assertSeedAllowed({ scriptName: "seed:companies:backfill", destructive: false });
   await mongoose.connect(process.env.MONGO_URI);
 
   const companyIds = await User.distinct("companyId", { companyId: { $ne: null } });

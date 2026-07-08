@@ -151,7 +151,7 @@ const Navbar = ({ userRole = "manager", onLogout, theme = "light", onToggleTheme
       >
         <div className="h-full flex items-center gap-2 sm:gap-3 px-2 sm:px-4">
           <div className="relative flex-none flex h-16 w-28 items-center justify-center sm:w-36">
-            <div className="flex h-12 w-full items-center justify-center rounded-xl border border-slate-200 bg-white p-1.5 shadow-sm">
+            <div className="brand-logo-frame flex h-12 w-full items-center justify-center rounded-xl border border-slate-200 bg-white p-1.5 shadow-sm">
               <BrandLogo className="h-full w-full" />
             </div>
           </div>

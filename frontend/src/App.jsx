@@ -4,7 +4,7 @@ import api from "./services/api";
 import ErrorBoundary from "./components/ErrorBoundary";
 import { ChatNotificationProvider } from "./context/chatNotificationProvider";
 import { updateMyLiveLocation } from "./services/userService";
-import AdminRequestAlertToast from "./components/layout/AdminRequestAlertToast";
+import RouteLoadingSkeleton from "./components/layout/RouteLoadingSkeleton";
 import {
   applySystemSettingsToDocument,
   getSessionTimeoutMs,
@@ -17,6 +17,7 @@ import {
 ======================= */
 const WorkbenchShell = lazy(() => import("./components/workbench/WorkbenchShell"));
 const Login = lazy(() => import("./components/auth/Login"));
+const AdminRequestAlertToast = lazy(() => import("./components/layout/AdminRequestAlertToast"));
 
 const ManagerDashboard = lazy(() => import("./modules/manager/ManagerDashboard"));
 const ExecutiveDashboard = lazy(() => import("./modules/executive/ExecutiveDashboard"));
@@ -274,13 +275,13 @@ export default function App() {
 
   const location = useLocation();
   const navigate = useNavigate();
-  const authUser = (() => {
+  const authUser = useMemo(() => {
     try {
       return JSON.parse(localStorage.getItem("user") || "{}");
     } catch {
       return {};
     }
-  })();
+  }, [isLoggedIn, userRole]);
 
   const isPublicPage = PUBLIC_ROUTE_PREFIXES.some((prefix) =>
     location.pathname.startsWith(prefix),
@@ -330,15 +331,15 @@ export default function App() {
 
   useEffect(() => {
     const root = document.documentElement;
+    const activeTheme = isForcedLightPage ? "light" : theme;
+
+    if (isForcedLightPage && theme !== "light") {
+      setTheme("light");
+    }
+
     root.classList.remove("theme-light", "theme-dark");
-    root.classList.add(
-      isForcedLightPage
-        ? "theme-light"
-        : theme === "dark"
-          ? "theme-dark"
-          : "theme-light",
-    );
-    localStorage.setItem("theme", theme);
+    root.classList.add(activeTheme === "dark" ? "theme-dark" : "theme-light");
+    localStorage.setItem("theme", activeTheme);
   }, [isForcedLightPage, theme]);
 
   const performInactivityLogout = useCallback(() => {
@@ -540,7 +541,7 @@ export default function App() {
   }, [userRole, theme]);
 
   /* 🔥 Logout */
-  const handleLogout = async () => {
+  const handleLogout = useCallback(async () => {
     const refreshToken = localStorage.getItem("refreshToken");
 
     try {
@@ -559,18 +560,23 @@ export default function App() {
     setIsLoggedIn(false);
     setUserRole(null);
     navigate("/login");
-  };
+  }, [navigate]);
 
-  const canAccess = (allowedRoles) =>
-    userRole === "ADMIN" || allowedRoles.includes(userRole);
+  const canAccess = useCallback(
+    (allowedRoles) => userRole === "ADMIN" || allowedRoles.includes(userRole),
+    [userRole],
+  );
 
-  const toggleTheme = () => {
+  const toggleTheme = useCallback(() => {
     setTheme((prev) => (prev === "dark" ? "light" : "dark"));
-  };
+  }, []);
 
-  const pageHeader = resolvePageHeader(location.pathname, userRole);
+  const pageHeader = useMemo(
+    () => resolvePageHeader(location.pathname, userRole),
+    [location.pathname, userRole],
+  );
   const roleLabel = ROLE_LABELS[userRole] || userRole || "Workspace";
-  const appRoutes = (
+  const appRoutes = useMemo(() => (
     <Routes>
       <Route path="/" element={DashboardByRole} />
       <Route path="/dashboard" element={DashboardByRole} />
@@ -700,7 +706,13 @@ export default function App() {
       <Route path="/shared/inventory/:shareToken" element={<SharedInventoryView />} />
       <Route path="/portal/*" element={<Navigate to="/" replace />} />
     </Routes>
-  );
+  ), [
+    DashboardByRole,
+    canAccess,
+    canChannelPartnerViewInventory,
+    theme,
+    userRole,
+  ]);
 
   if (!sessionReady && !isPublicPage) {
     return (
@@ -719,7 +731,7 @@ export default function App() {
 
       <ChatNotificationProvider enabled={isLoggedIn && !isPublicPage}>
         <ErrorBoundary>
-          <Suspense fallback={<div className="p-8">Loading...</div>}>
+          <Suspense fallback={<RouteLoadingSkeleton compact={isPublicPage} />}>
             <Routes>
 
           {/* ================= LOGIN ROUTES ================= */}
@@ -779,7 +791,7 @@ export default function App() {
                     >
                       {appRoutes}
                     </WorkbenchShell>
-                    <AdminRequestAlertToast userRole={userRole} />
+                    {userRole === "ADMIN" ? <AdminRequestAlertToast userRole={userRole} /> : null}
                   </>
                 )
               ) : (

@@ -3,6 +3,7 @@ const mongoose = require("mongoose");
 const Lead = require("../models/Lead");
 const User = require("../models/User");
 const Inventory = require("../models/Inventory");
+const { assertSeedAllowed } = require("./seedSafetyGuard.cjs");
 
 const toObjectIdString = (value) => String(value || "").trim();
 const isValidObjectId = (value) => mongoose.Types.ObjectId.isValid(value);
@@ -83,6 +84,7 @@ async function resolveLeadCompanyId(lead) {
 }
 
 async function run() {
+  assertSeedAllowed({ scriptName: "seed:leads:backfill-company", destructive: false });
   await mongoose.connect(process.env.MONGO_URI);
 
   const leads = await Lead.find({

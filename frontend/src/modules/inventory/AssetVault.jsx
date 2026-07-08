@@ -10,7 +10,8 @@ import {
   AlertCircle,
 } from "lucide-react";
 import {
-  getInventoryAssets,
+  getInventoryAssetsWithMeta,
+  getInventoryAssetById,
   createInventoryAsset,
   createInventoryCreateRequest,
   updateInventoryAsset,
@@ -24,6 +25,7 @@ import {
 } from "../../services/inventoryService";
 import { getAllLeads } from "../../services/leadService";
 import { toErrorMessage } from "../../utils/errorMessage";
+import { useDebouncedValue } from "../../hooks/useDebouncedValue";
 import {
   AssetVaultFilters,
   AssetVaultToolbar,
@@ -41,6 +43,42 @@ const STATUS_UPDATE_OPTIONS = [
   { label: "Blocked", value: "Blocked" },
   { label: "Sold", value: "Sold" },
 ];
+const INVENTORY_LIST_PAGE_LIMIT = 120;
+const INVENTORY_LIST_FIELDS = [
+  "_id",
+  "projectName",
+  "towerName",
+  "unitNumber",
+  "propertyId",
+  "inventoryType",
+  "price",
+  "deposit",
+  "type",
+  "category",
+  "furnishingStatus",
+  "status",
+  "reservationReason",
+  "reservationLeadId",
+  "saleDetails",
+  "location",
+  "city",
+  "area",
+  "pincode",
+  "buildingName",
+  "floorNumber",
+  "totalFloors",
+  "totalArea",
+  "carpetArea",
+  "builtUpArea",
+  "areaUnit",
+  "maintenanceCharges",
+  "commercialDetails",
+  "residentialDetails",
+  "siteLocation",
+  "images",
+  "createdAt",
+  "updatedAt",
+].join(",");
 const SOLD_PAYMENT_MODE_OPTIONS = [
   { value: "UPI", label: "UPI" },
   { value: "CASH", label: "Cash" },
@@ -466,6 +504,8 @@ const AssetVault = () => {
   const useGooglePlaces = locationProvider === "google" && Boolean(googleMapsApiKey);
   const [assets, setAssets] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [loadingMoreAssets, setLoadingMoreAssets] = useState(false);
+  const [assetPagination, setAssetPagination] = useState(null);
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
   const [editingAssetId, setEditingAssetId] = useState("");
@@ -501,6 +541,13 @@ const AssetVault = () => {
   const [parkingFilter, setParkingFilter] = useState("");
   const [pantryFilter, setPantryFilter] = useState("");
   const [amenitiesFilter, setAmenitiesFilter] = useState("");
+  const debouncedSearchTerm = useDebouncedValue(searchTerm, 180);
+  const debouncedCabinsFilter = useDebouncedValue(cabinsFilter, 160);
+  const debouncedSeatsFilter = useDebouncedValue(seatsFilter, 160);
+  const debouncedAreaRangeFilter = useDebouncedValue(areaRangeFilter, 180);
+  const debouncedBudgetRangeFilter = useDebouncedValue(budgetRangeFilter, 180);
+  const debouncedFloorFilter = useDebouncedValue(floorFilter, 160);
+  const debouncedAmenitiesFilter = useDebouncedValue(amenitiesFilter, 180);
   const [error, setError] = useState("");
   const [success, setSuccess] = useState("");
 
@@ -570,25 +617,53 @@ const AssetVault = () => {
     setIsReserveModalOpen(true);
   }, [assets]);
 
-  const fetchAssets = useCallback(async () => {
+  const fetchAssets = useCallback(async (options = {}) => {
+    const page = Number(options.page || 1);
+    const append = Boolean(options.append);
     try {
-      setLoading(true);
+      if (append) {
+        setLoadingMoreAssets(true);
+      } else {
+        setLoading(true);
+      }
       setError("");
 
-      const [list, requests] = await Promise.all([
-        getInventoryAssets(),
-        canReviewInventoryRequests ? getPendingInventoryRequests() : Promise.resolve([]),
+      const [result, requests] = await Promise.all([
+        getInventoryAssetsWithMeta({
+          page,
+          limit: INVENTORY_LIST_PAGE_LIMIT,
+          fields: INVENTORY_LIST_FIELDS,
+        }),
+        !append && canReviewInventoryRequests ? getPendingInventoryRequests() : Promise.resolve(null),
       ]);
 
-      setAssets(Array.isArray(list) ? list : []);
-      setPendingRequests(Array.isArray(requests) ? requests : []);
+      const list = Array.isArray(result?.assets) ? result.assets : [];
+      setAssetPagination(result?.pagination || null);
+      setAssets((prev) => {
+        if (!append) return list;
+        const rowsById = new Map(prev.map((asset) => [String(asset?._id || ""), asset]));
+        list.forEach((asset) => {
+          const id = String(asset?._id || "");
+          if (id) rowsById.set(id, asset);
+        });
+        return [...rowsById.values()];
+      });
+      if (Array.isArray(requests)) {
+        setPendingRequests(requests);
+      } else if (!append) {
+        setPendingRequests([]);
+      }
     } catch (fetchError) {
       console.error(`Error loading inventory: ${toErrorMessage(fetchError, "Unknown error")}`);
-      setAssets([]);
-      setPendingRequests([]);
+      if (!append) {
+        setAssets([]);
+        setPendingRequests([]);
+        setAssetPagination(null);
+      }
       setError(toErrorMessage(fetchError, "Failed to load inventory"));
     } finally {
       setLoading(false);
+      setLoadingMoreAssets(false);
     }
   }, [canReviewInventoryRequests]);
 
@@ -608,7 +683,11 @@ const AssetVault = () => {
     const loadLeadOptions = async () => {
       try {
         setLoadingLeadOptions(true);
-        const rows = await getAllLeads();
+        const rows = await getAllLeads({
+          page: 1,
+          limit: 200,
+          fields: "_id,name,phone,status,projectInterested",
+        });
         if (cancelled) return;
 
         const options = Array.isArray(rows)
@@ -671,15 +750,15 @@ const AssetVault = () => {
   }, [googleMapsApiKey, isAddModalOpen, isEditModalOpen, useGooglePlaces]);
 
   const filteredAssets = useMemo(() => {
-    const normalizedSearch = searchTerm.trim().toLowerCase();
-    const areaRange = parseRangeInput(areaRangeFilter);
-    const budgetRange = parseRangeInput(budgetRangeFilter);
-    const minCabins = toNumberOrNull(cabinsFilter);
-    const minSeats = toNumberOrNull(seatsFilter);
-    const minFloor = toNumberOrNull(floorFilter);
+    const normalizedSearch = debouncedSearchTerm.trim().toLowerCase();
+    const areaRange = parseRangeInput(debouncedAreaRangeFilter);
+    const budgetRange = parseRangeInput(debouncedBudgetRangeFilter);
+    const minCabins = toNumberOrNull(debouncedCabinsFilter);
+    const minSeats = toNumberOrNull(debouncedSeatsFilter);
+    const minFloor = toNumberOrNull(debouncedFloorFilter);
     const parkingAvailable = parseBooleanInput(parkingFilter);
     const pantryAvailable = parseBooleanInput(pantryFilter);
-    const amenityTokens = String(amenitiesFilter || "")
+    const amenityTokens = String(debouncedAmenitiesFilter || "")
       .split(",")
       .map((item) => normalizeToken(item))
       .filter(Boolean);
@@ -784,20 +863,20 @@ const AssetVault = () => {
       );
     });
   }, [
-    amenitiesFilter,
-    areaRangeFilter,
     assets,
     bhkFilter,
-    budgetRangeFilter,
-    cabinsFilter,
-    floorFilter,
+    debouncedAmenitiesFilter,
+    debouncedAreaRangeFilter,
+    debouncedBudgetRangeFilter,
+    debouncedCabinsFilter,
+    debouncedFloorFilter,
+    debouncedSearchTerm,
+    debouncedSeatsFilter,
     furnishingFilter,
     inventoryTypeFilter,
     modeType,
     pantryFilter,
     parkingFilter,
-    searchTerm,
-    seatsFilter,
     statusFilter,
   ]);
 
@@ -1458,8 +1537,21 @@ const AssetVault = () => {
     }
   };
 
-  const handleOpenEditModal = (asset, options = {}) => {
+  const handleOpenEditModal = async (asset, options = {}) => {
     if (!canOpenEditModal || !asset?._id) return;
+
+    try {
+      const detail = await getInventoryAssetById(asset._id);
+      const fullAsset = detail?.asset || detail?.inventory || null;
+      if (fullAsset?._id) {
+        asset = { ...asset, ...fullAsset };
+        setAssets((prev) =>
+          prev.map((row) => (row._id === fullAsset._id ? { ...row, ...fullAsset } : row)),
+        );
+      }
+    } catch (detailError) {
+      console.error(`Load inventory detail failed: ${toErrorMessage(detailError, "Unknown error")}`);
+    }
 
     const forcedStatus = String(options?.status || "").trim();
     const resolvedStatus = forcedStatus || asset.status || "Available";
@@ -1743,6 +1835,20 @@ const AssetVault = () => {
       setUpdatingStatusId(assetId);
       setError("");
       setSuccess("");
+      const optimisticUpdatedAt = new Date().toISOString();
+      setAssets((prev) =>
+        prev.map((row) =>
+          String(row?._id || "") === String(assetId)
+            ? {
+              ...row,
+              status,
+              reservationReason: "",
+              reservationLeadId: null,
+              reservationLead: null,
+              updatedAt: optimisticUpdatedAt,
+            }
+            : row),
+      );
 
       const updated = await updateInventoryAsset(assetId, {
         status,
@@ -1752,6 +1858,9 @@ const AssetVault = () => {
       setSuccess("Asset status updated");
     } catch (statusError) {
       console.error(`Update status failed: ${toErrorMessage(statusError, "Unknown error")}`);
+      setAssets((prev) =>
+        prev.map((row) => (String(row?._id || "") === String(assetId) ? asset : row)),
+      );
       setError(toErrorMessage(statusError, "Failed to update status"));
     } finally {
       setUpdatingStatusId("");
@@ -2009,6 +2118,24 @@ const AssetVault = () => {
           onStatusChangeRequest: handleStatusChangeRequest,
         }}
       />
+
+      {assetPagination?.hasNextPage ? (
+        <div className="flex justify-center px-4 pb-6">
+          <button
+            type="button"
+            onClick={() =>
+              fetchAssets({
+                page: Number(assetPagination.page || 1) + 1,
+                append: true,
+              })
+            }
+            disabled={loadingMoreAssets}
+            className="rounded-xl border border-slate-200 bg-white px-4 py-2 text-xs font-bold uppercase tracking-widest text-slate-700 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-60"
+          >
+            {loadingMoreAssets ? "Loading..." : "Load more properties"}
+          </button>
+        </div>
+      ) : null}
 
       <AnimatePresence>
         {((isAddModalOpen && canOpenCreateModal) || (isEditModalOpen && canOpenEditModal)) && (

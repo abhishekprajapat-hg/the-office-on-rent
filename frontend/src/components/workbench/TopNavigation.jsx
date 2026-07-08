@@ -1,3 +1,4 @@
+import { memo, useMemo } from "react";
 import { Link, useLocation } from "react-router-dom";
 import { Menu } from "lucide-react";
 import { IconButton, Tooltip, cn } from "../ui";
@@ -15,11 +16,17 @@ const TopNavigation = ({
   onMenuOpen,
 }) => {
   const location = useLocation();
-  const visibleSections = getVisibleSections(userRole, user);
-  const activeSectionId = getActiveSectionId(location.pathname, userRole, user);
-  const sections = TOP_NAV_SECTION_IDS
-    .map((sectionId) => visibleSections.find((section) => section.id === sectionId))
-    .filter(Boolean);
+  const visibleSections = useMemo(() => getVisibleSections(userRole, user), [userRole, user]);
+  const activeSectionId = useMemo(
+    () => getActiveSectionId(location.pathname, userRole, user),
+    [location.pathname, userRole, user],
+  );
+  const sections = useMemo(
+    () => TOP_NAV_SECTION_IDS
+      .map((sectionId) => visibleSections.find((section) => section.id === sectionId))
+      .filter(Boolean),
+    [visibleSections],
+  );
 
   return (
     <nav
@@ -73,4 +80,4 @@ const TopNavigation = ({
   );
 };
 
-export default TopNavigation;
+export default memo(TopNavigation);

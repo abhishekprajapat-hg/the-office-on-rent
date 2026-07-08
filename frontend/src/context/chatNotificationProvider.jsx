@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { createChatSocket } from "../services/chatSocket";
+import { acquireChatSocket, releaseChatSocket } from "../services/chatSocket";
 import { getMessengerConversations, markConversationRead as markConversationReadApi } from "../services/chatService";
 import ChatNotificationContext from "./chatNotificationContext";
 
@@ -364,7 +364,8 @@ export const ChatNotificationProvider = ({ children, enabled = true }) => {
 
     loadUnread();
 
-    const socket = createChatSocket(token);
+    const socket = acquireChatSocket(token);
+    if (!socket) return undefined;
 
     const onConnect = () => {
       setSocketConnected(true);
@@ -526,7 +527,7 @@ export const ChatNotificationProvider = ({ children, enabled = true }) => {
       socket.off("lead:deal:closed", onAdminRequestEvent);
       socket.off("lead:payment:remaining:collected", onAdminRequestEvent);
       socket.off("inventory:request:created", onAdminRequestEvent);
-      socket.disconnect();
+      releaseChatSocket(socket);
       setSocketConnected(false);
       setActiveConversationId("");
     };

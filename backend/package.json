@@ -7,6 +7,7 @@
     "dev:plain": "nodemon src/server.js",
     "dev:vps": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/dev-with-vps-mongo.ps1",
     "sync:vps-to-local": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/sync-vps-to-local.ps1",
+    "db:test-connection": "node src/scripts/testDbConnection.cjs",
     "start": "node src/server.js",
     "seed:admin": "node src/seeder/createAdmin.cjs",
     "seed:companies:backfill": "node src/seeder/backfillCompanies.cjs",

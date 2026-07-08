@@ -1192,10 +1192,8 @@ const LeadDetailsRebuiltContent = ({
     if (!selectedProposalProperties.length) return null;
     const { jsPDF } = await import("jspdf");
     const doc = new jsPDF({ unit: "pt", format: "a4", compress: true });
-    const pageWidth = doc.internal.pageSize.getWidth();
     const pageHeight = doc.internal.pageSize.getHeight();
     const margin = 36;
-    const contentWidth = pageWidth - (margin * 2);
     let cursorY = margin;
 
     const validityDays = String(proposalValidityDays || "7").trim() || "7";

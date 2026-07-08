@@ -173,6 +173,8 @@ const chatRoomSchema = new mongoose.Schema(
 chatRoomSchema.index({ participants: 1, lastMessageAt: -1 });
 chatRoomSchema.index({ type: 1, lastMessageAt: -1 });
 chatRoomSchema.index({ leadId: 1, type: 1 });
+// Escalation inboxes can include managers who are observers but not direct participants.
+chatRoomSchema.index({ "escalation.managerToNotify": 1, lastMessageAt: -1 });
 
 chatRoomSchema.path("participants").validate(function validateParticipants(value) {
   if (!Array.isArray(value) || value.length < 1) return false;

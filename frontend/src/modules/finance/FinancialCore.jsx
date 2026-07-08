@@ -353,7 +353,7 @@ const FinancialCore = () => {
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState("");
   const [leads, setLeads] = useState([]);
-  const [lastUpdatedAt, setLastUpdatedAt] = useState(null);
+  const [, setLastUpdatedAt] = useState(null);
 
   useEffect(() => {
     if (typeof window === "undefined") return;

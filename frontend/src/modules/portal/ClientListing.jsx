@@ -1,5 +1,5 @@
-﻿import React, { useState } from "react";
-import { motion } from "framer-motion";
+import React, { useState } from "react";
+import { motion as Motion } from "framer-motion";
 import {
   ArrowLeft,
   Bath,
@@ -141,7 +141,7 @@ const ClientListing = () => {
                 </p>
               </div>
             ) : (
-              <motion.div
+              <Motion.div
                 initial={{ opacity: 0, scale: 0.95 }}
                 animate={{ opacity: 1, scale: 1 }}
                 className="mt-6 rounded-2xl border border-emerald-200 bg-emerald-50 p-5 text-center"
@@ -157,7 +157,7 @@ const ClientListing = () => {
                 >
                   Book Another
                 </button>
-              </motion.div>
+              </Motion.div>
             )}
           </aside>
         </section>

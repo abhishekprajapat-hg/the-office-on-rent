@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { Search, Filter, MoreVertical, Phone, MapPin, Calendar, Clock, ChevronRight } from 'lucide-react';
-import { motion } from 'framer-motion';
+import { motion as Motion } from 'framer-motion';
 
 // Mock Data
 const initialLeads = [
@@ -11,7 +11,7 @@ const initialLeads = [
 ];
 
 const LeadCard = ({ lead, index }) => (
-    <motion.div
+    <Motion.div
         initial={{ opacity: 0, y: 20 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ delay: index * 0.1 }}
@@ -45,14 +45,14 @@ const LeadCard = ({ lead, index }) => (
         </div>
 
         {/* Hover Action Button */}
-        <motion.div
+        <Motion.div
             initial={{ x: 50 }}
             whileHover={{ x: 0 }}
             className="absolute right-0 bottom-0 bg-primary text-white p-3 rounded-tl-2xl opacity-0 group-hover:opacity-100 transition-all"
         >
             <ChevronRight size={20} />
-        </motion.div>
-    </motion.div>
+        </Motion.div>
+    </Motion.div>
 );
 
 const LeadPool = () => {
@@ -60,7 +60,7 @@ const LeadPool = () => {
     const columns = ["New", "Assigned", "Site Visit", "Closed"];
 
     return (
-        <motion.div
+        <Motion.div
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
@@ -109,7 +109,7 @@ const LeadPool = () => {
                     ))}
                 </div>
             </div>
-        </motion.div>
+        </Motion.div>
     );
 };
 

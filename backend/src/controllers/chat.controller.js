@@ -76,7 +76,11 @@ exports.getContacts = async (req, res) => {
 exports.getRooms = async (req, res) => {
   try {
     const type = req.query?.type || null;
-    const rooms = await listRoomsForUser({ user: req.user, type });
+    const rooms = await listRoomsForUser({
+      user: req.user,
+      type,
+      limit: req.query?.limit,
+    });
     return res.json({
       count: rooms.length,
       rooms,
@@ -297,7 +301,11 @@ exports.getEscalationLogs = async (req, res) => {
 // Legacy compatibility endpoints
 exports.getConversations = async (req, res) => {
   try {
-    const rooms = await listRoomsForUser({ user: req.user, type: null });
+    const rooms = await listRoomsForUser({
+      user: req.user,
+      type: null,
+      limit: req.query?.limit,
+    });
     return res.json({
       count: rooms.length,
       conversations: rooms,

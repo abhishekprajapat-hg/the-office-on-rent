@@ -55,14 +55,14 @@ router.patch(
 router.patch(
   "/:id/approve",
   writeLimiter,
-  authMiddleware.checkRole(["ADMIN"]),
+  authMiddleware.checkRole(["ADMIN", "MANAGER"]),
   inventoryApprovalController.approve,
 );
 
 router.patch(
   "/:id/reject",
   writeLimiter,
-  authMiddleware.checkRole(["ADMIN"]),
+  authMiddleware.checkRole(["ADMIN", "MANAGER"]),
   inventoryApprovalController.reject,
 );
 

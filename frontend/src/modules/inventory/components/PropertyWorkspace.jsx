@@ -15,6 +15,9 @@ import { Badge, Button, EmptyState, Skeleton } from "../../../components/ui";
 import { DataTableShell, MetricCard } from "../../../components/crm";
 import { toApiInventoryStatus } from "./propertyWorkspaceUtils";
 
+const INITIAL_VISIBLE_ASSETS = 60;
+const VISIBLE_ASSET_INCREMENT = 60;
+
 export const PropertyStatusBadge = ({ status }) => {
   const normalized = toApiInventoryStatus(status);
   const tone =
@@ -87,7 +90,7 @@ export const InventoryKpiGrid = ({ metrics = [] }) => (
   </div>
 );
 
-export const PropertyCard = ({
+export const PropertyCard = React.memo(({
   asset,
   canManage,
   canDeleteDirect,
@@ -128,6 +131,8 @@ export const PropertyCard = ({
           <img
             src={image}
             alt={getAssetTitle(asset)}
+            loading="lazy"
+            decoding="async"
             className="h-full w-full object-cover transition-transform duration-500 group-hover:scale-105"
           />
         ) : (
@@ -252,9 +257,9 @@ export const PropertyCard = ({
       </div>
     </article>
   );
-};
+});
 
-export const PropertyTable = ({
+export const PropertyTable = React.memo(({
   assets,
   canManage,
   canDeleteDirect,
@@ -363,7 +368,7 @@ export const PropertyTable = ({
       </tbody>
     </table>
   </DataTableShell>
-);
+));
 
 export const PropertyWorkspace = ({
   loading,
@@ -372,6 +377,18 @@ export const PropertyWorkspace = ({
   actionProps,
   emptyAction,
 }) => {
+  const [visibleCount, setVisibleCount] = React.useState(INITIAL_VISIBLE_ASSETS);
+
+  React.useEffect(() => {
+    setVisibleCount(INITIAL_VISIBLE_ASSETS);
+  }, [assets, viewMode]);
+
+  const visibleAssets = React.useMemo(
+    () => assets.slice(0, visibleCount),
+    [assets, visibleCount],
+  );
+  const hiddenCount = Math.max(0, assets.length - visibleAssets.length);
+
   if (loading) {
     return (
       <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3">
@@ -403,21 +420,49 @@ export const PropertyWorkspace = ({
   }
 
   if (viewMode === "table") {
-    return <PropertyTable assets={assets} {...actionProps} />;
+    return (
+      <>
+        <PropertyTable assets={visibleAssets} {...actionProps} />
+        {hiddenCount > 0 ? (
+          <div className="mt-4 flex justify-center">
+            <button
+              type="button"
+              onClick={() => setVisibleCount((count) => count + VISIBLE_ASSET_INCREMENT)}
+              className="h-10 rounded-xl border border-slate-200 bg-white px-4 text-xs font-bold uppercase tracking-widest text-slate-600 transition hover:border-emerald-300 hover:text-emerald-700"
+            >
+              Show {Math.min(VISIBLE_ASSET_INCREMENT, hiddenCount)} more of {hiddenCount}
+            </button>
+          </div>
+        ) : null}
+      </>
+    );
   }
 
   return (
-    <div className="grid grid-cols-1 gap-5 pb-8 md:grid-cols-2 2xl:grid-cols-3">
-      {assets.map((asset) => (
-        <PropertyCard
-          key={asset._id}
-          asset={asset}
-          deleting={actionProps.deletingId === asset._id}
-          updatingStatus={actionProps.updatingStatusId === asset._id}
-          requestingStatus={actionProps.requestingStatusId === asset._id}
-          {...actionProps}
-        />
-      ))}
-    </div>
+    <>
+      <div className="grid grid-cols-1 gap-5 pb-8 md:grid-cols-2 2xl:grid-cols-3">
+        {visibleAssets.map((asset) => (
+          <PropertyCard
+            key={asset._id}
+            asset={asset}
+            deleting={actionProps.deletingId === asset._id}
+            updatingStatus={actionProps.updatingStatusId === asset._id}
+            requestingStatus={actionProps.requestingStatusId === asset._id}
+            {...actionProps}
+          />
+        ))}
+      </div>
+      {hiddenCount > 0 ? (
+        <div className="-mt-2 flex justify-center pb-8">
+          <button
+            type="button"
+            onClick={() => setVisibleCount((count) => count + VISIBLE_ASSET_INCREMENT)}
+            className="h-11 rounded-xl border border-slate-200 bg-white px-5 text-xs font-bold uppercase tracking-widest text-slate-600 shadow-sm transition hover:border-emerald-300 hover:text-emerald-700"
+          >
+            Show {Math.min(VISIBLE_ASSET_INCREMENT, hiddenCount)} more properties
+          </button>
+        </div>
+      ) : null}
+    </>
   );
 };

@@ -1,15 +1,18 @@
 import axios from "axios";
 
 const configuredBaseUrl = String(import.meta.env.VITE_API_BASE_URL || "").trim();
-const defaultBaseUrl = import.meta.env.DEV
-  ? "/api/client"
-  : "https://nemnidhi.cloud/api/client";
+const defaultBaseUrl = "/api/client";
 const API_BASE_URL = configuredBaseUrl || defaultBaseUrl;
 
 const api = axios.create({
   baseURL: API_BASE_URL,
   timeout: 15000,
 });
+
+const GET_CACHE_TTL_MS = 8000;
+const GET_CACHE_MAX_ENTRIES = 80;
+const getResponseCache = new Map();
+const getInFlightRequests = new Map();
 
 const refreshClient = axios.create({
   baseURL: API_BASE_URL,
@@ -23,6 +26,26 @@ const clearSession = () => {
   localStorage.removeItem("refreshToken");
   localStorage.removeItem("role");
   localStorage.removeItem("user");
+};
+
+const buildGetCacheKey = (url, config = {}) => {
+  const params = config.params ? JSON.stringify(config.params) : "";
+  const role = localStorage.getItem("role") || "";
+  const user = localStorage.getItem("user") || "";
+  return `${API_BASE_URL}|${role}|${user}|${url}|${params}`;
+};
+
+const pruneGetCache = () => {
+  if (getResponseCache.size <= GET_CACHE_MAX_ENTRIES) return;
+  const overflow = getResponseCache.size - GET_CACHE_MAX_ENTRIES;
+  Array.from(getResponseCache.keys()).slice(0, overflow).forEach((key) => {
+    getResponseCache.delete(key);
+  });
+};
+
+const clearGetCache = () => {
+  getResponseCache.clear();
+  getInFlightRequests.clear();
 };
 
 const redirectToLogin = () => {
@@ -70,6 +93,10 @@ const refreshAccessToken = async () => {
 
 // Attach auth for all API calls.
 api.interceptors.request.use((config) => {
+  if (String(config.method || "get").toLowerCase() !== "get") {
+    clearGetCache();
+  }
+
   if (config.headers?.Authorization) {
     return config;
   }
@@ -131,5 +158,42 @@ api.interceptors.response.use(
     return Promise.reject(error);
   },
 );
+
+const uncachedGet = api.get.bind(api);
+
+api.get = (url, config = {}) => {
+  if (config?.cache === false) {
+    return uncachedGet(url, config);
+  }
+
+  const cacheKey = buildGetCacheKey(url, config);
+  const cached = getResponseCache.get(cacheKey);
+  const now = Date.now();
+
+  if (cached && now - cached.storedAt < GET_CACHE_TTL_MS) {
+    return Promise.resolve(cached.response);
+  }
+
+  const inFlight = getInFlightRequests.get(cacheKey);
+  if (inFlight) {
+    return inFlight;
+  }
+
+  const request = uncachedGet(url, config)
+    .then((response) => {
+      getResponseCache.set(cacheKey, {
+        storedAt: Date.now(),
+        response,
+      });
+      pruneGetCache();
+      return response;
+    })
+    .finally(() => {
+      getInFlightRequests.delete(cacheKey);
+    });
+
+  getInFlightRequests.set(cacheKey, request);
+  return request;
+};
 
 export default api;

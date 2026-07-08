@@ -1,6 +1,7 @@
 require("dotenv").config();
 const mongoose = require("mongoose");
 const Inventory = require("../models/Inventory");
+const { assertSeedAllowed } = require("./seedSafetyGuard.cjs");
 
 const sanitizeString = (value) => String(value || "").trim();
 
@@ -49,6 +50,7 @@ const deriveFieldsFromLegacyTitle = ({ title, fallbackId }) => {
 
 async function seedInventoryTitles() {
   try {
+    assertSeedAllowed({ scriptName: "seed:inventory:titles", destructive: false });
     await mongoose.connect(process.env.MONGO_URI);
 
     const rows = await Inventory.find({})

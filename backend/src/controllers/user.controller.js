@@ -257,30 +257,63 @@ const buildProfilePerformanceSummary = async (userDoc) => {
   const todayEnd = new Date();
   todayEnd.setHours(23, 59, 59, 999);
 
-  const [totalLeads, statusRows, dueFollowUpsToday, overdueFollowUps, siteVisits, recentLeads, activitiesPerformed, diaryEntriesCreated, directReports] = await Promise.all([
-    Lead.countDocuments(leadQuery),
+  const [leadSummaryRows, recentLeads, activitiesPerformed, diaryEntriesCreated, directReports] = await Promise.all([
     Lead.aggregate([
       { $match: leadQuery },
       {
-        $group: {
-          _id: "$status",
-          count: { $sum: 1 },
+        $facet: {
+          statusRows: [
+            {
+              $group: {
+                _id: "$status",
+                count: { $sum: 1 },
+              },
+            },
+          ],
+          totals: [
+            {
+              $group: {
+                _id: null,
+                totalLeads: { $sum: 1 },
+                dueFollowUpsToday: {
+                  $sum: {
+                    $cond: [
+                      {
+                        $and: [
+                          { $gte: ["$nextFollowUp", todayStart] },
+                          { $lte: ["$nextFollowUp", todayEnd] },
+                        ],
+                      },
+                      1,
+                      0,
+                    ],
+                  },
+                },
+                overdueFollowUps: {
+                  $sum: {
+                    $cond: [
+                      {
+                        $and: [
+                          { $lt: ["$nextFollowUp", todayStart] },
+                          { $not: [{ $in: ["$status", ["CLOSED", "LOST"]] }] },
+                        ],
+                      },
+                      1,
+                      0,
+                    ],
+                  },
+                },
+                siteVisits: {
+                  $sum: {
+                    $cond: [{ $eq: ["$status", "SITE_VISIT"] }, 1, 0],
+                  },
+                },
+              },
+            },
+          ],
         },
       },
     ]),
-    Lead.countDocuments({
-      ...leadQuery,
-      nextFollowUp: { $gte: todayStart, $lte: todayEnd },
-    }),
-    Lead.countDocuments({
-      ...leadQuery,
-      nextFollowUp: { $lt: todayStart },
-      status: { $nin: ["CLOSED", "LOST"] },
-    }),
-    Lead.countDocuments({
-      ...leadQuery,
-      status: "SITE_VISIT",
-    }),
     Lead.find(leadQuery)
       .select(
         "_id name phone city projectInterested status nextFollowUp updatedAt assignedTo createdBy",
@@ -299,6 +332,13 @@ const buildProfilePerformanceSummary = async (userDoc) => {
     }),
   ]);
 
+  const leadSummary = leadSummaryRows?.[0] || {};
+  const statusRows = leadSummary.statusRows || [];
+  const totals = leadSummary.totals?.[0] || {};
+  const totalLeads = Number(totals.totalLeads || 0);
+  const dueFollowUpsToday = Number(totals.dueFollowUpsToday || 0);
+  const overdueFollowUps = Number(totals.overdueFollowUps || 0);
+  const siteVisits = Number(totals.siteVisits || 0);
   const statusBreakdown = buildLeadStatusMap(statusRows);
   const closedLeads = statusBreakdown.CLOSED || 0;
   const conversionRate = totalLeads

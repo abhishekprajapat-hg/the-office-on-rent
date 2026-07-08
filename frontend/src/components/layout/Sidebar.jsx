@@ -210,7 +210,7 @@ const Sidebar = ({ userRole = "manager", onLogout, theme = "light", onToggleThem
         }`}
       >
         <div
-          className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl border border-slate-200 bg-white p-0.5 shadow-sm md:h-8 md:w-8 md:rounded-lg md:group-hover/sidebar:h-9 md:group-hover/sidebar:w-9 md:group-hover/sidebar:rounded-xl"
+          className="brand-logo-frame flex h-9 w-9 shrink-0 items-center justify-center rounded-xl border border-slate-200 bg-white p-0.5 shadow-sm md:h-8 md:w-8 md:rounded-lg md:group-hover/sidebar:h-9 md:group-hover/sidebar:w-9 md:group-hover/sidebar:rounded-xl"
         >
           <BrandLogo className="h-full w-full" />
         </div>

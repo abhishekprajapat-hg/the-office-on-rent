@@ -2,7 +2,8 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { AnimatePresence } from "framer-motion";
 import { useLocation, useNavigate, useParams } from "react-router-dom";
 import {
-  getAllLeads,
+  getLeadPool,
+  getLeadById,
   createLead,
   bulkUploadLeads,
   updateLeadStatus,
@@ -19,12 +20,12 @@ import {
 } from "../../services/inventoryService";
 import { getUsers } from "../../services/userService";
 import { toErrorMessage } from "../../utils/errorMessage";
+import { useDebouncedValue } from "../../hooks/useDebouncedValue";
 import {
   AddLeadModal,
   BulkLeadUploadModal,
   LeadsMatrixAlerts,
   LeadsMatrixFilters,
-  LeadsMatrixMetrics,
   LeadsMatrixTable,
   LeadsMatrixToolbar,
 } from "./components/LeadsMatrixSections";
@@ -51,6 +52,23 @@ const LEAD_VIEW_MODES = {
   TABLE: "TABLE",
   KANBAN: "KANBAN",
 };
+const LEAD_LIST_PAGE_LIMIT = 100;
+const LEAD_LIST_FIELDS = [
+  "_id",
+  "name",
+  "phone",
+  "email",
+  "city",
+  "projectInterested",
+  "source",
+  "status",
+  "assignedTo",
+  "createdBy",
+  "nextFollowUp",
+  "lastContactedAt",
+  "createdAt",
+  "updatedAt",
+].join(",");
 
 const EXECUTIVE_ROLES = ["EXECUTIVE", "FIELD_EXECUTIVE"];
 const MANAGEMENT_ROLES = ["MANAGER"];
@@ -484,19 +502,97 @@ const normalizeCsvHeader = (value) =>
   String(value || "")
     .trim()
     .toLowerCase()
-    .replace(/[\s_-]+/g, "");
+    .replace(/[\s_/-]+/g, "");
+
+const normalizeBulkCellText = (value) => {
+  if (value === null || value === undefined) return "";
+  if (value instanceof Date && !Number.isNaN(value.getTime())) {
+    return value.toISOString().slice(0, 10);
+  }
+  return String(value).trim();
+};
+
+const normalizeBulkPhone = (value) => {
+  const raw = normalizeBulkCellText(value);
+  if (!raw) return "";
+  const digits = raw.replace(/\D/g, "");
+  if (digits.length < 10) return "";
+  return digits.slice(-10);
+};
+
+const normalizeBulkAmount = (value) => {
+  const raw = normalizeBulkCellText(value);
+  if (!raw) return null;
+  const lower = raw.toLowerCase();
+  const numeric = Number.parseFloat(raw.replace(/,/g, "").replace(/[^\d.]/g, ""));
+  if (!Number.isFinite(numeric)) return null;
+  if (/\blac\b|\blakh\b|\bl\b/.test(lower)) return Math.round(numeric * 100000);
+  if (/\bk\b/.test(lower)) return Math.round(numeric * 1000);
+  return Math.round(numeric);
+};
+
+const normalizeBulkDate = (value) => {
+  if (value instanceof Date && !Number.isNaN(value.getTime())) {
+    return value.toISOString();
+  }
+
+  const raw = normalizeBulkCellText(value);
+  if (!raw) return "";
+
+  const dateMatch = raw.match(/(\d{1,2})[/-](\d{1,2})[/-](\d{2,4})/);
+  if (dateMatch) {
+    const day = Number.parseInt(dateMatch[1], 10);
+    const month = Number.parseInt(dateMatch[2], 10) - 1;
+    const rawYear = Number.parseInt(dateMatch[3], 10);
+    const year = rawYear < 100 ? 2000 + rawYear : rawYear;
+    const parsed = new Date(year, month, day, 12);
+    if (
+      parsed.getFullYear() === year
+      && parsed.getMonth() === month
+      && parsed.getDate() === day
+    ) {
+      return parsed.toISOString();
+    }
+  }
+
+  const parsed = new Date(raw);
+  return Number.isNaN(parsed.getTime()) ? "" : parsed.toISOString();
+};
+
+const normalizeBulkTransactionType = (value) => {
+  const normalized = normalizeBulkCellText(value).toLowerCase();
+  if (!normalized) return "";
+  if (/\b(rent|lease)\b/.test(normalized)) return "RENT";
+  if (/\b(purchase|sale|buy|sell)\b/.test(normalized)) return "SALE";
+  return "";
+};
 
 const resolveLeadCsvHeaderKey = (rawHeader) => {
   const normalized = normalizeCsvHeader(rawHeader);
   if (!normalized) return "";
 
-  if (["name", "leadname", "fullname"].includes(normalized)) return "name";
-  if (["phone", "mobile", "mobileno", "phonenumber"].includes(normalized)) return "phone";
+  if (["name", "leadname", "fullname", "clientname"].includes(normalized)) return "name";
+  if (["phone", "mobile", "mobileno", "phonenumber", "number", "contact"].includes(normalized)) return "phone";
   if (["email", "emailid"].includes(normalized)) return "email";
   if (["city", "location"].includes(normalized)) return "city";
-  if (["project", "projectinterested", "projectname", "interestedproject"].includes(normalized)) {
+  if (["project", "projectinterested", "interestedproject"].includes(normalized)) {
     return "projectInterested";
   }
+  if (["requirement", "requirment", "requiremnt", "requiremewnt"].includes(normalized)) return "requirement";
+  if (["projectname"].includes(normalized)) return "projectName";
+  if (["comment", "comments", "remark", "remarks", "feedback"].includes(normalized)) return "comment";
+  if (["company", "companyname", "working", "business", "workprofile"].includes(normalized)) return "company";
+  if (["status", "leadstatus", "leadstutas", "leadstutus"].includes(normalized)) return "status";
+  if (["date", "leaddate"].includes(normalized)) return "date";
+  if (["followup", "followup2", "followupdate", "followupdate2"].includes(normalized)) return "followUp";
+  if (["callupdate", "callstatus"].includes(normalized)) return "callUpdate";
+  if (["propertytype", "type"].includes(normalized)) return "propertyType";
+  if (["budget"].includes(normalized)) return "budget";
+  if (["visit", "visitupdate"].includes(normalized)) return "visit";
+  if (["handle", "handledby", "owner"].includes(normalized)) return "handle";
+  if (["optionshare", "optionsshared", "optionsshare"].includes(normalized)) return "optionShare";
+  if (["timeline", "timeLine"].includes(normalized)) return "timeline";
+  if (["leadsource", "source"].includes(normalized)) return "source";
   if (["inventoryid", "propertyid", "unitid", "assetid"].includes(normalized)) {
     return "inventoryId";
   }
@@ -507,6 +603,161 @@ const resolveLeadCsvHeaderKey = (rawHeader) => {
   }
 
   return "";
+};
+
+const resolveBulkLeadStatus = ({ sheetName = "", row = {} }) => {
+  const haystack = [
+    sheetName,
+    row.status,
+    row.visit,
+    row.comment,
+    row.callUpdate,
+    row.followUp,
+    row.projectInterested,
+  ]
+    .map((value) => normalizeBulkCellText(value).toLowerCase())
+    .join(" ");
+
+  if (/\b(close|closed|token)\b/.test(haystack)) return "CLOSED";
+  if (/\bvisit|visited|revisit\b/.test(haystack)) return "SITE_VISIT";
+  if (/\binterested|interest\b/.test(haystack)) return "INTERESTED";
+  if (/\btransfer|contacted|follow\s*up|callback|call back\b/.test(haystack)) return "CONTACTED";
+  if (/\blost|not\s*interested|notint|cna\b/.test(haystack)) return "LOST";
+  return "NEW";
+};
+
+const buildBulkLeadProjectSummary = (row) => {
+  const transactionType = normalizeBulkTransactionType(row.projectName);
+  const projectName = normalizeBulkCellText(row.projectName);
+  const parts = [
+    row.projectInterested,
+    row.requirement ? `Requirement: ${row.requirement}` : "",
+    row.propertyType ? `Property Type: ${row.propertyType}` : "",
+    projectName && !transactionType ? `Project: ${projectName}` : "",
+    transactionType ? `Transaction: ${transactionType}` : "",
+    row.city ? `Location: ${row.city}` : "",
+    row.budget ? `Budget: ${row.budget}` : "",
+    row.company ? `Work Profile: ${row.company}` : "",
+    row.callUpdate ? `Call Update: ${row.callUpdate}` : "",
+    row.comment ? `Comment: ${row.comment}` : "",
+    row.visit ? `Visit: ${row.visit}` : "",
+    row.handle ? `Handle: ${row.handle}` : "",
+    row.optionShare ? `Option Share: ${row.optionShare}` : "",
+    row.timeline ? `Timeline: ${row.timeline}` : "",
+  ]
+    .map(normalizeBulkCellText)
+    .filter(Boolean);
+
+  return parts.join(" | ").slice(0, 500);
+};
+
+const buildBulkLeadRequirements = (row) => {
+  const budget = normalizeBulkAmount(row.budget);
+  const requirementText = [
+    row.projectInterested,
+    row.requirement,
+  ].map(normalizeBulkCellText).filter(Boolean).join(" ");
+  const propertyType = normalizeBulkCellText(row.propertyType).toUpperCase();
+  const transactionType = normalizeBulkTransactionType(row.projectName || row.projectInterested);
+  const requirements = {};
+
+  if (budget !== null) {
+    requirements.budgetMin = budget;
+    requirements.budgetMax = budget;
+  }
+
+  if (["COMMERCIAL", "RESIDENTIAL"].includes(propertyType)) {
+    requirements.inventoryType = propertyType;
+  }
+  if (transactionType) {
+    requirements.transactionType = transactionType;
+  }
+
+  const seatsMatch = requirementText.match(/(\d+)\s*(?:seat|seater|seats)\b/i);
+  const cabinMatch = requirementText.match(/(\d+)\s*(?:cabin|cabins)\b/i);
+  const areaMatch = requirementText.match(/(\d+(?:\.\d+)?)\s*(?:sq\s*ft|sqft|sqfit|sft)\b/i);
+  if (seatsMatch || cabinMatch) {
+    requirements.inventoryType = "COMMERCIAL";
+    requirements.transactionType = transactionType || "RENT";
+    requirements.commercial = {};
+    if (seatsMatch) requirements.commercial.seats = Number.parseInt(seatsMatch[1], 10);
+    if (cabinMatch) requirements.commercial.cabins = Number.parseInt(cabinMatch[1], 10);
+  }
+  if (areaMatch) {
+    const area = Number.parseFloat(areaMatch[1]);
+    if (Number.isFinite(area)) {
+      requirements.areaMin = area;
+      requirements.areaMax = area;
+      requirements.areaUnit = "SQ_FT";
+    }
+  }
+
+  return Object.keys(requirements).length ? requirements : undefined;
+};
+
+const normalizeBulkLeadRow = ({ rawRow, mappedHeaders, sheetName = "" }) => {
+  const row = {};
+  const allCellValues = [];
+
+  mappedHeaders.forEach((key, cellIndex) => {
+    const value = normalizeBulkCellText(rawRow[cellIndex]);
+    if (value) allCellValues.push(value);
+    if (!key || !value) return;
+    if (!row[key]) row[key] = value;
+  });
+
+  const phone = normalizeBulkPhone(row.phone)
+    || allCellValues.map(normalizeBulkPhone).find(Boolean)
+    || "";
+  if (!phone) return null;
+
+  const name = normalizeBulkCellText(row.name);
+  const safeName = name && !normalizeBulkPhone(name) ? name : `Lead ${phone}`;
+  const sourceText = normalizeBulkCellText(row.source).toUpperCase();
+  const projectInterested = buildBulkLeadProjectSummary(row);
+  const requirements = buildBulkLeadRequirements(row);
+  const nextFollowUp = normalizeBulkDate(row.followUp);
+  const lastContactedAt = normalizeBulkDate(row.date);
+
+  return {
+    name: safeName,
+    phone,
+    email: row.email || "",
+    city: row.city || "",
+    projectInterested,
+    requirements,
+    source: sourceText.includes("META") ? "META" : "MANUAL",
+    status: resolveBulkLeadStatus({ sheetName, row }),
+    nextFollowUp,
+    lastContactedAt,
+  };
+};
+
+const parseBulkLeadRowsFromMatrix = ({ matrix, sheetName = "" }) => {
+  const headerIndex = matrix.findIndex((rawRow) => {
+    const mappedHeaders = rawRow.map((cell) => resolveLeadCsvHeaderKey(cell));
+    const mappedCount = mappedHeaders.filter(Boolean).length;
+    return mappedCount >= 2 && (mappedHeaders.includes("phone") || mappedHeaders.includes("name"));
+  });
+
+  if (headerIndex < 0) return [];
+
+  const mappedHeaders = matrix[headerIndex].map((header) => resolveLeadCsvHeaderKey(header));
+  const hasName = mappedHeaders.includes("name");
+  const rows = [];
+
+  for (let rowIndex = headerIndex + 1; rowIndex < matrix.length; rowIndex += 1) {
+    const row = normalizeBulkLeadRow({
+      rawRow: matrix[rowIndex],
+      mappedHeaders,
+      sheetName,
+    });
+    if (!row) continue;
+    if (!hasName && !row.name) continue;
+    rows.push(row);
+  }
+
+  return rows;
 };
 
 const parseCsvLine = (line) => {
@@ -563,29 +814,47 @@ const parseBulkLeadCsvRows = (csvText) => {
     throw new Error("CSV header must include at least name and phone columns");
   }
 
-  const rows = [];
-
-  for (let lineIndex = 1; lineIndex < lines.length; lineIndex += 1) {
-    const cells = parseCsvLine(lines[lineIndex]);
-    const row = {};
-
-    mappedHeaders.forEach((key, cellIndex) => {
-      if (!key) return;
-      const value = String(cells[cellIndex] || "").trim();
-      if (value) {
-        row[key] = value;
-      }
-    });
-
-    if (Object.keys(row).length === 0) {
-      continue;
-    }
-
-    rows.push(row);
-  }
+  const rows = parseBulkLeadRowsFromMatrix({
+    matrix: lines.map(parseCsvLine),
+    sheetName: "CSV",
+  });
 
   if (!rows.length) {
     throw new Error("No valid lead rows found in CSV");
+  }
+
+  return rows;
+};
+
+const parseBulkLeadWorkbookRows = async (file) => {
+  const XLSX = await import("xlsx");
+  const buffer = await file.arrayBuffer();
+  const workbook = XLSX.read(buffer, {
+    type: "array",
+    cellDates: true,
+    raw: false,
+  });
+  const rows = [];
+
+  workbook.SheetNames.forEach((sheetName) => {
+    const normalizedSheetName = normalizeCsvHeader(sheetName);
+    if (
+      normalizedSheetName.includes("performance")
+      || normalizedSheetName.includes("perfomance")
+      || ["broker", "owners", "dealclose"].includes(normalizedSheetName)
+    ) return;
+    const worksheet = workbook.Sheets[sheetName];
+    const matrix = XLSX.utils.sheet_to_json(worksheet, {
+      header: 1,
+      defval: "",
+      blankrows: false,
+      raw: false,
+    });
+    rows.push(...parseBulkLeadRowsFromMatrix({ matrix, sheetName }));
+  });
+
+  if (!rows.length) {
+    throw new Error("No valid lead rows found in workbook");
   }
 
   return rows;
@@ -612,6 +881,8 @@ const LeadsMatrix = () => {
   const [leads, setLeads] = useState([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
+  const [loadingMoreLeads, setLoadingMoreLeads] = useState(false);
+  const [leadPagination, setLeadPagination] = useState(null);
   const [error, setError] = useState("");
   const [success, setSuccess] = useState("");
   const [isDark, setIsDark] = useState(() =>
@@ -624,6 +895,7 @@ const LeadsMatrix = () => {
   const [inventoryOptions, setInventoryOptions] = useState([]);
   const [isBulkUploadModalOpen, setIsBulkUploadModalOpen] = useState(false);
   const [bulkUploadText, setBulkUploadText] = useState("");
+  const [bulkUploadParsedRows, setBulkUploadParsedRows] = useState(null);
   const [bulkUploadFileName, setBulkUploadFileName] = useState("");
   const [bulkUploading, setBulkUploading] = useState(false);
 
@@ -633,6 +905,7 @@ const LeadsMatrix = () => {
   const [showDueOnly, setShowDueOnly] = useState(false);
   const [viewMode, setViewMode] = useState(LEAD_VIEW_MODES.TABLE);
   const [nowMs, setNowMs] = useState(0);
+  const debouncedQuery = useDebouncedValue(query, 180);
 
   const [selectedLead, setSelectedLead] = useState(null);
   const [isDetailsOpen, setIsDetailsOpen] = useState(false);
@@ -697,25 +970,47 @@ const LeadsMatrix = () => {
     userRole === "ADMIN" || MANAGEMENT_ROLES.includes(userRole);
   const canReviewDealPayment = userRole === "ADMIN";
 
-  const fetchLeads = useCallback(async (asRefresh = false) => {
+  const fetchLeads = useCallback(async (asRefresh = false, options = {}) => {
+    const page = Number(options.page || 1);
+    const append = Boolean(options.append);
     try {
-      if (asRefresh) {
+      if (append) {
+        setLoadingMoreLeads(true);
+      } else if (asRefresh) {
         setRefreshing(true);
       } else {
         setLoading(true);
       }
       setError("");
 
-      const list = await getAllLeads();
-      setLeads(Array.isArray(list) ? list : []);
+      const response = await getLeadPool({
+        page,
+        limit: LEAD_LIST_PAGE_LIMIT,
+        fields: LEAD_LIST_FIELDS,
+      });
+      const list = Array.isArray(response?.leads) ? response.leads : [];
+      setLeadPagination(response?.pagination || null);
+      setLeads((prev) => {
+        if (!append) return list;
+        const rowsById = new Map(prev.map((lead) => [String(lead?._id || ""), lead]));
+        list.forEach((lead) => {
+          const id = String(lead?._id || "");
+          if (id) rowsById.set(id, lead);
+        });
+        return [...rowsById.values()];
+      });
     } catch (fetchError) {
       const message = toErrorMessage(fetchError, "Failed to load leads");
       console.error(`Load leads failed: ${message}`);
       setError(message);
-      setLeads([]);
+      if (!append) {
+        setLeads([]);
+        setLeadPagination(null);
+      }
     } finally {
       setLoading(false);
       setRefreshing(false);
+      setLoadingMoreLeads(false);
     }
   }, []);
 
@@ -740,7 +1035,31 @@ const LeadsMatrix = () => {
     if (!canManageLeadProperties) return;
 
     try {
-      const rows = await getInventoryAssets({ page: 1, limit: 200 });
+      const rows = await getInventoryAssets({
+        page: 1,
+        limit: 200,
+        fields: [
+          "_id",
+          "projectName",
+          "towerName",
+          "unitNumber",
+          "propertyId",
+          "inventoryType",
+          "price",
+          "type",
+          "category",
+          "furnishingStatus",
+          "status",
+          "location",
+          "city",
+          "area",
+          "pincode",
+          "totalArea",
+          "commercialDetails",
+          "residentialDetails",
+          "siteLocation",
+        ].join(","),
+      });
       setInventoryOptions(Array.isArray(rows) ? rows : []);
     } catch (fetchError) {
       const message = toErrorMessage(fetchError, "Failed to load inventory");
@@ -910,7 +1229,7 @@ const LeadsMatrix = () => {
   );
 
   const filteredLeads = useMemo(() => {
-    const normalized = query.trim().toLowerCase();
+    const normalized = debouncedQuery.trim().toLowerCase();
     const now = nowMs;
 
     const filtered = leads.filter((lead) => {
@@ -965,7 +1284,7 @@ const LeadsMatrix = () => {
       return bMs - aMs;
     });
     return sorted;
-  }, [leads, nowMs, query, showDueOnly, sortBy, statusFilter]);
+  }, [debouncedQuery, leads, nowMs, showDueOnly, sortBy, statusFilter]);
 
   const metrics = useMemo(() => {
     const closed = statusBreakdown.CLOSED || 0;
@@ -991,77 +1310,64 @@ const LeadsMatrix = () => {
     };
   }, [leads, nowMs, statusBreakdown]);
 
-  const handleMetricSelect = useCallback((metricKey) => {
-    switch (metricKey) {
-      case "due":
-        setShowDueOnly(true);
-        setStatusFilter("ALL");
-        break;
-      case "conversion":
-      case "closed":
-        setStatusFilter("CLOSED");
-        setShowDueOnly(false);
-        break;
-      case "interested":
-        setStatusFilter("INTERESTED");
-        setShowDueOnly(false);
-        break;
-      case "contacted":
-        setStatusFilter("CONTACTED");
-        setShowDueOnly(false);
-        break;
-      case "new":
-        setStatusFilter("NEW");
-        setShowDueOnly(false);
-        break;
-      default:
-        setStatusFilter("ALL");
-        setShowDueOnly(false);
-        break;
-    }
-  }, []);
-
   const openLeadDetails = useCallback(async (lead) => {
     const resolvedLeadId = String(lead?._id || "").trim();
     if (!resolvedLeadId) return;
 
-    const leadSiteLat = toCoordinateNumber(lead?.siteLocation?.lat);
-    const leadSiteLng = toCoordinateNumber(lead?.siteLocation?.lng);
-
     setSelectedLead(lead);
-    setNameDraft(String(lead?.name || ""));
-    setPhoneDraft(String(lead?.phone || ""));
-    setEmailDraft(String(lead?.email || ""));
-    setCityDraft(String(lead?.city || ""));
-    setProjectInterestedDraft(String(lead?.projectInterested || ""));
-    setStatusDraft(lead.status || "NEW");
-    setFollowUpDraft(toDateTimeInput(lead.nextFollowUp));
+    setIsDetailsOpen(true);
+    setActivityLoading(true);
+    setDiaryLoading(true);
+
+    let detailLead = lead;
+    try {
+      const fullLead = await getLeadById(resolvedLeadId);
+      if (fullLead?._id) {
+        detailLead = fullLead;
+        setLeads((prev) =>
+          prev.map((row) => (row._id === fullLead._id ? { ...row, ...fullLead } : row)),
+        );
+      }
+    } catch (detailError) {
+      const message = toErrorMessage(detailError, "Failed to load lead details");
+      console.error(`Load lead details failed: ${message}`);
+      setError(message);
+    }
+
+    const leadSiteLat = toCoordinateNumber(detailLead?.siteLocation?.lat);
+    const leadSiteLng = toCoordinateNumber(detailLead?.siteLocation?.lng);
+
+    setSelectedLead(detailLead);
+    setNameDraft(String(detailLead?.name || ""));
+    setPhoneDraft(String(detailLead?.phone || ""));
+    setEmailDraft(String(detailLead?.email || ""));
+    setCityDraft(String(detailLead?.city || ""));
+    setProjectInterestedDraft(String(detailLead?.projectInterested || ""));
+    setStatusDraft(detailLead.status || "NEW");
+    setFollowUpDraft(toDateTimeInput(detailLead.nextFollowUp));
     setSiteLatDraft(leadSiteLat === null ? "" : String(leadSiteLat));
     setSiteLngDraft(leadSiteLng === null ? "" : String(leadSiteLng));
     setExecutiveDraft(
-      typeof lead.assignedTo === "string"
-        ? lead.assignedTo
-        : lead.assignedTo?._id || "",
+      typeof detailLead.assignedTo === "string"
+        ? detailLead.assignedTo
+        : detailLead.assignedTo?._id || "",
     );
     setRelatedInventoryDraft("");
-    setPaymentModeDraft(String(lead?.dealPayment?.mode || ""));
-    setPaymentTypeDraft(String(lead?.dealPayment?.paymentType || ""));
+    setPaymentModeDraft(String(detailLead?.dealPayment?.mode || ""));
+    setPaymentTypeDraft(String(detailLead?.dealPayment?.paymentType || ""));
     setPaymentRemainingDraft(
-      lead?.dealPayment?.remainingAmount === null || lead?.dealPayment?.remainingAmount === undefined
+      detailLead?.dealPayment?.remainingAmount === null || detailLead?.dealPayment?.remainingAmount === undefined
         ? ""
-        : String(lead.dealPayment.remainingAmount),
+        : String(detailLead.dealPayment.remainingAmount),
     );
-    setPaymentReferenceDraft(String(lead?.dealPayment?.paymentReference || ""));
-    setPaymentNoteDraft(String(lead?.dealPayment?.note || ""));
+    setPaymentReferenceDraft(String(detailLead?.dealPayment?.paymentReference || ""));
+    setPaymentNoteDraft(String(detailLead?.dealPayment?.note || ""));
     setPaymentApprovalStatusDraft("");
-    setPaymentApprovalNoteDraft(String(lead?.dealPayment?.approvalNote || ""));
-    setClosureDocumentsDraft(sanitizeClosureDocumentList(lead?.closureDocuments));
-    setRequirementsDraft(mapLeadRequirementsToDraft(lead?.requirements));
+    setPaymentApprovalNoteDraft(String(detailLead?.dealPayment?.approvalNote || ""));
+    setClosureDocumentsDraft(sanitizeClosureDocumentList(detailLead?.closureDocuments));
+    setRequirementsDraft(mapLeadRequirementsToDraft(detailLead?.requirements));
     setDiaryDraft("");
-    setIsDetailsOpen(true);
 
-    setActivityLoading(true);
-    setDiaryLoading(true);
     const [timelineResult, diaryResult] = await Promise.allSettled([
       getLeadActivity(resolvedLeadId),
       getLeadDiary(resolvedLeadId),
@@ -1125,12 +1431,8 @@ const LeadsMatrix = () => {
   const handleOpenLeadDetailsPage = useCallback((lead) => {
     const resolvedLeadId = String(lead?._id || "").trim();
     if (!resolvedLeadId) return;
-    if (!isRouteDetailsView) {
-      openLeadDetails(lead);
-      return;
-    }
     navigate(`${currentLeadRouteBase}/${resolvedLeadId}`);
-  }, [currentLeadRouteBase, isRouteDetailsView, navigate, openLeadDetails]);
+  }, [currentLeadRouteBase, navigate]);
 
   useEffect(() => {
     if (!isRouteDetailsView) {
@@ -1149,11 +1451,7 @@ const LeadsMatrix = () => {
     );
 
     if (!targetLead) {
-      setError("Lead not found or you do not have access to this lead");
-      setSelectedLead(null);
-      setIsDetailsOpen(false);
-      setActivities([]);
-      setDiaryEntries([]);
+      openLeadDetails({ _id: normalizedRouteLeadId });
       return;
     }
 
@@ -1227,6 +1525,17 @@ const LeadsMatrix = () => {
     try {
       setUpdatingInlineStatusId(leadId);
       setError("");
+      setLeads((prev) =>
+        prev.map((row) =>
+          String(row?._id || "") === leadId
+            ? { ...row, status: normalizedStatus, updatedAt: new Date().toISOString() }
+            : row),
+      );
+      if (String(selectedLead?._id || "") === leadId) {
+        setSelectedLead((prev) =>
+          prev ? { ...prev, status: normalizedStatus, updatedAt: new Date().toISOString() } : prev,
+        );
+      }
 
       const updatedLead = await updateLeadStatus(leadId, { status: normalizedStatus });
 
@@ -1240,6 +1549,13 @@ const LeadsMatrix = () => {
     } catch (statusError) {
       const message = toErrorMessage(statusError, "Failed to update lead status");
       console.error(`Inline lead status update failed: ${message}`);
+      setLeads((prev) =>
+        prev.map((row) =>
+          String(row?._id || "") === leadId ? { ...row, status: lead.status } : row),
+      );
+      if (String(selectedLead?._id || "") === leadId) {
+        setSelectedLead((prev) => (prev ? { ...prev, status: lead.status } : prev));
+      }
       setError(message);
     } finally {
       setUpdatingInlineStatusId("");
@@ -1432,12 +1748,21 @@ const LeadsMatrix = () => {
     if (!file) return;
 
     try {
-      const csvText = await file.text();
-      setBulkUploadText(String(csvText || ""));
+      const extension = String(file.name || "").split(".").pop()?.toLowerCase();
+      if (["xlsx", "xls"].includes(extension)) {
+        const rows = await parseBulkLeadWorkbookRows(file);
+        setBulkUploadParsedRows(rows);
+        setBulkUploadText(`Parsed ${rows.length} lead rows from ${file.name}`);
+      } else {
+        const csvText = await file.text();
+        setBulkUploadParsedRows(null);
+        setBulkUploadText(String(csvText || ""));
+      }
       setBulkUploadFileName(String(file.name || ""));
       setError("");
     } catch {
-      setError("Unable to read selected CSV file");
+      setBulkUploadParsedRows(null);
+      setError("Unable to read selected bulk lead file");
     }
   };
 
@@ -1448,13 +1773,18 @@ const LeadsMatrix = () => {
       setBulkUploading(true);
       setError("");
 
-      const rows = parseBulkLeadCsvRows(bulkUploadText);
+      const rows = Array.isArray(bulkUploadParsedRows)
+        ? bulkUploadParsedRows
+        : parseBulkLeadCsvRows(bulkUploadText);
       const result = await bulkUploadLeads(rows);
       await fetchLeads(true);
 
       const createdCount = Number(result?.createdCount || 0);
+      const updatedCount = Number(result?.updatedCount || 0);
       const failedCount = Number(result?.failedCount || 0);
-      setSuccess(`Bulk upload complete: ${createdCount} created, ${failedCount} failed`);
+      setSuccess(
+        `Bulk upload complete: ${createdCount} created, ${updatedCount} updated, ${failedCount} failed`,
+      );
 
       const failures = Array.isArray(result?.failures) ? result.failures : [];
       if (failedCount > 0 && failures.length) {
@@ -1470,6 +1800,7 @@ const LeadsMatrix = () => {
       } else {
         setIsBulkUploadModalOpen(false);
         setBulkUploadText("");
+        setBulkUploadParsedRows(null);
         setBulkUploadFileName("");
       }
     } catch (uploadError) {
@@ -1980,20 +2311,12 @@ const LeadsMatrix = () => {
               onRefresh={() => fetchLeads(true)}
               onOpenAddModal={() => setIsAddModalOpen(true)}
               onOpenBulkUploadModal={() => setIsBulkUploadModalOpen(true)}
-              totalLeads={metrics.total}
+              totalLeads={leadPagination?.totalCount ?? metrics.total}
               filteredLeads={filteredLeads.length}
               dueFollowUps={metrics.dueFollowUps}
             />
 
             <LeadsMatrixAlerts isDark={isDark} error={error} success={success} />
-
-            <LeadsMatrixMetrics
-              isDark={isDark}
-              metrics={metrics}
-              statusFilter={statusFilter}
-              showDueOnly={showDueOnly}
-              onMetricSelect={handleMetricSelect}
-            />
 
             <div className="sticky top-0 z-30 -mx-2.5 px-2.5 pb-2 pt-1 backdrop-blur-xl sm:-mx-6 sm:px-6 lg:-mx-10 lg:px-10">
               <LeadsMatrixFilters
@@ -2029,6 +2352,28 @@ const LeadsMatrix = () => {
               formatDate={formatDate}
               nowMs={nowMs}
             />
+
+            {leadPagination?.hasNextPage ? (
+              <div className="flex justify-center px-4 py-5">
+                <button
+                  type="button"
+                  onClick={() =>
+                    fetchLeads(true, {
+                      page: Number(leadPagination.page || 1) + 1,
+                      append: true,
+                    })
+                  }
+                  disabled={loadingMoreLeads}
+                  className={`rounded-xl px-4 py-2 text-xs font-bold uppercase tracking-widest transition ${
+                    isDark
+                      ? "border border-slate-700 bg-slate-900 text-slate-200 hover:bg-slate-800"
+                      : "border border-slate-200 bg-white text-slate-700 hover:bg-slate-50"
+                  } disabled:cursor-not-allowed disabled:opacity-60`}
+                >
+                  {loadingMoreLeads ? "Loading..." : "Load more leads"}
+                </button>
+              </div>
+            ) : null}
           </>
         )}
       </div>
@@ -2054,7 +2399,10 @@ const LeadsMatrix = () => {
           <BulkLeadUploadModal
             isDark={isDark}
             csvText={bulkUploadText}
-            onCsvTextChange={setBulkUploadText}
+            onCsvTextChange={(value) => {
+              setBulkUploadParsedRows(null);
+              setBulkUploadText(value);
+            }}
             selectedFileName={bulkUploadFileName}
             onFileSelect={handleBulkUploadFileSelect}
             onClose={() => setIsBulkUploadModalOpen(false)}
@@ -2065,28 +2413,12 @@ const LeadsMatrix = () => {
       </AnimatePresence>
 
       <AnimatePresence>
-        {isDetailsOpen && selectedLead && (
+        {isRouteDetailsView && isDetailsOpen && selectedLead && (
           <div
-            className={
-              isRouteDetailsView
-                ? ""
-                : "fixed inset-0 z-[90] flex justify-end bg-slate-950/42 backdrop-blur-[2px]"
-            }
+            className="w-full"
           >
-            {!isRouteDetailsView ? (
-              <button
-                type="button"
-                aria-label="Close lead details"
-                className="absolute inset-0"
-                onClick={closeDetails}
-              />
-            ) : null}
             <div
-              className={
-                isRouteDetailsView
-                  ? "w-full"
-                  : "mobile-fullscreen-panel relative h-full w-full max-w-6xl overflow-y-auto p-2 custom-scrollbar sm:p-4"
-              }
+              className="w-full"
             >
               <LeadDetailsRebuilt
                 isDark={isDark}

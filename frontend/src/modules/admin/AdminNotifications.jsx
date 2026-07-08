@@ -305,8 +305,11 @@ const AdminNotifications = () => {
 
   useEffect(() => {
     if (!adminRequestPulseAt) return;
-    loadNotifications(true);
-    markAdminRequestsRead();
+    const timerId = window.setTimeout(() => {
+      loadNotifications(true);
+      markAdminRequestsRead();
+    }, 700);
+    return () => window.clearTimeout(timerId);
   }, [adminRequestPulseAt, loadNotifications, markAdminRequestsRead]);
 
   useEffect(() => {

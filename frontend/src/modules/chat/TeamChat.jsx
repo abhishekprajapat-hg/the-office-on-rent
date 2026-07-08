@@ -38,7 +38,7 @@ import {
   markMessageSeen,
   sendDirectMessage,
 } from "../../services/chatService";
-import { createChatSocket } from "../../services/chatSocket";
+import { acquireChatSocket, releaseChatSocket } from "../../services/chatSocket";
 import { useChatNotifications } from "../../context/useChatNotifications";
 import { toErrorMessage } from "../../utils/errorMessage";
 import {
@@ -102,6 +102,7 @@ const MAX_MEDIA_ATTACHMENTS = 8;
 const MAX_MEDIA_SIZE_BYTES = 25 * 1024 * 1024;
 const TYPING_IDLE_TIMEOUT_MS = 1200;
 const REMOTE_TYPING_TIMEOUT_MS = 3200;
+const ROOM_READ_EMIT_THROTTLE_MS = 1000;
 const CALL_SIGNAL_QUEUE_LIMIT = 60;
 const CALL_RING_TIMEOUT_MS = 45000;
 
@@ -470,7 +471,7 @@ const formatCallDuration = (seconds) => {
   return `${secs}s`;
 };
 
-const toCallHistoryStatusLabel = (row, currentUserId) => {
+const _toCallHistoryStatusLabel = (row, currentUserId) => {
   const status = String(row?.status || "").trim().toLowerCase();
   const callerId = toId(row?.caller?._id);
   const isOutgoing = callerId && callerId === toId(currentUserId);
@@ -541,6 +542,7 @@ const TeamChat = ({ theme = "light" }) => {
   const seenSocketMessageIdsRef = useRef(new Set());
   const deliveredReceiptIdsRef = useRef(new Set());
   const seenReceiptIdsRef = useRef(new Set());
+  const roomReadEmitAtRef = useRef(new Map());
   const peerConnectionRef = useRef(null);
   const localStreamRef = useRef(null);
   const remoteStreamRef = useRef(null);
@@ -570,8 +572,8 @@ const TeamChat = ({ theme = "light" }) => {
   const [selectedConversationId, setSelectedConversationId] = useState("");
   const [selectedContactId, setSelectedContactId] = useState("");
   const [messages, setMessages] = useState([]);
-  const [callHistory, setCallHistory] = useState([]);
-  const [callHistoryLoading, setCallHistoryLoading] = useState(false);
+  const [, setCallHistory] = useState([]);
+  const [, setCallHistoryLoading] = useState(false);
   const [typingByRoom, setTypingByRoom] = useState({});
   const [draft, setDraft] = useState("");
   const [queuedShare, setQueuedShare] = useState(null);
@@ -581,12 +583,12 @@ const TeamChat = ({ theme = "light" }) => {
   const [messageSearch, setMessageSearch] = useState("");
   const [incomingCall, setIncomingCall] = useState(null);
   const [activeCall, setActiveCall] = useState(null);
-  const [callError, setCallError] = useState("");
+  const [, setCallError] = useState("");
   const [isMicMuted, setIsMicMuted] = useState(false);
   const [isSpeakerMuted, setIsSpeakerMuted] = useState(false);
   const [isCameraMuted, setIsCameraMuted] = useState(false);
-  const [isCallFullscreen, setIsCallFullscreen] = useState(false);
-  const [callElapsedSeconds, setCallElapsedSeconds] = useState(0);
+  const [, setIsCallFullscreen] = useState(false);
+  const [, setCallElapsedSeconds] = useState(0);
   const [mobileListMode, setMobileListMode] = useState("chats");
   const [activeMessageActionId, setActiveMessageActionId] = useState("");
   const [messageActionLoadingId, setMessageActionLoadingId] = useState("");
@@ -703,6 +705,18 @@ const TeamChat = ({ theme = "light" }) => {
 
       const socket = socketRef.current;
       if (socket?.connected) {
+        if (!options.force) {
+          const now = Date.now();
+          const lastEmitAt = roomReadEmitAtRef.current.get(id) || 0;
+          if (now - lastEmitAt < ROOM_READ_EMIT_THROTTLE_MS) {
+            return;
+          }
+          roomReadEmitAtRef.current.set(id, now);
+          if (roomReadEmitAtRef.current.size > 500) {
+            roomReadEmitAtRef.current.clear();
+          }
+        }
+
         const ack = await new Promise((resolve) => {
           socket.emit("chat:room:read", { roomId: id }, (response) => {
             resolve(response || {});
@@ -1308,13 +1322,13 @@ const TeamChat = ({ theme = "light" }) => {
     [],
   );
 
-  const activeCallPeerName = useMemo(() => {
+  const _activeCallPeerName = useMemo(() => {
     if (activeCall?.peer?.name) return activeCall.peer.name;
     if (incomingCall?.from?.name) return incomingCall.from.name;
     return activeContact?.name || "User";
   }, [activeCall, activeContact, incomingCall]);
 
-  const activeCallLabel = useMemo(() => {
+  const _activeCallLabel = useMemo(() => {
     if (!activeCall) return "";
     if (activeCall.phase === CALL_PHASES.DIALING) return "Ringing...";
     if (activeCall.phase === CALL_PHASES.CONNECTING) return "Connecting...";
@@ -1322,7 +1336,7 @@ const TeamChat = ({ theme = "light" }) => {
   }, [activeCall]);
 
   const activeCallId = toId(activeCall?.callId);
-  const isVideoCallActive = Boolean(
+  const _isVideoCallActive = Boolean(
     activeCall && normalizeCallMode(activeCall.mode) === CALL_MODES.VIDEO,
   );
 
@@ -1407,7 +1421,7 @@ const TeamChat = ({ theme = "light" }) => {
     }
   }, [activeCallId]);
 
-  const handleToggleMicMute = useCallback(() => {
+  const _handleToggleMicMute = useCallback(() => {
     setIsMicMuted((prev) => {
       const next = !prev;
       const stream = localStreamRef.current;
@@ -1420,7 +1434,7 @@ const TeamChat = ({ theme = "light" }) => {
     });
   }, []);
 
-  const handleToggleSpeakerMute = useCallback(() => {
+  const _handleToggleSpeakerMute = useCallback(() => {
     setIsSpeakerMuted((prev) => {
       const next = !prev;
       if (remoteAudioRef.current) {
@@ -1431,7 +1445,7 @@ const TeamChat = ({ theme = "light" }) => {
     });
   }, []);
 
-  const handleToggleCameraMute = useCallback(() => {
+  const _handleToggleCameraMute = useCallback(() => {
     if (normalizeCallMode(activeCallRef.current?.mode) !== CALL_MODES.VIDEO) {
       return;
     }
@@ -1448,7 +1462,7 @@ const TeamChat = ({ theme = "light" }) => {
     });
   }, []);
 
-  const handleToggleCallFullscreen = useCallback(async () => {
+  const _handleToggleCallFullscreen = useCallback(async () => {
     if (typeof document === "undefined") return;
     const stage = callStageRef.current;
     if (!stage) return;
@@ -1594,7 +1608,7 @@ const TeamChat = ({ theme = "light" }) => {
 
     try {
       setMessagesLoading(true);
-      const list = await getConversationMessages({ conversationId, limit: 120 });
+      const list = await getConversationMessages({ conversationId, limit: 80 });
       setMessages(Array.isArray(list) ? list : []);
     } catch (err) {
       setError(toErrorMessage(err, "Failed to load messages"));
@@ -1604,7 +1618,7 @@ const TeamChat = ({ theme = "light" }) => {
     }
   }, []);
 
-  const handleStartCall = useCallback(async (mode = CALL_MODES.AUDIO) => {
+  const _handleStartCall = useCallback(async (mode = CALL_MODES.AUDIO) => {
     const normalizedMode = normalizeCallMode(mode);
     if (!activeContact) {
       setCallError("Select a contact to start a call");
@@ -1718,7 +1732,7 @@ const TeamChat = ({ theme = "light" }) => {
     selectedConversationId,
   ]);
 
-  const handleAcceptIncomingCall = useCallback(async () => {
+  const _handleAcceptIncomingCall = useCallback(async () => {
     const pendingCall = incomingCallRef.current;
     if (!pendingCall) return;
 
@@ -1800,7 +1814,7 @@ const TeamChat = ({ theme = "light" }) => {
     }
   }, [clearQueuedCallSignals, emitCallAck, loadCallHistoryForConversation]);
 
-  const handleEndCall = useCallback(() => {
+  const _handleEndCall = useCallback(() => {
     const roomId = toId(activeCallRef.current?.roomId || selectedConversationRef.current);
     endActiveCall({ notifyRemote: true, reason: "ended" })
       .catch(() => null)
@@ -1972,7 +1986,8 @@ const TeamChat = ({ theme = "light" }) => {
     const token = localStorage.getItem("token");
     if (!token) return undefined;
 
-    const socket = createChatSocket(token);
+    const socket = acquireChatSocket(token);
+    if (!socket) return undefined;
     const remoteTypingTimeouts = remoteTypingTimeoutsRef.current;
     socketRef.current = socket;
 
@@ -2281,6 +2296,11 @@ const TeamChat = ({ theme = "light" }) => {
     socket.on("chat:room:read", onRoomRead);
     socket.on("chat:room:cleared", onRoomCleared);
     socket.on("chat:typing", onTyping);
+    socket.on("chat:call:incoming", onCallIncoming);
+    socket.on("chat:call:accepted", onCallAccepted);
+    socket.on("chat:call:rejected", onCallRejected);
+    socket.on("chat:call:ended", onCallEnded);
+    socket.on("chat:call:signal", onCallSignal);
 
     return () => {
       socket.off("connect", onConnect);
@@ -2294,13 +2314,18 @@ const TeamChat = ({ theme = "light" }) => {
       socket.off("chat:room:read", onRoomRead);
       socket.off("chat:room:cleared", onRoomCleared);
       socket.off("chat:typing", onTyping);
+      socket.off("chat:call:incoming", onCallIncoming);
+      socket.off("chat:call:accepted", onCallAccepted);
+      socket.off("chat:call:rejected", onCallRejected);
+      socket.off("chat:call:ended", onCallEnded);
+      socket.off("chat:call:signal", onCallSignal);
       clearLocalTypingStopTimer();
       typingStateRef.current = { roomId: "", isTyping: false };
       remoteTypingTimeouts.forEach((timeoutId) => clearTimeout(timeoutId));
       remoteTypingTimeouts.clear();
       setTypingByRoom({});
       clearActiveCallLocally();
-      socket.disconnect();
+      releaseChatSocket(socket);
       socketRef.current = null;
       setSocketConnected(false);
     };
