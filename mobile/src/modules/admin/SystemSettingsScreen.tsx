@@ -1,6 +1,7 @@
 import React, { useEffect, useMemo, useState } from "react";
 import { Pressable, StyleSheet, Switch, Text, View } from "react-native";
 import { Screen } from "../../components/common/Screen";
+import { useAuth } from "../../context/AuthContext";
 import {
   DEFAULT_SYSTEM_SETTINGS,
   readSystemSettings,
@@ -9,6 +10,7 @@ import {
 } from "../../utils/systemSettings";
 
 export const SystemSettingsScreen = () => {
+  const { role } = useAuth();
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [savedSnapshot, setSavedSnapshot] = useState(JSON.stringify(DEFAULT_SYSTEM_SETTINGS));
@@ -68,6 +70,26 @@ export const SystemSettingsScreen = () => {
     setSavedSnapshot(JSON.stringify(reset));
     setSaveState("saved");
   };
+
+  if (loading) {
+    return (
+      <Screen title="System Settings" subtitle="Loading..." loading>
+        <View />
+      </Screen>
+    );
+  }
+
+  const canAccessSettings = role === "ADMIN" || role === "MANAGER";
+
+  if (!canAccessSettings) {
+    return (
+      <Screen title="System Settings" subtitle="Access Denied">
+        <View style={{ flex: 1, justifyContent: "center", alignItems: "center" }}>
+          <Text style={{ color: "#ef4444", fontWeight: "600" }}>Access denied. Only ADMIN/MANAGER can configure system settings.</Text>
+        </View>
+      </Screen>
+    );
+  }
 
   return (
     <Screen title="System Settings" subtitle="Runtime + Security" loading={loading} error={error}>

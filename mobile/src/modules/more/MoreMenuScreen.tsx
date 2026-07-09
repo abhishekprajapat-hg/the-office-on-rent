@@ -1,5 +1,5 @@
 import React from "react";
-import { Pressable, StyleSheet, Text, View } from "react-native";
+import { Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { Screen } from "../../components/common/Screen";
 import { AppCard } from "../../components/common/ui";
@@ -44,24 +44,36 @@ export const MoreMenuScreen = ({ navigation }: any) => {
 
   return (
     <Screen title="More" subtitle="Quick Access">
-      <AppCard style={styles.card as object}>
-        <Row label="Samvid Bot" onPress={() => open("Samvid Bot")} />
-        {isAdmin ? (
-          <Row
-            label="Chat"
-            badgeCount={chatUnreadTotal}
-            onPress={() => {
-              markAllChatRead();
-              open("Chat");
-            }}
-          />
-        ) : null}
-        <Row label="Profile" onPress={() => open("Profile")} />
-        <Row label="Tasks" onPress={() => open("Tasks")} />
-        {isManagement ? <Row label="Users" onPress={() => open("Users")} /> : null}
-        {isManagement ? <Row label="Settings" onPress={() => open("Settings")} /> : null}
-        {isAdmin ? <Row label="Field Ops" onPress={() => open("Field Ops")} /> : null}
-      </AppCard>
+      <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: 24 }}>
+        <AppCard style={styles.card as object}>
+          <Row label="Samvid Bot" onPress={() => open("Samvid Bot")} />
+          {isAdmin ? (
+            <Row
+              label="Chat"
+              badgeCount={chatUnreadTotal}
+              onPress={() => {
+                markAllChatRead();
+                open("Chat");
+              }}
+            />
+          ) : null}
+          <Row label="Profile" onPress={() => open("Profile")} />
+          <Row label="Tasks" onPress={() => open("Tasks")} />
+          {isManagement ? <Row label="Users" onPress={() => open("Users")} /> : null}
+          <Row label="Leaderboard" onPress={() => open("Leaderboard")} />
+          
+          {/* Screens moved from overflowing bottom tabs */}
+          {role !== "CHANNEL_PARTNER" ? <Row label="Attendance" onPress={() => open("Attendance")} /> : null}
+          {isManagement ? <Row label="Reports" onPress={() => open("Reports")} /> : null}
+          {role !== "CHANNEL_PARTNER" ? <Row label="Finance" onPress={() => open("Finance")} /> : null}
+          <Row label="Targets" onPress={() => open("Targets")} />
+          <Row label="Calendar" onPress={() => open("Calendar")} />
+
+          {isManagement ? <Row label="Settings" onPress={() => open("Settings")} /> : null}
+          {isManagement ? <Row label="Meta Ads" onPress={() => open("MetaAds")} /> : null}
+          {isAdmin ? <Row label="Field Ops" onPress={() => open("Field Ops")} /> : null}
+        </AppCard>
+      </ScrollView>
     </Screen>
   );
 };
