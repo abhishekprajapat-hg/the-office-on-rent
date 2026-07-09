@@ -21,10 +21,13 @@ import { ChatConversationScreen } from "../modules/chat/ChatConversationScreen";
 import { CallScreen } from "../modules/chat/CallScreen";
 import { IntelligenceReportsScreen } from "../modules/reports/IntelligenceReportsScreen";
 import { PerformanceScreen } from "../modules/reports/PerformanceScreen";
+import { RoleLeaderboardScreen } from "../modules/reports/RoleLeaderboardScreen";
 import { MasterScheduleScreen } from "../modules/calendar/MasterScheduleScreen";
 import { FieldOpsScreen } from "../modules/field/FieldOpsScreen";
+import { AttendanceScreen } from "../modules/attendance/AttendanceScreen";
 import { TeamManagerScreen } from "../modules/admin/TeamManagerScreen";
 import { SystemSettingsScreen } from "../modules/admin/SystemSettingsScreen";
+import { AdminMetaAdsScreen } from "../modules/admin/AdminMetaAdsScreen";
 import { FinancialCoreScreen } from "../modules/finance/FinancialCoreScreen";
 import { NotificationsScreen } from "../modules/notifications/NotificationsScreen";
 import { ProfileScreen } from "../modules/profile/ProfileScreen";
@@ -46,6 +49,7 @@ const getTabIconName = (routeName: string, focused: boolean) => {
     Dashboard: { focused: "speedometer", unfocused: "speedometer-outline" },
     Leads: { focused: "people", unfocused: "people-outline" },
     Inventory: { focused: "cube", unfocused: "cube-outline" },
+    Attendance: { focused: "time", unfocused: "time-outline" },
     Reports: { focused: "bar-chart", unfocused: "bar-chart-outline" },
     Finance: { focused: "wallet", unfocused: "wallet-outline" },
     Chat: { focused: "chatbubble", unfocused: "chatbubble-outline" },
@@ -105,10 +109,6 @@ const RoleMainTabs = ({ role }: { role: UserRole }) => {
         <Tab.Screen name="Dashboard" component={ManagerDashboardScreen} />
         <Tab.Screen name="Leads" component={LeadsMatrixScreen} />
         <Tab.Screen name="Inventory" component={AssetVaultScreen} />
-        <Tab.Screen name="Reports" component={IntelligenceReportsScreen} />
-        <Tab.Screen name="Targets" component={PerformanceScreen} />
-        <Tab.Screen name="Finance" component={FinancialCoreScreen} />
-        <Tab.Screen name="Calendar" component={MasterScheduleScreen} />
         <Tab.Screen
           name="Notifications"
           component={NotificationsScreen}
@@ -136,9 +136,6 @@ const RoleMainTabs = ({ role }: { role: UserRole }) => {
         <Tab.Screen name="Dashboard" component={ManagerDashboardScreen} />
         <Tab.Screen name="Leads" component={LeadsMatrixScreen} />
         <Tab.Screen name="Inventory" component={AssetVaultScreen} />
-        <Tab.Screen name="Reports" component={IntelligenceReportsScreen} />
-        <Tab.Screen name="Targets" component={PerformanceScreen} />
-        <Tab.Screen name="Finance" component={FinancialCoreScreen} />
         <Tab.Screen name="Chat" component={TeamChatScreen} options={{ tabBarBadge: chatBadge }} />
         <Tab.Screen name="More" component={MoreMenuScreen} />
       </Tab.Navigator>
@@ -162,15 +159,36 @@ const RoleMainTabs = ({ role }: { role: UserRole }) => {
         <Tab.Screen name="Dashboard" component={ExecutiveDashboardScreen} />
         <Tab.Screen name="Leads" component={LeadsMatrixScreen} />
         <Tab.Screen name="Inventory" component={AssetVaultScreen} />
-        <Tab.Screen name="Finance" component={FinancialCoreScreen} />
-        <Tab.Screen name="Targets" component={PerformanceScreen} />
-        <Tab.Screen name="Calendar" component={MasterScheduleScreen} />
         <Tab.Screen name="Chat" component={TeamChatScreen} options={{ tabBarBadge: chatBadge }} />
         <Tab.Screen name="More" component={MoreMenuScreen} />
       </Tab.Navigator>
     );
   }
 
+  if (role === "FIELD_EXECUTIVE") {
+    return (
+      <Tab.Navigator
+        screenOptions={({ route }) => ({
+          ...sharedOptions,
+          tabBarIcon: ({ focused, color, size }) => (
+            <Ionicons
+              name={getTabIconName(route.name, focused)}
+              size={size}
+              color={color}
+            />
+          ),
+        })}
+      >
+        <Tab.Screen name="Dashboard" component={FieldDashboardScreen} />
+        <Tab.Screen name="Leads" component={LeadsMatrixScreen} />
+        <Tab.Screen name="Field Ops" component={FieldOpsScreen} />
+        <Tab.Screen name="Chat" component={TeamChatScreen} options={{ tabBarBadge: chatBadge }} />
+        <Tab.Screen name="More" component={MoreMenuScreen} />
+      </Tab.Navigator>
+    );
+  }
+
+  // Default fallback for CHANNEL_PARTNER or unknown roles
   return (
     <Tab.Navigator
       screenOptions={({ route }) => ({
@@ -184,14 +202,9 @@ const RoleMainTabs = ({ role }: { role: UserRole }) => {
         ),
       })}
     >
-      <Tab.Screen name="Dashboard" component={FieldDashboardScreen} />
       <Tab.Screen name="Leads" component={LeadsMatrixScreen} />
       <Tab.Screen name="Inventory" component={AssetVaultScreen} />
-      <Tab.Screen name="Finance" component={FinancialCoreScreen} />
       <Tab.Screen name="Targets" component={PerformanceScreen} />
-      <Tab.Screen name="Field Ops" component={FieldOpsScreen} />
-      <Tab.Screen name="Calendar" component={MasterScheduleScreen} />
-      <Tab.Screen name="Chat" component={TeamChatScreen} options={{ tabBarBadge: chatBadge }} />
       <Tab.Screen name="More" component={MoreMenuScreen} />
     </Tab.Navigator>
   );
@@ -206,6 +219,11 @@ export const RoleTabs = ({ role }: { role: UserRole }) => (
       >
         {() => <RoleMainTabs role={role} />}
       </Stack.Screen>
+      <Stack.Screen name="Attendance" component={AttendanceScreen} options={{ title: "Attendance" }} />
+      <Stack.Screen name="Finance" component={FinancialCoreScreen} options={{ title: "Finance" }} />
+      <Stack.Screen name="Targets" component={PerformanceScreen} options={{ title: "Targets" }} />
+      <Stack.Screen name="Calendar" component={MasterScheduleScreen} options={{ title: "Calendar" }} />
+      <Stack.Screen name="Reports" component={IntelligenceReportsScreen} options={{ title: "Reports" }} />
       <Stack.Screen
         name="LeadDetails"
         component={LeadDetailsScreen}
@@ -262,9 +280,19 @@ export const RoleTabs = ({ role }: { role: UserRole }) => (
         options={{ title: "Settings" }}
       />
       <Stack.Screen
+        name="MetaAds"
+        component={AdminMetaAdsScreen}
+        options={{ title: "Meta Ads" }}
+      />
+      <Stack.Screen
         name="Field Ops"
         component={FieldOpsScreen}
         options={{ title: "Field Ops" }}
+      />
+      <Stack.Screen
+        name="Leaderboard"
+        component={RoleLeaderboardScreen}
+        options={{ title: "Leaderboard" }}
       />
     </Stack.Navigator>
     <RealtimePopupOverlay />
