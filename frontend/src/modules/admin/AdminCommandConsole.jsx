@@ -1,6 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
-  AlertCircle,
   Languages,
   MessageSquare,
   Mic,
@@ -23,6 +22,7 @@ import {
 } from "../../services/inventoryService";
 import { getUsers } from "../../services/userService";
 import { toErrorMessage } from "../../utils/errorMessage";
+import ToastNotice from "../../components/ui/ToastNotice";
 
 const MAX_PREVIEW_ROWS = 6;
 const MAX_BREAKDOWN_ROWS = 6;
@@ -3627,7 +3627,7 @@ const AdminCommandConsole = () => {
                       </span>
                     ) : null}
                     <div
-                      className={`max-w-[88%] whitespace-pre-wrap rounded-[1.35rem] px-4 py-3 text-sm leading-6 shadow-sm sm:max-w-[76%] ${
+                      className={`max-w-[86%] min-w-0 break-words whitespace-pre-wrap rounded-[1.35rem] px-3 py-2.5 text-sm leading-6 shadow-sm sm:max-w-[76%] sm:px-4 sm:py-3 ${
                         isUser
                           ? "rounded-br-md bg-slate-900 text-white"
                           : "rounded-bl-md border border-slate-200 bg-white text-slate-800"
@@ -3665,14 +3665,14 @@ const AdminCommandConsole = () => {
 
           <form onSubmit={handleSubmit} className="shrink-0 border-t border-slate-200 bg-white/95 px-3 py-3 backdrop-blur sm:px-5 sm:py-4">
             <div className="mx-auto w-full max-w-4xl space-y-2">
-              <div className="flex gap-2 overflow-x-auto pb-1 scrollbar-hide">
+              <div className="flex flex-wrap gap-2 pb-1 sm:flex-nowrap sm:overflow-x-auto sm:scrollbar-hide">
                 {SUGGESTED_PROMPTS.slice(0, 8).map((prompt) => (
                   <button
                     key={prompt}
                     type="button"
                     onClick={() => handleAsk(prompt)}
                     disabled={running}
-                    className="shrink-0 rounded-full border border-slate-200 bg-white px-3 py-1.5 text-[11px] font-semibold text-slate-700 shadow-sm transition hover:border-cyan-300 hover:text-cyan-700 disabled:cursor-not-allowed disabled:opacity-60"
+                    className="min-h-9 rounded-full border border-slate-200 bg-white px-3 py-1.5 text-[11px] font-semibold text-slate-700 shadow-sm transition hover:border-cyan-300 hover:text-cyan-700 disabled:cursor-not-allowed disabled:opacity-60 sm:shrink-0"
                   >
                     {prompt}
                   </button>
@@ -3683,7 +3683,7 @@ const AdminCommandConsole = () => {
                     setMessages(initialMessages());
                     setPendingAction(null);
                   }}
-                  className="shrink-0 rounded-full border border-slate-200 bg-white px-3 py-1.5 text-[11px] font-semibold text-slate-600 shadow-sm transition hover:border-slate-300"
+                  className="min-h-9 rounded-full border border-slate-200 bg-white px-3 py-1.5 text-[11px] font-semibold text-slate-600 shadow-sm transition hover:border-slate-300 sm:shrink-0"
                 >
                   Clear Chat
                 </button>
@@ -3783,12 +3783,7 @@ const AdminCommandConsole = () => {
         </div>
       </section>
 
-      {runtimeError ? (
-        <div className="mt-3 flex items-center gap-2 rounded-xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700">
-          <AlertCircle size={16} />
-          {runtimeError}
-        </div>
-      ) : null}
+      <ToastNotice message={runtimeError} type="error" />
     </div>
   );
 };

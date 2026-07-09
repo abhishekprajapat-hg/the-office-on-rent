@@ -1,8 +1,6 @@
 import React, { useEffect, useMemo, useState } from "react";
 import {
-  AlertCircle,
   Calendar,
-  CheckCircle,
   Loader2,
   MapPin,
   RefreshCw,
@@ -13,6 +11,7 @@ import {
 } from "lucide-react";
 import { assignHierarchyTarget, getMyTargets } from "../../services/targetService";
 import { toErrorMessage } from "../../utils/errorMessage";
+import ToastNotice from "../../components/ui/ToastNotice";
 
 const formatNumber = (value) => Number(value || 0).toLocaleString("en-IN");
 const formatCurrency = (value) => `Rs ${formatNumber(value)}`;
@@ -283,19 +282,8 @@ const Performance = () => {
           </button>
       </div>
 
-      {error ? (
-        <div className="ui-soft-panel flex items-center gap-2 rounded-xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700">
-          <AlertCircle size={16} />
-          {error}
-        </div>
-      ) : null}
-
-      {successMessage ? (
-        <div className="ui-soft-panel flex items-center gap-2 rounded-xl border border-cyan-200 bg-cyan-50 px-4 py-3 text-sm text-cyan-700">
-          <CheckCircle size={16} />
-          {successMessage}
-        </div>
-      ) : null}
+      <ToastNotice message={error} type="error" />
+      <ToastNotice message={successMessage} type="success" />
 
       {loading ? (
         <div className="ui-soft-panel flex h-44 items-center justify-center rounded-2xl border border-slate-200 bg-white text-slate-500">

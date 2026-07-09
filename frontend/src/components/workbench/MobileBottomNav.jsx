@@ -8,7 +8,7 @@ const getSectionTarget = (sectionId, userRole, user) => {
   return groups[0]?.items[0]?.path || "/dashboard";
 };
 
-const PRIORITY_SECTIONS = ["dashboard", "leads", "inventory", "chat"];
+const PRIORITY_SECTIONS = ["leads", "inventory", "chat", "calendar"];
 
 const MobileBottomNav = ({
   userRole,

@@ -7,6 +7,7 @@ import {
   updateUserByAdmin,
 } from "../../services/userService";
 import { toErrorMessage } from "../../utils/errorMessage";
+import ToastNotice from "../../components/ui/ToastNotice";
 
 const ROLE_OPTIONS = [
   { label: "Manager", value: "MANAGER" },
@@ -328,9 +329,7 @@ const UserDetailsEditor = ({ theme = "light" }) => {
           <ArrowLeft size={14} />
           Back
         </button>
-        <div className={`rounded-xl border p-4 text-sm ${isDarkTheme ? "border-rose-500/30 bg-rose-500/10 text-rose-200" : "border-rose-200 bg-rose-50 text-rose-700"}`}>
-          User not found or inaccessible.
-        </div>
+        <ToastNotice message="User not found or inaccessible." type="error" />
       </div>
     );
   }
@@ -360,17 +359,8 @@ const UserDetailsEditor = ({ theme = "light" }) => {
         </button>
       </div>
 
-      {error ? (
-        <div className={`rounded-xl border p-3 text-sm ${isDarkTheme ? "border-rose-500/30 bg-rose-500/10 text-rose-200" : "border-rose-200 bg-rose-50 text-rose-700"}`}>
-          {error}
-        </div>
-      ) : null}
-
-      {success ? (
-        <div className={`rounded-xl border p-3 text-sm ${isDarkTheme ? "border-emerald-500/30 bg-emerald-500/10 text-emerald-200" : "border-emerald-200 bg-emerald-50 text-emerald-700"}`}>
-          {success}
-        </div>
-      ) : null}
+      <ToastNotice message={error} type="error" />
+      <ToastNotice message={success} type="success" />
 
       {isEditingSelf ? (
         <div className={`rounded-xl border p-3 text-sm ${isDarkTheme ? "border-amber-500/30 bg-amber-500/10 text-amber-200" : "border-amber-200 bg-amber-50 text-amber-700"}`}>

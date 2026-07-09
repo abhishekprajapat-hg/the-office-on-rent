@@ -25,6 +25,7 @@ import {
 } from "../../services/inventoryService";
 import { toErrorMessage } from "../../utils/errorMessage";
 import { useChatNotifications } from "../../context/useChatNotifications";
+import ToastNotice from "../../components/ui/ToastNotice";
 
 const APPROVAL_FILTERS = [
   { value: "ALL", label: "All decisions" },
@@ -793,20 +794,8 @@ const AdminNotifications = () => {
         </div>
       </div>
 
-      {error && (
-        <div className={`rounded-xl border px-3 py-2 text-sm ${
-          isDark ? "border-rose-500/30 bg-rose-500/10 text-rose-200" : "border-rose-200 bg-rose-50 text-rose-700"
-        }`}>
-          {error}
-        </div>
-      )}
-      {success && (
-        <div className={`rounded-xl border px-3 py-2 text-sm ${
-          isDark ? "border-emerald-500/30 bg-emerald-500/10 text-emerald-200" : "border-emerald-200 bg-emerald-50 text-emerald-700"
-        }`}>
-          {success}
-        </div>
-      )}
+      <ToastNotice message={error} type="error" />
+      <ToastNotice message={success} type="success" />
 
       <section className={`ui-soft-panel rounded-2xl border p-4 ${
         isDark ? "border-slate-700 bg-slate-900/75" : "border-slate-200 bg-white"

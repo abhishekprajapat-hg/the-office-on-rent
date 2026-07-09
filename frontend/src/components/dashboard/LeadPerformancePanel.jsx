@@ -46,7 +46,14 @@ const STATUS_FLOW = [
   },
 ];
 
-const PRIMARY_STAGE_KEYS = ["NEW", "CONTACTED", "INTERESTED", "SITE_VISIT", "REQUESTED", "CLOSED"];
+const PRIMARY_STAGE_KEYS = [
+  "NEW",
+  "CONTACTED",
+  "INTERESTED",
+  "SITE_VISIT",
+  "REQUESTED",
+  "CLOSED",
+];
 
 const TIME_WINDOWS = [
   { value: 6, label: "6W" },
@@ -473,7 +480,7 @@ const LeadPerformancePanel = ({
 
   return (
     <section
-      className={`relative overflow-hidden rounded-2xl border p-4 sm:p-5 ${
+      className={`relative overflow-hidden rounded-2xl border p-3 sm:p-5 ${
         isDark ? "border-slate-700/80 bg-slate-900/80" : "border-slate-200 bg-white"
       }`}
       style={{
@@ -482,19 +489,19 @@ const LeadPerformancePanel = ({
           : `radial-gradient(circle at 8% 0%, ${palette.createdSoft} 0%, rgba(255,255,255,0) 45%), radial-gradient(circle at 100% 0%, ${palette.closedSoft} 0%, rgba(255,255,255,0) 40%)`,
       }}
     >
-      <div className="flex flex-wrap items-start justify-between gap-3">
-        <div>
+      <div className="flex flex-wrap items-start justify-between gap-2 sm:gap-3">
+        <div className="min-w-0">
           <h3
-            className={`text-sm font-semibold uppercase tracking-[0.14em] ${
+            className={`truncate text-xs font-semibold uppercase tracking-[0.08em] sm:text-sm sm:tracking-[0.14em] ${
               isDark ? "text-slate-300" : "text-slate-600"
             }`}
           >
             {title}
           </h3>
-          <p className={`mt-1 text-xs ${isDark ? "text-slate-400" : "text-slate-500"}`}>{subtitle}</p>
+          <p className={`mt-1 line-clamp-2 text-[11px] sm:text-xs ${isDark ? "text-slate-400" : "text-slate-500"}`}>{subtitle}</p>
         </div>
 
-        <div className="flex items-center gap-2">
+        <div className="flex shrink-0 items-center gap-2">
           {!compact && (
             <div
               className={`inline-flex rounded-full border p-1 ${
@@ -508,7 +515,7 @@ const LeadPerformancePanel = ({
                     key={window.value}
                     type="button"
                     onClick={() => setWindowSize(window.value)}
-                    className={`rounded-full px-2.5 py-1 text-[10px] font-semibold uppercase tracking-[0.12em] transition-colors ${
+                    className={`rounded-full px-2.5 py-1 text-[10px] font-semibold uppercase tracking-[0.08em] transition-colors sm:tracking-[0.12em] ${
                       active
                         ? isDark
                           ? "bg-slate-700 text-white"
@@ -526,25 +533,25 @@ const LeadPerformancePanel = ({
           )}
 
           <div
-            className={`inline-flex items-center gap-1.5 rounded-full border px-3 py-1 text-[10px] uppercase tracking-[0.18em] ${
+            className={`inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-[10px] uppercase tracking-[0.08em] sm:px-3 sm:tracking-[0.18em] ${
               isDark ? "border-slate-700 bg-slate-950/70 text-slate-300" : "border-slate-200 bg-slate-50 text-slate-600"
             }`}
           >
             <span className="h-2 w-2 animate-pulse rounded-full" style={{ backgroundColor: palette.closed }} />
-            Live Trend
+            <span className="hidden sm:inline">Live </span>Trend
           </div>
         </div>
       </div>
 
-      <div className={`mt-5 grid grid-cols-1 gap-4 ${compact ? "xl:grid-cols-[0.92fr_1.3fr]" : "xl:grid-cols-[1fr_1.45fr]"}`}>
+      <div className={`mt-3 grid grid-cols-1 gap-3 sm:mt-5 sm:gap-4 ${compact ? "xl:grid-cols-[0.92fr_1.3fr]" : "xl:grid-cols-[1fr_1.45fr]"}`}>
         <div
-          className={`rounded-xl border p-4 ${
+          className={`rounded-xl border p-3 sm:p-4 ${
             isDark ? "border-slate-700 bg-slate-950/55" : "border-slate-200 bg-white/75"
           }`}
         >
-          <div className="flex items-start gap-4">
+          <div className="flex items-start gap-3 sm:gap-4">
             <div
-              className="relative grid h-24 w-24 place-items-center rounded-full"
+              className="relative grid h-20 w-20 shrink-0 place-items-center rounded-full sm:h-24 sm:w-24"
               style={{
                 background: `conic-gradient(${palette.ring} ${clampPercent(conversionPercent) * 3.6}deg, ${
                   palette.ringMuted
@@ -552,22 +559,22 @@ const LeadPerformancePanel = ({
               }}
             >
               <div
-                className={`grid h-16 w-16 place-items-center rounded-full border ${
+                className={`grid h-14 w-14 place-items-center rounded-full border sm:h-16 sm:w-16 ${
                   isDark ? "border-slate-700 bg-slate-900 text-slate-100" : "border-slate-200 bg-white text-slate-900"
                 }`}
               >
-                <p className="font-display text-xl leading-none">{conversionPercent}%</p>
+                <p className="font-display text-lg leading-none sm:text-xl">{conversionPercent}%</p>
               </div>
             </div>
 
             <div className="min-w-0 flex-1">
-              <p className={`text-[11px] uppercase tracking-[0.18em] ${isDark ? "text-slate-400" : "text-slate-500"}`}>
+              <p className={`text-[10px] uppercase tracking-[0.08em] sm:text-[11px] sm:tracking-[0.18em] ${isDark ? "text-slate-400" : "text-slate-500"}`}>
                 Close Velocity
               </p>
-              <p className={`mt-1 text-2xl font-semibold ${isDark ? "text-slate-100" : "text-slate-900"}`}>
+              <p className={`mt-1 text-xl font-semibold sm:text-2xl ${isDark ? "text-slate-100" : "text-slate-900"}`}>
                 {closeVelocity}%
               </p>
-              <p className={`mt-1 text-xs ${isDark ? "text-slate-400" : "text-slate-500"}`}>
+              <p className={`mt-1 text-[11px] sm:text-xs ${isDark ? "text-slate-400" : "text-slate-500"}`}>
                 Last {recentSpan} weeks: {recentClosed} closed / {recentCreated} created
               </p>
               <p className={`mt-1 text-xs font-semibold ${trendClass}`}>
@@ -577,7 +584,7 @@ const LeadPerformancePanel = ({
             </div>
           </div>
 
-          <div className="mt-4 grid grid-cols-2 gap-2">
+          <div className="mt-3 grid grid-cols-2 gap-2 sm:mt-4">
             <MetricChip isDark={isDark} label="Total" value={formatCompactNumber(totalLeads)} icon={Target} />
             <MetricChip isDark={isDark} label="Active" value={formatCompactNumber(activeLeads)} icon={Activity} />
             <MetricChip
@@ -595,7 +602,7 @@ const LeadPerformancePanel = ({
                 isDark ? "border-slate-700 bg-slate-900/70" : "border-slate-200 bg-white"
               }`}
             >
-              <p className={`flex items-center gap-1.5 text-[10px] uppercase tracking-[0.15em] ${isDark ? "text-slate-400" : "text-slate-500"}`}>
+                <p className={`flex items-center gap-1.5 text-[10px] uppercase tracking-[0.08em] sm:tracking-[0.15em] ${isDark ? "text-slate-400" : "text-slate-500"}`}>
                 <Sparkles size={12} />
                 Insight
               </p>
@@ -605,12 +612,12 @@ const LeadPerformancePanel = ({
         </div>
 
         <div
-          className={`rounded-xl border p-4 ${
+          className={`rounded-xl border p-3 sm:p-4 ${
             isDark ? "border-slate-700 bg-slate-950/55" : "border-slate-200 bg-white/75"
           }`}
         >
           <div className="mb-3 flex flex-col items-start gap-1.5 sm:flex-row sm:items-center sm:justify-between sm:gap-2">
-            <p className={`text-[10px] uppercase tracking-[0.14em] sm:text-[11px] sm:tracking-[0.16em] ${isDark ? "text-slate-400" : "text-slate-500"}`}>
+            <p className={`text-[10px] uppercase tracking-[0.08em] sm:text-[11px] sm:tracking-[0.16em] ${isDark ? "text-slate-400" : "text-slate-500"}`}>
               Weekly Throughput ({windowSize} Weeks)
             </p>
             <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-[9px] uppercase sm:text-[10px]">
@@ -620,7 +627,7 @@ const LeadPerformancePanel = ({
             </div>
           </div>
 
-          <svg viewBox={`0 0 ${chartWidth} ${chartHeight}`} className="h-44 w-full rounded-lg" preserveAspectRatio="none">
+          <svg viewBox={`0 0 ${chartWidth} ${chartHeight}`} className="h-32 w-full max-w-full rounded-lg sm:h-44" preserveAspectRatio="none">
             <defs>
               <linearGradient id={`created-fill-${panelId}`} x1="0" y1="0" x2="0" y2="1">
                 <stop offset="0%" stopColor={palette.createdSoft} />
@@ -706,17 +713,17 @@ const LeadPerformancePanel = ({
         </div>
       </div>
 
-      <div className={`mt-4 grid grid-cols-1 gap-2 ${compact ? "sm:grid-cols-2" : "sm:grid-cols-2 xl:grid-cols-3"}`}>
+      <div className={`mt-3 grid grid-cols-2 gap-2 sm:mt-4 ${compact ? "sm:grid-cols-2" : "xl:grid-cols-3"}`}>
         {stageRows.map((row) => (
           <div
             key={row.key}
-            className={`rounded-xl border px-3 py-2 ${
+            className={`rounded-xl border px-2.5 py-2 sm:px-3 ${
               isDark ? "border-slate-700 bg-slate-950/40" : "border-slate-200 bg-white/90"
             }`}
           >
             <div className="mb-1 flex items-center justify-between gap-2">
-              <p className={`text-[11px] font-semibold uppercase tracking-[0.14em] ${row.textClass}`}>{row.label}</p>
-              <p className={`text-xs ${isDark ? "text-slate-300" : "text-slate-700"}`}>
+              <p className={`truncate text-[10px] font-semibold uppercase tracking-[0.06em] sm:text-[11px] sm:tracking-[0.14em] ${row.textClass}`}>{row.label}</p>
+              <p className={`shrink-0 text-[11px] sm:text-xs ${isDark ? "text-slate-300" : "text-slate-700"}`}>
                 {row.value} ({row.share}%)
               </p>
             </div>
@@ -726,7 +733,7 @@ const LeadPerformancePanel = ({
             </div>
 
             {row.flowCarry !== null && (
-              <p className={`mt-1 text-[10px] ${isDark ? "text-slate-400" : "text-slate-500"}`}>
+              <p className={`mt-1 hidden text-[10px] sm:block ${isDark ? "text-slate-400" : "text-slate-500"}`}>
                 Stage carry: {row.flowCarry}%
               </p>
             )}
@@ -756,12 +763,12 @@ const LeadPerformancePanel = ({
 };
 
 const MetricChip = ({ label, value, isDark, icon: Icon }) => (
-  <div className={`rounded-lg border px-3 py-2 ${isDark ? "border-slate-700 bg-slate-900/70" : "border-slate-200 bg-white"}`}>
-    <p className={`flex items-center gap-1 text-[10px] uppercase tracking-[0.14em] ${isDark ? "text-slate-400" : "text-slate-500"}`}>
+  <div className={`rounded-lg border px-2.5 py-2 sm:px-3 ${isDark ? "border-slate-700 bg-slate-900/70" : "border-slate-200 bg-white"}`}>
+    <p className={`flex items-center gap-1 truncate text-[10px] uppercase tracking-[0.06em] sm:tracking-[0.14em] ${isDark ? "text-slate-400" : "text-slate-500"}`}>
       {Icon ? <Icon size={11} /> : null}
       {label}
     </p>
-    <p className={`mt-1 text-lg font-semibold ${isDark ? "text-slate-100" : "text-slate-900"}`}>{value}</p>
+    <p className={`mt-1 text-base font-semibold sm:text-lg ${isDark ? "text-slate-100" : "text-slate-900"}`}>{value}</p>
   </div>
 );
 

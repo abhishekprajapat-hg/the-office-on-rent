@@ -21,7 +21,7 @@ const DataTableShell = ({
         {actions ? <div className="flex shrink-0 flex-wrap items-center gap-2">{actions}</div> : null}
       </div>
     ) : null}
-    <div className="custom-scrollbar overflow-x-auto">
+    <div className="custom-scrollbar max-w-full overflow-x-auto">
       {loading ? (
         <div className="space-y-3 p-4" aria-busy="true" aria-live="polite">
           <Skeleton className="h-9 w-full" />

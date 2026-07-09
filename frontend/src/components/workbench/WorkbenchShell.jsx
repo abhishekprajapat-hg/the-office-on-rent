@@ -20,7 +20,7 @@ const WorkbenchShell = ({
 }) => {
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
-  const { adminRequestUnread } = useChatNotifications();
+  const { adminRequestUnread, unreadTotal } = useChatNotifications();
   const userForNav = useMemo(() => user || {}, [user]);
   const handleOpenMobileMenu = useCallback(() => setMobileMenuOpen(true), []);
   const handleCloseMobileMenu = useCallback(() => setMobileMenuOpen(false), []);
@@ -40,6 +40,7 @@ const WorkbenchShell = ({
         onToggleTheme={onToggleTheme}
         onLogout={onLogout}
         unreadAlerts={adminRequestUnread}
+        unreadChats={unreadTotal}
         onMobileMenuOpen={handleOpenMobileMenu}
       />
       <PrimarySidebar
@@ -52,6 +53,7 @@ const WorkbenchShell = ({
         onToggleCollapsed={handleToggleSidebar}
         mobileOpen={mobileMenuOpen}
         onMobileClose={handleCloseMobileMenu}
+        unreadChats={unreadTotal}
       />
 
       <main className="workspace-main app-page-bg relative min-w-0 flex flex-1 flex-col overflow-hidden">
@@ -59,13 +61,15 @@ const WorkbenchShell = ({
           userRole={userRole}
           user={userForNav}
           unreadAlerts={adminRequestUnread}
+          unreadChats={unreadTotal}
           onMenuOpen={handleOpenMobileMenu}
         />
-        <AppTopCommandBar
-          pageHeader={pageHeader}
-          roleLabel={roleLabel}
-          isChatPage={isChatPage}
-        />
+        {!isChatPage ? (
+          <AppTopCommandBar
+            pageHeader={pageHeader}
+            roleLabel={roleLabel}
+          />
+        ) : null}
         <div
           className={cn(
             "workspace-main-content min-h-0 flex-1 overflow-hidden",

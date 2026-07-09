@@ -53,6 +53,7 @@ const INVENTORY_DIRECT_MANAGE_ROLES = Object.freeze([
   USER_ROLES.ADMIN,
   USER_ROLES.MANAGER,
 ]);
+const INVENTORY_DIRECT_CREATE_ROLES = INVENTORY_CREATE_REQUEST_ROLES;
 const INVENTORY_DELETE_REQUEST_ROLES = Object.freeze([
   USER_ROLES.MANAGER,
   USER_ROLES.EXECUTIVE,
@@ -706,7 +707,7 @@ const ensureManagerExistsInCompany = async ({ managerId, companyId }) => {
 const getTeamIdForUser = (user) => {
   if (!user) return null;
   if (isManagementRole(user.role)) return user._id;
-  if (EXECUTIVE_ROLES.includes(user.role)) {
+  if (EXECUTIVE_ROLES.includes(user.role) || user.role === USER_ROLES.CHANNEL_PARTNER) {
     return user.parentId || null;
   }
   return null;
@@ -836,8 +837,13 @@ const resolveDirectCreateTeamId = async ({ user, payload, companyId }) => {
     return requestedTeamId;
   }
 
-  if (user.role !== USER_ROLES.ADMIN) {
-    throw createHttpError(400, "teamId is required");
+  const userTeamId = getTeamIdForUser(user);
+  if (userTeamId) {
+    await ensureManagerExistsInCompany({
+      managerId: userTeamId,
+      companyId,
+    });
+    return userTeamId;
   }
 
   const manager = await User.findOne({
@@ -1494,8 +1500,8 @@ const getInventoryById = async ({ user, inventoryId }) => {
 };
 
 const createInventoryDirect = async ({ user, payload }) => {
-  if (!INVENTORY_DIRECT_MANAGE_ROLES.includes(user.role)) {
-    throw createHttpError(403, "Only ADMIN or MANAGER can create inventory directly");
+  if (!INVENTORY_DIRECT_CREATE_ROLES.includes(user.role)) {
+    throw createHttpError(403, "This role cannot create inventory");
   }
 
   const companyId = getCompanyIdForUser(user);

@@ -1,8 +1,9 @@
 import React, { useCallback, useEffect, useMemo, useState } from "react";
-import { AlertCircle, RefreshCw } from "lucide-react";
+import { RefreshCw } from "lucide-react";
 import { getAllLeads } from "../../services/leadService";
 import { getInventoryAssets } from "../../services/inventoryService";
 import { toErrorMessage } from "../../utils/errorMessage";
+import ToastNotice from "../../components/ui/ToastNotice";
 import {
   ExecutivePerformanceSection,
   FollowUpRiskSection,
@@ -556,12 +557,7 @@ const IntelligenceReports = () => {
         onExport={handleExportCsv}
       />
 
-      {error && (
-        <div className="ui-soft-panel rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700 flex items-center gap-2">
-          <AlertCircle size={16} />
-          {error}
-        </div>
-      )}
+      <ToastNotice message={error} type="error" />
 
       {!error && scopedData.leads.length === 0 && scopedData.inventory.length === 0 ? (
         <div className="ui-soft-panel rounded-2xl border border-dashed border-slate-300 bg-white px-4 py-6 text-center shadow-sm">

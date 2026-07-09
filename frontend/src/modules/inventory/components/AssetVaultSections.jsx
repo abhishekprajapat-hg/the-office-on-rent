@@ -32,7 +32,7 @@ export const AssetVaultToolbar = ({ modeType, onModeChange, canOpenCreateModal, 
           onClick={onOpenAddModal}
           className="flex items-center gap-2 px-6 py-2.5 bg-slate-900 text-white rounded-full text-xs font-bold uppercase tracking-widest hover:bg-emerald-600 transition-all shadow-lg"
         >
-          <Plus size={16} /> {canManage ? "Add Asset" : "Add Request"}
+          <Plus size={16} /> Add Asset
         </button>
       )}
     </div>
@@ -72,7 +72,7 @@ export const AssetVaultFilters = ({
   amenitiesFilter,
   onAmenitiesFilterChange,
 }) => (
-  <div className="sticky top-4 z-20 space-y-3 rounded-2xl border border-slate-200 bg-white/95 p-3 shadow-sm backdrop-blur">
+  <div className="z-20 space-y-2 rounded-2xl border border-slate-200 bg-white/95 p-2.5 shadow-sm backdrop-blur md:sticky md:top-4 md:space-y-3 md:p-3">
     <div className="grid grid-cols-1 gap-3 lg:grid-cols-[1fr_auto_220px]">
       <div className="relative">
         <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={16} />
@@ -85,7 +85,7 @@ export const AssetVaultFilters = ({
         />
       </div>
 
-      <div className="flex rounded-xl border border-slate-200 bg-slate-50 p-1">
+      <div className="hidden rounded-xl border border-slate-200 bg-slate-50 p-1 md:flex">
         <button
           type="button"
           onClick={() => onViewModeChange("cards")}
@@ -131,7 +131,7 @@ export const AssetVaultFilters = ({
     <button
       type="button"
       onClick={onToggleAdvancedFilters}
-      className="inline-flex h-10 items-center justify-center gap-2 rounded-xl border border-slate-200 bg-slate-50 px-3 text-xs font-bold uppercase tracking-widest text-slate-600 md:hidden"
+      className="inline-flex h-10 w-full items-center justify-center gap-2 rounded-xl border border-slate-200 bg-slate-50 px-3 text-xs font-bold uppercase tracking-widest text-slate-600 md:hidden"
     >
       <Filter size={14} />
       {advancedFiltersOpen ? "Hide Filters" : "More Filters"}
@@ -325,8 +325,8 @@ export const PendingInventoryRequestsPanel = ({
                 key={requestId}
                 className="rounded-xl border border-slate-200 bg-slate-50 p-3"
               >
-                <div className="flex items-start justify-between gap-3">
-                  <div>
+                <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                  <div className="min-w-0">
                     <p className="text-xs font-bold text-slate-800">
                       {inventoryLabel}
                     </p>
@@ -341,7 +341,7 @@ export const PendingInventoryRequestsPanel = ({
                         : `${currentStatus} to ${requestedStatus}`}
                     </p>
 
-                    <div className="mt-2 grid grid-cols-2 gap-x-4 gap-y-1 text-[11px] text-slate-600">
+                    <div className="mt-2 grid grid-cols-1 gap-x-4 gap-y-1 text-[11px] text-slate-600 sm:grid-cols-2">
                       <p>
                         <span className="font-semibold text-slate-700">Location:</span> {detailLocation}
                       </p>
@@ -360,7 +360,7 @@ export const PendingInventoryRequestsPanel = ({
                         <span className="font-semibold text-slate-700">Status:</span> {detailStatus}
                       </p>
                       {String(detailStatus || "").toLowerCase() === "sold" && detailSource?.saleDetails ? (
-                        <p className="col-span-2">
+                        <p className="sm:col-span-2">
                           <span className="font-semibold text-slate-700">Sold Details:</span>{" "}
                           {formatRequestValue("saleDetails", detailSource.saleDetails)}
                         </p>
@@ -392,7 +392,7 @@ export const PendingInventoryRequestsPanel = ({
                         <p className="text-[10px] font-bold uppercase tracking-widest text-slate-500">
                           Requested Changes
                         </p>
-                        <div className="mt-1 grid grid-cols-2 gap-x-3 gap-y-1 text-[11px] text-slate-600">
+                        <div className="mt-1 grid grid-cols-1 gap-x-3 gap-y-1 text-[11px] text-slate-600 sm:grid-cols-2">
                           {requestedFields.map(([key, value]) => (
                             <p key={`${requestId}-${key}`}>
                               <span className="font-semibold text-slate-700">
@@ -421,7 +421,7 @@ export const PendingInventoryRequestsPanel = ({
                     )}
                   </div>
 
-                  <div className="flex gap-2">
+                  <div className="flex gap-2 sm:shrink-0">
                     <button
                       onClick={() => onApprove(requestId)}
                       disabled={loadingReview}

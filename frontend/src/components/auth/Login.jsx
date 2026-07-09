@@ -5,6 +5,7 @@ import { Link } from "react-router-dom";
 import api from "../../services/api";
 import { toErrorMessage } from "../../utils/errorMessage";
 import BrandLogo from "../common/BrandLogo";
+import ToastNotice from "../ui/ToastNotice";
 
 const Login = ({ onLogin, portal = "GENERAL" }) => {
   const [email, setEmail] = useState("");
@@ -98,11 +99,7 @@ const Login = ({ onLogin, portal = "GENERAL" }) => {
             />
           </div>
 
-          {error ? (
-            <p className="rounded-xl border border-rose-200 bg-rose-50 px-3 py-2 text-sm text-rose-700">
-              {error}
-            </p>
-          ) : null}
+          <ToastNotice message={error} type="error" />
 
           <button
             type="submit"

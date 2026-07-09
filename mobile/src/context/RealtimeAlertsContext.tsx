@@ -133,6 +133,9 @@ const buildNotificationText = (eventName: string, payload: any) => {
   if (eventName === "lead:payment:request:created") {
     return "New lead payment approval request";
   }
+  if (eventName === "lead:status:request:created") {
+    return "New lead close approval request";
+  }
   if (eventName === "admin:request:new") {
     return "New approval request";
   }
@@ -474,6 +477,7 @@ export const RealtimeAlertsProvider = ({ children }: { children: React.ReactNode
 
     const onAdminRequest = (payload: any) => onNotification("admin:request:new", payload);
     const onLeadPayment = (payload: any) => onNotification("lead:payment:request:created", payload);
+    const onLeadStatusRequest = (payload: any) => onNotification("lead:status:request:created", payload);
     const onInventoryCreated = (payload: any) => onNotification("inventory:request:created", payload);
     const onInventoryReviewed = (payload: any) => onNotification("inventory:request:reviewed", payload);
     const onCallUpdate = (payload: any) => {
@@ -492,6 +496,7 @@ export const RealtimeAlertsProvider = ({ children }: { children: React.ReactNode
     socket.on("chat:call:incoming", onIncomingCall);
     socket.on("admin:request:new", onAdminRequest);
     socket.on("lead:payment:request:created", onLeadPayment);
+    socket.on("lead:status:request:created", onLeadStatusRequest);
     socket.on("inventory:request:created", onInventoryCreated);
     socket.on("inventory:request:reviewed", onInventoryReviewed);
     socket.on("messenger:call:update", onCallUpdate);
@@ -507,6 +512,7 @@ export const RealtimeAlertsProvider = ({ children }: { children: React.ReactNode
       socket.off("chat:call:incoming", onIncomingCall);
       socket.off("admin:request:new", onAdminRequest);
       socket.off("lead:payment:request:created", onLeadPayment);
+      socket.off("lead:status:request:created", onLeadStatusRequest);
       socket.off("inventory:request:created", onInventoryCreated);
       socket.off("inventory:request:reviewed", onInventoryReviewed);
       socket.off("messenger:call:update", onCallUpdate);

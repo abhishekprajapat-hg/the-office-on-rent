@@ -135,6 +135,7 @@ export const AssetVaultScreen = () => {
   const normalizedRole = String(role || "").toUpperCase();
   const isAdmin = normalizedRole === "ADMIN";
   const canManage = ["ADMIN", "MANAGER", "CHANNEL_PARTNER"].includes(normalizedRole);
+  const canCreateInventory = ["ADMIN", "MANAGER", "EXECUTIVE", "FIELD_EXECUTIVE", "CHANNEL_PARTNER"].includes(normalizedRole);
   const canRequestStatusChange = ["FIELD_EXECUTIVE", "EXECUTIVE"].includes(normalizedRole);
   const canDirectInventoryEdit = canManage;
   const canEditInventory = canManage || canRequestStatusChange;
@@ -953,7 +954,7 @@ export const AssetVaultScreen = () => {
             <Text style={[styles.modeBtnText, modeType === "rent" && styles.modeBtnTextActive]}>Rentals</Text>
           </Pressable>
         </View>
-        {canManage ? (
+        {canCreateInventory ? (
           <Pressable style={styles.primaryBtn} onPress={openCreateModal}>
             <Text style={styles.primaryText}>+ Add Asset</Text>
           </Pressable>

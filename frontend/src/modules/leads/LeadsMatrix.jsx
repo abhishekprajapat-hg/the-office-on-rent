@@ -70,8 +70,9 @@ const LEAD_LIST_FIELDS = [
   "updatedAt",
 ].join(",");
 
-const EXECUTIVE_ROLES = ["EXECUTIVE", "FIELD_EXECUTIVE"];
+const EXECUTIVE_ROLES = ["INSIDE_EXECUTIVE", "EXECUTIVE", "FIELD_EXECUTIVE"];
 const MANAGEMENT_ROLES = ["MANAGER"];
+const CRM_ASSIGNABLE_ROLES = ["ADMIN", ...MANAGEMENT_ROLES, ...EXECUTIVE_ROLES];
 const SITE_VISIT_RADIUS_METERS = 200;
 const DEAL_PAYMENT_MODES = [
   { value: "UPI", label: "UPI" },
@@ -111,6 +112,18 @@ const defaultFormData = {
   requirementsCommercialCabins: "",
   requirementsCommercialParkingAvailable: false,
   requirementsCommercialPantry: false,
+  requirementsCommercialReceptionArea: false,
+  requirementsCommercialWaitingArea: false,
+  requirementsCommercialCafeteria: false,
+  requirementsCommercialServerRoom: false,
+  requirementsCommercialStorageRoom: false,
+  requirementsCommercialBreakoutArea: false,
+  requirementsCommercialLiftAvailable: false,
+  requirementsCommercialPowerBackup: false,
+  requirementsCommercialCentralAC: false,
+  requirementsCommercialFireSafety: false,
+  requirementsCommercialReadyToMove: false,
+  requirementsCommercialUnderConstruction: false,
   requirementsResidentialBhkType: "",
   requirementsResidentialFloor: "",
   requirementsResidentialAmenityLift: false,
@@ -120,6 +133,11 @@ const defaultFormData = {
   requirementsResidentialAmenityClubhouse: false,
   requirementsResidentialAmenityPowerBackup: false,
   requirementsResidentialAmenityParking: false,
+  requirementsResidentialAmenityStudyRoom: false,
+  requirementsResidentialAmenityServantRoom: false,
+  requirementsResidentialAmenityModularKitchen: false,
+  requirementsResidentialAmenityElectricityBackup: false,
+  requirementsResidentialAmenityGasPipeline: false,
 };
 
 const createDefaultLeadRequirementsDraft = () => ({
@@ -136,6 +154,18 @@ const createDefaultLeadRequirementsDraft = () => ({
     cabins: "",
     parkingAvailable: false,
     pantry: false,
+    receptionArea: false,
+    waitingArea: false,
+    cafeteria: false,
+    serverRoom: false,
+    storageRoom: false,
+    breakoutArea: false,
+    liftAvailable: false,
+    powerBackup: false,
+    centralAC: false,
+    fireSafety: false,
+    readyToMove: false,
+    underConstruction: false,
   },
   residential: {
     bhkType: "",
@@ -148,6 +178,11 @@ const createDefaultLeadRequirementsDraft = () => ({
       clubhouse: false,
       powerBackup: false,
       parking: false,
+      studyRoom: false,
+      servantRoom: false,
+      modularKitchen: false,
+      electricityBackup: false,
+      gasPipeline: false,
     },
   },
 });
@@ -177,6 +212,18 @@ const mapLeadRequirementsToDraft = (requirements = {}) => {
       cabins: toRequirementDraftText(commercial?.cabins),
       parkingAvailable: Boolean(commercial?.parkingAvailable),
       pantry: Boolean(commercial?.pantry),
+      receptionArea: Boolean(commercial?.receptionArea),
+      waitingArea: Boolean(commercial?.waitingArea),
+      cafeteria: Boolean(commercial?.cafeteria),
+      serverRoom: Boolean(commercial?.serverRoom),
+      storageRoom: Boolean(commercial?.storageRoom),
+      breakoutArea: Boolean(commercial?.breakoutArea),
+      liftAvailable: Boolean(commercial?.liftAvailable),
+      powerBackup: Boolean(commercial?.powerBackup),
+      centralAC: Boolean(commercial?.centralAC),
+      fireSafety: Boolean(commercial?.fireSafety),
+      readyToMove: Boolean(commercial?.readyToMove),
+      underConstruction: Boolean(commercial?.underConstruction),
     },
     residential: {
       bhkType: toRequirementDraftText(residential?.bhkType).toUpperCase(),
@@ -189,6 +236,11 @@ const mapLeadRequirementsToDraft = (requirements = {}) => {
         clubhouse: Boolean(amenities?.clubhouse),
         powerBackup: Boolean(amenities?.powerBackup),
         parking: Boolean(amenities?.parking),
+        studyRoom: Boolean(amenities?.studyRoom),
+        servantRoom: Boolean(amenities?.servantRoom),
+        modularKitchen: Boolean(amenities?.modularKitchen),
+        electricityBackup: Boolean(amenities?.electricityBackup),
+        gasPipeline: Boolean(amenities?.gasPipeline),
       },
     },
   };
@@ -208,6 +260,18 @@ const buildLeadRequirementsPayloadFromDraft = (draft = {}) => ({
     cabins: toAmountNumber(draft?.commercial?.cabins),
     parkingAvailable: Boolean(draft?.commercial?.parkingAvailable),
     pantry: Boolean(draft?.commercial?.pantry),
+    receptionArea: Boolean(draft?.commercial?.receptionArea),
+    waitingArea: Boolean(draft?.commercial?.waitingArea),
+    cafeteria: Boolean(draft?.commercial?.cafeteria),
+    serverRoom: Boolean(draft?.commercial?.serverRoom),
+    storageRoom: Boolean(draft?.commercial?.storageRoom),
+    breakoutArea: Boolean(draft?.commercial?.breakoutArea),
+    liftAvailable: Boolean(draft?.commercial?.liftAvailable),
+    powerBackup: Boolean(draft?.commercial?.powerBackup),
+    centralAC: Boolean(draft?.commercial?.centralAC),
+    fireSafety: Boolean(draft?.commercial?.fireSafety),
+    readyToMove: Boolean(draft?.commercial?.readyToMove),
+    underConstruction: Boolean(draft?.commercial?.underConstruction),
   },
   residential: {
     bhkType: String(draft?.residential?.bhkType || "").trim().toUpperCase(),
@@ -220,6 +284,11 @@ const buildLeadRequirementsPayloadFromDraft = (draft = {}) => ({
       clubhouse: Boolean(draft?.residential?.amenities?.clubhouse),
       powerBackup: Boolean(draft?.residential?.amenities?.powerBackup),
       parking: Boolean(draft?.residential?.amenities?.parking),
+      studyRoom: Boolean(draft?.residential?.amenities?.studyRoom),
+      servantRoom: Boolean(draft?.residential?.amenities?.servantRoom),
+      modularKitchen: Boolean(draft?.residential?.amenities?.modularKitchen),
+      electricityBackup: Boolean(draft?.residential?.amenities?.electricityBackup),
+      gasPipeline: Boolean(draft?.residential?.amenities?.gasPipeline),
     },
   },
 });
@@ -238,6 +307,15 @@ const getInventoryLeadLabel = (inventoryLike = {}) => {
 
 const getInventoryLeadCity = (inventoryLike = {}) =>
   String(inventoryLike?.city || inventoryLike?.location || "").trim();
+
+const getStoredUserId = () => {
+  try {
+    const parsedUser = JSON.parse(localStorage.getItem("user") || "{}");
+    return String(parsedUser?._id || parsedUser?.id || "").trim();
+  } catch {
+    return "";
+  }
+};
 
 const getInventoryLeadSearchText = (inventoryLike = {}) => {
   const commercialLayout = inventoryLike?.commercialDetails?.officeLayout || {};
@@ -299,6 +377,18 @@ const hasLeadRequirements = (formData = {}) => {
   return [
     formData.requirementsCommercialParkingAvailable,
     formData.requirementsCommercialPantry,
+    formData.requirementsCommercialReceptionArea,
+    formData.requirementsCommercialWaitingArea,
+    formData.requirementsCommercialCafeteria,
+    formData.requirementsCommercialServerRoom,
+    formData.requirementsCommercialStorageRoom,
+    formData.requirementsCommercialBreakoutArea,
+    formData.requirementsCommercialLiftAvailable,
+    formData.requirementsCommercialPowerBackup,
+    formData.requirementsCommercialCentralAC,
+    formData.requirementsCommercialFireSafety,
+    formData.requirementsCommercialReadyToMove,
+    formData.requirementsCommercialUnderConstruction,
     formData.requirementsResidentialAmenityLift,
     formData.requirementsResidentialAmenitySecurity,
     formData.requirementsResidentialAmenityGym,
@@ -306,6 +396,11 @@ const hasLeadRequirements = (formData = {}) => {
     formData.requirementsResidentialAmenityClubhouse,
     formData.requirementsResidentialAmenityPowerBackup,
     formData.requirementsResidentialAmenityParking,
+    formData.requirementsResidentialAmenityStudyRoom,
+    formData.requirementsResidentialAmenityServantRoom,
+    formData.requirementsResidentialAmenityModularKitchen,
+    formData.requirementsResidentialAmenityElectricityBackup,
+    formData.requirementsResidentialAmenityGasPipeline,
   ].some(Boolean);
 };
 
@@ -943,12 +1038,16 @@ const LeadsMatrix = () => {
   const [paymentNoteDraft, setPaymentNoteDraft] = useState("");
   const [paymentApprovalStatusDraft, setPaymentApprovalStatusDraft] = useState("");
   const [paymentApprovalNoteDraft, setPaymentApprovalNoteDraft] = useState("");
+  const [brokerageReceivedDraft, setBrokerageReceivedDraft] = useState("");
+  const [brokerageDistributedDraft, setBrokerageDistributedDraft] = useState("0");
   const [closureDocumentsDraft, setClosureDocumentsDraft] = useState([]);
   const [requirementsDraft, setRequirementsDraft] = useState(
     createDefaultLeadRequirementsDraft(),
   );
 
   const [executives, setExecutives] = useState([]);
+  const [transferReasonDraft, setTransferReasonDraft] = useState("");
+  const [assigneeSearchDraft, setAssigneeSearchDraft] = useState("");
   const diaryRecognitionRef = useRef(null);
 
   const normalizedRouteLeadId = String(routeLeadId || "").trim();
@@ -959,12 +1058,13 @@ const LeadsMatrix = () => {
 
   const userRole = localStorage.getItem("role") || "";
   const isExecutiveUser = EXECUTIVE_ROLES.includes(userRole);
+  const currentUserId = getStoredUserId();
   const canAddLead =
     userRole === "ADMIN"
     || MANAGEMENT_ROLES.includes(userRole)
     || userRole === "CHANNEL_PARTNER";
-  const canBulkUploadLeads = userRole === "ADMIN";
-  const canAssignLead = userRole === "ADMIN" || MANAGEMENT_ROLES.includes(userRole);
+  const canBulkUploadLeads = userRole === "ADMIN" || MANAGEMENT_ROLES.includes(userRole);
+  const canAssignLead = CRM_ASSIGNABLE_ROLES.includes(userRole);
   const canManageLeadProperties = userRole !== "CHANNEL_PARTNER";
   const canConfigureSiteLocation =
     userRole === "ADMIN" || MANAGEMENT_ROLES.includes(userRole);
@@ -987,6 +1087,7 @@ const LeadsMatrix = () => {
         page,
         limit: LEAD_LIST_PAGE_LIMIT,
         fields: LEAD_LIST_FIELDS,
+        ...(isExecutiveUser && currentUserId ? { assignedTo: currentUserId } : {}),
       });
       const list = Array.isArray(response?.leads) ? response.leads : [];
       setLeadPagination(response?.pagination || null);
@@ -1012,21 +1113,25 @@ const LeadsMatrix = () => {
       setRefreshing(false);
       setLoadingMoreLeads(false);
     }
-  }, []);
+  }, [currentUserId, isExecutiveUser]);
 
   const fetchExecutives = useCallback(async () => {
     if (!canAssignLead) return;
 
     try {
-      const response = await getUsers();
+      const response = await getUsers({
+        crmAssignable: true,
+        limit: 200,
+        fields: "_id,name,role,isActive,lastAssignedAt",
+      });
       const users = response?.users || [];
       const list = users.filter(
-        (user) => user.isActive && EXECUTIVE_ROLES.includes(user.role),
+        (user) => user.isActive !== false && CRM_ASSIGNABLE_ROLES.includes(user.role),
       );
       setExecutives(list);
     } catch (fetchError) {
-      const message = toErrorMessage(fetchError, "Failed to load executives");
-      console.error(`Load executives failed: ${message}`);
+      const message = toErrorMessage(fetchError, "Failed to load transfer users");
+      console.error(`Load transfer users failed: ${message}`);
       setExecutives([]);
     }
   }, [canAssignLead]);
@@ -1329,6 +1434,18 @@ const LeadsMatrix = () => {
         );
       }
     } catch (detailError) {
+      const statusCode = Number(detailError?.response?.status || 0);
+      if (statusCode === 404) {
+        console.warn("Lead detail not available; returning to lead list");
+        setIsDetailsOpen(false);
+        setSelectedLead(null);
+        setActivities([]);
+        setDiaryEntries([]);
+        setActivityLoading(false);
+        setDiaryLoading(false);
+        navigate(currentLeadRouteBase, { replace: true });
+        return;
+      }
       const message = toErrorMessage(detailError, "Failed to load lead details");
       console.error(`Load lead details failed: ${message}`);
       setError(message);
@@ -1352,6 +1469,8 @@ const LeadsMatrix = () => {
         ? detailLead.assignedTo
         : detailLead.assignedTo?._id || "",
     );
+    setTransferReasonDraft("");
+    setAssigneeSearchDraft("");
     setRelatedInventoryDraft("");
     setPaymentModeDraft(String(detailLead?.dealPayment?.mode || ""));
     setPaymentTypeDraft(String(detailLead?.dealPayment?.paymentType || ""));
@@ -1364,6 +1483,16 @@ const LeadsMatrix = () => {
     setPaymentNoteDraft(String(detailLead?.dealPayment?.note || ""));
     setPaymentApprovalStatusDraft("");
     setPaymentApprovalNoteDraft(String(detailLead?.dealPayment?.approvalNote || ""));
+    setBrokerageReceivedDraft(
+      detailLead?.brokerageReceived === null || detailLead?.brokerageReceived === undefined
+        ? ""
+        : String(detailLead.brokerageReceived),
+    );
+    setBrokerageDistributedDraft(
+      detailLead?.brokerageDistributed === null || detailLead?.brokerageDistributed === undefined
+        ? "0"
+        : String(detailLead.brokerageDistributed),
+    );
     setClosureDocumentsDraft(sanitizeClosureDocumentList(detailLead?.closureDocuments));
     setRequirementsDraft(mapLeadRequirementsToDraft(detailLead?.requirements));
     setDiaryDraft("");
@@ -1391,7 +1520,7 @@ const LeadsMatrix = () => {
 
     setActivityLoading(false);
     setDiaryLoading(false);
-  }, []);
+  }, [currentLeadRouteBase, navigate]);
 
   const closeDetails = useCallback(() => {
     if (diaryRecognitionRef.current && isDiaryListening) {
@@ -1421,6 +1550,10 @@ const LeadsMatrix = () => {
     setPaymentNoteDraft("");
     setPaymentApprovalStatusDraft("");
     setPaymentApprovalNoteDraft("");
+    setTransferReasonDraft("");
+    setAssigneeSearchDraft("");
+    setBrokerageReceivedDraft("");
+    setBrokerageDistributedDraft("0");
     setClosureDocumentsDraft([]);
     setRequirementsDraft(createDefaultLeadRequirementsDraft());
     if (normalizedRouteLeadId) {
@@ -1498,6 +1631,16 @@ const LeadsMatrix = () => {
     setPaymentNoteDraft(String(updatedLead?.dealPayment?.note || ""));
     setPaymentApprovalStatusDraft("");
     setPaymentApprovalNoteDraft(String(updatedLead?.dealPayment?.approvalNote || ""));
+    setBrokerageReceivedDraft(
+      updatedLead?.brokerageReceived === null || updatedLead?.brokerageReceived === undefined
+        ? ""
+        : String(updatedLead.brokerageReceived),
+    );
+    setBrokerageDistributedDraft(
+      updatedLead?.brokerageDistributed === null || updatedLead?.brokerageDistributed === undefined
+        ? "0"
+        : String(updatedLead.brokerageDistributed),
+    );
     setClosureDocumentsDraft(sanitizeClosureDocumentList(updatedLead?.closureDocuments));
     setRequirementsDraft(mapLeadRequirementsToDraft(updatedLead?.requirements));
   };
@@ -1519,6 +1662,12 @@ const LeadsMatrix = () => {
     const leadId = String(lead?._id || "").trim();
     const normalizedStatus = String(nextStatus || "").trim().toUpperCase();
     if (!leadId || !normalizedStatus || normalizedStatus === String(lead?.status || "").toUpperCase()) {
+      return;
+    }
+
+    if (normalizedStatus === "CLOSED") {
+      setError("Open lead details to enter Brokerage Received before closing the deal");
+      handleOpenLeadDetailsPage(lead);
       return;
     }
 
@@ -1628,6 +1777,18 @@ const LeadsMatrix = () => {
           (commercialParkingSlots !== null && commercialParkingSlots > 0)
           || (Boolean(commercialParkingType) && commercialParkingType !== "NONE"),
         requirementsCommercialPantry: Boolean(commercialAmenities?.pantry),
+        requirementsCommercialReceptionArea: Boolean(commercialAmenities?.receptionArea),
+        requirementsCommercialWaitingArea: Boolean(commercialAmenities?.waitingArea),
+        requirementsCommercialCafeteria: Boolean(commercialAmenities?.cafeteria),
+        requirementsCommercialServerRoom: Boolean(commercialAmenities?.serverRoom),
+        requirementsCommercialStorageRoom: Boolean(commercialAmenities?.storageRoom),
+        requirementsCommercialBreakoutArea: Boolean(commercialAmenities?.breakoutArea),
+        requirementsCommercialLiftAvailable: Boolean(commercialAmenities?.liftAvailable),
+        requirementsCommercialPowerBackup: Boolean(commercialAmenities?.powerBackup),
+        requirementsCommercialCentralAC: Boolean(commercialAmenities?.centralAC),
+        requirementsCommercialFireSafety: Boolean(commercialAmenities?.fireSafety),
+        requirementsCommercialReadyToMove: Boolean(commercialAmenities?.readyToMove),
+        requirementsCommercialUnderConstruction: Boolean(commercialAmenities?.underConstruction),
         requirementsResidentialBhkType:
           String(residentialDetails?.bhkType || "").trim().toUpperCase()
           || prev.requirementsResidentialBhkType,
@@ -1643,6 +1804,11 @@ const LeadsMatrix = () => {
         requirementsResidentialAmenityPowerBackup: Boolean(residentialAmenities?.powerBackup),
         requirementsResidentialAmenityParking:
           residentialParking !== null && residentialParking > 0,
+        requirementsResidentialAmenityStudyRoom: Boolean(residentialAmenities?.studyRoom),
+        requirementsResidentialAmenityServantRoom: Boolean(residentialAmenities?.servantRoom),
+        requirementsResidentialAmenityModularKitchen: Boolean(residentialAmenities?.modularKitchen),
+        requirementsResidentialAmenityElectricityBackup: Boolean(residentialAmenities?.electricityBackup),
+        requirementsResidentialAmenityGasPipeline: Boolean(residentialAmenities?.gasPipeline),
       };
     });
   };
@@ -1707,6 +1873,18 @@ const LeadsMatrix = () => {
             cabins: toAmountNumber(formData.requirementsCommercialCabins),
             parkingAvailable: Boolean(formData.requirementsCommercialParkingAvailable),
             pantry: Boolean(formData.requirementsCommercialPantry),
+            receptionArea: Boolean(formData.requirementsCommercialReceptionArea),
+            waitingArea: Boolean(formData.requirementsCommercialWaitingArea),
+            cafeteria: Boolean(formData.requirementsCommercialCafeteria),
+            serverRoom: Boolean(formData.requirementsCommercialServerRoom),
+            storageRoom: Boolean(formData.requirementsCommercialStorageRoom),
+            breakoutArea: Boolean(formData.requirementsCommercialBreakoutArea),
+            liftAvailable: Boolean(formData.requirementsCommercialLiftAvailable),
+            powerBackup: Boolean(formData.requirementsCommercialPowerBackup),
+            centralAC: Boolean(formData.requirementsCommercialCentralAC),
+            fireSafety: Boolean(formData.requirementsCommercialFireSafety),
+            readyToMove: Boolean(formData.requirementsCommercialReadyToMove),
+            underConstruction: Boolean(formData.requirementsCommercialUnderConstruction),
           },
           residential: {
             bhkType: String(formData.requirementsResidentialBhkType || "").trim().toUpperCase(),
@@ -1719,6 +1897,11 @@ const LeadsMatrix = () => {
               clubhouse: Boolean(formData.requirementsResidentialAmenityClubhouse),
               powerBackup: Boolean(formData.requirementsResidentialAmenityPowerBackup),
               parking: Boolean(formData.requirementsResidentialAmenityParking),
+              studyRoom: Boolean(formData.requirementsResidentialAmenityStudyRoom),
+              servantRoom: Boolean(formData.requirementsResidentialAmenityServantRoom),
+              modularKitchen: Boolean(formData.requirementsResidentialAmenityModularKitchen),
+              electricityBackup: Boolean(formData.requirementsResidentialAmenityElectricityBackup),
+              gasPipeline: Boolean(formData.requirementsResidentialAmenityGasPipeline),
             },
           },
         };
@@ -1844,6 +2027,13 @@ const LeadsMatrix = () => {
         effectivePaymentType === "PARTIAL"
           ? (paymentRemainingDraft !== "" ? parsedPaymentRemaining : existingPaymentRemaining)
           : 0;
+      const parsedBrokerageReceived = toAmountNumber(brokerageReceivedDraft);
+      const parsedBrokerageDistributed = brokerageDistributedDraft === ""
+        ? 0
+        : toAmountNumber(brokerageDistributedDraft);
+      const existingBrokerageReceived = toAmountNumber(selectedLead?.brokerageReceived);
+      const effectiveBrokerageReceived =
+        brokerageReceivedDraft !== "" ? parsedBrokerageReceived : existingBrokerageReceived;
       const normalizedApprovalStatus = String(paymentApprovalStatusDraft || "")
         .trim()
         .toUpperCase();
@@ -1925,6 +2115,18 @@ const LeadsMatrix = () => {
         && (effectiveRemainingAmount === null || effectiveRemainingAmount <= 0)
       ) {
         setError("Enter remaining amount greater than 0 for partial payment");
+        setSavingUpdates(false);
+        return;
+      }
+
+      if (isClosedFlow && (effectiveBrokerageReceived === null || effectiveBrokerageReceived < 0)) {
+        setError("Brokerage Received is required and cannot be negative when closing the deal");
+        setSavingUpdates(false);
+        return;
+      }
+
+      if (isClosedFlow && (parsedBrokerageDistributed === null || parsedBrokerageDistributed < 0)) {
+        setError("Brokerage Distributed cannot be negative");
         setSavingUpdates(false);
         return;
       }
@@ -2018,6 +2220,9 @@ const LeadsMatrix = () => {
         if (Object.keys(dealPaymentPayload).length > 0) {
           payload.dealPayment = dealPaymentPayload;
         }
+
+        payload.brokerageReceived = effectiveBrokerageReceived;
+        payload.brokerageDistributed = parsedBrokerageDistributed || 0;
       }
 
       if (String(statusDraft || "").toUpperCase() === "CLOSED") {
@@ -2044,17 +2249,29 @@ const LeadsMatrix = () => {
   };
 
   const handleAssignLead = async () => {
-    if (!canAssignLead || !selectedLead || !executiveDraft) return;
+    if (!canAssignLead || !selectedLead) return;
+    if (!executiveDraft) {
+      setError("Select a user to transfer this lead");
+      return;
+    }
 
     try {
       setAssigning(true);
       setError("");
 
-      const updatedLead = await assignLead(selectedLead._id, executiveDraft);
+      const updatedLead = await assignLead(selectedLead._id, {
+        assignedTo: executiveDraft,
+        reason: transferReasonDraft,
+      });
 
       if (!updatedLead) {
         await fetchLeads(true);
-        setSuccess("Lead assigned");
+        setIsDetailsOpen(false);
+        setSelectedLead(null);
+        setTransferReasonDraft("");
+        setAssigneeSearchDraft("");
+        setSuccess("Lead is transferred");
+        navigate(currentLeadRouteBase);
         return;
       }
 
@@ -2062,10 +2279,21 @@ const LeadsMatrix = () => {
         prev.map((lead) => (lead._id === updatedLead._id ? updatedLead : lead)),
       );
       setSelectedLead(updatedLead);
-      setSuccess("Lead assigned");
+      setExecutiveDraft(
+        typeof updatedLead.assignedTo === "string"
+          ? updatedLead.assignedTo
+          : updatedLead.assignedTo?._id || "",
+      );
+      setTransferReasonDraft("");
+      setAssigneeSearchDraft("");
+      setIsDetailsOpen(false);
+      setSelectedLead(null);
+      setSuccess("Lead is transferred");
+      navigate(currentLeadRouteBase);
+      await fetchLeads(true);
     } catch (assignError) {
-      const message = toErrorMessage(assignError, "Failed to assign lead");
-      console.error(`Assign lead failed: ${message}`);
+      const message = toErrorMessage(assignError, "Failed to transfer lead");
+      console.error(`Transfer lead failed: ${message}`);
       setError(message);
     } finally {
       setAssigning(false);
@@ -2318,7 +2546,7 @@ const LeadsMatrix = () => {
 
             <LeadsMatrixAlerts isDark={isDark} error={error} success={success} />
 
-            <div className="sticky top-0 z-30 -mx-2.5 px-2.5 pb-2 pt-1 backdrop-blur-xl sm:-mx-6 sm:px-6 lg:-mx-10 lg:px-10">
+            <div className="z-30 -mx-2.5 px-2.5 pb-1 pt-0.5 md:sticky md:top-0 md:pb-2 md:pt-1 md:backdrop-blur-xl sm:-mx-6 sm:px-6 lg:-mx-10 lg:px-10">
               <LeadsMatrixFilters
                 isDark={isDark}
                 query={query}
@@ -2344,6 +2572,7 @@ const LeadsMatrix = () => {
               statusBreakdown={statusBreakdown}
               viewMode={viewMode}
               onOpenLeadDetails={handleOpenLeadDetailsPage}
+              canAssignLead={canAssignLead}
               onInlineStatusChange={handleInlineStatusChange}
               updatingInlineStatusId={updatingInlineStatusId}
               leadStatuses={LEAD_STATUSES}
@@ -2477,6 +2706,10 @@ const LeadsMatrix = () => {
             setPaymentApprovalStatusDraft={setPaymentApprovalStatusDraft}
             paymentApprovalNoteDraft={paymentApprovalNoteDraft}
             setPaymentApprovalNoteDraft={setPaymentApprovalNoteDraft}
+            brokerageReceivedDraft={brokerageReceivedDraft}
+            setBrokerageReceivedDraft={setBrokerageReceivedDraft}
+            brokerageDistributedDraft={brokerageDistributedDraft}
+            setBrokerageDistributedDraft={setBrokerageDistributedDraft}
             closureDocumentsDraft={closureDocumentsDraft}
             setClosureDocumentsDraft={setClosureDocumentsDraft}
             canReviewDealPayment={canReviewDealPayment}
@@ -2495,6 +2728,10 @@ const LeadsMatrix = () => {
             executiveDraft={executiveDraft}
             setExecutiveDraft={setExecutiveDraft}
             executives={executives}
+            transferReasonDraft={transferReasonDraft}
+            setTransferReasonDraft={setTransferReasonDraft}
+            assigneeSearchDraft={assigneeSearchDraft}
+            setAssigneeSearchDraft={setAssigneeSearchDraft}
             onAssignLead={handleAssignLead}
             assigning={assigning}
             diaryDraft={diaryDraft}

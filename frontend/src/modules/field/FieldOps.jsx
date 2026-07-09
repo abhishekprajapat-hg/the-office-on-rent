@@ -2,7 +2,6 @@ import React, { useCallback, useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import {
   Activity,
-  AlertCircle,
   ArrowUpRight,
   Clock3,
   MapPin,
@@ -19,6 +18,7 @@ import { getAllLeads } from "../../services/leadService";
 import { getInventoryAssetsWithMeta } from "../../services/inventoryService";
 import { getFieldExecutiveLocations, getUsers } from "../../services/userService";
 import { toErrorMessage } from "../../utils/errorMessage";
+import ToastNotice from "../../components/ui/ToastNotice";
 import FieldOpsTaskQueueSection from "./components/FieldOpsTaskQueueSection";
 import FieldOpsQuickLocateSection from "./components/FieldOpsQuickLocateSection";
 import FieldOpsDispatchQueueSection from "./components/FieldOpsDispatchQueueSection";
@@ -750,7 +750,7 @@ const FieldOps = () => {
               </div>
             </div>
 
-            <div className="mt-4 flex items-center gap-2 overflow-x-auto pb-1 text-[11px] font-semibold uppercase tracking-[0.12em] sm:flex-wrap sm:overflow-visible sm:pb-0">
+            <div className="mt-4 flex flex-wrap items-center gap-2 text-[11px] font-semibold uppercase tracking-[0.08em] sm:tracking-[0.12em]">
               <span className="inline-flex items-center gap-1 whitespace-nowrap rounded-full border border-white/30 bg-white/10 px-2.5 py-1 text-cyan-100">
                 <Signal size={12} />
                 Live tracked: {liveTrackedExecutives}
@@ -809,12 +809,7 @@ const FieldOps = () => {
           </div>
         </section>
 
-        {error && (
-          <div className="ui-soft-panel flex items-center gap-2 border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
-            <AlertCircle size={16} />
-            {error}
-          </div>
-        )}
+        <ToastNotice message={error} type="error" />
 
         <div className="grid grid-cols-2 gap-3 sm:grid-cols-2 sm:gap-4 xl:grid-cols-3 2xl:grid-cols-6">
           <StatCard

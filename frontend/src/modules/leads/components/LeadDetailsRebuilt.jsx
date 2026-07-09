@@ -43,6 +43,83 @@ const statusLabel = (status) =>
     .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
     .join(" ");
 
+const getUserDisplayName = (user, fallback = "-") => {
+  if (!user) return fallback;
+  if (typeof user === "string") return user || fallback;
+  const name = String(user?.name || "").trim();
+  const role = String(user?.role || "").trim();
+  if (name && role) return `${name} (${statusLabel(role)})`;
+  return name || role || fallback;
+};
+
+const getAssignmentActionLabel = (action) => {
+  const normalized = String(action || "").trim().toUpperCase();
+  if (normalized === "LEAD_CREATED") return "Lead Created";
+  if (normalized === "AUTO_ASSIGNED") return "Auto Assigned";
+  if (normalized === "QUALIFIED") return "Qualified";
+  if (normalized === "MANUAL_TRANSFER") return "Manual Transfer";
+  if (normalized === "REASSIGNED") return "Reassigned";
+  if (normalized === "CLOSED") return "Closed";
+  return statusLabel(normalized || "UPDATE");
+};
+
+const getAssignmentEventTime = (event) => {
+  const date = new Date(event?.createdAt || 0);
+  return Number.isNaN(date.getTime()) ? 0 : date.getTime();
+};
+
+const buildAssignmentHistoryEvents = (lead = {}) => {
+  const events = [];
+
+  if (lead?.createdAt) {
+    events.push({
+      _id: `${lead?._id || "lead"}-created`,
+      action: "LEAD_CREATED",
+      toUser: lead?.assignedTo || null,
+      reason: "",
+      statusAtTransfer: "NEW",
+      createdAt: lead.createdAt,
+      createdBy: lead?.createdBy || null,
+      synthetic: true,
+    });
+  }
+
+  if (Array.isArray(lead?.assignmentHistory)) {
+    lead.assignmentHistory.forEach((event, index) => {
+      if (!event || typeof event !== "object") return;
+      events.push({
+        _id: event._id || `${lead?._id || "lead"}-assignment-${index}`,
+        action: event.action || "REASSIGNED",
+        fromUser: event.fromUser || null,
+        toUser: event.toUser || null,
+        reason: event.reason || "",
+        statusAtTransfer: event.statusAtTransfer || "",
+        createdAt: event.createdAt || lead.updatedAt || lead.createdAt,
+        createdBy: event.createdBy || null,
+      });
+    });
+  }
+
+  const isClosed = String(lead?.status || "").trim().toUpperCase() === "CLOSED";
+  if (isClosed) {
+    events.push({
+      _id: `${lead?._id || "lead"}-closed`,
+      action: "CLOSED",
+      fromUser: lead?.assignedTo || null,
+      toUser: lead?.assignedTo || null,
+      reason: lead?.dealPayment?.note || "",
+      statusAtTransfer: "CLOSED",
+      createdAt: lead?.brokerageClosedAt || lead?.updatedAt || lead?.createdAt,
+      createdBy: lead?.brokerageClosedBy || lead?.dealPayment?.approvalReviewedBy || null,
+      synthetic: true,
+    });
+  }
+
+  return events
+    .filter((event) => event?.createdAt || event?.action)
+    .sort((a, b) => getAssignmentEventTime(b) - getAssignmentEventTime(a));
+};
+
 const INR_CURRENCY_FORMATTER = new Intl.NumberFormat("en-IN", {
   style: "currency",
   currency: "INR",
@@ -176,6 +253,22 @@ const LEAD_REQUIREMENT_BHK_OPTIONS = [
   { value: "STUDIO", label: "Studio" },
   { value: "OTHER", label: "Other" },
 ];
+const LEAD_REQUIREMENT_COMMERCIAL_AMENITY_FIELDS = [
+  { key: "parkingAvailable", label: "Parking" },
+  { key: "pantry", label: "Pantry" },
+  { key: "receptionArea", label: "Reception Area" },
+  { key: "waitingArea", label: "Waiting Area" },
+  { key: "cafeteria", label: "Cafeteria" },
+  { key: "serverRoom", label: "Server / IT Room" },
+  { key: "storageRoom", label: "Storage Room" },
+  { key: "breakoutArea", label: "Breakout Area" },
+  { key: "liftAvailable", label: "Lift Available" },
+  { key: "powerBackup", label: "Power Backup" },
+  { key: "centralAC", label: "Central AC" },
+  { key: "fireSafety", label: "Fire Safety" },
+  { key: "readyToMove", label: "Ready to Move" },
+  { key: "underConstruction", label: "Under Construction" },
+];
 const LEAD_REQUIREMENT_RESIDENTIAL_AMENITY_FIELDS = [
   { key: "lift", label: "Lift" },
   { key: "security", label: "Security" },
@@ -184,6 +277,11 @@ const LEAD_REQUIREMENT_RESIDENTIAL_AMENITY_FIELDS = [
   { key: "clubhouse", label: "Clubhouse" },
   { key: "powerBackup", label: "Power Backup" },
   { key: "parking", label: "Parking" },
+  { key: "studyRoom", label: "Study Room" },
+  { key: "servantRoom", label: "Servant Room" },
+  { key: "modularKitchen", label: "Modular Kitchen" },
+  { key: "electricityBackup", label: "Electricity Backup" },
+  { key: "gasPipeline", label: "Gas Pipeline" },
 ];
 
 const detectClosureDocumentKind = (mimeType = "") => {
@@ -376,6 +474,10 @@ const LeadDetailsRebuiltContent = ({
   setPaymentApprovalStatusDraft,
   paymentApprovalNoteDraft,
   setPaymentApprovalNoteDraft,
+  brokerageReceivedDraft,
+  setBrokerageReceivedDraft,
+  brokerageDistributedDraft,
+  setBrokerageDistributedDraft,
   closureDocumentsDraft,
   setClosureDocumentsDraft,
   canReviewDealPayment,
@@ -394,6 +496,10 @@ const LeadDetailsRebuiltContent = ({
   executiveDraft,
   setExecutiveDraft,
   executives,
+  transferReasonDraft,
+  setTransferReasonDraft,
+  assigneeSearchDraft,
+  setAssigneeSearchDraft,
   onAssignLead,
   assigning,
   diaryDraft,
@@ -623,6 +729,18 @@ const LeadDetailsRebuiltContent = ({
           cabins: "",
           parkingAvailable: false,
           pantry: false,
+          receptionArea: false,
+          waitingArea: false,
+          cafeteria: false,
+          serverRoom: false,
+          storageRoom: false,
+          breakoutArea: false,
+          liftAvailable: false,
+          powerBackup: false,
+          centralAC: false,
+          fireSafety: false,
+          readyToMove: false,
+          underConstruction: false,
           ...(prev?.commercial || {}),
           [field]: value,
         },
@@ -646,6 +764,11 @@ const LeadDetailsRebuiltContent = ({
             clubhouse: false,
             powerBackup: false,
             parking: false,
+            studyRoom: false,
+            servantRoom: false,
+            modularKitchen: false,
+            electricityBackup: false,
+            gasPipeline: false,
             ...(prev?.residential?.amenities || {}),
           },
           ...(prev?.residential || {}),
@@ -672,6 +795,11 @@ const LeadDetailsRebuiltContent = ({
             clubhouse: false,
             powerBackup: false,
             parking: false,
+            studyRoom: false,
+            servantRoom: false,
+            modularKitchen: false,
+            electricityBackup: false,
+            gasPipeline: false,
             ...(prev?.residential?.amenities || {}),
             [field]: value,
           },
@@ -950,6 +1078,29 @@ const LeadDetailsRebuiltContent = ({
   );
   const hasMoreDiaryEntries = normalizedDiaryEntries.length > visibleDiaryEntries.length;
   const hasMoreActivities = normalizedActivities.length > visibleActivities.length;
+  const normalizedLeadStatus = String(statusDraft || selectedLead?.status || "").trim().toUpperCase();
+  const showQualifiedTransferHelper =
+    normalizedLeadStatus === "QUALIFIED_LEAD" || normalizedLeadStatus === "SITE_VISIT_REQUIRED";
+  const currentOwnerName = selectedLead?.assignedTo?.name || "Unassigned";
+  const currentOwnerRole = selectedLead?.assignedTo?.role || "";
+  const assignmentHistoryEvents = React.useMemo(
+    () => buildAssignmentHistoryEvents(selectedLead),
+    [selectedLead],
+  );
+  const assigneeSearch = String(assigneeSearchDraft || "").trim().toLowerCase();
+  const filteredAssignees = React.useMemo(() => {
+    const rows = Array.isArray(executives) ? executives : [];
+    if (!assigneeSearch) return rows;
+    return rows.filter((user) => {
+      const haystack = [
+        user?.name,
+        user?.role,
+        user?.email,
+        user?.phone,
+      ].map((value) => String(value || "").toLowerCase()).join(" ");
+      return haystack.includes(assigneeSearch);
+    });
+  }, [assigneeSearch, executives]);
   const sortedLinkableInventoryOptions = React.useMemo(
     () =>
       [...(Array.isArray(availableRelatedInventoryOptions) ? availableRelatedInventoryOptions : [])]
@@ -2025,22 +2176,16 @@ const LeadDetailsRebuiltContent = ({
                   />
                 </div>
                 <div className="mt-2 flex flex-wrap gap-1.5">
-                  <label className={`inline-flex items-center gap-1.5 rounded-lg border px-2 py-1 text-[11px] ${button}`}>
-                    <input
-                      type="checkbox"
-                      checked={Boolean(requirementsDraft?.commercial?.parkingAvailable)}
-                      onChange={(event) => updateRequirementCommercialField("parkingAvailable", event.target.checked)}
-                    />
-                    Parking
-                  </label>
-                  <label className={`inline-flex items-center gap-1.5 rounded-lg border px-2 py-1 text-[11px] ${button}`}>
-                    <input
-                      type="checkbox"
-                      checked={Boolean(requirementsDraft?.commercial?.pantry)}
-                      onChange={(event) => updateRequirementCommercialField("pantry", event.target.checked)}
-                    />
-                    Pantry
-                  </label>
+                  {LEAD_REQUIREMENT_COMMERCIAL_AMENITY_FIELDS.map((field) => (
+                    <label key={field.key} className={`inline-flex items-center gap-1.5 rounded-lg border px-2 py-1 text-[11px] ${button}`}>
+                      <input
+                        type="checkbox"
+                        checked={Boolean(requirementsDraft?.commercial?.[field.key])}
+                        onChange={(event) => updateRequirementCommercialField(field.key, event.target.checked)}
+                      />
+                      {field.label}
+                    </label>
+                  ))}
                 </div>
               </div>
             ) : null}
@@ -2506,16 +2651,147 @@ const LeadDetailsRebuiltContent = ({
 
           {canAssignLead ? (
             <section className={`rounded-3xl border p-4 ${card}`}>
-              <div className={`text-xs font-bold uppercase tracking-widest ${isDark ? "text-slate-400" : "text-slate-500"}`}>Assignment</div>
-              <select value={executiveDraft} onChange={(event) => setExecutiveDraft(event.target.value)} className={`mt-2 h-10 w-full rounded-xl border px-3 text-sm ${input}`}>
-                <option value="">Select executive</option>
-                {executives.map((executive) => <option key={executive._id} value={executive._id}>{executive.name} ({executive.role})</option>)}
+              <div className="flex items-start justify-between gap-3">
+                <div>
+                  <div className={`text-xs font-bold uppercase tracking-widest ${isDark ? "text-slate-400" : "text-slate-500"}`}>Assign / Transfer Lead</div>
+                  <p className={`mt-1 text-xs ${isDark ? "text-slate-400" : "text-slate-500"}`}>
+                    Current owner: <span className={isDark ? "font-semibold text-slate-100" : "font-semibold text-slate-800"}>{currentOwnerName}</span>
+                    {currentOwnerRole ? ` (${statusLabel(currentOwnerRole)})` : ""}
+                  </p>
+                </div>
+              </div>
+              {showQualifiedTransferHelper ? (
+                <div className={`mt-3 rounded-2xl border px-3 py-2 text-xs font-medium ${
+                  isDark ? "border-emerald-400/35 bg-emerald-500/10 text-emerald-100" : "border-emerald-200 bg-emerald-50 text-emerald-800"
+                }`}>
+                  This lead is qualified. You can assign it to a Field Executive for site visit or deal handling.
+                </div>
+              ) : null}
+              <input
+                type="search"
+                value={assigneeSearchDraft}
+                onChange={(event) => setAssigneeSearchDraft(event.target.value)}
+                placeholder="Search by name or role"
+                className={`mt-3 h-11 w-full rounded-xl border px-3 text-sm ${input}`}
+              />
+              <select
+                value={executiveDraft}
+                onChange={(event) => setExecutiveDraft(event.target.value)}
+                className={`mt-2 h-11 w-full rounded-xl border px-3 text-sm ${input}`}
+              >
+                <option value="">Select user</option>
+                {filteredAssignees.map((user) => (
+                  <option key={user._id} value={user._id}>
+                    {user.name} ({statusLabel(user.role)})
+                    {user.lastAssignedAt ? ` - last ${formatDate(user.lastAssignedAt)}` : ""}
+                  </option>
+                ))}
               </select>
-              <button type="button" onClick={onAssignLead} disabled={!executiveDraft || assigning} className={`mt-2 h-10 w-full rounded-xl border text-sm font-semibold disabled:opacity-60 ${button}`}>
-                {assigning ? "Assigning..." : "Assign Lead"}
-              </button>
+              <textarea
+                value={transferReasonDraft}
+                onChange={(event) => setTransferReasonDraft(event.target.value)}
+                placeholder="Transfer reason (optional)"
+                rows={3}
+                className={`mt-2 min-h-24 w-full resize-y rounded-xl border px-3 py-2 text-sm ${input}`}
+              />
+              <div className="sticky bottom-0 -mx-1 mt-3 flex gap-2 bg-inherit pt-2">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setExecutiveDraft(selectedLead?.assignedTo?._id || "");
+                    setTransferReasonDraft("");
+                    setAssigneeSearchDraft("");
+                  }}
+                  className={`h-11 flex-1 rounded-xl border text-sm font-semibold ${button}`}
+                >
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  onClick={onAssignLead}
+                  disabled={!executiveDraft || assigning}
+                  className={`inline-flex h-11 flex-1 items-center justify-center gap-2 rounded-xl border text-sm font-semibold disabled:opacity-60 ${button}`}
+                >
+                  {assigning ? <Loader size={14} className="animate-spin" /> : <Send size={14} />}
+                  {assigning ? "Transferring..." : "Save Transfer"}
+                </button>
+              </div>
             </section>
           ) : null}
+
+          <section className={`rounded-3xl border p-4 ${card}`}>
+            <div className={`mb-3 flex items-center gap-1.5 text-xs font-bold uppercase tracking-widest ${isDark ? "text-slate-400" : "text-slate-500"}`}>
+              <History size={12} /> Assignment History
+            </div>
+            {assignmentHistoryEvents.length === 0 ? (
+              <div className={`rounded-2xl border border-dashed px-3 py-4 text-sm ${isDark ? "border-slate-700 text-slate-400" : "border-slate-300 text-slate-500"}`}>
+                No assignment history yet
+              </div>
+            ) : (
+              <div className="space-y-0">
+                {assignmentHistoryEvents.map((event, index) => {
+                  const hasConnector = index < assignmentHistoryEvents.length - 1;
+                  const fromUser = getUserDisplayName(event.fromUser);
+                  const toUser = getUserDisplayName(event.toUser);
+                  const createdBy = getUserDisplayName(event.createdBy, event.synthetic ? "System" : "-");
+                  const reason = String(event.reason || "").trim();
+                  const statusAtTransfer = String(event.statusAtTransfer || "").trim();
+
+                  return (
+                    <div key={event._id || `${event.action}-${index}`} className="grid grid-cols-[18px_minmax(0,1fr)] gap-3">
+                      <div className="flex flex-col items-center">
+                        <span className={`mt-1 h-3 w-3 rounded-full border-2 ${
+                          isDark ? "border-cyan-300 bg-slate-950" : "border-cyan-600 bg-white"
+                        }`} />
+                        {hasConnector ? (
+                          <span className={`mt-1 h-full min-h-12 w-px ${isDark ? "bg-slate-700" : "bg-slate-200"}`} />
+                        ) : null}
+                      </div>
+
+                      <div className={`min-w-0 pb-3 ${hasConnector ? "" : "pb-0"}`}>
+                        <div className={`rounded-2xl border p-3 ${softCard}`}>
+                          <div className="flex min-w-0 flex-col gap-1 sm:flex-row sm:items-start sm:justify-between">
+                            <div className="min-w-0">
+                              <div className={`text-sm font-bold ${isDark ? "text-slate-100" : "text-slate-800"}`}>
+                                {getAssignmentActionLabel(event.action)}
+                              </div>
+                              <div className={`mt-0.5 text-[11px] ${isDark ? "text-slate-400" : "text-slate-500"}`}>
+                                {formatDate(event.createdAt)}
+                              </div>
+                            </div>
+                            {statusAtTransfer ? (
+                              <span className={`w-fit rounded-full border px-2 py-0.5 text-[10px] font-bold uppercase tracking-[0.08em] ${
+                                isDark ? "border-slate-700 bg-slate-950 text-slate-300" : "border-slate-200 bg-white text-slate-600"
+                              }`}>
+                                {statusLabel(statusAtTransfer)}
+                              </span>
+                            ) : null}
+                          </div>
+
+                          <div className="mt-2 grid min-w-0 grid-cols-1 gap-1.5 text-[11px] sm:grid-cols-2">
+                            <div className={isDark ? "text-slate-400" : "text-slate-500"}>
+                              From: <span className={isDark ? "font-semibold text-slate-200" : "font-semibold text-slate-700"}>{fromUser}</span>
+                            </div>
+                            <div className={isDark ? "text-slate-400" : "text-slate-500"}>
+                              To: <span className={isDark ? "font-semibold text-slate-200" : "font-semibold text-slate-700"}>{toUser}</span>
+                            </div>
+                            <div className={`min-w-0 sm:col-span-2 ${isDark ? "text-slate-400" : "text-slate-500"}`}>
+                              Created by: <span className={isDark ? "font-semibold text-slate-200" : "font-semibold text-slate-700"}>{createdBy}</span>
+                            </div>
+                            {reason ? (
+                              <div className={`min-w-0 break-words sm:col-span-2 ${isDark ? "text-slate-300" : "text-slate-600"}`}>
+                                Reason: {reason}
+                              </div>
+                            ) : null}
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </section>
         </div>
 
         <div className="space-y-4 xl:col-span-7">
@@ -2727,6 +3003,39 @@ const LeadDetailsRebuiltContent = ({
                 {showRemainingAmountField ? (
                   <input type="number" min="0" step="0.01" value={paymentRemainingDraft} onChange={(event) => setPaymentRemainingDraft(event.target.value)} placeholder="Remaining amount" className={`h-9 w-full rounded-lg border px-3 text-sm ${input}`} />
                 ) : null}
+                <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+                  <label className="space-y-1">
+                    <span className={`text-[10px] font-bold uppercase tracking-wider ${isDark ? "text-slate-400" : "text-slate-500"}`}>
+                      Brokerage Received *
+                    </span>
+                    <input
+                      type="number"
+                      min="0"
+                      step="0.01"
+                      value={brokerageReceivedDraft}
+                      onChange={(event) => setBrokerageReceivedDraft(event.target.value)}
+                      placeholder="Company brokerage received"
+                      className={`h-9 w-full rounded-lg border px-3 text-sm ${input}`}
+                    />
+                  </label>
+                  <label className="space-y-1">
+                    <span className={`text-[10px] font-bold uppercase tracking-wider ${isDark ? "text-slate-400" : "text-slate-500"}`}>
+                      Brokerage Distributed
+                    </span>
+                    <input
+                      type="number"
+                      min="0"
+                      step="0.01"
+                      value={brokerageDistributedDraft}
+                      onChange={(event) => setBrokerageDistributedDraft(event.target.value)}
+                      placeholder="0"
+                      className={`h-9 w-full rounded-lg border px-3 text-sm ${input}`}
+                    />
+                  </label>
+                </div>
+                <div className={`rounded-lg border px-2 py-1.5 text-[11px] ${isDark ? "border-sky-500/30 bg-sky-500/10 text-sky-100" : "border-sky-200 bg-sky-50 text-sky-700"}`}>
+                  Only Brokerage Received will be counted as company revenue.
+                </div>
                 <textarea value={paymentNoteDraft} onChange={(event) => setPaymentNoteDraft(event.target.value)} placeholder="Executive payment note..." maxLength={1000} className={`min-h-[68px] w-full rounded-lg border px-3 py-2 text-xs ${input}`} />
                 <div className={`rounded-lg border px-2 py-1.5 text-xs ${
                   currentApprovalStatus === "APPROVED"

@@ -1,6 +1,5 @@
 import React, { useEffect, useMemo, useState } from "react";
 import {
-  AlertCircle,
   Crown,
   Loader2,
   Medal,
@@ -10,6 +9,7 @@ import {
 } from "lucide-react";
 import { getRoleLeaderboard } from "../../services/userService";
 import { toErrorMessage } from "../../utils/errorMessage";
+import ToastNotice from "../../components/ui/ToastNotice";
 
 const WINDOW_OPTIONS = [
   { label: "Last 7 Days", value: 7 },
@@ -152,12 +152,7 @@ const RoleLeaderboard = () => {
           </button>
       </div>
 
-      {error ? (
-        <div className="flex items-center gap-2 rounded-xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700">
-          <AlertCircle size={16} />
-          {error}
-        </div>
-      ) : null}
+      <ToastNotice message={error} type="error" />
 
       {loading ? (
         <div className="ui-soft-panel flex h-40 items-center justify-center rounded-2xl border border-slate-200 bg-white text-slate-500">

@@ -5,6 +5,7 @@ import {
   updateMyTenantMetaIntegration,
 } from "../../services/saasService";
 import { toErrorMessage } from "../../utils/errorMessage";
+import ToastNotice from "../../components/ui/ToastNotice";
 
 const AdminMetaAdsPanel = ({ theme = "light" }) => {
   const isDark = theme === "dark";
@@ -160,17 +161,8 @@ const AdminMetaAdsPanel = ({ theme = "light" }) => {
         </button>
       </div>
 
-      {error ? (
-        <div className={`rounded-xl border px-4 py-3 text-sm ${isDark ? "border-red-500/30 bg-red-500/10 text-red-200" : "border-red-200 bg-red-50 text-red-700"}`}>
-          {error}
-        </div>
-      ) : null}
-
-      {notice ? (
-        <div className={`rounded-xl border px-4 py-3 text-sm ${isDark ? "border-emerald-500/30 bg-emerald-500/10 text-emerald-200" : "border-emerald-200 bg-emerald-50 text-emerald-700"}`}>
-          {notice}
-        </div>
-      ) : null}
+      <ToastNotice message={error} type="error" />
+      <ToastNotice message={notice} type="success" />
 
       <section className="grid grid-cols-1 gap-4 lg:grid-cols-4">
         <MetaHealthCard

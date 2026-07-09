@@ -83,7 +83,6 @@ export const ACTIVITY_SECTIONS = [
 ];
 
 export const TOP_NAV_SECTION_IDS = [
-  "dashboard",
   "leads",
   "inventory",
   "finance",

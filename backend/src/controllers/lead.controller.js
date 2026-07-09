@@ -65,9 +65,14 @@ const LEAD_POPULATE_FIELDS = [
   { path: "assignedManager", select: "name role" },
   { path: "assignedExecutive", select: "name role" },
   { path: "assignedFieldExecutive", select: "name role" },
+  { path: "assignmentHistory.fromUser", select: "name role" },
+  { path: "assignmentHistory.toUser", select: "name role" },
+  { path: "assignmentHistory.createdBy", select: "name role" },
+  { path: "qualifiedBy", select: "name role" },
   { path: "createdBy", select: "name role partnerCode brokerageConfig" },
   { path: "dealPayment.approvalRequestedBy", select: "name role" },
   { path: "dealPayment.approvalReviewedBy", select: "name role" },
+  { path: "brokerageClosedBy", select: "name role" },
   { path: "closureDocuments.uploadedBy", select: "name role" },
   {
     path: "inventoryId",
@@ -87,6 +92,7 @@ const LEAD_PAYMENT_REQUEST_POPULATE_FIELDS = [
   { path: "createdBy", select: "name role phone email partnerCode brokerageConfig" },
   { path: "dealPayment.approvalRequestedBy", select: "name role phone email" },
   { path: "dealPayment.approvalReviewedBy", select: "name role phone email" },
+  { path: "brokerageClosedBy", select: "name role phone email" },
   { path: "closureDocuments.uploadedBy", select: "name role phone email" },
   {
     path: "inventoryId",
@@ -112,11 +118,19 @@ const LEAD_SELECTABLE_FIELDS = [
   "source",
   "status",
   "dealPayment",
+  "brokerageReceived",
+  "brokerageDistributed",
+  "brokerageDistributionBreakdown",
+  "brokerageClosedAt",
+  "brokerageClosedBy",
   "closureDocuments",
   "assignedTo",
   "assignedManager",
   "assignedExecutive",
   "assignedFieldExecutive",
+  "assignmentHistory",
+  "qualifiedBy",
+  "qualifiedAt",
   "createdBy",
   "nextFollowUp",
   "lastContactedAt",
@@ -143,6 +157,8 @@ const LEAD_DIARY_SELECTABLE_FIELDS = [
 
 const FIELD_EXECUTIVE_ROLE = USER_ROLES.FIELD_EXECUTIVE;
 const SITE_VISIT_STATUS = "SITE_VISIT";
+const SITE_VISIT_REQUIRED_STATUS = "SITE_VISIT_REQUIRED";
+const QUALIFIED_LEAD_STATUS = "QUALIFIED_LEAD";
 const REQUESTED_STATUS = "REQUESTED";
 const CLOSED_STATUS = "CLOSED";
 const LEAD_STATUS_VALUES = Object.freeze([
@@ -181,11 +197,21 @@ const MAX_CLOSURE_DOCUMENT_URL_LENGTH = 2048;
 const MAX_CLOSURE_DOCUMENT_NAME_LENGTH = 180;
 const MAX_CLOSURE_DOCUMENT_MIME_LENGTH = 120;
 const MAX_CLOSURE_DOCUMENT_SIZE_BYTES = 25 * 1024 * 1024;
+const MAX_BROKERAGE_BREAKDOWN_ROWS = 25;
+const MAX_BROKERAGE_TEXT_LENGTH = 180;
+const BROKERAGE_AMOUNT_TOLERANCE = 0.01;
 const MAX_LEAD_STATUS_REQUEST_NOTE_LENGTH = 500;
 const MAX_BULK_LEAD_UPLOAD_ROWS = 5000;
 const LEAD_REQUIREMENT_INVENTORY_TYPES = Object.freeze(["COMMERCIAL", "RESIDENTIAL"]);
 const LEAD_REQUIREMENT_TRANSACTION_TYPES = Object.freeze(["SALE", "RENT"]);
 const LEAD_REQUIREMENT_AREA_UNITS = Object.freeze(["SQ_FT", "SQ_M"]);
+const CRM_ASSIGNABLE_ROLES = Object.freeze([
+  USER_ROLES.ADMIN,
+  ...MANAGEMENT_ROLES,
+  ...EXECUTIVE_ROLES,
+]);
+const MANUAL_TRANSFER_REASON_FALLBACK = "Manual lead transfer";
+const MAX_ASSIGNMENT_REASON_LENGTH = 500;
 
 const isValidObjectId = (value) =>
   /^[a-fA-F0-9]{24}$/.test(String(value || "").trim());
@@ -245,8 +271,17 @@ const buildLeadRelatedInventoryRefs = (lead = {}) => {
 const toLeadView = (lead) => {
   if (!lead) return null;
 
+  const assignmentHistory = Array.isArray(lead.assignmentHistory)
+    ? [...lead.assignmentHistory].sort((a, b) => {
+      const aTime = new Date(a?.createdAt || 0).getTime();
+      const bTime = new Date(b?.createdAt || 0).getTime();
+      return (Number.isNaN(bTime) ? 0 : bTime) - (Number.isNaN(aTime) ? 0 : aTime);
+    })
+    : [];
+
   return {
     ...lead,
+    assignmentHistory,
     relatedInventoryIds: buildLeadRelatedInventoryRefs(lead),
   };
 };
@@ -403,6 +438,18 @@ const buildLeadRequirementsFromInventory = (inventory) => {
         false,
       ),
       pantry: normalizeLeadRequirementBoolean(commercialAmenities?.pantry, false),
+      receptionArea: normalizeLeadRequirementBoolean(commercialAmenities?.receptionArea, false),
+      waitingArea: normalizeLeadRequirementBoolean(commercialAmenities?.waitingArea, false),
+      cafeteria: normalizeLeadRequirementBoolean(commercialAmenities?.cafeteria, false),
+      serverRoom: normalizeLeadRequirementBoolean(commercialAmenities?.serverRoom, false),
+      storageRoom: normalizeLeadRequirementBoolean(commercialAmenities?.storageRoom, false),
+      breakoutArea: normalizeLeadRequirementBoolean(commercialAmenities?.breakoutArea, false),
+      liftAvailable: normalizeLeadRequirementBoolean(commercialAmenities?.liftAvailable, false),
+      powerBackup: normalizeLeadRequirementBoolean(commercialAmenities?.powerBackup, false),
+      centralAC: normalizeLeadRequirementBoolean(commercialAmenities?.centralAC, false),
+      fireSafety: normalizeLeadRequirementBoolean(commercialAmenities?.fireSafety, false),
+      readyToMove: normalizeLeadRequirementBoolean(commercialAmenities?.readyToMove, false),
+      underConstruction: normalizeLeadRequirementBoolean(commercialAmenities?.underConstruction, false),
     },
     residential: {
       bhkType: String(residentialDetails?.bhkType || "").trim().toUpperCase(),
@@ -415,6 +462,11 @@ const buildLeadRequirementsFromInventory = (inventory) => {
         clubhouse: normalizeLeadRequirementBoolean(residentialAmenities?.clubhouse, false),
         powerBackup: normalizeLeadRequirementBoolean(residentialAmenities?.powerBackup, false),
         parking: normalizeLeadRequirementNumber(residentialDetails?.parking, null) > 0,
+        studyRoom: normalizeLeadRequirementBoolean(residentialAmenities?.studyRoom, false),
+        servantRoom: normalizeLeadRequirementBoolean(residentialAmenities?.servantRoom, false),
+        modularKitchen: normalizeLeadRequirementBoolean(residentialAmenities?.modularKitchen, false),
+        electricityBackup: normalizeLeadRequirementBoolean(residentialAmenities?.electricityBackup, false),
+        gasPipeline: normalizeLeadRequirementBoolean(residentialAmenities?.gasPipeline, false),
       },
     },
   };
@@ -496,6 +548,54 @@ const normalizeLeadRequirements = ({ rawRequirements, inventory }) => {
         commercialInput?.pantry,
         base?.commercial?.pantry || false,
       ),
+      receptionArea: normalizeLeadRequirementBoolean(
+        commercialInput?.receptionArea,
+        base?.commercial?.receptionArea || false,
+      ),
+      waitingArea: normalizeLeadRequirementBoolean(
+        commercialInput?.waitingArea,
+        base?.commercial?.waitingArea || false,
+      ),
+      cafeteria: normalizeLeadRequirementBoolean(
+        commercialInput?.cafeteria,
+        base?.commercial?.cafeteria || false,
+      ),
+      serverRoom: normalizeLeadRequirementBoolean(
+        commercialInput?.serverRoom,
+        base?.commercial?.serverRoom || false,
+      ),
+      storageRoom: normalizeLeadRequirementBoolean(
+        commercialInput?.storageRoom,
+        base?.commercial?.storageRoom || false,
+      ),
+      breakoutArea: normalizeLeadRequirementBoolean(
+        commercialInput?.breakoutArea,
+        base?.commercial?.breakoutArea || false,
+      ),
+      liftAvailable: normalizeLeadRequirementBoolean(
+        commercialInput?.liftAvailable,
+        base?.commercial?.liftAvailable || false,
+      ),
+      powerBackup: normalizeLeadRequirementBoolean(
+        commercialInput?.powerBackup,
+        base?.commercial?.powerBackup || false,
+      ),
+      centralAC: normalizeLeadRequirementBoolean(
+        commercialInput?.centralAC,
+        base?.commercial?.centralAC || false,
+      ),
+      fireSafety: normalizeLeadRequirementBoolean(
+        commercialInput?.fireSafety,
+        base?.commercial?.fireSafety || false,
+      ),
+      readyToMove: normalizeLeadRequirementBoolean(
+        commercialInput?.readyToMove,
+        base?.commercial?.readyToMove || false,
+      ),
+      underConstruction: normalizeLeadRequirementBoolean(
+        commercialInput?.underConstruction,
+        base?.commercial?.underConstruction || false,
+      ),
     },
     residential: {
       bhkType:
@@ -535,6 +635,26 @@ const normalizeLeadRequirements = ({ rawRequirements, inventory }) => {
         parking: normalizeLeadRequirementBoolean(
           residentialAmenitiesInput?.parking,
           base?.residential?.amenities?.parking || false,
+        ),
+        studyRoom: normalizeLeadRequirementBoolean(
+          residentialAmenitiesInput?.studyRoom,
+          base?.residential?.amenities?.studyRoom || false,
+        ),
+        servantRoom: normalizeLeadRequirementBoolean(
+          residentialAmenitiesInput?.servantRoom,
+          base?.residential?.amenities?.servantRoom || false,
+        ),
+        modularKitchen: normalizeLeadRequirementBoolean(
+          residentialAmenitiesInput?.modularKitchen,
+          base?.residential?.amenities?.modularKitchen || false,
+        ),
+        electricityBackup: normalizeLeadRequirementBoolean(
+          residentialAmenitiesInput?.electricityBackup,
+          base?.residential?.amenities?.electricityBackup || false,
+        ),
+        gasPipeline: normalizeLeadRequirementBoolean(
+          residentialAmenitiesInput?.gasPipeline,
+          base?.residential?.amenities?.gasPipeline || false,
         ),
       },
     },
@@ -586,6 +706,18 @@ const parseSiteLocationPayload = (rawSiteLocation) => {
 const normalizeEnumValue = (value) =>
   String(value || "").trim().toUpperCase();
 
+const normalizeLeadStatusValue = (value) => {
+  const normalized = normalizeEnumValue(value)
+    .replace(/[^A-Z0-9]+/g, "_")
+    .replace(/^_+|_+$/g, "");
+  if (normalized === "FOLLOWUP_REQUIRED") return "FOLLOW_UP_REQUIRED";
+  if (normalized === "CALL_BACK_LATER") return "CALLBACK_LATER";
+  if (normalized === "REQUIREMENT_AFTER_2_MONTH") return "REQUIREMENT_AFTER_2_MONTHS";
+  if (normalized === "SITE_VISIT_REQUIRED") return SITE_VISIT_REQUIRED_STATUS;
+  if (normalized === "SITE_VISIT") return SITE_VISIT_STATUS;
+  return normalized;
+};
+
 const isValidHttpUrl = (value) => /^https?:\/\//i.test(String(value || "").trim());
 
 const escapeRegex = (value) =>
@@ -597,7 +729,7 @@ const addLeadAndClause = (query, clause) => {
 };
 
 const applyLeadListFilters = (query, rawQuery = {}) => {
-  const status = normalizeEnumValue(rawQuery.status);
+  const status = normalizeLeadStatusValue(rawQuery.status);
   if (status && LEAD_STATUS_VALUES.includes(status)) {
     query.status = status;
   }
@@ -628,6 +760,25 @@ const applyLeadListFilters = (query, rawQuery = {}) => {
     query.createdAt = {
       ...(dateFrom ? { $gte: dateFrom } : {}),
       ...(dateTo ? { $lte: dateTo } : {}),
+    };
+  }
+
+  const followUpFrom = normalizeDateTimeFilter(
+    rawQuery.followUpFrom || rawQuery.nextFollowUpFrom,
+  );
+  const followUpTo = normalizeDateTimeFilter(
+    rawQuery.followUpTo || rawQuery.nextFollowUpTo,
+  );
+  const followUpDueOnly = ["1", "true", "yes"].includes(
+    String(rawQuery.followUpDueOnly || rawQuery.dueFollowUpsOnly || "")
+      .trim()
+      .toLowerCase(),
+  );
+  if (followUpFrom || followUpTo || followUpDueOnly) {
+    query.nextFollowUp = {
+      ...(followUpFrom ? { $gte: followUpFrom } : {}),
+      ...(followUpTo ? { $lte: followUpTo } : {}),
+      ...(followUpDueOnly && !followUpTo ? { $lte: new Date() } : {}),
     };
   }
 
@@ -894,9 +1045,154 @@ const emitAdminPaymentRequestCreated = ({
       : null,
   };
 
-  const adminRoom = `company:${resolvedCompanyId}:role:${USER_ROLES.ADMIN}`;
-  io.to(adminRoom).emit("lead:payment:request:created", payload);
-  io.to(adminRoom).emit("admin:request:new", payload);
+  emitAdminManagerRequestEvent({
+    io,
+    companyId: resolvedCompanyId,
+    eventName: "lead:payment:request:created",
+    payload,
+  });
+};
+
+const hasOwn = (value, key) =>
+  Object.prototype.hasOwnProperty.call(value || {}, key);
+
+const pickBrokerageSource = (rawPayload = {}) => {
+  if (rawPayload?.brokerage && typeof rawPayload.brokerage === "object" && !Array.isArray(rawPayload.brokerage)) {
+    return rawPayload.brokerage;
+  }
+
+  if (
+    hasOwn(rawPayload, "brokerageReceived")
+    || hasOwn(rawPayload, "brokerageDistributed")
+    || hasOwn(rawPayload, "brokerageDistributionBreakdown")
+  ) {
+    return rawPayload;
+  }
+
+  return undefined;
+};
+
+const parseBrokeragePayload = (rawPayload = {}) => {
+  const source = pickBrokerageSource(rawPayload);
+  if (source === undefined) {
+    return { provided: false };
+  }
+
+  const hasReceived = hasOwn(source, "brokerageReceived");
+  const hasDistributed = hasOwn(source, "brokerageDistributed");
+  const hasBreakdown = hasOwn(source, "brokerageDistributionBreakdown");
+  const brokerageReceived = hasReceived ? toFiniteNumber(source.brokerageReceived) : null;
+  const brokerageDistributed = hasDistributed
+    ? toFiniteNumber(source.brokerageDistributed)
+    : 0;
+
+  if (hasReceived && brokerageReceived === null) {
+    return { error: "brokerageReceived must be a valid number" };
+  }
+
+  if (hasReceived && brokerageReceived < 0) {
+    return { error: "brokerageReceived cannot be negative" };
+  }
+
+  if (hasDistributed && brokerageDistributed === null) {
+    return { error: "brokerageDistributed must be a valid number" };
+  }
+
+  if ((brokerageDistributed || 0) < 0) {
+    return { error: "brokerageDistributed cannot be negative" };
+  }
+
+  if (hasBreakdown && !Array.isArray(source.brokerageDistributionBreakdown)) {
+    return { error: "brokerageDistributionBreakdown must be an array" };
+  }
+
+  const breakdown = hasBreakdown
+    ? source.brokerageDistributionBreakdown.slice(0, MAX_BROKERAGE_BREAKDOWN_ROWS).map((row) => {
+        const amount = toFiniteNumber(row?.amount);
+        const paidDateRaw = String(row?.paidDate || "").trim();
+        const paidDate = paidDateRaw ? new Date(paidDateRaw) : null;
+
+        if (amount === null || amount < 0) {
+          return { error: "Brokerage distribution breakdown amount must be a non-negative number" };
+        }
+
+        if (paidDate && Number.isNaN(paidDate.getTime())) {
+          return { error: "Brokerage distribution paidDate must be a valid date" };
+        }
+
+        return {
+          recipientName: String(row?.recipientName || "").trim().slice(0, MAX_BROKERAGE_TEXT_LENGTH),
+          recipientType: String(row?.recipientType || "").trim().slice(0, MAX_BROKERAGE_TEXT_LENGTH),
+          amount,
+          note: String(row?.note || "").trim().slice(0, MAX_PAYMENT_NOTE_LENGTH),
+          paidDate,
+        };
+      })
+    : [];
+
+  const invalidBreakdown = breakdown.find((row) => row?.error);
+  if (invalidBreakdown) {
+    return { error: invalidBreakdown.error };
+  }
+
+  const cleanBreakdown = breakdown.filter((row) =>
+    row.recipientName || row.recipientType || row.amount > 0 || row.note || row.paidDate,
+  );
+  const breakdownTotal = cleanBreakdown.reduce((sum, row) => sum + Number(row.amount || 0), 0);
+  const resolvedDistributed = hasDistributed ? brokerageDistributed : (cleanBreakdown.length ? breakdownTotal : 0);
+
+  if (
+    cleanBreakdown.length
+    && Math.abs(breakdownTotal - resolvedDistributed) > BROKERAGE_AMOUNT_TOLERANCE
+  ) {
+    return {
+      error: "Brokerage distribution breakdown total must equal brokerageDistributed",
+    };
+  }
+
+  return {
+    provided: true,
+    value: {
+      hasReceived,
+      brokerageReceived,
+      brokerageDistributed: resolvedDistributed,
+      brokerageDistributionBreakdown: cleanBreakdown,
+      hasBreakdown,
+    },
+  };
+};
+
+const applyBrokerageToLead = ({ lead, brokerage, user, markClosed = false }) => {
+  if (!lead || !brokerage) return;
+
+  if (brokerage.hasReceived) {
+    lead.brokerageReceived = brokerage.brokerageReceived;
+  }
+  lead.brokerageDistributed = brokerage.brokerageDistributed ?? 0;
+  if (brokerage.hasBreakdown) {
+    lead.brokerageDistributionBreakdown = brokerage.brokerageDistributionBreakdown || [];
+  }
+
+  if (markClosed) {
+    lead.brokerageClosedAt = lead.brokerageClosedAt || new Date();
+    lead.brokerageClosedBy = lead.brokerageClosedBy || user?._id || null;
+  }
+};
+
+const emitAdminManagerRequestEvent = ({
+  io,
+  companyId,
+  eventName,
+  payload,
+}) => {
+  const resolvedCompanyId = String(companyId || "").trim();
+  if (!io || !resolvedCompanyId || !eventName || !payload) return;
+
+  [USER_ROLES.ADMIN, USER_ROLES.MANAGER].forEach((role) => {
+    const roleRoom = `company:${resolvedCompanyId}:role:${role}`;
+    io.to(roleRoom).emit(eventName, payload);
+    io.to(roleRoom).emit("admin:request:new", payload);
+  });
 };
 
 const emitAdminLeadDealClosed = ({
@@ -947,9 +1243,12 @@ const emitAdminLeadDealClosed = ({
       : null,
   };
 
-  const adminRoom = `company:${resolvedCompanyId}:role:${USER_ROLES.ADMIN}`;
-  io.to(adminRoom).emit("lead:deal:closed", payload);
-  io.to(adminRoom).emit("admin:request:new", payload);
+  emitAdminManagerRequestEvent({
+    io,
+    companyId: resolvedCompanyId,
+    eventName: "lead:deal:closed",
+    payload,
+  });
 };
 
 const emitAdminRemainingPaymentCollected = ({
@@ -1003,9 +1302,12 @@ const emitAdminRemainingPaymentCollected = ({
       : null,
   };
 
-  const adminRoom = `company:${resolvedCompanyId}:role:${USER_ROLES.ADMIN}`;
-  io.to(adminRoom).emit("lead:payment:remaining:collected", payload);
-  io.to(adminRoom).emit("admin:request:new", payload);
+  emitAdminManagerRequestEvent({
+    io,
+    companyId: resolvedCompanyId,
+    eventName: "lead:payment:remaining:collected",
+    payload,
+  });
 };
 
 const toRadians = (degrees) => (degrees * Math.PI) / 180;
@@ -1080,21 +1382,13 @@ const buildLeadQueryForUser = async (user) => {
   }
 
   if (isManagementRole(user.role)) {
-    const execIds = await getExecutiveIdsForLeader(user);
-    return {
-      ...companyScope,
-      $or: [
-        { createdBy: user._id },
-        { assignedTo: { $in: execIds } },
-        { assignedTo: null },
-      ],
-    };
+    return companyScope;
   }
 
   if (EXECUTIVE_ROLES.includes(user.role)) {
     return {
       ...companyScope,
-      $or: [{ assignedTo: user._id }, { assignedTo: null }],
+      assignedTo: user._id,
     };
   }
 
@@ -1115,6 +1409,12 @@ const normalizeDateBoundary = (rawValue, boundary = "start") => {
     parsed.setHours(0, 0, 0, 0);
   }
   return parsed;
+};
+
+const normalizeDateTimeFilter = (rawValue) => {
+  if (!rawValue) return null;
+  const parsed = new Date(String(rawValue));
+  return Number.isNaN(parsed.getTime()) ? null : parsed;
 };
 
 const parsePerformanceRange = (query = {}) => {
@@ -1717,10 +2017,46 @@ const releaseSelectedInventoryReservationForLead = async ({
   };
 };
 
+const toLeadStatusRequestDealPayment = (saleMeta = {}) => {
+  const paymentModeLabel = String(saleMeta?.paymentMode || "").trim();
+  const modeMap = {
+    Cash: "CASH",
+    Cheque: "CHECK",
+    "Bank Transfer": "NET_BANKING_NEFTRTGSIMPS",
+    "Net Banking": "NET_BANKING_NEFTRTGSIMPS",
+    UPI: "UPI",
+  };
+  const mode = modeMap[paymentModeLabel] || normalizeEnumValue(paymentModeLabel);
+  const remainingAmount = toFiniteNumber(saleMeta?.remainingAmount) || 0;
+  const paymentType = remainingAmount > 0 ? "PARTIAL" : "FULL";
+  const paymentReference =
+    mode === "UPI"
+      ? String(saleMeta?.upi?.transactionId || "").trim()
+      : mode === "CHECK"
+        ? String(saleMeta?.cheque?.chequeNumber || "").trim()
+        : mode === "NET_BANKING_NEFTRTGSIMPS"
+          ? String(saleMeta?.bankTransfer?.utrNumber || "").trim()
+          : "";
+  const noteParts = [
+    paymentModeLabel ? `Close details via ${paymentModeLabel}` : "",
+    saleMeta?.leadName ? `Sale lead: ${String(saleMeta.leadName).trim()}` : "",
+    saleMeta?.paymentDate ? `Payment date: ${String(saleMeta.paymentDate).trim()}` : "",
+    saleMeta?.remainingDueDate ? `Remaining due: ${String(saleMeta.remainingDueDate).trim()}` : "",
+  ].filter(Boolean);
+
+  return {
+    mode,
+    paymentType,
+    remainingAmount,
+    paymentReference,
+    note: noteParts.join(" | "),
+  };
+};
+
 exports.bulkUploadLeads = async (req, res) => {
   try {
-    if (req.user?.role !== USER_ROLES.ADMIN) {
-      return res.status(403).json({ message: "Only ADMIN can bulk upload leads" });
+    if (![USER_ROLES.ADMIN, ...MANAGEMENT_ROLES].includes(req.user?.role)) {
+      return res.status(403).json({ message: "Only ADMIN or MANAGER can bulk upload leads" });
     }
 
     const companyId = toObjectIdString(req.user?.companyId);
@@ -1764,11 +2100,26 @@ exports.bulkUploadLeads = async (req, res) => {
       ),
     ];
 
-    const [existingRows, inventoryRows] = await Promise.all([
+    const accessibleLeadQuery = await buildLeadQueryForUser(req.user);
+    if (!accessibleLeadQuery) {
+      return res.status(403).json({ message: "Access denied" });
+    }
+
+    const [companyExistingRows, accessibleExistingRows, inventoryRows] = await Promise.all([
       payloadPhones.length
         ? Lead.find({
           companyId,
           phone: { $in: payloadPhones },
+        })
+          .select("phone")
+          .lean()
+        : [],
+      payloadPhones.length
+        ? Lead.find({
+          $and: [
+            accessibleLeadQuery,
+            { phone: { $in: payloadPhones } },
+          ],
         })
           .select("phone")
           .lean()
@@ -1783,10 +2134,13 @@ exports.bulkUploadLeads = async (req, res) => {
         : [],
     ]);
 
-    const seenPhones = new Set(
-      existingRows.map((row) => String(row?.phone || "").trim()).filter(Boolean),
+    const companyPhoneSet = new Set(
+      companyExistingRows.map((row) => String(row?.phone || "").trim()).filter(Boolean),
     );
-    const existingPhoneSet = new Set(seenPhones);
+    const accessiblePhoneSet = new Set(
+      accessibleExistingRows.map((row) => String(row?.phone || "").trim()).filter(Boolean),
+    );
+    const seenPhones = new Set(companyPhoneSet);
     const uploadedPhoneSet = new Set();
     const inventoryById = new Map(
       inventoryRows.map((row) => [String(row._id), row]),
@@ -1817,8 +2171,9 @@ exports.bulkUploadLeads = async (req, res) => {
         const source = String(row.source || "").trim().toUpperCase() === "META"
           ? "META"
           : "MANUAL";
-        const status = LEAD_STATUS_VALUES.includes(String(row.status || "").trim().toUpperCase())
-          ? String(row.status || "").trim().toUpperCase()
+        const normalizedRowStatus = normalizeLeadStatusValue(row.status);
+        const status = LEAD_STATUS_VALUES.includes(normalizedRowStatus)
+          ? normalizedRowStatus
           : "NEW";
         const nextFollowUp = parseBulkLeadDate(row.nextFollowUp || row.next_follow_up);
         const lastContactedAt = parseBulkLeadDate(row.lastContactedAt || row.last_contacted_at);
@@ -1839,7 +2194,10 @@ exports.bulkUploadLeads = async (req, res) => {
         if (uploadedPhoneSet.has(phone)) {
           throw new Error("Duplicate phone in uploaded sheet");
         }
-        const isExistingLead = existingPhoneSet.has(phone);
+        if (companyPhoneSet.has(phone) && !accessiblePhoneSet.has(phone)) {
+          throw new Error("Lead already exists outside your accessible team");
+        }
+        const isExistingLead = accessiblePhoneSet.has(phone);
 
         let inventory = null;
         if (inventoryId) {
@@ -2248,7 +2606,25 @@ exports.getCompanyPerformanceOverview = async (req, res) => {
 exports.assignLead = async (req, res) => {
   try {
     const { leadId } = req.params;
-    const { executiveId } = req.body;
+    const assignedTo = String(req.body?.assignedTo || req.body?.executiveId || "").trim();
+    const reason = String(req.body?.reason || "").trim().slice(0, MAX_ASSIGNMENT_REASON_LENGTH);
+
+    if (!isValidObjectId(leadId)) {
+      return res.status(400).json({ message: "Invalid lead id" });
+    }
+
+    if (!isValidObjectId(assignedTo)) {
+      return res.status(400).json({ message: "assignedTo must be a valid user id" });
+    }
+
+    if (!CRM_ASSIGNABLE_ROLES.includes(req.user?.role)) {
+      return res.status(403).json({ message: "You are not authorized to transfer leads" });
+    }
+
+    const accessibleLead = await findAccessibleLeadById({ leadId, user: req.user });
+    if (!accessibleLead) {
+      return res.status(404).json({ message: "Lead not found" });
+    }
 
     const lead = await Lead.findOne({
       _id: leadId,
@@ -2258,67 +2634,64 @@ exports.assignLead = async (req, res) => {
       return res.status(404).json({ message: "Lead not found" });
     }
 
-    const executive = await User.findOne({
-      _id: executiveId,
+    const targetUser = await User.findOne({
+      _id: assignedTo,
       companyId: req.user.companyId,
       isActive: true,
     });
-    if (!executive || !EXECUTIVE_ROLES.includes(executive.role)) {
-      return res.status(400).json({ message: "Invalid executive" });
+    if (!targetUser) {
+      return res.status(400).json({ message: "Target user must be active and in your company" });
     }
 
-    if (isManagementRole(req.user.role) && req.user.role !== USER_ROLES.ADMIN) {
-      const teamExecutiveIds = new Set(
-        (await getExecutiveIdsForLeader(req.user)).map((item) => String(item)),
-      );
-
-      const targetExecutiveId = String(executive._id);
-      const leadAssigneeId = String(lead.assignedTo || "");
-      const leadAssignedManagerId = String(lead.assignedManager || "");
-      const leadCreatorId = String(lead.createdBy || "");
-      const managerId = String(req.user._id);
-
-      if (!teamExecutiveIds.has(targetExecutiveId)) {
-        return res.status(403).json({
-          message: "Leads can be assigned only to your team executives",
-        });
-      }
-
-      const canManageLead =
-        !leadAssigneeId
-        || teamExecutiveIds.has(leadAssigneeId)
-        || leadAssignedManagerId === managerId
-        || leadCreatorId === managerId;
-
-      if (!canManageLead) {
-        return res.status(403).json({
-          message: "You can assign only your own team leads",
-        });
-      }
+    if (!CRM_ASSIGNABLE_ROLES.includes(targetUser.role)) {
+      return res.status(400).json({ message: "Target user is not an authorized CRM user" });
     }
 
     const topManager = await getAncestorByRoles({
-      user: executive,
+      user: targetUser,
       targetRoles: [USER_ROLES.MANAGER],
-      companyId: executive.companyId || null,
+      companyId: targetUser.companyId || null,
       select: "_id role parentId companyId isActive",
     });
 
-    lead.assignedTo = executive._id;
-    lead.assignedManager = topManager?._id || executive.parentId || null;
-    lead.assignedExecutive = executive.role === USER_ROLES.EXECUTIVE ? executive._id : null;
+    const previousOwner = lead.assignedTo || null;
+    const now = new Date();
+    const targetIsManagement = isManagementRole(targetUser.role);
+    const targetIsExecutive =
+      targetUser.role === USER_ROLES.EXECUTIVE
+      || targetUser.role === USER_ROLES.INSIDE_EXECUTIVE;
+    const targetIsFieldExecutive = targetUser.role === USER_ROLES.FIELD_EXECUTIVE;
+
+    lead.assignedTo = targetUser._id;
+    lead.assignedManager =
+      targetIsManagement
+        ? targetUser._id
+        : topManager?._id || targetUser.parentId || null;
+    lead.assignedExecutive = targetIsExecutive ? targetUser._id : null;
     lead.assignedFieldExecutive =
-      executive.role === USER_ROLES.FIELD_EXECUTIVE ? executive._id : null;
+      targetIsFieldExecutive ? targetUser._id : null;
+    lead.assignmentHistory = [
+      ...(Array.isArray(lead.assignmentHistory) ? lead.assignmentHistory : []),
+      {
+        action: "MANUAL_TRANSFER",
+        fromUser: previousOwner,
+        toUser: targetUser._id,
+        reason: reason || MANUAL_TRANSFER_REASON_FALLBACK,
+        statusAtTransfer: String(lead.status || ""),
+        createdAt: now,
+        createdBy: req.user._id,
+      },
+    ];
     await lead.save();
 
     await User.updateOne(
-      { _id: executive._id },
-      { $set: { lastAssignedAt: new Date() } },
+      { _id: targetUser._id },
+      { $set: { lastAssignedAt: now } },
     );
 
     await LeadActivity.create({
       lead: lead._id,
-      action: `Manually assigned to ${executive.name}`,
+      action: `Manually transferred to ${targetUser.name}`,
       performedBy: req.user._id,
     });
 
@@ -2602,7 +2975,7 @@ exports.getLeadPaymentRequests = async (req, res) => {
   try {
     if (![USER_ROLES.ADMIN, USER_ROLES.MANAGER].includes(req.user.role)) {
       return res.status(403).json({
-        message: "Only admin users can view payment requests",
+        message: "Only admin or manager users can view payment requests",
       });
     }
 
@@ -2762,7 +3135,7 @@ exports.updateLeadStatus = async (req, res) => {
       closureDocuments: rawClosureDocuments,
       requirements: rawRequirements,
     } = req.body;
-    const requestedStatus = normalizeEnumValue(rawStatus);
+    const requestedStatus = normalizeLeadStatusValue(rawStatus);
 
     if (!requestedStatus) {
       return res.status(400).json({ message: "Status is required" });
@@ -2806,6 +3179,11 @@ exports.updateLeadStatus = async (req, res) => {
       return res.status(400).json({
         message: "nextFollowUp must be a valid date/time",
       });
+    }
+
+    const accessibleLead = await findAccessibleLeadById({ leadId, user: req.user });
+    if (!accessibleLead) {
+      return res.status(404).json({ message: "Lead not found" });
     }
 
     const lead = await Lead.findOne({
@@ -2917,6 +3295,10 @@ exports.updateLeadStatus = async (req, res) => {
     if (parsedDealPayment.error) {
       return res.status(400).json({ message: parsedDealPayment.error });
     }
+    const parsedBrokerage = parseBrokeragePayload(req.body);
+    if (parsedBrokerage.error) {
+      return res.status(400).json({ message: parsedBrokerage.error });
+    }
     const parsedClosureDocuments = parseClosureDocumentsPayload(rawClosureDocuments);
     if (parsedClosureDocuments.error) {
       return res.status(400).json({ message: parsedClosureDocuments.error });
@@ -2947,10 +3329,21 @@ exports.updateLeadStatus = async (req, res) => {
     const wasDealPaymentWorkflowStatus = [REQUESTED_STATUS, CLOSED_STATUS].includes(
       previousLeadStatus,
     );
+    const brokeragePayload = parsedBrokerage.value || null;
+    const existingBrokerageReceived = toFiniteNumber(lead?.brokerageReceived);
+    const nextBrokerageReceived = brokeragePayload?.hasReceived
+      ? brokeragePayload.brokerageReceived
+      : existingBrokerageReceived;
 
     if (parsedDealPayment.provided && !isDealPaymentWorkflowStatus && !wasDealPaymentWorkflowStatus) {
       return res.status(400).json({
         message: "Payment details can be updated only when lead status is REQUESTED or CLOSED",
+      });
+    }
+
+    if (parsedBrokerage.provided && !isDealPaymentWorkflowStatus && !wasDealPaymentWorkflowStatus) {
+      return res.status(400).json({
+        message: "Brokerage details can be updated only when lead status is REQUESTED or CLOSED",
       });
     }
 
@@ -2959,6 +3352,7 @@ exports.updateLeadStatus = async (req, res) => {
     const hasApprovalInput =
       parsedDealPayment.provided
       && Boolean(dealPaymentPayload.approvalStatus || dealPaymentPayload.approvalNote);
+    const hasBrokerageInput = Boolean(brokeragePayload);
 
     if (
       parsedSiteLocation.provided
@@ -3136,7 +3530,7 @@ exports.updateLeadStatus = async (req, res) => {
     if (hasApprovalInput) {
       if (!isAdminUser) {
         return res.status(403).json({
-          message: "Only admin can approve or reject deal payment",
+          message: "Only admin or manager can approve or reject deal payment",
         });
       }
 
@@ -3180,11 +3574,35 @@ exports.updateLeadStatus = async (req, res) => {
       }
 
       if (dealPaymentPayload.approvalStatus) {
+        const reviewerLabel =
+          req.user.role === USER_ROLES.MANAGER ? "manager" : "admin";
         paymentDecisionAction =
-          `Payment ${dealPaymentPayload.approvalStatus.toLowerCase()} by admin`;
+          `Payment ${dealPaymentPayload.approvalStatus.toLowerCase()} by ${reviewerLabel}`;
       } else if (dealPaymentPayload.approvalNote) {
-        paymentDecisionAction = "Payment approval note updated by admin";
+        paymentDecisionAction = "Payment approval note updated by admin/manager";
       }
+    }
+
+    const isClosingWithoutRecordedBrokerage =
+      previousLeadStatus !== CLOSED_STATUS
+      && nextLeadStatus === CLOSED_STATUS
+      && nextBrokerageReceived === null;
+    const isCloseRequestWithoutBrokerage =
+      isNewCloseApprovalRequest && nextBrokerageReceived === null;
+
+    if (isClosingWithoutRecordedBrokerage || isCloseRequestWithoutBrokerage) {
+      return res.status(400).json({
+        message: "Brokerage Received is required when closing a deal",
+      });
+    }
+
+    if (hasBrokerageInput) {
+      applyBrokerageToLead({
+        lead,
+        brokerage: brokeragePayload,
+        user: req.user,
+        markClosed: nextLeadStatus === CLOSED_STATUS,
+      });
     }
 
     if (parsedClosureDocuments.provided) {
@@ -3232,6 +3650,9 @@ exports.updateLeadStatus = async (req, res) => {
     const isClosingTransition =
       previousLeadStatus !== CLOSED_STATUS
       && nextLeadStatus === CLOSED_STATUS;
+    const isQualifiedTransition =
+      previousLeadStatus !== QUALIFIED_LEAD_STATUS
+      && nextLeadStatus === QUALIFIED_LEAD_STATUS;
     const shouldReleaseReservedProperty =
       previousLeadStatus === REQUESTED_STATUS
       && nextLeadStatus !== REQUESTED_STATUS
@@ -3242,6 +3663,27 @@ exports.updateLeadStatus = async (req, res) => {
 
     lead.status = nextLeadStatus;
     lead.lastContactedAt = new Date();
+    if (isQualifiedTransition) {
+      const qualifiedAt = new Date();
+      lead.qualifiedBy = req.user._id;
+      lead.qualifiedAt = qualifiedAt;
+      lead.assignmentHistory = [
+        ...(Array.isArray(lead.assignmentHistory) ? lead.assignmentHistory : []),
+        {
+          action: "QUALIFIED",
+          fromUser: lead.assignedTo || null,
+          toUser: lead.assignedTo || null,
+          reason: "Lead qualified by Inside Executive",
+          statusAtTransfer: nextLeadStatus,
+          createdAt: qualifiedAt,
+          createdBy: req.user._id,
+        },
+      ];
+    }
+    if (nextLeadStatus === CLOSED_STATUS && !lead.brokerageClosedAt) {
+      lead.brokerageClosedAt = new Date();
+      lead.brokerageClosedBy = lead.brokerageClosedBy || req.user._id;
+    }
 
     if (hasNextFollowUpInput) {
       lead.nextFollowUp = parsedNextFollowUp;
@@ -3337,6 +3779,10 @@ exports.updateLeadStatus = async (req, res) => {
       activityActions.push(paymentDecisionAction);
     }
 
+    if (isQualifiedTransition) {
+      activityActions.push("QUALIFIED");
+    }
+
     if (didCollectRemainingPayment) {
       activityActions.push("Remaining payment collected and admin notified");
     }
@@ -3417,7 +3863,7 @@ exports.requestLeadStatusChange = async (req, res) => {
       return res.status(404).json({ message: "Lead not found" });
     }
 
-    const proposedStatus = String(req.body?.status || "").trim().toUpperCase();
+    const proposedStatus = normalizeLeadStatusValue(req.body?.status);
     if (!LEAD_STATUS_VALUES.includes(proposedStatus)) {
       return res.status(400).json({ message: "Invalid status" });
     }
@@ -3441,6 +3887,16 @@ exports.requestLeadStatusChange = async (req, res) => {
       proposedNextFollowUp = parsed;
     }
 
+    const parsedBrokerage = parseBrokeragePayload(req.body);
+    if (parsedBrokerage.error) {
+      return res.status(400).json({ message: parsedBrokerage.error });
+    }
+    if (proposedStatus === CLOSED_STATUS && !parsedBrokerage.value?.hasReceived) {
+      return res.status(400).json({
+        message: "Brokerage Received is required when closing a deal",
+      });
+    }
+
     const payload = {
       companyId: accessibleLead.companyId || req.user.companyId,
       lead: accessibleLead._id,
@@ -3453,6 +3909,13 @@ exports.requestLeadStatusChange = async (req, res) => {
         req.body?.saleMeta && typeof req.body.saleMeta === "object"
           ? req.body.saleMeta
           : undefined,
+      proposedBrokerage: parsedBrokerage.value
+        ? {
+          brokerageReceived: parsedBrokerage.value.brokerageReceived,
+          brokerageDistributed: parsedBrokerage.value.brokerageDistributed,
+          brokerageDistributionBreakdown: parsedBrokerage.value.brokerageDistributionBreakdown,
+        }
+        : undefined,
       attachment:
         req.body?.attachment && typeof req.body.attachment === "object"
           ? req.body.attachment
@@ -3482,6 +3945,41 @@ exports.requestLeadStatusChange = async (req, res) => {
       .populate("requestedBy", "name role")
       .populate("lead", "name status nextFollowUp")
       .lean();
+
+    if (proposedStatus === CLOSED_STATUS) {
+      const createdAt = request?.createdAt || new Date();
+      const createdAtIso = new Date(createdAt).toISOString();
+      const payloadEvent = {
+        eventId: `lead-status-request:${created._id}`,
+        source: "lead",
+        requestType: "LEAD_STATUS_APPROVAL",
+        requestId: created._id,
+        leadId: accessibleLead._id,
+        status: "PENDING",
+        companyId: String(accessibleLead.companyId || req.user.companyId || ""),
+        createdAt: createdAtIso,
+        message: "New lead close approval request",
+        lead: {
+          _id: accessibleLead._id,
+          name: request?.lead?.name || "",
+          status: request?.lead?.status || "",
+        },
+        requestedBy: request?.requestedBy
+          ? {
+            _id: request.requestedBy._id || null,
+            name: request.requestedBy.name || "",
+            role: request.requestedBy.role || "",
+          }
+          : null,
+      };
+
+      emitAdminManagerRequestEvent({
+        io: req.app.get("io"),
+        companyId: accessibleLead.companyId || req.user.companyId || null,
+        eventName: "lead:status:request:created",
+        payload: payloadEvent,
+      });
+    }
 
     return res.status(201).json({
       message: "Status change request submitted",
@@ -3603,9 +4101,81 @@ exports.approveLeadStatusRequest = async (req, res) => {
       return res.status(404).json({ message: "Lead not found" });
     }
 
+    const previousLeadStatus = normalizeEnumValue(lead.status);
     lead.status = request.proposedStatus;
+    if (
+      previousLeadStatus !== QUALIFIED_LEAD_STATUS
+      && request.proposedStatus === QUALIFIED_LEAD_STATUS
+    ) {
+      const qualifiedAt = new Date();
+      const qualifiedBy = request.requestedBy || req.user._id;
+      lead.qualifiedBy = qualifiedBy;
+      lead.qualifiedAt = qualifiedAt;
+      lead.assignmentHistory = [
+        ...(Array.isArray(lead.assignmentHistory) ? lead.assignmentHistory : []),
+        {
+          action: "QUALIFIED",
+          fromUser: lead.assignedTo || null,
+          toUser: lead.assignedTo || null,
+          reason: "Lead qualified by Inside Executive",
+          statusAtTransfer: request.proposedStatus,
+          createdAt: qualifiedAt,
+          createdBy: qualifiedBy,
+        },
+      ];
+    }
     if (request.proposedNextFollowUp) {
       lead.nextFollowUp = request.proposedNextFollowUp;
+    }
+    if (request.proposedStatus === CLOSED_STATUS) {
+      const saleMeta = request.proposedSaleMeta?.toObject
+        ? request.proposedSaleMeta.toObject()
+        : (request.proposedSaleMeta || {});
+      const dealPaymentFromRequest = toLeadStatusRequestDealPayment(saleMeta);
+      const existingDealPayment = lead?.dealPayment?.toObject
+        ? lead.dealPayment.toObject()
+        : (lead.dealPayment || {});
+
+      if (dealPaymentFromRequest.mode && dealPaymentFromRequest.paymentType) {
+        lead.dealPayment = {
+          ...existingDealPayment,
+          ...dealPaymentFromRequest,
+          approvalStatus: "APPROVED",
+          approvalNote: String(req.body?.reviewNote || "").trim().slice(0, 500),
+          approvalRequestedBy: request.requestedBy || existingDealPayment.approvalRequestedBy || null,
+          approvalRequestedAt: request.createdAt || existingDealPayment.approvalRequestedAt || new Date(),
+          approvalReviewedBy: req.user._id,
+          approvalReviewedAt: new Date(),
+          requestedFromStatus:
+            existingDealPayment.requestedFromStatus
+            || (previousLeadStatus && previousLeadStatus !== CLOSED_STATUS ? previousLeadStatus : ""),
+          requestedTargetStatus: CLOSED_STATUS,
+        };
+      }
+
+      const proposedBrokerage = request.proposedBrokerage?.toObject
+        ? request.proposedBrokerage.toObject()
+        : (request.proposedBrokerage || {});
+      const brokerageReceived = toFiniteNumber(proposedBrokerage.brokerageReceived);
+      if (brokerageReceived === null) {
+        return res.status(400).json({
+          message: "Brokerage Received is required when closing a deal",
+        });
+      }
+      applyBrokerageToLead({
+        lead,
+        brokerage: {
+          hasReceived: true,
+          brokerageReceived,
+          brokerageDistributed: Math.max(0, toFiniteNumber(proposedBrokerage.brokerageDistributed) || 0),
+          brokerageDistributionBreakdown: Array.isArray(proposedBrokerage.brokerageDistributionBreakdown)
+            ? proposedBrokerage.brokerageDistributionBreakdown
+            : [],
+          hasBreakdown: Array.isArray(proposedBrokerage.brokerageDistributionBreakdown),
+        },
+        user: req.user,
+        markClosed: true,
+      });
     }
     if (Array.isArray(request.closureDocuments) && request.closureDocuments.length) {
       lead.closureDocuments = request.closureDocuments.map((row) => ({
@@ -3616,6 +4186,20 @@ exports.approveLeadStatusRequest = async (req, res) => {
         size: Number(row?.size || 0),
         uploadedBy: request.requestedBy || null,
       }));
+    }
+    let soldInventory = null;
+    if (
+      previousLeadStatus !== CLOSED_STATUS
+      && request.proposedStatus === CLOSED_STATUS
+    ) {
+      const soldSyncResult = await syncSelectedInventoryAsSoldForLeadClosure({
+        lead,
+        user: req.user,
+      });
+      if (soldSyncResult?.error) {
+        return res.status(400).json({ message: soldSyncResult.error });
+      }
+      soldInventory = soldSyncResult?.inventory || null;
     }
     await lead.save();
 
@@ -3631,6 +4215,37 @@ exports.approveLeadStatusRequest = async (req, res) => {
       action: `Status request approved: ${request.proposedStatus}`,
       performedBy: req.user._id,
     });
+
+    if (
+      previousLeadStatus !== QUALIFIED_LEAD_STATUS
+      && request.proposedStatus === QUALIFIED_LEAD_STATUS
+    ) {
+      await LeadActivity.create({
+        lead: lead._id,
+        action: "QUALIFIED",
+        performedBy: request.requestedBy || req.user._id,
+      });
+    }
+
+    if (soldInventory) {
+      await LeadActivity.create({
+        lead: lead._id,
+        action: `Selected property marked as Sold (${buildInventoryLeadProjectLabel(soldInventory) || String(soldInventory._id)})`,
+        performedBy: req.user._id,
+      });
+    }
+
+    if (
+      previousLeadStatus !== CLOSED_STATUS
+      && request.proposedStatus === CLOSED_STATUS
+    ) {
+      emitAdminLeadDealClosed({
+        io: req.app.get("io"),
+        lead,
+        closedBy: req.user,
+        companyId: req.user?.companyId || null,
+      });
+    }
 
     const populatedLead = await getLeadViewById(lead._id, req.user.companyId);
     const populatedRequest = await LeadStatusRequest.findById(request._id)

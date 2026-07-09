@@ -69,6 +69,11 @@ const USER_SELECTABLE_FIELDS = [
 const USER_ROLE_VALUES = Object.values(USER_ROLES);
 const ADMIN_TOOL_ROLES = [USER_ROLES.ADMIN, USER_ROLES.MANAGER];
 const canUseAdminTools = (role) => ADMIN_TOOL_ROLES.includes(role);
+const CRM_ASSIGNABLE_ROLES = [
+  USER_ROLES.ADMIN,
+  ...MANAGEMENT_ROLES,
+  ...EXECUTIVE_ROLES,
+];
 const BROKERAGE_MODES = Object.freeze(["FLAT", "PERCENTAGE"]);
 const DEFAULT_BROKERAGE_VALUE = 50000;
 const DEFAULT_BROKERAGE_PERCENTAGE = 2;
@@ -725,7 +730,15 @@ const buildProfileSummary = async (userDoc) => {
       Lead.countDocuments({
         companyId,
         assignedTo: userId,
-        status: { $in: ["NEW", "CONTACTED", "INTERESTED", "SITE_VISIT", "REQUESTED"] },
+        status: {
+          $in: [
+            "NEW",
+            "CONTACTED",
+            "INTERESTED",
+            "SITE_VISIT",
+            "REQUESTED",
+          ],
+        },
       }),
       Lead.countDocuments({ companyId, assignedTo: userId, status: "CLOSED" }),
       Lead.countDocuments({
@@ -795,9 +808,19 @@ exports.getUsers = async (req, res) => {
     }
 
     const companyScope = { companyId: req.user.companyId };
+    const crmAssignableOnly = String(req.query?.crmAssignable || "").trim().toLowerCase() === "true";
     let query = {};
 
-    if (req.user.role === USER_ROLES.ADMIN) {
+    if (crmAssignableOnly) {
+      if (!CRM_ASSIGNABLE_ROLES.includes(req.user.role)) {
+        return res.status(403).json({ message: "Access denied" });
+      }
+      query = {
+        ...companyScope,
+        role: { $in: CRM_ASSIGNABLE_ROLES },
+        isActive: true,
+      };
+    } else if (req.user.role === USER_ROLES.ADMIN) {
       query = companyScope;
     } else if (isManagementRole(req.user.role)) {
       const descendants = await getDescendantUsers({

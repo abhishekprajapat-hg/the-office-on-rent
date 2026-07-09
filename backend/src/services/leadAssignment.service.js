@@ -4,6 +4,7 @@ const LeadActivity = require("../models/leadActivity.model");
 const {
   USER_ROLES,
   EXECUTIVE_ROLES,
+  INSIDE_EXECUTIVE_ROLES,
   MANAGEMENT_ROLES,
   isManagementRole,
 } = require("../constants/role.constants");
@@ -12,7 +13,13 @@ const {
   getDescendantExecutiveIds,
 } = require("./hierarchy.service");
 
-const PIPELINE_STATUSES = ["NEW", "CONTACTED", "INTERESTED", "SITE_VISIT"];
+const PIPELINE_STATUSES = [
+  "NEW",
+  "CONTACTED",
+  "INTERESTED",
+  "SITE_VISIT",
+];
+const AUTO_ASSIGNMENT_REASON = "New lead automatically assigned to Inside Executive";
 
 const DEFAULT_MAX_ACTIVE_LEADS = 120;
 const ACTIVE_LOAD_WEIGHT = 100;
@@ -221,12 +228,26 @@ const persistAssignment = async ({
   });
   const inferredManagerId = topManager?._id || manager?._id || executive?.parentId || null;
   const isFieldExecutive = executive?.role === USER_ROLES.FIELD_EXECUTIVE;
-  const isExecutive = executive?.role === USER_ROLES.EXECUTIVE;
+  const isInsideExecutive = INSIDE_EXECUTIVE_ROLES.includes(executive?.role);
+  const isExecutive = executive?.role === USER_ROLES.EXECUTIVE || isInsideExecutive;
+  const previousAssignee = lead.assignedTo || null;
 
   lead.assignedTo = executive._id;
   lead.assignedManager = inferredManagerId;
   lead.assignedExecutive = isExecutive ? executive._id : null;
   lead.assignedFieldExecutive = isFieldExecutive ? executive._id : null;
+  lead.assignmentHistory = [
+    ...(Array.isArray(lead.assignmentHistory) ? lead.assignmentHistory : []),
+    {
+      action: "AUTO_ASSIGNED",
+      fromUser: previousAssignee,
+      toUser: executive._id,
+      reason: AUTO_ASSIGNMENT_REASON,
+      statusAtTransfer: String(lead.status || ""),
+      createdAt: now,
+      createdBy: performedBy || null,
+    },
+  ];
   await lead.save();
 
   const updates = [
@@ -270,7 +291,7 @@ const autoAssignLead = async ({ lead, requester = null, performedBy = null }) =>
   const actorId = performedBy || requester?._id || null;
   const resolvedCompanyId = requester?.companyId || lead?.companyId || null;
 
-  if (requester && EXECUTIVE_ROLES.includes(requester.role) && requester.isActive) {
+  if (requester && INSIDE_EXECUTIVE_ROLES.includes(requester.role) && requester.isActive) {
     await persistAssignment({
       lead,
       executive: requester,
@@ -288,7 +309,7 @@ const autoAssignLead = async ({ lead, requester = null, performedBy = null }) =>
   }
 
   const executiveQuery = {
-    role: { $in: EXECUTIVE_ROLES },
+    role: { $in: INSIDE_EXECUTIVE_ROLES },
     isActive: true,
   };
   if (resolvedCompanyId) {
@@ -301,10 +322,10 @@ const autoAssignLead = async ({ lead, requester = null, performedBy = null }) =>
     .lean();
 
   if (!activeExecutives.length) {
-    await createNoAssignmentActivity(lead._id, actorId, "no active executive available");
+    await createNoAssignmentActivity(lead._id, actorId, "no active inside executive available");
     return {
       assigned: false,
-      reason: "NO_ACTIVE_EXECUTIVE",
+      reason: "NO_ACTIVE_INSIDE_EXECUTIVE",
       mode: null,
       executive: null,
       manager: null,
@@ -407,7 +428,7 @@ const redistributePipelineLeads = async ({
   includeUnassigned = false,
 } = {}) => {
   const query = {
-    role: { $in: EXECUTIVE_ROLES },
+    role: { $in: INSIDE_EXECUTIVE_ROLES },
     isActive: true,
   };
 
@@ -570,7 +591,9 @@ const redistributePipelineLeads = async ({
     const currentAssignee = toId(lead.assignedTo);
     const managerId = resolveManagerId(selectedExecutive);
     const managerIdStr = toId(managerId);
-    const isExecutive = selectedExecutive.role === USER_ROLES.EXECUTIVE;
+    const isExecutive =
+      selectedExecutive.role === USER_ROLES.EXECUTIVE
+      || INSIDE_EXECUTIVE_ROLES.includes(selectedExecutive.role);
     const isFieldExecutive = selectedExecutive.role === USER_ROLES.FIELD_EXECUTIVE;
     const assignedExecutiveId = isExecutive ? selectedExecutiveId : "";
     const assignedFieldExecutiveId = isFieldExecutive ? selectedExecutiveId : "";

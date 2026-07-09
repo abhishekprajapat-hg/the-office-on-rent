@@ -18,10 +18,8 @@ import {
   Search,
   ArrowRight,
   ChevronRight,
-  CheckCircle,
   KanbanSquare,
-  List,
-  AlertTriangle
+  List
 } from "lucide-react";
 import {
   getTasks,
@@ -32,6 +30,7 @@ import {
 } from "../../services/taskService";
 import { getUsers } from "../../services/userService";
 import { getAllLeads } from "../../services/leadService";
+import ToastNotice from "../../components/ui/ToastNotice";
 
 const STATUS_COLUMNS = [
   { id: "BACKLOG", label: "Backlog", color: "text-slate-400 border-slate-400 bg-slate-400/5" },
@@ -518,68 +517,45 @@ export default function TaskManager({ theme = "light" }) {
 
   return (
     <div className={`flex flex-col h-full w-full overflow-hidden ${isDark ? "bg-slate-950" : "bg-slate-50/50"}`}>
-      {/* Real-time Notifications */}
-      <AnimatePresence>
-        {success && (
-          <Motion.div 
-            initial={{ opacity: 0, y: -20 }}
-            animate={{ opacity: 1, y: 0 }}
-            exit={{ opacity: 0, y: -20 }}
-            className="fixed top-4 right-4 z-50 flex items-center gap-2 rounded-xl bg-emerald-500 text-white px-4 py-3 shadow-lg text-sm font-semibold"
-          >
-            <CheckCircle size={16} />
-            {success}
-          </Motion.div>
-        )}
-        {error && (
-          <Motion.div 
-            initial={{ opacity: 0, y: -20 }}
-            animate={{ opacity: 1, y: 0 }}
-            exit={{ opacity: 0, y: -20 }}
-            className="fixed top-4 right-4 z-50 flex items-center gap-2 rounded-xl bg-rose-500 text-white px-4 py-3 shadow-lg text-sm font-semibold"
-          >
-            <AlertTriangle size={16} />
-            {error}
-          </Motion.div>
-        )}
-      </AnimatePresence>
+      <ToastNotice message={success} type="success" />
+      <ToastNotice message={error} type="error" />
 
       {/* Main Container */}
-      <div className="flex-1 flex flex-col min-h-0 p-4 lg:p-6 space-y-4 max-w-7xl w-full mx-auto">
+      <div className="mx-auto flex min-h-0 w-full max-w-7xl flex-1 flex-col space-y-3 p-3 sm:space-y-4 sm:p-4 lg:p-6">
         
         {/* Header Summary Stats */}
-        <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
-          <div className={`rounded-2xl p-4 flex items-center justify-between ${styles.card}`}>
+        <div className="grid grid-cols-2 gap-2 sm:gap-3 lg:grid-cols-4">
+          <div className={`flex items-center justify-between rounded-2xl p-3 sm:p-4 ${styles.card}`}>
             <div>
               <p className={`text-xs font-bold uppercase tracking-wider ${styles.label}`}>Total Tasks</p>
-              <h3 className={`text-2xl font-black mt-1 ${styles.title}`}>{stats.total}</h3>
+              <h3 className={`mt-1 text-xl font-black sm:text-2xl ${styles.title}`}>{stats.total}</h3>
             </div>
             <div className={`p-2.5 rounded-xl ${isDark ? "bg-slate-800 text-slate-300" : "bg-slate-100 text-slate-700"}`}>
               <ListTodo size={20} />
             </div>
           </div>
-          <div className={`rounded-2xl p-4 flex items-center justify-between ${styles.card}`}>
+          <div className={`flex items-center justify-between rounded-2xl p-3 sm:p-4 ${styles.card}`}>
             <div>
               <p className={`text-xs font-bold uppercase tracking-wider ${styles.label}`}>Pending</p>
-              <h3 className={`text-2xl font-black mt-1 ${isDark ? "text-amber-400" : "text-amber-600"}`}>{stats.pending}</h3>
+              <h3 className={`mt-1 text-xl font-black sm:text-2xl ${isDark ? "text-amber-400" : "text-amber-600"}`}>{stats.pending}</h3>
             </div>
             <div className={`p-2.5 rounded-xl ${isDark ? "bg-amber-500/10 text-amber-400" : "bg-amber-50 text-amber-600"}`}>
               <Clock size={20} />
             </div>
           </div>
-          <div className={`rounded-2xl p-4 flex items-center justify-between ${styles.card}`}>
+          <div className={`flex items-center justify-between rounded-2xl p-3 sm:p-4 ${styles.card}`}>
             <div>
               <p className={`text-xs font-bold uppercase tracking-wider ${styles.label}`}>Completed</p>
-              <h3 className={`text-2xl font-black mt-1 ${isDark ? "text-emerald-400" : "text-emerald-600"}`}>{stats.COMPLETED}</h3>
+              <h3 className={`mt-1 text-xl font-black sm:text-2xl ${isDark ? "text-emerald-400" : "text-emerald-600"}`}>{stats.COMPLETED}</h3>
             </div>
             <div className={`p-2.5 rounded-xl ${isDark ? "bg-emerald-500/10 text-emerald-400" : "bg-emerald-50 text-emerald-600"}`}>
               <CheckSquare size={20} />
             </div>
           </div>
-          <div className={`rounded-2xl p-4 flex items-center justify-between ${styles.card}`}>
+          <div className={`flex items-center justify-between rounded-2xl p-3 sm:p-4 ${styles.card}`}>
             <div>
               <p className={`text-xs font-bold uppercase tracking-wider ${styles.label}`}>Overdue</p>
-              <h3 className={`text-2xl font-black mt-1 ${isDark ? "text-rose-400" : "text-rose-600"}`}>{stats.overdue}</h3>
+              <h3 className={`mt-1 text-xl font-black sm:text-2xl ${isDark ? "text-rose-400" : "text-rose-600"}`}>{stats.overdue}</h3>
             </div>
             <div className={`p-2.5 rounded-xl ${isDark ? "bg-rose-500/10 text-rose-400" : "bg-rose-50 text-rose-600"}`}>
               <AlertCircle size={20} />
@@ -588,7 +564,7 @@ export default function TaskManager({ theme = "light" }) {
         </div>
 
         {/* Toolbar & Filters */}
-        <div className={`rounded-2xl p-4 space-y-3 ${styles.card}`}>
+        <div className={`space-y-3 rounded-2xl p-3 sm:p-4 ${styles.card}`}>
           <div className="flex flex-col md:flex-row gap-3 items-stretch md:items-center justify-between">
             {/* Search */}
             <div className="relative flex-1">
@@ -603,13 +579,13 @@ export default function TaskManager({ theme = "light" }) {
             </div>
 
             {/* Toggle View + Create button */}
-            <div className="flex items-center gap-2">
+            <div className="grid grid-cols-1 gap-2 sm:flex sm:items-center">
               {/* Group By & Sort By */}
-              <div className="flex items-center gap-1.5 mr-2">
+              <div className="grid grid-cols-2 gap-1.5 sm:mr-2 sm:flex sm:items-center">
                 <select
                   value={groupBy}
                   onChange={(e) => setGroupBy(e.target.value)}
-                  className={`h-9 rounded-xl border px-2 text-xs font-semibold ${styles.input}`}
+                  className={`h-10 rounded-xl border px-2 text-xs font-semibold sm:h-9 ${styles.input}`}
                   title="Group By"
                 >
                   <option value="status">Group: Status</option>
@@ -620,7 +596,7 @@ export default function TaskManager({ theme = "light" }) {
                 <select
                   value={sortBy}
                   onChange={(e) => setSortBy(e.target.value)}
-                  className={`h-9 rounded-xl border px-2 text-xs font-semibold ${styles.input}`}
+                  className={`h-10 rounded-xl border px-2 text-xs font-semibold sm:h-9 ${styles.input}`}
                   title="Sort By"
                 >
                   <option value="createdNewest">Newest</option>
@@ -630,7 +606,7 @@ export default function TaskManager({ theme = "light" }) {
                 </select>
               </div>
 
-              <div className={`flex items-center rounded-xl border p-0.5 ${isDark ? "border-slate-800 bg-slate-950" : "border-slate-200 bg-slate-100"}`}>
+              <div className={`grid grid-cols-2 rounded-xl border p-0.5 sm:flex sm:items-center ${isDark ? "border-slate-800 bg-slate-950" : "border-slate-200 bg-slate-100"}`}>
                 <button
                   onClick={() => setViewMode("kanban")}
                   className={`p-1.5 rounded-lg flex items-center gap-1.5 text-xs font-semibold transition-all ${
@@ -659,7 +635,7 @@ export default function TaskManager({ theme = "light" }) {
 
               <button
                 onClick={handleOpenCreateModal}
-                className={`h-9 px-4 rounded-xl flex items-center gap-1.5 text-xs font-bold uppercase tracking-wider ${styles.primaryButton}`}
+                className={`flex h-10 items-center justify-center gap-1.5 rounded-xl px-4 text-xs font-bold uppercase tracking-wider sm:h-9 ${styles.primaryButton}`}
               >
                 <Plus size={14} />
                 Create Task
@@ -668,7 +644,7 @@ export default function TaskManager({ theme = "light" }) {
           </div>
 
           {/* Filters Row */}
-          <div className="flex flex-wrap items-center gap-2 pt-1 border-t border-slate-800/10 dark:border-white/5">
+          <div className="grid grid-cols-2 gap-2 border-t border-slate-800/10 pt-1 dark:border-white/5 sm:flex sm:flex-wrap sm:items-center">
             <div className={`flex items-center gap-1.5 text-[10px] uppercase font-bold tracking-wider ${styles.label}`}>
               <SlidersHorizontal size={12} />
               Filters:
@@ -677,7 +653,7 @@ export default function TaskManager({ theme = "light" }) {
             <select
               value={statusFilter}
               onChange={(e) => setStatusFilter(e.target.value)}
-              className={`h-8 rounded-lg border px-2 text-xs font-medium ${styles.input}`}
+              className={`h-10 rounded-lg border px-2 text-xs font-medium sm:h-8 ${styles.input}`}
             >
               <option value="">All Statuses</option>
               {STATUS_COLUMNS.map(col => (
@@ -688,7 +664,7 @@ export default function TaskManager({ theme = "light" }) {
             <select
               value={priorityFilter}
               onChange={(e) => setPriorityFilter(e.target.value)}
-              className={`h-8 rounded-lg border px-2 text-xs font-medium ${styles.input}`}
+              className={`h-10 rounded-lg border px-2 text-xs font-medium sm:h-8 ${styles.input}`}
             >
               <option value="">All Priorities</option>
               {PRIORITIES.map(p => (
@@ -699,7 +675,7 @@ export default function TaskManager({ theme = "light" }) {
             <select
               value={assigneeFilter}
               onChange={(e) => setAssigneeFilter(e.target.value)}
-              className={`h-8 rounded-lg border px-2 text-xs font-medium ${styles.input} max-w-[150px]`}
+              className={`h-10 rounded-lg border px-2 text-xs font-medium sm:h-8 ${styles.input} sm:max-w-[150px]`}
             >
               <option value="">All Assignees</option>
               {teamUsers.map(u => (
@@ -710,7 +686,7 @@ export default function TaskManager({ theme = "light" }) {
             <select
               value={leadFilter}
               onChange={(e) => setLeadFilter(e.target.value)}
-              className={`h-8 rounded-lg border px-2 text-xs font-medium ${styles.input} max-w-[150px]`}
+              className={`h-10 rounded-lg border px-2 text-xs font-medium sm:h-8 ${styles.input} sm:max-w-[150px]`}
             >
               <option value="">All Leads</option>
               {leads.map(l => (
@@ -721,7 +697,7 @@ export default function TaskManager({ theme = "light" }) {
             <select
               value={tagFilter}
               onChange={(e) => setTagFilter(e.target.value)}
-              className={`h-8 rounded-lg border px-2 text-xs font-medium ${styles.input}`}
+              className={`h-10 rounded-lg border px-2 text-xs font-medium sm:h-8 ${styles.input}`}
             >
               <option value="">All Tags</option>
               {["Call", "Meeting", "Document", "Site Visit", "Urgent", "Follow-up"].map(tagOpt => (
@@ -739,7 +715,7 @@ export default function TaskManager({ theme = "light" }) {
                   setSearchQuery("");
                   setTagFilter("");
                 }}
-                className={`h-8 px-2.5 rounded-lg border text-xs font-medium transition-colors ${
+                className={`h-10 rounded-lg border px-2.5 text-xs font-medium transition-colors sm:h-8 ${
                   isDark ? "border-slate-800 text-rose-400 hover:bg-rose-950/20" : "border-slate-200 text-rose-600 hover:bg-rose-50"
                 }`}
               >
@@ -776,7 +752,7 @@ export default function TaskManager({ theme = "light" }) {
           /* ========================================================
              KANBAN BOARD VIEW (HTML5 Drag & Drop)
              ======================================================== */
-          <div className="flex-1 flex gap-4 overflow-x-auto min-h-0 pb-4 custom-scrollbar">
+          <div className="custom-scrollbar grid min-h-0 flex-1 grid-cols-1 gap-3 pb-4 sm:flex sm:gap-4 sm:overflow-x-auto">
             {boardColumns.map((col) => {
               const columnTasks = getColumnTasks(col.id);
               const isOver = activeDragCol === col.id;
@@ -787,7 +763,7 @@ export default function TaskManager({ theme = "light" }) {
                   onDragOver={(e) => handleDragOver(e, col.id)}
                   onDragLeave={handleDragLeave}
                   onDrop={(e) => handleDrop(e, col.id)}
-                  className={`flex flex-col rounded-2xl border min-w-[280px] w-[280px] max-h-full transition-all shrink-0 ${styles.column} ${
+                  className={`flex max-h-full w-full flex-col rounded-2xl border transition-all sm:w-[280px] sm:min-w-[280px] sm:shrink-0 ${styles.column} ${
                     isOver ? "ring-2 ring-sky-500/50 bg-sky-500/5 border-sky-400" : ""
                   }`}
                 >
@@ -803,7 +779,7 @@ export default function TaskManager({ theme = "light" }) {
                   </div>
 
                   {/* Task Card List */}
-                  <div className="flex-1 overflow-y-auto p-2 space-y-2.5 custom-scrollbar min-h-[120px]">
+                  <div className="custom-scrollbar min-h-[120px] flex-1 space-y-2.5 p-2 sm:overflow-y-auto">
                     <AnimatePresence initial={false}>
                       {columnTasks.map((task) => {
                         const priority = PRIORITIES.find(p => p.value === task.priority) || PRIORITIES[1];
@@ -975,8 +951,76 @@ export default function TaskManager({ theme = "light" }) {
           /* ========================================================
              LIST / TABLE VIEW
              ======================================================== */
-          <div className={`flex-1 overflow-hidden rounded-2xl border ${styles.card}`}>
-            <div className="h-full overflow-y-auto custom-scrollbar">
+          <div className={`flex-1 rounded-2xl border ${styles.card}`}>
+            <div className="space-y-2 p-2 sm:hidden">
+              {sortedTasks.map((task) => {
+                const priority = PRIORITIES.find(p => p.value === task.priority) || PRIORITIES[1];
+                const expired = isOverdue(task);
+
+                return (
+                  <div
+                    key={task._id}
+                    className={`rounded-xl border p-3 ${isDark ? "border-slate-800 bg-slate-900/80" : "border-slate-200 bg-white"}`}
+                  >
+                    <div className="flex items-start justify-between gap-2">
+                      <div className="min-w-0">
+                        <h4 className={`truncate text-sm font-bold ${styles.title}`}>{task.title}</h4>
+                        {task.description && (
+                          <p className={`mt-1 line-clamp-2 text-xs ${styles.label}`}>{task.description}</p>
+                        )}
+                      </div>
+                      <span className={`shrink-0 rounded-full border px-2 py-1 text-[10px] font-bold uppercase ${priority.color}`}>
+                        {priority.label}
+                      </span>
+                    </div>
+
+                    <div className="mt-3 grid grid-cols-2 gap-2 text-[11px]">
+                      <div className={styles.label}>Status</div>
+                      <select
+                        value={task.status}
+                        onChange={(e) => handleUpdateStatus(task._id, e.target.value)}
+                        className={`h-9 rounded-lg border px-2 text-xs font-semibold ${styles.input}`}
+                      >
+                        {STATUS_COLUMNS.map(colOpt => (
+                          <option key={colOpt.id} value={colOpt.id}>{colOpt.label}</option>
+                        ))}
+                      </select>
+                      <div className={styles.label}>Due</div>
+                      <div className={`font-semibold ${expired ? "text-rose-500" : styles.title}`}>
+                        {task.dueDate ? formatDate(task.dueDate) : "-"}
+                      </div>
+                      <div className={styles.label}>Lead</div>
+                      <div className={`truncate font-semibold ${styles.title}`}>
+                        {task.leadId?.name || "-"}
+                      </div>
+                      <div className={styles.label}>Assignee</div>
+                      <div className={`truncate font-semibold ${styles.title}`}>
+                        {task.assignedTo?.name || "-"}
+                      </div>
+                    </div>
+
+                    <div className="mt-3 flex items-center justify-end gap-2">
+                      <button
+                        onClick={() => handleOpenEditModal(task)}
+                        className={`inline-flex h-10 w-10 items-center justify-center rounded-xl border ${styles.button}`}
+                        title="Edit"
+                      >
+                        <Edit2 size={14} />
+                      </button>
+                      <button
+                        onClick={() => handleDeleteTask(task._id)}
+                        className="inline-flex h-10 w-10 items-center justify-center rounded-xl border border-rose-500/20 text-rose-500 hover:bg-rose-500/10"
+                        title="Delete"
+                      >
+                        <Trash2 size={14} />
+                      </button>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+
+            <div className="custom-scrollbar hidden h-full overflow-y-auto sm:block">
               <table className="w-full text-left border-collapse">
                 <thead>
                   <tr className={`border-b border-slate-800/10 dark:border-white/5 text-xs font-bold uppercase tracking-wider ${
@@ -1105,7 +1149,7 @@ export default function TaskManager({ theme = "light" }) {
       {/* Task Creation / Edit Modal */}
       <AnimatePresence>
         {isModalOpen && (
-          <div className="fixed inset-0 z-[70] flex items-center justify-center p-4">
+          <div className="mobile-bottom-sheet fixed inset-0 z-[70] flex items-center justify-center p-0 sm:p-4">
             {/* Backdrop */}
             <Motion.div 
               initial={{ opacity: 0 }}
@@ -1120,7 +1164,7 @@ export default function TaskManager({ theme = "light" }) {
               initial={{ opacity: 0, scale: 0.95, y: 10 }}
               animate={{ opacity: 1, scale: 1, y: 0 }}
               exit={{ opacity: 0, scale: 0.95, y: 10 }}
-              className={`relative z-10 w-full max-w-lg rounded-[22px] border overflow-hidden p-6 ${
+              className={`mobile-fullscreen-panel relative z-10 flex w-full max-w-lg flex-col overflow-hidden rounded-[22px] border p-4 sm:p-6 ${
                 isDark ? "border-slate-800 bg-slate-900" : "border-slate-200 bg-white"
               }`}
             >
@@ -1138,7 +1182,7 @@ export default function TaskManager({ theme = "light" }) {
               </div>
 
               {/* Form */}
-              <form onSubmit={handleSubmit} className="space-y-4">
+              <form onSubmit={handleSubmit} className="mobile-modal-scroll flex-1 space-y-4">
                 {/* Title */}
                 <div className="space-y-1">
                   <label className={`text-[10px] font-bold uppercase tracking-wider ${styles.label}`}>
@@ -1168,7 +1212,7 @@ export default function TaskManager({ theme = "light" }) {
                 </div>
 
                 {/* Status & Priority */}
-                <div className="grid grid-cols-2 gap-3">
+                <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
                   <div className="space-y-1">
                     <label className={`text-[10px] font-bold uppercase tracking-wider ${styles.label}`}>
                       Status
@@ -1201,7 +1245,7 @@ export default function TaskManager({ theme = "light" }) {
                 </div>
 
                 {/* Due Date & Assignee */}
-                <div className="grid grid-cols-2 gap-3">
+                <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
                   <div className="space-y-1">
                     <label className={`text-[10px] font-bold uppercase tracking-wider ${styles.label}`}>
                       Due Date
@@ -1375,7 +1419,7 @@ export default function TaskManager({ theme = "light" }) {
                 </div>
 
                 {/* Actions */}
-                <div className="flex items-center justify-end gap-2 pt-2">
+                <div className="mobile-safe-footer -mx-4 flex items-center justify-end gap-2 border-t border-slate-200 bg-inherit px-4 pt-3 sm:mx-0 sm:border-t-0 sm:px-0 sm:pt-2">
                   <button
                     type="button"
                     onClick={() => setIsModalOpen(false)}

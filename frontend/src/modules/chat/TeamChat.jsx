@@ -38,6 +38,7 @@ import {
   markMessageSeen,
   sendDirectMessage,
 } from "../../services/chatService";
+import ToastNotice from "../../components/ui/ToastNotice";
 import { acquireChatSocket, releaseChatSocket } from "../../services/chatSocket";
 import { useChatNotifications } from "../../context/useChatNotifications";
 import { toErrorMessage } from "../../utils/errorMessage";
@@ -2661,7 +2662,7 @@ const TeamChat = ({ theme = "light" }) => {
               </p>
             </div>
 
-            <div className="flex w-full items-center gap-1.5 overflow-x-auto pb-1 sm:w-auto sm:flex-wrap sm:justify-end sm:overflow-visible sm:pb-0">
+            <div className="flex w-full flex-wrap items-center gap-1.5 sm:w-auto sm:justify-end">
               <span className={`shrink-0 whitespace-nowrap rounded-full px-2 py-0.5 text-[10px] font-semibold ${
                 isDark ? "bg-slate-800 text-slate-300" : "bg-slate-100 text-slate-600"
               }`}>
@@ -2896,13 +2897,7 @@ const TeamChat = ({ theme = "light" }) => {
             </div>
           )}
 
-          {error && (
-            <div className={`mx-3 mt-2 rounded-xl border px-3 py-2 text-xs sm:mx-4 ${
-              isDark ? "border-amber-500/35 bg-amber-500/10 text-amber-200" : "border-amber-300 bg-amber-50 text-amber-700"
-            }`}>
-              {error}
-            </div>
-          )}
+          <ToastNotice message={error} type="error" />
 
           <div className={`chat-message-surface relative flex min-h-0 flex-1 flex-col overflow-hidden ${isDark ? "bg-slate-950/45" : "bg-slate-50"}`}>
             <div className={`chat-message-pattern pointer-events-none absolute inset-0 opacity-45 ${

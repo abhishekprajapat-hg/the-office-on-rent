@@ -28,6 +28,8 @@ const AdminNotifications = lazy(() => import("./modules/admin/AdminNotifications
 const AdminCommandConsole = lazy(() => import("./modules/admin/AdminCommandConsole"));
 const AdminMetaAdsPanel = lazy(() => import("./modules/admin/AdminMetaAdsPanel"));
 const TeamChat = lazy(() => import("./modules/chat/TeamChat"));
+const ChatMessageAlertToast = lazy(() => import("./components/layout/ChatMessageAlertToast"));
+const FollowUpReminderToast = lazy(() => import("./components/layout/FollowUpReminderToast"));
 
 const LeadsMatrix = lazy(() => import("./modules/leads/LeadsMatrix"));
 const AssetVault = lazy(() => import("./modules/inventory/AssetVault"));
@@ -451,6 +453,13 @@ export default function App() {
     if (typeof navigator === "undefined" || !navigator.geolocation) return undefined;
 
     let alive = true;
+    locationSyncStateRef.current = {
+      inFlight: false,
+      lastSentAt: 0,
+      lastLat: null,
+      lastLng: null,
+    };
+
     const sendLocationUpdate = async (coords) => {
       if (!alive) return;
 
@@ -500,6 +509,22 @@ export default function App() {
       }
     };
 
+    const locationOptions = {
+      enableHighAccuracy: true,
+      maximumAge: 15000,
+      timeout: 20000,
+    };
+
+    navigator.geolocation.getCurrentPosition(
+      (position) => {
+        sendLocationUpdate(position.coords);
+      },
+      () => {
+        // Geolocation can be denied; keep app usable without location streaming.
+      },
+      locationOptions,
+    );
+
     const watchId = navigator.geolocation.watchPosition(
       (position) => {
         sendLocationUpdate(position.coords);
@@ -507,11 +532,7 @@ export default function App() {
       () => {
         // Geolocation can be denied; keep app usable without location streaming.
       },
-      {
-        enableHighAccuracy: true,
-        maximumAge: 15000,
-        timeout: 20000,
-      },
+      locationOptions,
     );
 
     return () => {
@@ -791,6 +812,8 @@ export default function App() {
                     >
                       {appRoutes}
                     </WorkbenchShell>
+                    <ChatMessageAlertToast />
+                    <FollowUpReminderToast enabled={isLoggedIn && !isPublicPage} />
                     {userRole === "ADMIN" ? <AdminRequestAlertToast userRole={userRole} /> : null}
                   </>
                 )

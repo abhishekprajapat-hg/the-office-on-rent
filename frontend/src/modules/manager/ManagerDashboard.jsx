@@ -17,6 +17,7 @@ import {
 import api from "../../services/api";
 import LeadPerformancePanel from "../../components/dashboard/LeadPerformancePanel";
 import { toErrorMessage } from "../../utils/errorMessage";
+import ToastNotice from "../../components/ui/ToastNotice";
 
 const toEntityId = (value) => {
   if (!value) return "";
@@ -387,33 +388,33 @@ const ManagerDashboard = ({ theme = "light" }) => {
     >
       <Motion.section
         variants={itemMotion}
-        className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-4"
+        className="grid grid-cols-1 gap-3 sm:gap-4 md:grid-cols-2 xl:grid-cols-4"
       >
         {deckChips.map((chip) => (
           <button
             key={chip.label}
             type="button"
             onClick={() => navigate(chip.to)}
-            className={`min-h-28 rounded-2xl border p-4 text-left shadow-sm transition-all hover:-translate-y-0.5 ${
+            className={`min-h-20 rounded-2xl border p-3 text-left shadow-sm transition-all hover:-translate-y-0.5 sm:min-h-28 sm:p-4 ${
               isDark
                 ? "border-slate-700 bg-slate-900/85 hover:border-sky-300/40"
                 : "border-slate-200 bg-white hover:border-sky-300"
             }`}
           >
-            <p className={`text-[10px] font-semibold uppercase tracking-[0.14em] ${isDark ? "text-slate-400" : "text-slate-500"}`}>
+            <p className={`truncate text-[10px] font-semibold uppercase tracking-[0.08em] sm:tracking-[0.14em] ${isDark ? "text-slate-400" : "text-slate-500"}`}>
               {chip.label}
             </p>
-            <p className={`mt-3 text-2xl font-display ${isDark ? "text-slate-100" : "text-slate-900"}`}>
+            <p className={`mt-2 truncate text-xl font-display sm:mt-3 sm:text-2xl ${isDark ? "text-slate-100" : "text-slate-900"}`}>
               {chip.value}
             </p>
           </button>
         ))}
 
-        <div className={`min-h-28 rounded-2xl border p-4 shadow-sm ${
+        <div className={`min-h-20 rounded-2xl border p-3 shadow-sm sm:min-h-28 sm:p-4 ${
           isDark ? "border-slate-700 bg-slate-900/85" : "border-slate-200 bg-white"
         }`}>
           <div className="flex items-center justify-between gap-3">
-            <div className={`inline-flex items-center gap-2 rounded-full border px-3 py-1 text-[10px] font-semibold uppercase tracking-[0.14em] ${
+            <div className={`inline-flex min-w-0 items-center gap-1.5 rounded-full border px-2.5 py-1 text-[10px] font-semibold uppercase tracking-[0.08em] sm:gap-2 sm:px-3 sm:tracking-[0.14em] ${
               isDark
                 ? "border-emerald-300/35 bg-emerald-500/10 text-emerald-100"
                 : "border-emerald-200 bg-emerald-50 text-emerald-700"
@@ -424,22 +425,22 @@ const ManagerDashboard = ({ theme = "light" }) => {
             <Clock3 size={13} className={isDark ? "text-slate-400" : "text-slate-500"} />
           </div>
 
-          <div className="mt-4 grid grid-cols-3 gap-2">
+          <div className="mt-3 grid grid-cols-3 gap-2 sm:mt-4">
             <div>
-              <p className={`text-[9px] uppercase tracking-[0.12em] ${isDark ? "text-slate-400" : "text-slate-500"}`}>Close</p>
-              <p className={`mt-1 text-lg font-display ${isDark ? "text-emerald-100" : "text-emerald-700"}`}>
+              <p className={`text-[9px] uppercase tracking-[0.06em] sm:tracking-[0.12em] ${isDark ? "text-slate-400" : "text-slate-500"}`}>Close</p>
+              <p className={`mt-1 text-base font-display sm:text-lg ${isDark ? "text-emerald-100" : "text-emerald-700"}`}>
                 {derived.conversionPercent}%
               </p>
             </div>
             <div>
-              <p className={`text-[9px] uppercase tracking-[0.12em] ${isDark ? "text-slate-400" : "text-slate-500"}`}>Pipeline</p>
-              <p className={`mt-1 text-lg font-display ${isDark ? "text-sky-100" : "text-sky-700"}`}>
+              <p className={`text-[9px] uppercase tracking-[0.06em] sm:tracking-[0.12em] ${isDark ? "text-slate-400" : "text-slate-500"}`}>Pipeline</p>
+              <p className={`mt-1 text-base font-display sm:text-lg ${isDark ? "text-sky-100" : "text-sky-700"}`}>
                 {derived.activePipeline}
               </p>
             </div>
             <div>
-              <p className={`text-[9px] uppercase tracking-[0.12em] ${isDark ? "text-slate-400" : "text-slate-500"}`}>Ticket</p>
-              <p className={`mt-1 text-lg font-display ${isDark ? "text-amber-100" : "text-amber-700"}`}>
+              <p className={`text-[9px] uppercase tracking-[0.06em] sm:tracking-[0.12em] ${isDark ? "text-slate-400" : "text-slate-500"}`}>Ticket</p>
+              <p className={`mt-1 truncate text-base font-display sm:text-lg ${isDark ? "text-amber-100" : "text-amber-700"}`}>
                 {derived.avgTicket ? `Rs ${(derived.avgTicket / 1000).toFixed(1)}k` : "Rs 0"}
               </p>
             </div>
@@ -447,26 +448,15 @@ const ManagerDashboard = ({ theme = "light" }) => {
         </div>
       </Motion.section>
 
-      {error && (
-        <Motion.div
-          variants={itemMotion}
-          className={`mt-4 rounded-2xl border px-4 py-3 text-sm ${
-            isDark
-              ? "border-amber-500/30 bg-amber-500/10 text-amber-200"
-              : "border-amber-300 bg-amber-50 text-amber-700"
-          }`}
-        >
-          {error}
-        </Motion.div>
-      )}
+      <ToastNotice message={error} type="error" />
 
-      <Motion.section variants={itemMotion} className="grid grid-cols-1 gap-3 xl:grid-cols-3">
+      <Motion.section variants={itemMotion} className="grid grid-cols-1 gap-3 sm:gap-4 xl:grid-cols-3">
         {kpiCards.map((card) => (
           <button
             key={card.label}
             type="button"
             onClick={() => navigate(card.to)}
-            className={`group relative overflow-hidden rounded-3xl border p-5 text-left transition-all hover:-translate-y-0.5 ${
+            className={`group relative overflow-hidden rounded-2xl border p-4 text-left transition-all hover:-translate-y-0.5 sm:rounded-3xl sm:p-5 ${
               isDark
                 ? "border-slate-700 bg-slate-900/85 hover:border-slate-500"
                 : "border-slate-200 bg-white hover:border-slate-300"
@@ -482,15 +472,15 @@ const ManagerDashboard = ({ theme = "light" }) => {
 
             <div className="relative">
               <div className="flex items-center justify-between">
-                <p className={`text-[11px] uppercase tracking-[0.2em] ${isDark ? "text-slate-300" : "text-slate-500"}`}>
+                <p className={`truncate text-[10px] uppercase tracking-[0.1em] sm:text-[11px] sm:tracking-[0.2em] ${isDark ? "text-slate-300" : "text-slate-500"}`}>
                   {card.label}
                 </p>
                 <card.icon size={16} className={card.tone} />
               </div>
-              <p className={`mt-3 text-3xl font-display tracking-tight ${isDark ? "text-slate-100" : "text-slate-900"}`}>
+              <p className={`mt-2 truncate text-2xl font-display tracking-tight sm:mt-3 sm:text-3xl ${isDark ? "text-slate-100" : "text-slate-900"}`}>
                 {card.value}
               </p>
-              <p className={`mt-2 text-xs ${isDark ? "text-slate-400" : "text-slate-500"}`}>
+              <p className={`mt-1 truncate text-xs sm:mt-2 ${isDark ? "text-slate-400" : "text-slate-500"}`}>
                 {card.helper}
               </p>
             </div>
@@ -499,7 +489,7 @@ const ManagerDashboard = ({ theme = "light" }) => {
       </Motion.section>
 
       <Motion.div variants={itemMotion}>
-        <div className={`rounded-3xl border p-3 sm:p-4 ${
+        <div className={`rounded-2xl border p-2 sm:rounded-3xl sm:p-4 ${
           isDark ? "border-slate-700 bg-slate-900/80" : "border-slate-200 bg-white"
         }`}>
           <LeadPerformancePanel
@@ -512,7 +502,7 @@ const ManagerDashboard = ({ theme = "light" }) => {
         </div>
       </Motion.div>
 
-      <Motion.section variants={itemMotion} className="grid grid-cols-1 gap-4 xl:grid-cols-4">
+      <Motion.section variants={itemMotion} className="grid grid-cols-1 gap-3 sm:gap-4 xl:grid-cols-4">
         <CommandPanel
           title="Today's Follow-ups"
           subtitle={`${commandCenterRows.todayFollowUps.length} scheduled`}
@@ -547,11 +537,11 @@ const ManagerDashboard = ({ theme = "light" }) => {
           <button
             type="button"
             onClick={() => navigate("/admin/notifications")}
-            className={`w-full rounded-2xl border px-4 py-5 text-left ${
+            className={`w-full rounded-2xl border px-3 py-4 text-left sm:px-4 sm:py-5 ${
               isDark ? "border-amber-500/30 bg-amber-500/10" : "border-amber-200 bg-amber-50"
             }`}
           >
-            <p className={isDark ? "text-3xl font-bold text-amber-100" : "text-3xl font-bold text-amber-800"}>
+            <p className={isDark ? "text-2xl font-bold text-amber-100 sm:text-3xl" : "text-2xl font-bold text-amber-800 sm:text-3xl"}>
               {commandCenterRows.pendingApprovals}
             </p>
             <p className={isDark ? "mt-1 text-xs text-amber-200" : "mt-1 text-xs text-amber-700"}>
@@ -581,7 +571,7 @@ const ManagerDashboard = ({ theme = "light" }) => {
         </CommandPanel>
       </Motion.section>
 
-      <Motion.section variants={itemMotion} className="mt-6">
+      <Motion.section variants={itemMotion} className="mt-4 sm:mt-6">
         <CommandPanel title="Recent Activity" subtitle="Latest lead movement" isDark={isDark}>
           {commandCenterRows.recentActivity.length ? (
             <div className="grid grid-cols-1 gap-2 lg:grid-cols-5">
@@ -610,17 +600,17 @@ const ManagerDashboard = ({ theme = "light" }) => {
       </Motion.section>
 
       {subordinatePerformance.rows.length > 0 && (
-        <Motion.section variants={itemMotion} className="mt-6">
-          <div className="mb-3 flex items-center justify-between gap-2">
-            <h2 className={`text-lg font-semibold ${isDark ? "text-slate-100" : "text-slate-900"}`}>
+        <Motion.section variants={itemMotion} className="mt-4 sm:mt-6">
+          <div className="mb-2 flex items-center justify-between gap-2 sm:mb-3">
+            <h2 className={`min-w-0 truncate text-base font-semibold sm:text-lg ${isDark ? "text-slate-100" : "text-slate-900"}`}>
               {subordinatePerformance.title}
             </h2>
-            <span className={`text-xs uppercase tracking-[0.14em] ${isDark ? "text-slate-400" : "text-slate-500"}`}>
+            <span className={`shrink-0 text-[10px] uppercase tracking-[0.08em] sm:text-xs sm:tracking-[0.14em] ${isDark ? "text-slate-400" : "text-slate-500"}`}>
               {subordinatePerformance.countLabel}: {subordinatePerformance.rows.length}
             </span>
           </div>
 
-          <div className="space-y-4">
+          <div className="space-y-3 sm:space-y-4">
             {subordinatePerformance.rows.map((row) => (
               <div
                 key={row.id}
@@ -643,17 +633,17 @@ const ManagerDashboard = ({ theme = "light" }) => {
         </Motion.section>
       )}
 
-      <Motion.section variants={itemMotion} className="mt-6 grid grid-cols-1 gap-4 xl:grid-cols-[1.7fr_1fr]">
+      <Motion.section variants={itemMotion} className="mt-4 grid grid-cols-1 gap-3 sm:mt-6 sm:gap-4 xl:grid-cols-[1.7fr_1fr]">
         <div
-          className={`rounded-3xl border p-4 sm:p-5 ${
+          className={`rounded-2xl border p-3 sm:rounded-3xl sm:p-5 ${
             isDark ? "border-slate-700 bg-slate-900/80" : "border-slate-200 bg-white"
           }`}
         >
-          <div className="mb-4 flex items-center justify-between gap-3">
-            <h2 className={`text-lg font-semibold ${isDark ? "text-slate-100" : "text-slate-900"}`}>
+          <div className="mb-3 flex items-center justify-between gap-3 sm:mb-4">
+            <h2 className={`min-w-0 truncate text-base font-semibold sm:text-lg ${isDark ? "text-slate-100" : "text-slate-900"}`}>
               Pipeline Snapshot
             </h2>
-            <span className={`text-xs uppercase tracking-[0.16em] ${isDark ? "text-slate-400" : "text-slate-500"}`}>
+            <span className={`hidden text-xs uppercase tracking-[0.16em] sm:inline ${isDark ? "text-slate-400" : "text-slate-500"}`}>
               Status-wise distribution
             </span>
           </div>
@@ -664,17 +654,17 @@ const ManagerDashboard = ({ theme = "light" }) => {
                 key={card.label}
                 type="button"
                 onClick={() => navigate(card.to)}
-                className={`rounded-2xl border p-4 ${
+                className={`rounded-2xl border p-3 sm:p-4 ${
                   isDark ? "border-slate-700 bg-slate-950/70" : "border-slate-200 bg-slate-50"
                 } text-left transition-all hover:-translate-y-0.5 hover:border-cyan-300 hover:shadow-sm`}
               >
                 <div className="flex items-center justify-between">
-                  <p className={`text-[10px] uppercase tracking-[0.18em] ${isDark ? "text-slate-400" : "text-slate-500"}`}>
+                  <p className={`truncate text-[10px] uppercase tracking-[0.08em] sm:tracking-[0.18em] ${isDark ? "text-slate-400" : "text-slate-500"}`}>
                     {card.label}
                   </p>
                   <card.icon size={14} className={isDark ? "text-cyan-300" : "text-cyan-700"} />
                 </div>
-                <p className={`mt-2 text-2xl font-bold ${isDark ? "text-slate-100" : "text-slate-900"}`}>
+                <p className={`mt-1 text-xl font-bold sm:mt-2 sm:text-2xl ${isDark ? "text-slate-100" : "text-slate-900"}`}>
                   {card.value}
                 </p>
                 <div className={`mt-3 h-1.5 overflow-hidden rounded-full ${isDark ? "bg-slate-800" : "bg-slate-200"}`}>
@@ -689,20 +679,20 @@ const ManagerDashboard = ({ theme = "light" }) => {
         </div>
 
         <div
-          className={`rounded-3xl border p-4 sm:p-5 ${
+          className={`rounded-2xl border p-3 sm:rounded-3xl sm:p-5 ${
             isDark ? "border-slate-700 bg-slate-900/80" : "border-slate-200 bg-white"
           }`}
         >
-          <div className="mb-4">
-            <p className={`text-[11px] uppercase tracking-[0.2em] ${isDark ? "text-slate-400" : "text-slate-500"}`}>
+          <div className="mb-3 sm:mb-4">
+            <p className={`text-[10px] uppercase tracking-[0.1em] sm:text-[11px] sm:tracking-[0.2em] ${isDark ? "text-slate-400" : "text-slate-500"}`}>
               Conversion Engine
             </p>
-            <h3 className={`mt-1 text-2xl font-display ${isDark ? "text-slate-100" : "text-slate-900"}`}>
+            <h3 className={`mt-1 text-xl font-display sm:text-2xl ${isDark ? "text-slate-100" : "text-slate-900"}`}>
               {derived.conversionPercent}%
             </h3>
           </div>
 
-          <div className="space-y-4">
+          <div className="space-y-3 sm:space-y-4">
             {funnelSignals.map((signal) => (
               <button
                 key={signal.label}
@@ -732,15 +722,15 @@ const ManagerDashboard = ({ theme = "light" }) => {
 export default ManagerDashboard;
 
 const CommandPanel = ({ title, subtitle, isDark, children }) => (
-  <section className={`rounded-3xl border p-4 ${
+  <section className={`rounded-2xl border p-3 sm:rounded-3xl sm:p-4 ${
     isDark ? "border-slate-700 bg-slate-900/80" : "border-slate-200 bg-white"
   }`}>
-    <div className="mb-3 flex items-start justify-between gap-3">
-      <div>
-        <h2 className={isDark ? "text-sm font-bold text-slate-100" : "text-sm font-bold text-slate-900"}>
+    <div className="mb-2 flex items-start justify-between gap-3 sm:mb-3">
+      <div className="min-w-0">
+        <h2 className={isDark ? "truncate text-sm font-bold text-slate-100" : "truncate text-sm font-bold text-slate-900"}>
           {title}
         </h2>
-        <p className={isDark ? "mt-1 text-[10px] uppercase tracking-[0.14em] text-slate-400" : "mt-1 text-[10px] uppercase tracking-[0.14em] text-slate-500"}>
+        <p className={isDark ? "mt-1 truncate text-[10px] uppercase tracking-[0.06em] text-slate-400 sm:tracking-[0.14em]" : "mt-1 truncate text-[10px] uppercase tracking-[0.06em] text-slate-500 sm:tracking-[0.14em]"}>
           {subtitle}
         </p>
       </div>
@@ -750,20 +740,20 @@ const CommandPanel = ({ title, subtitle, isDark, children }) => (
 );
 
 const MiniCommandMetric = ({ label, value, isDark }) => (
-  <div className={`rounded-xl border px-3 py-2 ${
+  <div className={`rounded-xl border px-2.5 py-2 sm:px-3 ${
     isDark ? "border-slate-700 bg-slate-950/70" : "border-slate-200 bg-slate-50"
   }`}>
-    <p className={isDark ? "text-[10px] uppercase tracking-[0.12em] text-slate-400" : "text-[10px] uppercase tracking-[0.12em] text-slate-500"}>
+    <p className={isDark ? "truncate text-[10px] uppercase tracking-[0.06em] text-slate-400 sm:tracking-[0.12em]" : "truncate text-[10px] uppercase tracking-[0.06em] text-slate-500 sm:tracking-[0.12em]"}>
       {label}
     </p>
-    <p className={isDark ? "mt-1 text-lg font-bold text-slate-100" : "mt-1 text-lg font-bold text-slate-900"}>
+    <p className={isDark ? "mt-1 text-base font-bold text-slate-100 sm:text-lg" : "mt-1 text-base font-bold text-slate-900 sm:text-lg"}>
       {value}
     </p>
   </div>
 );
 
 const EmptyCommandState = ({ text, isDark }) => (
-  <div className={`rounded-xl border border-dashed px-4 py-6 text-center text-sm ${
+  <div className={`rounded-xl border border-dashed px-3 py-4 text-center text-sm sm:px-4 sm:py-6 ${
     isDark ? "border-slate-700 text-slate-400" : "border-slate-300 text-slate-500"
   }`}>
     {text}

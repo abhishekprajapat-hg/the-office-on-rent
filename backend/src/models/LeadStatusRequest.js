@@ -80,6 +80,25 @@ const leadStatusRequestSchema = new mongoose.Schema(
         transactionId: { type: String, trim: true, default: "" },
       },
     },
+    proposedBrokerage: {
+      brokerageReceived: {
+        type: Number,
+        default: null,
+      },
+      brokerageDistributed: {
+        type: Number,
+        default: 0,
+      },
+      brokerageDistributionBreakdown: [
+        {
+          recipientName: { type: String, trim: true, default: "" },
+          recipientType: { type: String, trim: true, default: "" },
+          amount: { type: Number, default: 0 },
+          note: { type: String, trim: true, default: "" },
+          paidDate: { type: Date, default: null },
+        },
+      ],
+    },
     attachment: {
       fileName: { type: String, trim: true, default: "" },
       fileUrl: { type: String, trim: true, default: "" },

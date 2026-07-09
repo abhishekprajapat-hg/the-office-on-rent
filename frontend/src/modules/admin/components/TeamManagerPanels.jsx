@@ -9,6 +9,7 @@ import {
   Phone,
   X,
 } from "lucide-react";
+import ToastNotice from "../../../components/ui/ToastNotice";
 
 export const UserFormPanel = ({
   isOpen,
@@ -34,13 +35,13 @@ export const UserFormPanel = ({
           initial={{ opacity: 0 }}
           animate={{ opacity: 1 }}
           exit={{ opacity: 0 }}
-          className="fixed inset-0 bg-black/45 z-50 flex justify-end"
+          className="mobile-bottom-sheet fixed inset-0 z-50 flex justify-end bg-black/45 sm:items-stretch sm:justify-end"
         >
           <Motion.div
             initial={{ x: 500 }}
             animate={{ x: 0 }}
             exit={{ x: 500 }}
-            className={`h-full w-full max-w-md border-l shadow-2xl p-6 flex flex-col gap-4 ${
+            className={`mobile-fullscreen-panel flex h-full w-full max-w-md flex-col gap-4 border-l p-4 shadow-2xl sm:p-6 ${
               isDarkTheme
                 ? "bg-slate-950 border-slate-700"
                 : "bg-white border-slate-200"
@@ -58,7 +59,7 @@ export const UserFormPanel = ({
               </button>
             </div>
 
-            <div className="space-y-3">
+            <div className="mobile-modal-scroll flex-1 space-y-3">
               <input
                 type="text"
                 placeholder="Full name"
@@ -193,12 +194,12 @@ export const UserFormPanel = ({
               ) : null}
             </div>
 
-            {error && <div className="text-sm text-red-500">{error}</div>}
+            <ToastNotice message={error} type="error" />
 
             <button
               onClick={onSubmit}
               disabled={submitting}
-              className="mt-auto w-full py-2.5 rounded-lg bg-cyan-600 hover:bg-cyan-500 text-white font-semibold disabled:opacity-60"
+              className="mobile-safe-footer mt-auto w-full rounded-lg bg-cyan-600 py-3 font-semibold text-white hover:bg-cyan-500 disabled:opacity-60"
             >
               {submitting ? "Creating..." : "Create User"}
             </button>
@@ -235,13 +236,13 @@ export const UserProfilePanel = ({
           initial={{ opacity: 0 }}
           animate={{ opacity: 1 }}
           exit={{ opacity: 0 }}
-          className="fixed inset-0 bg-black/45 z-50 flex justify-end"
+          className="mobile-bottom-sheet fixed inset-0 z-50 flex justify-end bg-black/45 sm:items-stretch sm:justify-end"
         >
           <Motion.div
             initial={{ x: 600 }}
             animate={{ x: 0 }}
             exit={{ x: 600 }}
-            className={`h-full w-full max-w-2xl border-l shadow-2xl p-6 flex flex-col gap-4 overflow-y-auto custom-scrollbar ${
+            className={`mobile-fullscreen-panel flex h-full w-full max-w-2xl flex-col gap-4 border-l p-4 shadow-2xl sm:p-6 ${
               isDarkTheme
                 ? "bg-slate-950 border-slate-700"
                 : "bg-white border-slate-200"
@@ -266,15 +267,19 @@ export const UserProfilePanel = ({
               </button>
             </div>
 
+            <div className="mobile-modal-scroll custom-scrollbar flex-1">
             {loading ? (
               <div className={`h-52 rounded-xl border flex items-center justify-center gap-2 text-sm ${isDarkTheme ? "border-slate-700 bg-slate-900/80 text-slate-300" : "border-slate-200 bg-slate-50 text-slate-600"}`}>
                 <Loader2 size={16} className="animate-spin" />
                 Loading profile...
               </div>
             ) : error ? (
-              <div className={`rounded-xl border p-3 text-sm ${isDarkTheme ? "border-red-500/30 bg-red-500/10 text-red-300" : "border-red-200 bg-red-50 text-red-700"}`}>
-                {error}
-              </div>
+              <>
+                <ToastNotice message={error} type="error" />
+                <div className={`h-52 rounded-xl border flex items-center justify-center text-sm ${isDarkTheme ? "border-slate-700 bg-slate-900/80 text-slate-300" : "border-slate-200 bg-slate-50 text-slate-600"}`}>
+                  Profile data not available.
+                </div>
+              </>
             ) : !profile ? (
               <div className={`h-52 rounded-xl border flex items-center justify-center text-sm ${isDarkTheme ? "border-slate-700 bg-slate-900/80 text-slate-300" : "border-slate-200 bg-slate-50 text-slate-600"}`}>
                 Profile data not available.
@@ -503,6 +508,7 @@ export const UserProfilePanel = ({
                 </div>
               </>
             )}
+            </div>
           </Motion.div>
         </Motion.div>
       )}

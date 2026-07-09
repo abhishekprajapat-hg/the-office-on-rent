@@ -24,6 +24,7 @@ import api from "../../services/api";
 import { addLeadDiaryEntry, getLeadDiary } from "../../services/leadService";
 import { toErrorMessage } from "../../utils/errorMessage";
 import { getTasks, updateTask } from "../../services/taskService";
+import ToastNotice from "../../components/ui/ToastNotice";
 
 const DAY_NAMES = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
 
@@ -543,18 +544,10 @@ const MasterSchedule = () => {
           </button>
       </div>
 
-      {error && (
-        <div className={`rounded-xl border p-3 text-sm ${isDark ? "border-red-500/35 bg-red-500/10 text-red-300" : "border-red-200 bg-red-50 text-red-700"}`}>
-          {error}
-        </div>
-      )}
-      {success && (
-        <div className={`rounded-xl border p-3 text-sm ${isDark ? "border-emerald-500/35 bg-emerald-500/10 text-emerald-300" : "border-emerald-200 bg-emerald-50 text-emerald-700"}`}>
-          {success}
-        </div>
-      )}
+      <ToastNotice message={error} type="error" />
+      <ToastNotice message={success} type="success" />
 
-      <div className="grid grid-cols-1 xl:grid-cols-[1.2fr_0.8fr] gap-5 min-h-[640px]">
+      <div className="grid grid-cols-1 gap-3 md:gap-5 md:min-h-[640px] xl:grid-cols-[1.2fr_0.8fr]">
         <section className={`rounded-2xl border overflow-hidden ${isDark ? "border-slate-700 bg-slate-900/70" : "border-slate-200 bg-white"}`}>
           <div className={`h-14 px-4 flex items-center justify-between border-b ${isDark ? "border-slate-700 bg-slate-900/90" : "border-slate-200 bg-slate-50"}`}>
             <div className={`text-sm font-bold tracking-wide ${isDark ? "text-slate-100" : "text-slate-800"}`}>{monthTitle}</div>
@@ -589,7 +582,7 @@ const MasterSchedule = () => {
                 <button
                   key={key}
                   onClick={() => setSelectedDate(date)}
-                  className={`min-h-[92px] border p-2 text-left transition-colors ${
+                  className={`min-h-[56px] border p-1.5 text-left transition-colors sm:min-h-[92px] sm:p-2 ${
                     isDark ? "border-slate-800 hover:bg-slate-800/60" : "border-slate-100 hover:bg-slate-50"
                   } ${selected ? (isDark ? "bg-cyan-500/10" : "bg-sky-50") : ""}`}
                 >
@@ -602,7 +595,7 @@ const MasterSchedule = () => {
                     <div className="flex flex-col gap-1 items-end shrink-0">
                       {leadCount > 0 && (
                         <span 
-                          className={`text-[9px] px-1.5 py-0.5 rounded font-bold ${
+                      className={`rounded px-1 py-0.5 text-[8px] font-bold sm:px-1.5 sm:text-[9px] ${
                             isDark ? "bg-amber-500/20 text-amber-300 border border-amber-500/30" : "bg-amber-50 text-amber-700 border border-amber-200"
                           }`}
                           title={`${leadCount} Lead Follow-up(s)`}
@@ -612,7 +605,7 @@ const MasterSchedule = () => {
                       )}
                       {taskCount > 0 && (
                         <span 
-                          className={`text-[9px] px-1.5 py-0.5 rounded font-bold ${
+                      className={`rounded px-1 py-0.5 text-[8px] font-bold sm:px-1.5 sm:text-[9px] ${
                             isDark ? "bg-emerald-500/20 text-emerald-300 border border-emerald-500/30" : "bg-emerald-50 text-emerald-700 border border-emerald-250"
                           }`}
                           title={`${taskCount} Task Deadline(s)`}
@@ -628,8 +621,8 @@ const MasterSchedule = () => {
           </div>
         </section>
 
-	          <section className="grid grid-rows-[auto_auto] gap-4 xl:min-h-0 xl:grid-rows-[auto_1fr]">
-          <div className={`rounded-2xl border p-4 ${isDark ? "border-slate-700 bg-slate-900/75" : "border-slate-200 bg-white"}`}>
+	          <section className="grid grid-rows-[auto_auto] gap-3 md:gap-4 xl:min-h-0 xl:grid-rows-[auto_1fr]">
+          <div className={`rounded-2xl border p-3 sm:p-4 ${isDark ? "border-slate-700 bg-slate-900/75" : "border-slate-200 bg-white"}`}>
             <h3 className={`text-sm font-bold mb-3 ${isDark ? "text-slate-100" : "text-slate-800"}`}>Schedule Follow-up</h3>
             <div className="space-y-2">
               <select
@@ -925,13 +918,13 @@ const MasterSchedule = () => {
         </div>
 
       {detailsLead ? (
-        <div className="fixed inset-0 z-[80] flex justify-end bg-slate-900/40" onClick={handleCloseLeadDetails}>
+        <div className="mobile-bottom-sheet fixed inset-0 z-[80] flex justify-end bg-slate-900/40 sm:items-stretch sm:justify-end" onClick={handleCloseLeadDetails}>
           <Motion.aside
             initial={{ opacity: 0, x: 36 }}
             animate={{ opacity: 1, x: 0 }}
             transition={{ duration: 0.2 }}
             onClick={(event) => event.stopPropagation()}
-            className={`h-full w-full max-w-md border-l shadow-2xl ${
+            className={`mobile-fullscreen-panel h-full w-full max-w-md border-l shadow-2xl ${
               isDark ? "border-slate-700 bg-slate-950 text-slate-100" : "border-slate-200 bg-white text-slate-900"
             }`}
           >
@@ -954,7 +947,7 @@ const MasterSchedule = () => {
               </button>
             </div>
 
-            <div className="h-[calc(100%-64px)] overflow-y-auto p-4 space-y-4 custom-scrollbar">
+            <div className="mobile-modal-scroll h-[calc(100%-64px)] space-y-4 p-3 custom-scrollbar sm:p-4">
               <div className="flex justify-end">
                 <button
                   type="button"

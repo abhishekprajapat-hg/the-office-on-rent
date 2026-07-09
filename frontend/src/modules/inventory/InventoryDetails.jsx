@@ -1,7 +1,6 @@
 import React, { useCallback, useEffect, useMemo, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import {
-  AlertCircle,
   ArrowLeft,
   Building2,
   CalendarClock,
@@ -23,6 +22,7 @@ import {
   createInventoryShareLink,
 } from "../../services/inventoryService";
 import { toErrorMessage } from "../../utils/errorMessage";
+import ToastNotice from "../../components/ui/ToastNotice";
 import { PropertyStatusBadge } from "./components/PropertyWorkspace";
 
 const formatPrice = (value) => {
@@ -362,10 +362,7 @@ const InventoryDetails = () => {
           <ArrowLeft size={16} />
           Back
         </button>
-        <div className="rounded-xl border border-red-200 bg-red-50 text-red-700 p-4 text-sm flex items-center gap-2">
-          <AlertCircle size={16} />
-          {error}
-        </div>
+        <ToastNotice message={error} type="error" />
       </div>
     );
   }

@@ -67,27 +67,27 @@ const LeadPool = () => {
             className="h-full flex flex-col"
         >
             {/* Filters Bar */}
-            <div className="flex justify-between items-center mb-6">
-                <div className="glass-technical px-4 py-3 rounded-2xl flex items-center gap-3 text-secondary w-96 shadow-sm">
+            <div className="mb-4 flex flex-col gap-3 sm:mb-6 sm:flex-row sm:items-center sm:justify-between">
+                <div className="glass-technical flex w-full items-center gap-3 rounded-2xl px-3 py-3 text-secondary shadow-sm sm:w-96 sm:px-4">
                     <Search size={20} className="text-primary" />
                     <input type="text" placeholder="Search by name, phone, or project..." className="bg-transparent outline-none text-sm w-full font-medium placeholder:text-secondary/50" />
                 </div>
 
-                <div className="flex gap-3">
-                    <button className="glass-technical p-3 rounded-xl text-primary hover:bg-white transition-colors">
+                <div className="grid grid-cols-[auto_1fr] gap-2 sm:flex sm:gap-3">
+                    <button className="glass-technical inline-flex h-11 w-11 items-center justify-center rounded-xl text-primary transition-colors hover:bg-white sm:h-auto sm:w-auto sm:p-3">
                         <Filter size={20} />
                     </button>
-                    <button className="bg-primary text-white px-6 py-3 rounded-xl text-sm font-bold hover:bg-primary/90 shadow-lg shadow-primary/20 flex items-center gap-2">
+                    <button className="flex min-h-11 items-center justify-center gap-2 rounded-xl bg-primary px-4 py-3 text-sm font-bold text-white shadow-lg shadow-primary/20 hover:bg-primary/90 sm:px-6">
                         <span>+ MANUAL ENTRY</span>
                     </button>
                 </div>
             </div>
 
             {/* Kanban Board */}
-            <div className="flex-1 overflow-x-auto pb-4">
-                <div className="flex gap-6 min-w-[1200px] h-full">
+            <div className="flex-1 pb-4 sm:overflow-x-auto">
+                <div className="grid h-full grid-cols-1 gap-4 sm:flex sm:min-w-[1200px] sm:gap-6">
                     {columns.map((col) => (
-                        <div key={col} className="flex-1 min-w-[300px] flex flex-col h-full">
+                        <div key={col} className="flex h-full min-w-0 flex-1 flex-col sm:min-w-[300px]">
                             {/* Column Header */}
                             <div className="flex justify-between items-center mb-4 px-2">
                                 <div className="flex items-center gap-2">
@@ -100,7 +100,7 @@ const LeadPool = () => {
                             </div>
 
                             {/* Column Drop Zone */}
-                            <div className="flex-1 bg-secondary/5 rounded-[2rem] p-4 border border-secondary/5 shadow-inner overflow-y-auto custom-scrollbar">
+                            <div className="custom-scrollbar flex-1 rounded-2xl border border-secondary/5 bg-secondary/5 p-3 shadow-inner sm:rounded-[2rem] sm:p-4 sm:overflow-y-auto">
                                 {leads.filter(l => l.status === col).map((lead, index) => (
                                     <LeadCard key={lead.id} lead={lead} index={index} />
                                 ))}

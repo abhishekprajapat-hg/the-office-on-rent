@@ -188,6 +188,25 @@ const normalizeAdminRequestEvent = (payload = {}) => {
       };
     }
 
+    if (leadRequestType === "LEAD_STATUS_APPROVAL") {
+      const requestId = String(payload.requestId || "").trim();
+      const eventId =
+        String(payload.eventId || "").trim()
+        || `lead-status-request:${requestId || leadId}:${timestamp}`;
+
+      return {
+        eventId,
+        source: "lead",
+        requestType: "LEAD_STATUS_APPROVAL",
+        createdAt,
+        preview: `${leadName} close approval request`,
+        leadId,
+        requestId,
+        inventoryId: "",
+        payload,
+      };
+    }
+
     const eventId =
       String(payload.eventId || "").trim()
       || `lead-payment:${leadId}:${timestamp}`;
@@ -510,6 +529,7 @@ export const ChatNotificationProvider = ({ children, enabled = true }) => {
     socket.on("chat:room:read", onRoomRead);
     socket.on("admin:request:new", onAdminRequestEvent);
     socket.on("lead:payment:request:created", onAdminRequestEvent);
+    socket.on("lead:status:request:created", onAdminRequestEvent);
     socket.on("lead:deal:closed", onAdminRequestEvent);
     socket.on("lead:payment:remaining:collected", onAdminRequestEvent);
     socket.on("inventory:request:created", onAdminRequestEvent);
@@ -524,6 +544,7 @@ export const ChatNotificationProvider = ({ children, enabled = true }) => {
       socket.off("chat:room:read", onRoomRead);
       socket.off("admin:request:new", onAdminRequestEvent);
       socket.off("lead:payment:request:created", onAdminRequestEvent);
+      socket.off("lead:status:request:created", onAdminRequestEvent);
       socket.off("lead:deal:closed", onAdminRequestEvent);
       socket.off("lead:payment:remaining:collected", onAdminRequestEvent);
       socket.off("inventory:request:created", onAdminRequestEvent);

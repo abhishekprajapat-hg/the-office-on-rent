@@ -108,6 +108,18 @@ const leadSchema = new mongoose.Schema(
           type: Boolean,
           default: false,
         },
+        receptionArea: { type: Boolean, default: false },
+        waitingArea: { type: Boolean, default: false },
+        cafeteria: { type: Boolean, default: false },
+        serverRoom: { type: Boolean, default: false },
+        storageRoom: { type: Boolean, default: false },
+        breakoutArea: { type: Boolean, default: false },
+        liftAvailable: { type: Boolean, default: false },
+        powerBackup: { type: Boolean, default: false },
+        centralAC: { type: Boolean, default: false },
+        fireSafety: { type: Boolean, default: false },
+        readyToMove: { type: Boolean, default: false },
+        underConstruction: { type: Boolean, default: false },
       },
       residential: {
         bhkType: {
@@ -128,6 +140,11 @@ const leadSchema = new mongoose.Schema(
           clubhouse: { type: Boolean, default: false },
           powerBackup: { type: Boolean, default: false },
           parking: { type: Boolean, default: false },
+          studyRoom: { type: Boolean, default: false },
+          servantRoom: { type: Boolean, default: false },
+          modularKitchen: { type: Boolean, default: false },
+          electricityBackup: { type: Boolean, default: false },
+          gasPipeline: { type: Boolean, default: false },
         },
       },
     },
@@ -217,6 +234,53 @@ const leadSchema = new mongoose.Schema(
         trim: true,
       },
     },
+    brokerageReceived: {
+      type: Number,
+      min: 0,
+      default: null,
+    },
+    brokerageDistributed: {
+      type: Number,
+      min: 0,
+      default: 0,
+    },
+    brokerageDistributionBreakdown: [
+      {
+        recipientName: {
+          type: String,
+          trim: true,
+          default: "",
+        },
+        recipientType: {
+          type: String,
+          trim: true,
+          default: "",
+        },
+        amount: {
+          type: Number,
+          min: 0,
+          default: 0,
+        },
+        note: {
+          type: String,
+          trim: true,
+          default: "",
+        },
+        paidDate: {
+          type: Date,
+          default: null,
+        },
+      },
+    ],
+    brokerageClosedAt: {
+      type: Date,
+      default: null,
+    },
+    brokerageClosedBy: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "User",
+      default: null,
+    },
     closureDocuments: [
       {
         url: {
@@ -281,6 +345,58 @@ const leadSchema = new mongoose.Schema(
       ref: "User",
       default: null,
       index: true
+    },
+
+    assignmentHistory: [
+      {
+        action: {
+          type: String,
+          required: true,
+          trim: true,
+        },
+        fromUser: {
+          type: mongoose.Schema.Types.ObjectId,
+          ref: "User",
+          default: null,
+        },
+        toUser: {
+          type: mongoose.Schema.Types.ObjectId,
+          ref: "User",
+          default: null,
+        },
+        reason: {
+          type: String,
+          trim: true,
+          default: "",
+        },
+        statusAtTransfer: {
+          type: String,
+          trim: true,
+          default: "",
+        },
+        createdAt: {
+          type: Date,
+          default: Date.now,
+        },
+        createdBy: {
+          type: mongoose.Schema.Types.ObjectId,
+          ref: "User",
+          default: null,
+        },
+      },
+    ],
+
+    qualifiedBy: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "User",
+      default: null,
+      index: true,
+    },
+
+    qualifiedAt: {
+      type: Date,
+      default: null,
+      index: true,
     },
 
     createdBy: {

@@ -16,6 +16,7 @@ import {
   updateMyProfile,
 } from "../../services/userService";
 import { toErrorMessage } from "../../utils/errorMessage";
+import ToastNotice from "../../components/ui/ToastNotice";
 
 const ROLE_LABELS = {
   ADMIN: "Admin",
@@ -191,17 +192,8 @@ const UserProfile = () => {
 
   return (
     <div className="ui-page-shell custom-scrollbar space-y-6">
-      {error && (
-        <div className="ui-soft-panel rounded-xl border border-red-200 bg-red-50 text-red-700 text-sm px-3 py-2">
-          {error}
-        </div>
-      )}
-
-      {success && (
-        <div className="ui-soft-panel rounded-xl border border-cyan-200 bg-cyan-50 text-cyan-700 text-sm px-3 py-2">
-          {success}
-        </div>
-      )}
+      <ToastNotice message={error} type="error" />
+      <ToastNotice message={success} type="success" />
 
       {loading ? (
         <div className="ui-soft-panel h-56 rounded-2xl border bg-white flex items-center justify-center text-slate-400 gap-2">

@@ -7,13 +7,11 @@ import {
   Loader,
   UploadCloud,
   Trash2,
-  AlertCircle,
 } from "lucide-react";
 import {
   getInventoryAssetsWithMeta,
   getInventoryAssetById,
   createInventoryAsset,
-  createInventoryCreateRequest,
   updateInventoryAsset,
   deleteInventoryAsset,
   requestInventoryDelete,
@@ -26,6 +24,7 @@ import {
 import { getAllLeads } from "../../services/leadService";
 import { toErrorMessage } from "../../utils/errorMessage";
 import { useDebouncedValue } from "../../hooks/useDebouncedValue";
+import ToastNotice from "../../components/ui/ToastNotice";
 import {
   AssetVaultFilters,
   AssetVaultToolbar,
@@ -549,6 +548,7 @@ const AssetVault = () => {
   const debouncedFloorFilter = useDebouncedValue(floorFilter, 160);
   const debouncedAmenitiesFilter = useDebouncedValue(amenitiesFilter, 180);
   const [error, setError] = useState("");
+  const [formError, setFormError] = useState("");
   const [success, setSuccess] = useState("");
 
   const [formData, setFormData] = useState(DEFAULT_FORM);
@@ -572,8 +572,8 @@ const AssetVault = () => {
   const canDeleteDirect = role === "ADMIN";
   const canRequestDelete = role !== "ADMIN" && UPDATE_STATUS_REQUEST_ROLES.has(role);
   const canReviewInventoryRequests = role === "ADMIN";
-  const canRequestCreate = CREATE_REQUEST_ROLES.has(role);
-  const canOpenCreateModal = canManage || canRequestCreate;
+  const canCreateInventory = CREATE_REQUEST_ROLES.has(role);
+  const canOpenCreateModal = canCreateInventory;
   const canRequestEdit = UPDATE_STATUS_REQUEST_ROLES.has(role);
   const canOpenEditModal = canManage || canRequestEdit;
   const canRequestStatusChange = UPDATE_STATUS_REQUEST_ROLES.has(role);
@@ -934,6 +934,7 @@ const AssetVault = () => {
 
   const resetForm = () => {
     setFormData({ ...DEFAULT_FORM });
+    setFormError("");
     clearLocationSuggestionState();
     setLocationBaseline({
       location: "",
@@ -946,11 +947,13 @@ const AssetVault = () => {
     setIsAddModalOpen(false);
     setIsEditModalOpen(false);
     setEditingAssetId("");
+    setFormError("");
     resetForm();
   };
 
   const openAddModal = () => {
     setError("");
+    setFormError("");
     setSuccess("");
     setIsEditModalOpen(false);
     setEditingAssetId("");
@@ -1482,7 +1485,7 @@ const AssetVault = () => {
     const finalLocation = String(formData.location || "").trim() || derivedLocation;
 
     if (!formData.propertyId.trim() || !formData.title.trim() || formData.price === "" || !finalLocation) {
-      setError("Property ID, property name, location and price are required");
+      setFormError("Property ID, property name, location and price are required");
       return;
     }
 
@@ -1492,25 +1495,26 @@ const AssetVault = () => {
     });
 
     if (parsedSiteLocation.error) {
-      setError(parsedSiteLocation.error);
+      setFormError(parsedSiteLocation.error);
       return;
     }
 
     const trimmedReservationReason = String(formData.reservationReason || "").trim();
     if (isReservedStatusValue(formData.status) && !trimmedReservationReason) {
-      setError("Block reason is required when status is Blocked");
+      setFormError("Block reason is required when status is Blocked");
       return;
     }
 
     const saleDetailsPayload = buildSaleDetailsPayload();
     if (saleDetailsPayload.error) {
-      setError(saleDetailsPayload.error);
+      setFormError(saleDetailsPayload.error);
       return;
     }
 
     try {
       setSaving(true);
       setError("");
+      setFormError("");
       setSuccess("");
 
       const payload = buildInventoryPayloadFromForm({
@@ -1520,18 +1524,13 @@ const AssetVault = () => {
         parsedSiteLocation,
       });
 
-      if (canManage) {
-        const createdAsset = await createInventoryAsset(payload);
-        setAssets((prev) => [createdAsset, ...prev]);
-        setSuccess("Asset added to inventory");
-      } else {
-        await createInventoryCreateRequest(payload);
-        setSuccess("Inventory request submitted for admin approval");
-      }
+      const createdAsset = await createInventoryAsset(payload);
+      setAssets((prev) => [createdAsset, ...prev]);
+      setSuccess("Asset added to inventory");
       closeFormModal();
     } catch (saveError) {
       console.error(`Save asset failed: ${toErrorMessage(saveError, "Unknown error")}`);
-      setError(toErrorMessage(saveError, "Failed to save asset"));
+      setFormError(toErrorMessage(saveError, "Failed to save asset"));
     } finally {
       setSaving(false);
     }
@@ -1561,6 +1560,7 @@ const AssetVault = () => {
     const existingSiteLng = toCoordinateNumber(asset?.siteLocation?.lng);
 
     setError("");
+    setFormError("");
     setSuccess("");
     clearLocationSuggestionState();
     setIsAddModalOpen(false);
@@ -1687,13 +1687,14 @@ const AssetVault = () => {
     const finalLocation = String(formData.location || "").trim() || derivedLocation;
 
     if (!formData.propertyId.trim() || !formData.title.trim() || formData.price === "" || !finalLocation) {
-      setError("Property ID, property name, location and price are required");
+      setFormError("Property ID, property name, location and price are required");
       return;
     }
 
     try {
       setSaving(true);
       setError("");
+      setFormError("");
       setSuccess("");
 
       let locationLatInput = formData.locationLat;
@@ -1716,7 +1717,7 @@ const AssetVault = () => {
         setResolvingLocation(true);
         const resolved = await lookupCoordinatesByLocation(currentLocation);
         if (!resolved) {
-          setError(
+          setFormError(
             "Location changed but coordinates could not be resolved. Use Get Lat/Lng or enter coordinates manually.",
           );
           return;
@@ -1738,19 +1739,19 @@ const AssetVault = () => {
       });
 
       if (parsedSiteLocation.error) {
-        setError(parsedSiteLocation.error);
+        setFormError(parsedSiteLocation.error);
         return;
       }
 
       const trimmedReservationReason = String(formData.reservationReason || "").trim();
       if (isReservedStatusValue(formData.status) && !trimmedReservationReason) {
-        setError("Block reason is required when status is Blocked");
+        setFormError("Block reason is required when status is Blocked");
         return;
       }
 
       const saleDetailsPayload = buildSaleDetailsPayload();
       if (saleDetailsPayload.error) {
-        setError(saleDetailsPayload.error);
+        setFormError(saleDetailsPayload.error);
         return;
       }
 
@@ -1774,7 +1775,7 @@ const AssetVault = () => {
       closeFormModal();
     } catch (updateError) {
       console.error(`Update asset failed: ${toErrorMessage(updateError, "Unknown error")}`);
-      setError(toErrorMessage(updateError, "Failed to update asset"));
+      setFormError(toErrorMessage(updateError, "Failed to update asset"));
     } finally {
       setSaving(false);
       setResolvingLocation(false);
@@ -2057,17 +2058,8 @@ const AssetVault = () => {
         onAmenitiesFilterChange={setAmenitiesFilter}
       />
 
-      {error && (
-        <div className="ui-soft-panel rounded-xl border border-red-200 bg-red-50 text-red-700 p-3 text-sm flex items-center gap-2">
-          <AlertCircle size={16} /> {error}
-        </div>
-      )}
-
-      {success && (
-        <div className="ui-soft-panel rounded-xl border border-cyan-200 bg-cyan-50 text-cyan-700 p-3 text-sm">
-          {success}
-        </div>
-      )}
+      <ToastNotice message={error} type="error" />
+      <ToastNotice message={success} type="success" />
 
       <PendingInventoryRequestsPanel
         canManage={canReviewInventoryRequests}
@@ -2089,7 +2081,7 @@ const AssetVault = () => {
         emptyAction={
           canOpenCreateModal
             ? {
-              label: canManage ? "Add Asset" : "Add Request",
+              label: "Add Asset",
               onClick: openAddModal,
             }
             : undefined
@@ -2143,40 +2135,40 @@ const AssetVault = () => {
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
-            className="mobile-bottom-sheet fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 flex items-center justify-center p-4"
+            className="mobile-bottom-sheet fixed inset-0 z-50 flex items-stretch justify-center bg-slate-900/60 p-0 backdrop-blur-sm sm:items-center sm:p-4"
           >
             <Motion.div
               initial={{ scale: 0.95, y: 20 }}
               animate={{ scale: 1, y: 0 }}
               exit={{ scale: 0.95, y: 20 }}
-              className="bg-white rounded-2xl shadow-2xl w-full max-w-lg overflow-hidden flex flex-col max-h-[90vh]"
+              className="mobile-fullscreen-panel flex h-dvh max-h-dvh w-full max-w-lg flex-col overflow-hidden bg-white shadow-2xl sm:h-auto sm:max-h-[90vh] sm:rounded-2xl"
             >
-              <div className="p-6 border-b border-slate-100 flex justify-between items-center bg-slate-50/50 shrink-0">
-                <h3 className="font-display text-lg text-slate-900">
+              <div className="flex shrink-0 items-center justify-between border-b border-slate-100 bg-slate-50/50 p-4 sm:p-6">
+                <h3 className="min-w-0 truncate font-display text-base text-slate-900 sm:text-lg">
                   {isEditModalOpen
                     ? canManage
                       ? "Edit Property"
                       : "Request Property Edit"
-                    : canManage
-                      ? "New Inventory Asset"
-                      : "New Inventory Request"}
+                    : "New Inventory Asset"}
                 </h3>
                 <button
                   onClick={closeFormModal}
-                  className="p-2 hover:bg-slate-200 rounded-full text-slate-400"
+                  className="ml-3 inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-full text-slate-400 hover:bg-slate-200"
                 >
                   <X size={18} />
                 </button>
               </div>
 
-              <div className="p-6 space-y-4 overflow-y-auto custom-scrollbar flex-1">
+              <ToastNotice message={formError} type="error" />
+
+              <div className="mobile-modal-scroll custom-scrollbar flex-1 space-y-4 p-3 sm:p-6">
                 <div>
                   <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-2 block">
                     Property Images
                   </label>
 
                   {formData.images.length > 0 && (
-                    <div className="flex gap-2 mb-3 overflow-x-auto pb-2">
+                    <div className="mb-3 flex flex-wrap gap-2">
                       {formData.images.map((url, index) => (
                         <div
                           key={`${url}-${index}`}
@@ -2224,7 +2216,7 @@ const AssetVault = () => {
                 </div>
 
                 <div>
-                  <div className="grid grid-cols-2 gap-4 mb-4">
+                  <div className="mb-4 grid grid-cols-1 gap-3 sm:grid-cols-2 sm:gap-4">
                     <div>
                       <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">
                         Property ID *
@@ -2264,7 +2256,7 @@ const AssetVault = () => {
                   />
                 </div>
 
-                <div className="grid grid-cols-2 gap-4">
+                <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 sm:gap-4">
                   <div>
                     <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">
                       Price (Rs)
@@ -2294,7 +2286,7 @@ const AssetVault = () => {
                     </div>
                   ) : null}
 
-                  <div className="col-span-2">
+                  <div className="sm:col-span-2">
                     <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">
                       Location
                     </label>
@@ -2376,7 +2368,7 @@ const AssetVault = () => {
                     </p>
                   </div>
 
-                  <div className="col-span-2 grid grid-cols-2 gap-4">
+                  <div className="grid grid-cols-1 gap-3 sm:col-span-2 sm:grid-cols-2 sm:gap-4">
                     <div>
                       <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">
                         Latitude (Optional)
@@ -2405,7 +2397,7 @@ const AssetVault = () => {
                     </div>
                   </div>
 
-                  <div className="col-span-2 grid grid-cols-3 gap-4">
+                  <div className="grid grid-cols-1 gap-3 sm:col-span-2 sm:grid-cols-3 sm:gap-4">
                     <div>
                       <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">
                         City
@@ -2444,7 +2436,7 @@ const AssetVault = () => {
                     </div>
                   </div>
 
-                  <div className="col-span-2 grid grid-cols-2 gap-4">
+                  <div className="grid grid-cols-1 gap-3 sm:col-span-2 sm:grid-cols-2 sm:gap-4">
                     <div>
                       <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">
                         Building Name
@@ -2498,7 +2490,7 @@ const AssetVault = () => {
                     </div>
                   </div>
 
-                  <div className="col-span-2 grid grid-cols-3 gap-4">
+                  <div className="grid grid-cols-1 gap-3 sm:col-span-2 sm:grid-cols-3 sm:gap-4">
                     <div>
                       <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">
                         Total Area
@@ -2611,7 +2603,7 @@ const AssetVault = () => {
                     </select>
                   </div>
 
-                  <div className="col-span-2">
+                  <div className="sm:col-span-2">
                     <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">
                       Status
                     </label>
@@ -2629,12 +2621,12 @@ const AssetVault = () => {
                   </div>
 
                   {formData.inventoryType === "COMMERCIAL" ? (
-                    <div className="col-span-2 rounded-xl border border-slate-200 bg-slate-50/80 p-4 space-y-4">
+                    <div className="space-y-4 rounded-xl border border-slate-200 bg-slate-50/80 p-3 sm:col-span-2 sm:p-4">
                       <p className="text-[10px] font-bold uppercase tracking-widest text-slate-500">
                         Commercial Office Details
                       </p>
 
-                      <div className="grid grid-cols-2 gap-4">
+                      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 sm:gap-4">
                         <div>
                           <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">
                             Office Type
@@ -2673,7 +2665,7 @@ const AssetVault = () => {
                         </div>
                       </div>
 
-                      <div className="grid grid-cols-3 gap-4">
+                      <div className="grid grid-cols-1 gap-3 sm:grid-cols-3 sm:gap-4">
                         <div>
                           <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">
                             Total Cabins
@@ -2758,7 +2750,7 @@ const AssetVault = () => {
                         </div>
                       </div>
 
-                      <div className="grid grid-cols-3 gap-4">
+                      <div className="grid grid-cols-1 gap-3 sm:grid-cols-3 sm:gap-4">
                         <div>
                           <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">
                             Parking Type
@@ -2811,7 +2803,7 @@ const AssetVault = () => {
                         </div>
                       </div>
 
-                      <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+                      <div className="grid grid-cols-1 gap-2 sm:grid-cols-3 sm:gap-3">
                         {[
                           ["commercialReceptionArea", "Reception Area"],
                           ["commercialWaitingArea", "Waiting Area"],
@@ -2861,12 +2853,12 @@ const AssetVault = () => {
                   ) : null}
 
                   {formData.inventoryType === "RESIDENTIAL" ? (
-                    <div className="col-span-2 rounded-xl border border-slate-200 bg-slate-50/80 p-4 space-y-4">
+                    <div className="space-y-4 rounded-xl border border-slate-200 bg-slate-50/80 p-3 sm:col-span-2 sm:p-4">
                       <p className="text-[10px] font-bold uppercase tracking-widest text-slate-500">
                         Residential Details
                       </p>
 
-                      <div className="grid grid-cols-3 gap-4">
+                      <div className="grid grid-cols-1 gap-3 sm:grid-cols-3 sm:gap-4">
                         <div>
                           <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">
                             Property Type
@@ -2963,7 +2955,7 @@ const AssetVault = () => {
                             className="w-full p-3 bg-white border border-slate-200 rounded-xl text-sm text-slate-900 focus:outline-none focus:border-emerald-500 mt-1"
                           />
                         </div>
-                        <div className="col-span-3">
+                        <div className="sm:col-span-3">
                           <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">
                             Water Supply
                           </label>
@@ -2984,7 +2976,7 @@ const AssetVault = () => {
                         </div>
                       </div>
 
-                      <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+                      <div className="grid grid-cols-1 gap-2 sm:grid-cols-3 sm:gap-3">
                         {[
                           ["residentialStudyRoom", "Study Room"],
                           ["residentialServantRoom", "Servant Room"],
@@ -3017,7 +3009,7 @@ const AssetVault = () => {
                     </div>
                   ) : null}
 
-                  <div className="col-span-2 grid grid-cols-1 gap-4">
+                  <div className="grid grid-cols-1 gap-3 sm:col-span-2 sm:gap-4">
                     <div>
                       <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">
                         Floor Plans (one URL per line)
@@ -3049,7 +3041,7 @@ const AssetVault = () => {
                   </div>
 
                   {isReservedStatusValue(formData.status) ? (
-                    <div className="col-span-2">
+                    <div className="sm:col-span-2">
                       <label className="text-[10px] font-bold text-amber-700 uppercase tracking-widest">
                         Block Reason *
                       </label>
@@ -3069,7 +3061,7 @@ const AssetVault = () => {
                   ) : null}
 
                   {isSoldStatusValue(formData.status) ? (
-                    <div className="col-span-2 rounded-xl border border-emerald-200 bg-emerald-50/60 p-3 space-y-3">
+                    <div className="space-y-3 rounded-xl border border-emerald-200 bg-emerald-50/60 p-3 sm:col-span-2">
                       <p className="text-[10px] font-bold uppercase tracking-widest text-emerald-700">
                         Sold Details (Mandatory)
                       </p>
@@ -3094,7 +3086,7 @@ const AssetVault = () => {
                         </select>
                       </div>
 
-                      <div className="grid grid-cols-2 gap-3">
+                      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
                         <div>
                           <label className="text-[10px] font-bold text-slate-500 uppercase tracking-widest">
                             Payment Mode *
@@ -3132,7 +3124,7 @@ const AssetVault = () => {
                         </div>
                       </div>
 
-                      <div className="grid grid-cols-2 gap-3">
+                      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
                         <div>
                           <label className="text-[10px] font-bold text-slate-500 uppercase tracking-widest">
                             Total Amount *
@@ -3212,7 +3204,7 @@ const AssetVault = () => {
                 </div>
               </div>
 
-              <div className="p-6 border-t border-slate-100 bg-slate-50/50 flex gap-3 shrink-0">
+              <div className="mobile-safe-footer flex shrink-0 gap-3 border-t border-slate-100 bg-slate-50/50 px-3 pt-3 sm:p-6">
                 <button
                   onClick={closeFormModal}
                   className="flex-1 py-3 text-xs font-bold uppercase text-slate-500 hover:bg-slate-100 rounded-xl"
@@ -3236,9 +3228,7 @@ const AssetVault = () => {
                       ? canManage
                         ? "Update Asset"
                         : "Submit Edit Request"
-                      : canManage
-                        ? "Save Asset"
-                        : "Submit Request"}
+                      : "Save Asset"}
                 </button>
               </div>
             </Motion.div>
@@ -3252,13 +3242,13 @@ const AssetVault = () => {
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
-            className="mobile-bottom-sheet fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 p-4 backdrop-blur-sm"
+            className="mobile-bottom-sheet fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 p-0 backdrop-blur-sm sm:p-4"
           >
             <Motion.div
               initial={{ scale: 0.95, y: 20 }}
               animate={{ scale: 1, y: 0 }}
               exit={{ scale: 0.95, y: 20 }}
-              className="w-full max-w-lg overflow-hidden rounded-2xl bg-white shadow-2xl"
+              className="mobile-fullscreen-panel flex w-full max-w-lg flex-col overflow-hidden rounded-2xl bg-white shadow-2xl sm:max-h-[90vh]"
             >
               <div className="flex items-center justify-between border-b border-slate-100 bg-slate-50/80 p-5">
                 <div>
@@ -3279,7 +3269,7 @@ const AssetVault = () => {
                 </button>
               </div>
 
-              <div className="space-y-4 p-5">
+              <div className="mobile-modal-scroll flex-1 space-y-4 p-4 sm:p-5">
                 <div className="rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3">
                   <p className="text-[10px] font-bold uppercase tracking-widest text-slate-400">
                     Property
@@ -3337,7 +3327,7 @@ const AssetVault = () => {
                 </div>
               </div>
 
-              <div className="flex gap-3 border-t border-slate-100 bg-slate-50/50 p-5">
+              <div className="mobile-safe-footer flex gap-3 border-t border-slate-100 bg-slate-50/50 px-4 pt-3 sm:p-5">
                 <button
                   type="button"
                   onClick={closeReserveModal}

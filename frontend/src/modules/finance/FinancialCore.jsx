@@ -1,7 +1,6 @@
 import React, { useCallback, useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import {
-  AlertCircle,
   BarChart3,
   Building2,
   ChevronRight,
@@ -14,6 +13,7 @@ import {
 } from "lucide-react";
 import { getAllLeads } from "../../services/leadService";
 import { toErrorMessage } from "../../utils/errorMessage";
+import ToastNotice from "../../components/ui/ToastNotice";
 
 const COMMISSION_PER_DEAL = 50000;
 const DEFAULT_BROKERAGE_PERCENTAGE = 2;
@@ -179,6 +179,25 @@ const toAmountNumber = (value) => {
   const parsed = Number(value);
   return Number.isFinite(parsed) ? parsed : null;
 };
+
+const getRecordedBrokerageReceived = (lead = {}) => {
+  const amount = toAmountNumber(lead?.brokerageReceived);
+  return amount === null ? 0 : Math.max(0, amount);
+};
+
+const getRecordedBrokerageDistributed = (lead = {}) => {
+  const amount = toAmountNumber(lead?.brokerageDistributed);
+  return amount === null ? 0 : Math.max(0, amount);
+};
+
+const getLeadClosingDate = (lead = {}) =>
+  lead?.brokerageClosedAt || lead?.updatedAt || lead?.createdAt;
+
+const getLeadClosingExecutiveName = (lead = {}) =>
+  lead?.brokerageClosedBy?.name
+  || lead?.dealPayment?.approvalReviewedBy?.name
+  || lead?.assignedTo?.name
+  || "Unassigned";
 
 const normalizeBrokerageConfig = (config = null) => {
   const mode = String(config?.mode || "").trim().toUpperCase() === "PERCENTAGE"
@@ -412,6 +431,8 @@ const FinancialCore = () => {
     const countedSaleKeys = new Set();
     let totalSellAmount = 0;
     let pendingSellCollection = 0;
+    let companyBrokerageRevenue = 0;
+    let brokerageDistributedTotal = 0;
 
     scopedLeads.forEach((lead) => {
       const status = String(lead.status || "NEW");
@@ -435,6 +456,11 @@ const FinancialCore = () => {
         totalSellAmount += entry.totalAmount;
         pendingSellCollection += entry.remainingAmount;
       });
+
+      if (String(lead.status || "").toUpperCase() === "CLOSED") {
+        companyBrokerageRevenue += getRecordedBrokerageReceived(lead);
+        brokerageDistributedTotal += getRecordedBrokerageDistributed(lead);
+      }
     });
 
     const totalLeads = scopedLeads.length;
@@ -452,8 +478,7 @@ const FinancialCore = () => {
         : 0;
 
     const collectedSellValue = Math.max(0, totalSellAmount - pendingSellCollection);
-    const commissionPayable = closedDeals * COMMISSION_PER_DEAL;
-    const avgCommissionPerClosed = closedDeals > 0 ? commissionPayable / closedDeals : 0;
+    const avgBrokeragePerClosed = closedDeals > 0 ? companyBrokerageRevenue / closedDeals : 0;
 
     return {
       totalLeads,
@@ -465,8 +490,9 @@ const FinancialCore = () => {
       totalSellAmount,
       pendingSellCollection,
       collectedSellValue,
-      commissionPayable,
-      avgCommissionPerClosed,
+      companyBrokerageRevenue,
+      brokerageDistributedTotal,
+      avgBrokeragePerClosed,
       statusCount,
       sourceCount,
     };
@@ -643,7 +669,7 @@ const FinancialCore = () => {
     () =>
       scopedLeads
         .filter((lead) => String(lead.status || "") === "CLOSED")
-        .sort((a, b) => new Date(b.updatedAt || b.createdAt) - new Date(a.updatedAt || a.createdAt))
+        .sort((a, b) => new Date(getLeadClosingDate(b)) - new Date(getLeadClosingDate(a)))
         .slice(0, 8),
     [scopedLeads],
   );
@@ -731,9 +757,16 @@ const FinancialCore = () => {
         onClick: () => openLeadWorkspace({ status: "CLOSED" }),
       },
       {
-        title: "Commission Payable",
-        value: formatCurrency(dashboard.commissionPayable),
-        helper: `Internal payout | Avg ${formatCurrency(dashboard.avgCommissionPerClosed)} per closed deal`,
+        title: "Company Brokerage Revenue",
+        value: formatCurrency(dashboard.companyBrokerageRevenue),
+        helper: `Avg ${formatCurrency(dashboard.avgBrokeragePerClosed)} per closed deal`,
+        icon: IndianRupee,
+        onClick: () => openLeadWorkspace({ status: "CLOSED" }),
+      },
+      {
+        title: "Brokerage Distributed",
+        value: formatCurrency(dashboard.brokerageDistributedTotal),
+        helper: "Shown separately, not counted as revenue",
         icon: IndianRupee,
         onClick: () => openLeadWorkspace({ status: "CLOSED" }),
       },
@@ -833,12 +866,7 @@ const FinancialCore = () => {
           ) : null}
       </div>
 
-      {error && (
-        <div className="ui-soft-panel rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700 flex items-center gap-2">
-          <AlertCircle size={16} />
-          {error}
-        </div>
-      )}
+      <ToastNotice message={error} type="error" />
 
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
         {statCards.map((card) => (
@@ -1065,11 +1093,14 @@ const FinancialCore = () => {
               <table className="min-w-full text-sm">
                 <thead>
                   <tr className="text-left text-xs uppercase tracking-wider text-slate-500">
-                    <th className="py-2 pr-3">Lead</th>
+                    <th className="py-2 pr-3">Deal ID</th>
                     <th className="py-2 pr-3">Project</th>
-                    <th className="py-2 pr-3">Broker</th>
-                    <th className="py-2 pr-3">Assigned</th>
-                    <th className="py-2">Closed On</th>
+                    <th className="py-2 pr-3">Client</th>
+                    <th className="py-2 pr-3">Brokerage Received</th>
+                    <th className="py-2 pr-3">Brokerage Distributed</th>
+                    <th className="py-2 pr-3">Net Brokerage Counted in Revenue</th>
+                    <th className="py-2 pr-3">Closing Date</th>
+                    <th className="py-2">Closing Executive</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -1080,16 +1111,19 @@ const FinancialCore = () => {
                       onClick={() => openLeadWorkspace({ leadId: lead._id })}
                     >
                       <td className="py-2 pr-3 text-slate-800">
-                        <div className="font-medium">{lead.name || "-"}</div>
+                        <div className="font-medium">{String(lead._id || "").slice(-8) || "-"}</div>
                         <div className="text-xs text-slate-500">{lead.phone || "-"}</div>
                       </td>
                       <td className="py-2 pr-3 text-slate-700">{lead.projectInterested || "-"}</td>
                       <td className="py-2 pr-3 text-slate-700">
-                        <div className="font-medium">{getLeadBrokerLabel(lead).name}</div>
-                        <div className="text-xs text-slate-500">{getLeadBrokerLabel(lead).detail}</div>
+                        <div className="font-medium">{lead.name || "-"}</div>
+                        <div className="text-xs text-slate-500">{lead.email || "No email"}</div>
                       </td>
-                      <td className="py-2 pr-3 text-slate-700">{lead.assignedTo?.name || "Unassigned"}</td>
-                      <td className="py-2 text-slate-600">{formatDateTime(lead.updatedAt || lead.createdAt)}</td>
+                      <td className="py-2 pr-3 text-slate-700">{formatCurrency(getRecordedBrokerageReceived(lead))}</td>
+                      <td className="py-2 pr-3 text-slate-700">{formatCurrency(getRecordedBrokerageDistributed(lead))}</td>
+                      <td className="py-2 pr-3 font-semibold text-slate-900">{formatCurrency(getRecordedBrokerageReceived(lead))}</td>
+                      <td className="py-2 pr-3 text-slate-600">{formatDateTime(getLeadClosingDate(lead))}</td>
+                      <td className="py-2 text-slate-600">{getLeadClosingExecutiveName(lead)}</td>
                     </tr>
                   ))}
                 </tbody>

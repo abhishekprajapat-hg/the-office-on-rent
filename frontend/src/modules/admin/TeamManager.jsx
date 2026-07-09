@@ -11,6 +11,7 @@ import {
 } from "../../services/userService";
 import { getAllLeads } from "../../services/leadService";
 import { toErrorMessage } from "../../utils/errorMessage";
+import ToastNotice from "../../components/ui/ToastNotice";
 import {
   UserFormPanel,
 } from "./components/TeamManagerPanels";
@@ -550,13 +551,7 @@ const TeamManager = ({ theme = "light" }) => {
         </div>
       </section>
 
-      {error ? (
-        <div className={`rounded-xl border p-3 text-sm ${
-          isDarkTheme ? "border-red-500/30 bg-red-500/10 text-red-300" : "border-red-200 bg-red-50 text-red-700"
-        }`}>
-          {error}
-        </div>
-      ) : null}
+      <ToastNotice message={error} type="error" />
 
       <section className={`rounded-2xl border p-4 ${
         isDarkTheme ? "border-slate-700 bg-slate-900/70" : "border-slate-200 bg-white"

@@ -2027,7 +2027,7 @@ export const LeadDetailsScreen = () => {
       }
       if (requiresClosedApproval) {
         await requestLeadStatusChange(lead._id, payload);
-        setSuccess("Status change request sent for admin approval");
+        setSuccess("Status change request sent for admin or manager approval");
       } else {
         const paymentModeMap: Record<string, string> = {
           Cash: "CASH",

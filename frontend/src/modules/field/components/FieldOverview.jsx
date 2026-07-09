@@ -3,61 +3,96 @@ import {
   Calendar,
   CheckCircle,
   ClipboardList,
+  IndianRupee,
   MapPin,
   MessageSquare,
-  Navigation,
+  PhoneCall,
   Package,
+  TrendingDown,
   Users,
 } from "lucide-react";
 import LeadPerformancePanel from "../../../components/dashboard/LeadPerformancePanel";
+
+const formatCurrencyShort = (value) => {
+  const amount = Number(value) || 0;
+  if (amount >= 10000000) return `Rs ${(amount / 10000000).toFixed(1)}Cr`;
+  if (amount >= 100000) return `Rs ${(amount / 100000).toFixed(1)}L`;
+  if (amount >= 1000) return `Rs ${(amount / 1000).toFixed(1)}K`;
+  return `Rs ${amount.toLocaleString("en-IN")}`;
+};
 
 const FieldOverview = ({
   tasks,
   inventoryCount,
   leadCount,
+  metrics,
   leads,
   onCompleteTask,
   onOpen,
 }) => {
   const pending = tasks.filter((task) => task.status !== "Done").length;
+  const dashboardMetrics = {
+    leadsAssigned: leadCount,
+    activeClients: 0,
+    siteVisitsScheduled: 0,
+    ongoingNegotiations: 0,
+    dealsClosed: 0,
+    dealsLost: 0,
+    revenueGenerated: 0,
+    ...(metrics || {}),
+  };
 
   return (
     <div className="h-full overflow-y-auto custom-scrollbar px-4 py-6 sm:px-6 lg:px-8">
-      <div className="grid grid-cols-1 gap-5 md:grid-cols-2 xl:grid-cols-5">
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4 2xl:grid-cols-7">
         <FieldStatCard
-          title="Pending Tasks"
-          value={pending}
-          hint="Today route actions"
-          icon={ClipboardList}
-          onClick={() => onOpen("calendar")}
-        />
-        <FieldStatCard
-          title="Completed"
-          value={tasks.length - pending}
-          hint="Marked done"
-          icon={CheckCircle}
-          onClick={() => onOpen("calendar")}
-        />
-        <FieldStatCard
-          title="My Leads"
-          value={leadCount}
+          title="Leads Assigned"
+          value={dashboardMetrics.leadsAssigned}
           hint="Assigned to me"
           icon={Users}
           onClick={() => onOpen("leads")}
         />
         <FieldStatCard
-          title="Inventory Access"
-          value={inventoryCount}
-          hint="Company units visible"
-          icon={Package}
-          onClick={() => onOpen("inventory")}
+          title="Active Clients"
+          value={dashboardMetrics.activeClients}
+          hint="Open field pipeline"
+          icon={PhoneCall}
+          onClick={() => onOpen("leads")}
         />
         <FieldStatCard
-          title="Live Navigation"
-          value="On"
-          hint="Map tracking available"
-          icon={Navigation}
+          title="Site Visits Scheduled"
+          value={dashboardMetrics.siteVisitsScheduled}
+          hint="Visit required or active"
+          icon={MapPin}
           onClick={() => onOpen("map")}
+        />
+        <FieldStatCard
+          title="Ongoing Negotiations"
+          value={dashboardMetrics.ongoingNegotiations}
+          hint="Interested/requested"
+          icon={ClipboardList}
+          onClick={() => onOpen("leads")}
+        />
+        <FieldStatCard
+          title="Deals Closed"
+          value={dashboardMetrics.dealsClosed}
+          hint="Won deals"
+          icon={CheckCircle}
+          onClick={() => onOpen("leads")}
+        />
+        <FieldStatCard
+          title="Deals Lost"
+          value={dashboardMetrics.dealsLost}
+          hint="Lost opportunities"
+          icon={TrendingDown}
+          onClick={() => onOpen("leads")}
+        />
+        <FieldStatCard
+          title="Revenue Generated"
+          value={formatCurrencyShort(dashboardMetrics.revenueGenerated)}
+          hint="Closed brokerage"
+          icon={IndianRupee}
+          onClick={() => onOpen("leads")}
         />
       </div>
 
@@ -75,6 +110,9 @@ const FieldOverview = ({
         <div className="ui-soft-panel rounded-2xl p-5">
           <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-500">
             Today Tasks
+          </p>
+          <p className="mt-1 text-xs text-slate-500">
+            {pending} pending, {tasks.length - pending} completed
           </p>
 
           <div className="mt-4 space-y-3">
@@ -127,7 +165,7 @@ const FieldOverview = ({
           />
           <QuickPageCard
             title="Inventory"
-            subtitle="View all inventory in your company"
+            subtitle={`${inventoryCount} company units visible`}
             icon={Package}
             onClick={() => onOpen("inventory")}
           />

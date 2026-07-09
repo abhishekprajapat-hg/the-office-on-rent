@@ -18,6 +18,7 @@ const PrimarySidebar = ({
   onToggleCollapsed,
   mobileOpen,
   onMobileClose,
+  unreadChats = 0,
 }) => {
   const location = useLocation();
   const activeSectionId = useMemo(
@@ -48,6 +49,7 @@ const PrimarySidebar = ({
           <div className="space-y-1">
             {group.items.map((item) => {
               const Icon = item.icon;
+              const showChatAlert = item.path === "/chat" && unreadChats > 0;
               return (
                 <NavLink
                   key={item.path}
@@ -66,6 +68,14 @@ const PrimarySidebar = ({
                 >
                   <Icon aria-hidden="true" className="shrink-0" size={17} />
                   <span className={cn("truncate", isCollapsed && "md:sr-only")}>{item.label}</span>
+                  {showChatAlert ? (
+                    <span className={cn(
+                      "ml-auto flex h-5 min-w-5 items-center justify-center rounded-full bg-rose-500 px-1.5 text-[10px] font-bold text-white",
+                      isCollapsed && "md:absolute md:right-1 md:top-1 md:ml-0 md:h-4 md:min-w-4 md:px-1 md:text-[9px]",
+                    )}>
+                      {unreadChats > 99 ? "99+" : unreadChats}
+                    </span>
+                  ) : null}
                 </NavLink>
               );
             })}

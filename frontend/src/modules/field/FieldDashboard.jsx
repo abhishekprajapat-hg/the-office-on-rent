@@ -1,12 +1,4 @@
 import React, { useEffect, useState } from "react";
-import {
-  Calendar,
-  LayoutGrid,
-  MapPin,
-  MessageSquare,
-  Package,
-  Users,
-} from "lucide-react";
 import AssetVault from "../inventory/AssetVault";
 import FieldOps from "./FieldOps";
 import TeamChat from "../chat/TeamChat";
@@ -15,15 +7,6 @@ import LeadsMatrix from "../leads/LeadsMatrix";
 import FieldOverview from "./components/FieldOverview";
 import api from "../../services/api";
 import { toErrorMessage } from "../../utils/errorMessage";
-
-const TABS = [
-  { id: "dashboard", label: "Dashboard", icon: LayoutGrid },
-  { id: "leads", label: "My Leads", icon: Users },
-  { id: "inventory", label: "Inventory", icon: Package },
-  { id: "map", label: "Field Ops", icon: MapPin },
-  { id: "chat", label: "Chat", icon: MessageSquare },
-  { id: "calendar", label: "Schedule", icon: Calendar },
-];
 
 const DEFAULT_TASKS = [
   {
@@ -46,18 +29,62 @@ const DEFAULT_TASKS = [
   },
 ];
 
+const getStoredUserId = () => {
+  try {
+    const user = JSON.parse(localStorage.getItem("user") || "{}");
+    return String(user?._id || user?.id || "").trim();
+  } catch {
+    return "";
+  }
+};
+
+const normalizeStatus = (value) => String(value || "").trim().toUpperCase();
+
+const buildFieldExecutiveMetrics = (leads = []) => {
+  const leadsAssigned = leads.length;
+  const activeClients = leads.filter((lead) =>
+    !["CLOSED", "LOST"].includes(normalizeStatus(lead?.status))
+  ).length;
+  const siteVisitsScheduled = leads.filter((lead) =>
+    ["SITE_VISIT_REQUIRED", "SITE_VISIT"].includes(normalizeStatus(lead?.status))
+  ).length;
+  const ongoingNegotiations = leads.filter((lead) =>
+    ["REQUESTED", "INTERESTED"].includes(normalizeStatus(lead?.status))
+  ).length;
+  const dealsClosed = leads.filter((lead) => normalizeStatus(lead?.status) === "CLOSED").length;
+  const dealsLost = leads.filter((lead) => normalizeStatus(lead?.status) === "LOST").length;
+  const revenueGenerated = leads.reduce((total, lead) => {
+    if (normalizeStatus(lead?.status) !== "CLOSED") return total;
+    return total + Math.max(0, Number(lead?.brokerageReceived) || 0);
+  }, 0);
+
+  return {
+    leadsAssigned,
+    activeClients,
+    siteVisitsScheduled,
+    ongoingNegotiations,
+    dealsClosed,
+    dealsLost,
+    revenueGenerated,
+  };
+};
+
 const FieldDashboard = () => {
   const [activeTab, setActiveTab] = useState("dashboard");
   const [inventoryCount, setInventoryCount] = useState(0);
   const [leadCount, setLeadCount] = useState(0);
   const [leadRows, setLeadRows] = useState([]);
+  const [fieldMetrics, setFieldMetrics] = useState(buildFieldExecutiveMetrics([]));
   const [tasks, setTasks] = useState(DEFAULT_TASKS);
 
   useEffect(() => {
     const fetchDashboardData = async () => {
+      const currentUserId = getStoredUserId();
       const [inventoryResult, leadsResult] = await Promise.allSettled([
         api.get("/inventory"),
-        api.get("/leads"),
+        api.get("/leads", {
+          params: currentUserId ? { assignedTo: currentUserId } : {},
+        }),
       ]);
 
       if (inventoryResult.status === "fulfilled") {
@@ -74,8 +101,10 @@ const FieldDashboard = () => {
         const rows = leadsResult.value.data?.leads || [];
         setLeadRows(Array.isArray(rows) ? rows : []);
         setLeadCount(Array.isArray(rows) ? rows.length : 0);
+        setFieldMetrics(buildFieldExecutiveMetrics(Array.isArray(rows) ? rows : []));
       } else {
         setLeadRows([]);
+        setFieldMetrics(buildFieldExecutiveMetrics([]));
         console.error(
           "Field dashboard leads error:",
           toErrorMessage(leadsResult.reason, "Unknown error"),
@@ -101,6 +130,7 @@ const FieldDashboard = () => {
           tasks={tasks}
           inventoryCount={inventoryCount}
           leadCount={leadCount}
+          metrics={fieldMetrics}
           leads={leadRows}
           onCompleteTask={completeTask}
           onOpen={setActiveTab}
@@ -133,6 +163,7 @@ const FieldDashboard = () => {
         tasks={tasks}
         inventoryCount={inventoryCount}
         leadCount={leadCount}
+        metrics={fieldMetrics}
         leads={leadRows}
         onCompleteTask={completeTask}
         onOpen={setActiveTab}
@@ -142,31 +173,6 @@ const FieldDashboard = () => {
 
   return (
     <div className="ui-page-shell flex h-full w-full flex-col overflow-hidden">
-      <div className="shrink-0">
-        <div className="flex flex-wrap gap-2">
-          {TABS.map((tab) => {
-            const Icon = tab.icon;
-            const active = activeTab === tab.id;
-
-            return (
-              <button
-                key={tab.id}
-                type="button"
-                onClick={() => setActiveTab(tab.id)}
-                className={`inline-flex items-center gap-2 rounded-xl border px-3 py-2 text-xs font-semibold transition-colors ${
-                  active
-                    ? "border-cyan-300 bg-cyan-100/70 text-cyan-800"
-                    : "border-slate-200 bg-white/70 text-slate-600 hover:border-cyan-200 hover:text-cyan-700"
-                }`}
-              >
-                <Icon size={14} />
-                {tab.label}
-              </button>
-            );
-          })}
-        </div>
-      </div>
-
       <div className="min-h-0 flex-1 overflow-hidden">
         {renderContent()}
       </div>

@@ -17,6 +17,7 @@ const ActivityBar = ({
   onToggleTheme,
   onLogout,
   unreadAlerts = 0,
+  unreadChats = 0,
   onMobileMenuOpen,
 }) => {
   const location = useLocation();
@@ -40,6 +41,8 @@ const ActivityBar = ({
           const isActive = section.id === activeSectionId;
           const target = getSectionTarget(section.id, userRole, user);
           const showAlert = section.id === "admin" && unreadAlerts > 0;
+          const showChatAlert = section.id === "chat" && unreadChats > 0;
+          const badgeCount = showAlert ? unreadAlerts : showChatAlert ? unreadChats : 0;
 
           return (
             <Tooltip key={section.id} label={section.label} side="right">
@@ -54,9 +57,9 @@ const ActivityBar = ({
               >
                 {isActive ? <span className="absolute -left-2 h-6 w-1 rounded-r-full bg-blue-400" /> : null}
                 <Icon aria-hidden="true" size={19} strokeWidth={isActive ? 2.4 : 1.9} />
-                {showAlert ? (
+                {badgeCount > 0 ? (
                   <span className="absolute right-1 top-1 flex h-4 min-w-4 items-center justify-center rounded-full bg-rose-500 px-1 text-[9px] font-bold text-white">
-                    {unreadAlerts > 99 ? "99+" : unreadAlerts}
+                    {badgeCount > 99 ? "99+" : badgeCount}
                   </span>
                 ) : null}
               </Link>

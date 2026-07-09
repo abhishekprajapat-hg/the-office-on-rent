@@ -31,6 +31,7 @@ import {
 } from "lucide-react";
 import { EmptyState, Skeleton } from "../../../components/ui";
 import { StatusBadge } from "../../../components/crm";
+import ToastNotice from "../../../components/ui/ToastNotice";
 
 const INR_CURRENCY_FORMATTER = new Intl.NumberFormat("en-IN", {
   style: "currency",
@@ -184,6 +185,23 @@ const LEAD_REQUIREMENT_BHK_OPTIONS = [
   { value: "OTHER", label: "Other" },
 ];
 
+const LEAD_REQUIREMENT_COMMERCIAL_AMENITY_FIELDS = [
+  { key: "requirementsCommercialPantry", label: "Pantry" },
+  { key: "requirementsCommercialParkingAvailable", label: "Parking" },
+  { key: "requirementsCommercialReceptionArea", label: "Reception Area" },
+  { key: "requirementsCommercialWaitingArea", label: "Waiting Area" },
+  { key: "requirementsCommercialCafeteria", label: "Cafeteria" },
+  { key: "requirementsCommercialServerRoom", label: "Server / IT Room" },
+  { key: "requirementsCommercialStorageRoom", label: "Storage Room" },
+  { key: "requirementsCommercialBreakoutArea", label: "Breakout Area" },
+  { key: "requirementsCommercialLiftAvailable", label: "Lift Available" },
+  { key: "requirementsCommercialPowerBackup", label: "Power Backup" },
+  { key: "requirementsCommercialCentralAC", label: "Central AC" },
+  { key: "requirementsCommercialFireSafety", label: "Fire Safety" },
+  { key: "requirementsCommercialReadyToMove", label: "Ready to Move" },
+  { key: "requirementsCommercialUnderConstruction", label: "Under Construction" },
+];
+
 const LEAD_REQUIREMENT_RESIDENTIAL_AMENITY_FIELDS = [
   { key: "requirementsResidentialAmenityLift", label: "Lift" },
   { key: "requirementsResidentialAmenitySecurity", label: "Security" },
@@ -192,6 +210,11 @@ const LEAD_REQUIREMENT_RESIDENTIAL_AMENITY_FIELDS = [
   { key: "requirementsResidentialAmenityClubhouse", label: "Clubhouse" },
   { key: "requirementsResidentialAmenityPowerBackup", label: "Power Backup" },
   { key: "requirementsResidentialAmenityParking", label: "Parking" },
+  { key: "requirementsResidentialAmenityStudyRoom", label: "Study Room" },
+  { key: "requirementsResidentialAmenityServantRoom", label: "Servant Room" },
+  { key: "requirementsResidentialAmenityModularKitchen", label: "Modular Kitchen" },
+  { key: "requirementsResidentialAmenityElectricityBackup", label: "Electricity Backup" },
+  { key: "requirementsResidentialAmenityGasPipeline", label: "Gas Pipeline" },
 ];
 
 export const LeadsMatrixToolbar = ({
@@ -212,7 +235,7 @@ export const LeadsMatrixToolbar = ({
 
   return (
     <div
-      className={`ui-hero-card relative overflow-hidden rounded-2xl px-3 py-3 sm:px-4 sm:py-3 ${
+      className={`ui-hero-card relative overflow-hidden rounded-[26px] px-3 py-3 sm:rounded-2xl sm:px-4 sm:py-3 ${
         isDark
           ? "border-slate-700/80 bg-slate-900/90 shadow-[0_20px_80px_rgba(2,6,23,0.55)]"
           : "border-slate-200 bg-white shadow-[0_18px_55px_rgba(15,23,42,0.12)]"
@@ -230,48 +253,51 @@ export const LeadsMatrixToolbar = ({
 
       <div className="relative z-10 grid grid-cols-1 gap-3 lg:grid-cols-12">
         <div className="lg:col-span-8">
-          <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">
-            <div className={`rounded-xl border px-3 py-2 ${
+          <div className="grid grid-cols-3 gap-2 sm:grid-cols-3">
+            <div className={`min-h-[86px] rounded-2xl border px-2.5 py-3 sm:min-h-0 sm:rounded-xl sm:px-3 sm:py-2 ${
               isDark ? "border-slate-700/80 bg-slate-950/70" : "border-slate-200 bg-white/80"
             }`}>
-              <p className={`text-[10px] font-bold uppercase tracking-[0.14em] ${
+              <p className={`text-[9px] font-bold uppercase tracking-[0.1em] sm:text-[10px] sm:tracking-[0.14em] ${
                 isDark ? "text-slate-400" : "text-slate-500"
               }`}>
-                Visible Leads
+                <span className="sm:hidden">Visible</span>
+                <span className="hidden sm:inline">Visible Leads</span>
               </p>
-              <p className={`mt-1 text-xl font-display ${isDark ? "text-cyan-100" : "text-cyan-700"}`}>
+              <p className={`mt-2 text-2xl font-display leading-none sm:mt-1 sm:text-xl ${isDark ? "text-cyan-100" : "text-cyan-700"}`}>
                 {filteredLeads}
               </p>
             </div>
 
-            <div className={`rounded-xl border px-3 py-2 ${
+            <div className={`min-h-[86px] rounded-2xl border px-2.5 py-3 sm:min-h-0 sm:rounded-xl sm:px-3 sm:py-2 ${
               isDark ? "border-slate-700/80 bg-slate-950/70" : "border-slate-200 bg-white/80"
             }`}>
-              <p className={`text-[10px] font-bold uppercase tracking-[0.14em] ${
+              <p className={`text-[9px] font-bold uppercase tracking-[0.1em] sm:text-[10px] sm:tracking-[0.14em] ${
                 isDark ? "text-slate-400" : "text-slate-500"
               }`}>
-                Total Leads
+                <span className="sm:hidden">Total</span>
+                <span className="hidden sm:inline">Total Leads</span>
               </p>
-              <p className={`mt-1 text-xl font-display ${isDark ? "text-slate-100" : "text-slate-800"}`}>
+              <p className={`mt-2 text-2xl font-display leading-none sm:mt-1 sm:text-xl ${isDark ? "text-slate-100" : "text-slate-800"}`}>
                 {totalLeads}
               </p>
             </div>
 
-            <div className={`rounded-xl border px-3 py-2 ${
+            <div className={`min-h-[86px] rounded-2xl border px-2.5 py-3 sm:min-h-0 sm:rounded-xl sm:px-3 sm:py-2 ${
               isDark ? "border-rose-300/30 bg-rose-500/10" : "border-rose-200 bg-rose-50"
             }`}>
-              <p className={`text-[10px] font-bold uppercase tracking-[0.14em] ${
+              <p className={`text-[9px] font-bold uppercase tracking-[0.1em] sm:text-[10px] sm:tracking-[0.14em] ${
                 isDark ? "text-rose-200/90" : "text-rose-700"
               }`}>
-                Due Follow-ups
+                <span className="sm:hidden">Due</span>
+                <span className="hidden sm:inline">Due Follow-ups</span>
               </p>
-              <p className={`mt-1 text-xl font-display ${isDark ? "text-rose-100" : "text-rose-700"}`}>
+              <p className={`mt-2 text-2xl font-display leading-none sm:mt-1 sm:text-xl ${isDark ? "text-rose-100" : "text-rose-700"}`}>
                 {dueFollowUps}
               </p>
             </div>
           </div>
 
-          <div className="mt-3">
+          <div className="mt-3 rounded-2xl border px-3 py-2 sm:rounded-none sm:border-0 sm:px-0 sm:py-0">
             <div className="flex items-center justify-between text-[11px] font-semibold uppercase tracking-[0.14em]">
               <span className={isDark ? "text-slate-400" : "text-slate-500"}>View Coverage</span>
               <span className={isDark ? "text-cyan-200" : "text-cyan-700"}>{visibilityRatio}%</span>
@@ -292,26 +318,26 @@ export const LeadsMatrixToolbar = ({
         </div>
 
         <div className="lg:col-span-4">
-          <div className={`h-full rounded-2xl border p-3 ${
+          <div className={`h-full rounded-[22px] border p-2.5 sm:rounded-2xl sm:p-3 ${
             isDark
               ? "border-slate-700 bg-slate-950/70"
               : "border-slate-200 bg-white/80"
           }`}>
-            <p className={`text-[10px] font-bold uppercase tracking-[0.16em] ${
+            <p className={`px-1 text-[10px] font-bold uppercase tracking-[0.16em] sm:px-0 ${
               isDark ? "text-slate-400" : "text-slate-500"
             }`}>
               Quick Actions
             </p>
 
-            <div className="mt-3 flex flex-col gap-2">
+            <div className="mt-2 grid grid-cols-3 gap-1.5 sm:mt-3 sm:gap-2">
               <button
                 type="button"
                 onClick={onRefresh}
-                className={`h-10 rounded-xl border px-4 text-xs font-bold uppercase tracking-[0.14em] transition-colors ${
+                className={`inline-flex h-10 min-w-0 items-center justify-center gap-1.5 rounded-2xl border px-2 text-[10px] font-bold uppercase tracking-[0.08em] transition-colors sm:rounded-xl sm:text-xs sm:tracking-[0.12em] ${
                   isDark
                     ? "border-slate-600 bg-slate-900 text-slate-100 hover:border-emerald-300/60 hover:text-emerald-100"
                     : "border-slate-300 bg-white text-slate-700 hover:border-emerald-400 hover:text-emerald-700"
-                } inline-flex items-center justify-center gap-2`}
+                }`}
               >
                 {refreshing ? <Loader size={14} className="animate-spin" /> : <RefreshCw size={14} />}
                 Refresh Feed
@@ -321,9 +347,9 @@ export const LeadsMatrixToolbar = ({
                 <button
                   type="button"
                   onClick={onOpenAddModal}
-                  className={`h-10 rounded-xl px-4 text-xs font-bold uppercase tracking-[0.14em] text-white transition-colors ${
+                  className={`inline-flex h-10 min-w-0 items-center justify-center gap-1.5 rounded-2xl px-2 text-[10px] font-bold uppercase tracking-[0.08em] text-white transition-colors sm:rounded-xl sm:text-xs sm:tracking-[0.12em] ${
                     isDark ? "bg-emerald-600 hover:bg-emerald-500" : "bg-slate-900 hover:bg-emerald-600"
-                  } inline-flex items-center justify-center gap-2`}
+                  }`}
                 >
                   <Plus size={15} />
                   Add New Lead
@@ -334,11 +360,11 @@ export const LeadsMatrixToolbar = ({
                 <button
                   type="button"
                   onClick={onOpenBulkUploadModal}
-                  className={`h-10 rounded-xl border px-4 text-xs font-bold uppercase tracking-[0.14em] transition-colors ${
+                  className={`inline-flex h-10 min-w-0 items-center justify-center gap-1.5 rounded-2xl border px-2 text-[10px] font-bold uppercase tracking-[0.08em] transition-colors sm:rounded-xl sm:text-xs sm:tracking-[0.12em] ${
                     isDark
                       ? "border-cyan-300/50 bg-cyan-500/10 text-cyan-100 hover:bg-cyan-500/20"
                       : "border-cyan-300 bg-cyan-50 text-cyan-700 hover:bg-cyan-100"
-                  } inline-flex items-center justify-center gap-2`}
+                  }`}
                 >
                   <UploadCloud size={14} />
                   Bulk Upload
@@ -346,31 +372,6 @@ export const LeadsMatrixToolbar = ({
               )}
             </div>
 
-            <div className={`mt-3 rounded-xl border px-3 py-2 text-xs ${
-              isDark ? "border-slate-700 bg-slate-900/80 text-slate-300" : "border-slate-200 bg-slate-50 text-slate-600"
-            }`}>
-              <div className="flex items-center justify-between">
-                <span className="inline-flex items-center gap-1.5">
-                  <Eye size={12} />
-                  Visible
-                </span>
-                <span className="font-semibold">{filteredLeads}</span>
-              </div>
-              <div className="mt-1 flex items-center justify-between">
-                <span className="inline-flex items-center gap-1.5">
-                  <Users2 size={12} />
-                  Total
-                </span>
-                <span className="font-semibold">{totalLeads}</span>
-              </div>
-              <div className="mt-1 flex items-center justify-between">
-                <span className="inline-flex items-center gap-1.5">
-                  <CalendarClock size={12} />
-                  Due
-                </span>
-                <span className={`font-semibold ${isDark ? "text-rose-200" : "text-rose-700"}`}>{dueFollowUps}</span>
-              </div>
-            </div>
           </div>
         </div>
       </div>
@@ -378,23 +379,10 @@ export const LeadsMatrixToolbar = ({
   );
 };
 
-export const LeadsMatrixAlerts = ({ isDark, error, success }) => (
+export const LeadsMatrixAlerts = ({ error, success }) => (
   <>
-    {error && (
-      <div className={`ui-soft-panel mb-4 rounded-xl px-3 py-2 text-sm ${
-        isDark ? "border-rose-500/35 bg-rose-500/15 text-rose-100" : "border-rose-200 bg-rose-50 text-rose-700"
-      }`}>
-        {error}
-      </div>
-    )}
-
-    {success && (
-      <div className={`ui-soft-panel mb-4 flex items-center gap-2 rounded-xl px-3 py-2 text-sm ${
-        isDark ? "border-emerald-500/35 bg-emerald-500/15 text-emerald-100" : "border-emerald-200 bg-emerald-50 text-emerald-700"
-      }`}>
-        <CheckCircle2 size={14} /> {success}
-      </div>
-    )}
+    <ToastNotice message={error} type="error" />
+    <ToastNotice message={success} type="success" />
   </>
 );
 
@@ -551,189 +539,259 @@ export const LeadsMatrixFilters = ({
   viewMode = "TABLE",
   onViewModeChange,
   getStatusLabel,
-}) => (
-  <div className={`ui-soft-panel relative mb-4 overflow-hidden rounded-3xl p-3 sm:p-4 ${
+}) => {
+  const [mobileMoreOpen, setMobileMoreOpen] = React.useState(false);
+  const totalLeads = leadStatuses.reduce(
+    (sum, status) => sum + Number(statusBreakdown[status] || 0),
+    0,
+  );
+  const chipClass = (active) => `shrink-0 rounded-full border px-3 py-2 text-[11px] font-semibold uppercase tracking-[0.08em] transition-colors ${
+    active
+      ? isDark
+        ? "border-cyan-300/55 bg-cyan-500/20 text-cyan-100"
+        : "border-cyan-300 bg-cyan-50 text-cyan-700"
+      : isDark
+        ? "border-slate-700 bg-slate-950 text-slate-300 hover:border-slate-500"
+        : "border-slate-300 bg-white text-slate-600 hover:border-slate-400"
+  }`;
+  const inputClass = `h-11 w-full rounded-2xl border text-sm outline-none transition-colors ${
     isDark
-      ? "border-slate-700 bg-slate-900/85"
-      : "border-slate-200 bg-white"
-  }`}>
-    <div className="pointer-events-none absolute inset-0 opacity-80">
-      <div className={`absolute -left-12 top-0 h-28 w-28 rounded-full blur-2xl ${
-        isDark ? "bg-cyan-500/20" : "bg-cyan-300/35"
-      }`} />
-      <div className={`absolute right-0 top-0 h-24 w-24 rounded-full blur-2xl ${
-        isDark ? "bg-emerald-500/15" : "bg-emerald-300/30"
-      }`} />
-    </div>
+      ? "border-slate-700 bg-slate-950/90 text-slate-100 placeholder:text-slate-500 focus:border-cyan-300/50"
+      : "border-slate-300 bg-white text-slate-700 placeholder:text-slate-400 focus:border-cyan-400"
+  }`;
+  const selectClass = `h-11 w-full rounded-2xl border px-3 text-xs font-semibold outline-none transition-colors sm:text-sm sm:font-normal ${
+    isDark
+      ? "border-slate-700 bg-slate-950/90 text-slate-100 focus:border-cyan-300/50"
+      : "border-slate-300 bg-white text-slate-700 focus:border-cyan-400"
+  }`;
+  const dueButtonClass = `h-11 rounded-2xl border text-xs font-semibold uppercase tracking-[0.12em] transition-colors ${
+    showDueOnly
+      ? isDark
+        ? "border-rose-300/60 bg-rose-500/20 text-rose-100"
+        : "border-rose-300 bg-rose-50 text-rose-700"
+      : isDark
+        ? "border-slate-700 bg-slate-950/90 text-slate-300 hover:border-slate-500"
+        : "border-slate-300 bg-white text-slate-600 hover:border-slate-400"
+  }`;
 
-    <div className="relative z-10">
-      <div className="mb-3 flex items-center gap-2">
-        <div className={`inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-[10px] font-bold uppercase tracking-[0.14em] ${
-          isDark ? "border-slate-700 bg-slate-950 text-slate-300" : "border-slate-300 bg-slate-50 text-slate-600"
-        }`}>
-          <Filter size={11} />
-          Filter Stack
-        </div>
-        <p className={`text-[11px] font-semibold uppercase tracking-[0.14em] ${
-          isDark ? "text-slate-400" : "text-slate-500"
-        }`}>
-          Search, status and follow-up controls
-        </p>
+  return (
+    <div className={`ui-soft-panel relative mb-2 overflow-hidden rounded-2xl p-2.5 md:mb-4 md:rounded-3xl md:p-4 ${
+      isDark
+        ? "border-slate-700 bg-slate-900/85"
+        : "border-slate-200 bg-white"
+    }`}>
+      <div className="pointer-events-none absolute inset-0 hidden opacity-80 md:block">
+        <div className={`absolute -left-12 top-0 h-28 w-28 rounded-full blur-2xl ${
+          isDark ? "bg-cyan-500/20" : "bg-cyan-300/35"
+        }`} />
+        <div className={`absolute right-0 top-0 h-24 w-24 rounded-full blur-2xl ${
+          isDark ? "bg-emerald-500/15" : "bg-emerald-300/30"
+        }`} />
       </div>
 
-      <div className="grid grid-cols-1 gap-3 lg:grid-cols-12">
-      <div className="relative lg:col-span-4">
-        <Search className={`absolute left-3 top-1/2 -translate-y-1/2 ${isDark ? "text-slate-400" : "text-slate-500"}`} size={15} />
-        <input
-          type="text"
-          value={query}
-          onChange={(event) => onQueryChange(event.target.value)}
-          placeholder="Search by name, city, project, executive, phone"
-          className={`h-11 w-full rounded-2xl border pl-9 pr-9 text-sm outline-none transition-colors ${
-            isDark
-              ? "border-slate-700 bg-slate-950/90 text-slate-100 placeholder:text-slate-500 focus:border-cyan-300/50"
-              : "border-slate-300 bg-white text-slate-700 placeholder:text-slate-400 focus:border-cyan-400"
-          }`}
-        />
-        {query && (
+      <div className="relative z-10">
+        <div className="hidden md:block">
+          <div className="mb-3 flex items-center gap-2">
+            <div className={`inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-[10px] font-bold uppercase tracking-[0.14em] ${
+              isDark ? "border-slate-700 bg-slate-950 text-slate-300" : "border-slate-300 bg-slate-50 text-slate-600"
+            }`}>
+              <Filter size={11} />
+              Filter Stack
+            </div>
+            <p className={`text-[11px] font-semibold uppercase tracking-[0.14em] ${
+              isDark ? "text-slate-400" : "text-slate-500"
+            }`}>
+              Search, status and follow-up controls
+            </p>
+          </div>
+
+          <div className="grid grid-cols-2 gap-2.5 sm:gap-3 lg:grid-cols-12">
+            <div className="relative col-span-2 lg:col-span-4">
+              <Search className={`absolute left-3 top-1/2 -translate-y-1/2 ${isDark ? "text-slate-400" : "text-slate-500"}`} size={15} />
+              <input
+                type="text"
+                value={query}
+                onChange={(event) => onQueryChange(event.target.value)}
+                placeholder="Search by name, city, project, executive, phone"
+                className={`${inputClass} pl-9 pr-9`}
+              />
+              {query && (
+                <button
+                  type="button"
+                  onClick={() => onQueryChange("")}
+                  className={`absolute right-2 top-1/2 -translate-y-1/2 rounded p-1 ${
+                    isDark ? "text-slate-400 hover:bg-slate-800" : "text-slate-500 hover:bg-slate-100"
+                  }`}
+                  aria-label="Clear search"
+                >
+                  <X size={12} />
+                </button>
+              )}
+            </div>
+
+            <div className="lg:col-span-2">
+              <select value={statusFilter} onChange={(event) => onStatusFilterChange(event.target.value)} className={selectClass}>
+                <option value="ALL">All statuses</option>
+                {leadStatuses.map((status) => (
+                  <option key={status} value={status}>{getStatusLabel(status)}</option>
+                ))}
+              </select>
+            </div>
+
+            <div className="lg:col-span-2">
+              <div className={`flex h-11 items-center gap-2 rounded-2xl border px-3 ${
+                isDark ? "border-slate-700 bg-slate-950/90 text-slate-300" : "border-slate-300 bg-white text-slate-600"
+              }`}>
+                <SlidersHorizontal className="shrink-0" size={14} />
+                <select
+                  value={sortBy}
+                  onChange={(event) => onSortByChange(event.target.value)}
+                  className="h-full min-w-0 w-full bg-transparent text-xs font-semibold outline-none sm:text-sm sm:font-normal"
+                >
+                  <option value="RECENT">Latest updated</option>
+                  <option value="FOLLOW_UP">Next follow-up</option>
+                  <option value="NAME">Name A-Z</option>
+                </select>
+              </div>
+            </div>
+
+            <button type="button" onClick={() => onShowDueOnlyChange(!showDueOnly)} className={`col-span-2 lg:col-span-2 ${dueButtonClass}`}>
+              <span className="inline-flex items-center gap-1.5">
+                <CalendarClock size={13} />
+                {showDueOnly ? "Due Mode On" : "Due Follow-ups"}
+              </span>
+            </button>
+
+            <div className={`col-span-2 grid grid-cols-2 gap-1 rounded-2xl border p-1 lg:col-span-2 ${
+              isDark ? "border-slate-700 bg-slate-950/90" : "border-slate-300 bg-white"
+            }`}>
+              <button
+                type="button"
+                onClick={() => onViewModeChange?.("TABLE")}
+                aria-pressed={viewMode === "TABLE"}
+                className={`inline-flex h-9 items-center justify-center gap-1.5 rounded-xl text-[11px] font-bold uppercase tracking-[0.1em] transition-colors ${
+                  viewMode === "TABLE"
+                    ? isDark ? "bg-slate-800 text-cyan-100" : "bg-slate-100 text-blue-700 shadow-sm"
+                    : isDark ? "text-slate-400 hover:text-slate-100" : "text-slate-500 hover:text-slate-900"
+                }`}
+              >
+                <Table2 size={13} />
+                Table
+              </button>
+              <button
+                type="button"
+                onClick={() => onViewModeChange?.("KANBAN")}
+                aria-pressed={viewMode === "KANBAN"}
+                className={`inline-flex h-9 items-center justify-center gap-1.5 rounded-xl text-[11px] font-bold uppercase tracking-[0.1em] transition-colors ${
+                  viewMode === "KANBAN"
+                    ? isDark ? "bg-slate-800 text-cyan-100" : "bg-slate-100 text-blue-700 shadow-sm"
+                    : isDark ? "text-slate-400 hover:text-slate-100" : "text-slate-500 hover:text-slate-900"
+                }`}
+              >
+                <LayoutGrid size={13} />
+                Kanban
+              </button>
+            </div>
+          </div>
+
+          <div className="mt-3 flex flex-wrap gap-2 sm:-mx-1 sm:flex-nowrap sm:overflow-x-auto sm:px-1 sm:pb-1 sm:custom-scrollbar">
+            <button type="button" onClick={() => onStatusFilterChange("ALL")} className={chipClass(statusFilter === "ALL")}>
+              All ({totalLeads})
+            </button>
+            {leadStatuses.map((status) => (
+              <button key={status} type="button" onClick={() => onStatusFilterChange(status)} className={chipClass(statusFilter === status)}>
+                {getStatusLabel(status)} ({statusBreakdown[status] || 0})
+              </button>
+            ))}
+          </div>
+        </div>
+
+        <div className="md:hidden">
+          <div className="relative">
+            <Search className={`absolute left-3 top-1/2 -translate-y-1/2 ${isDark ? "text-slate-400" : "text-slate-500"}`} size={15} />
+            <input
+              type="text"
+              value={query}
+              onChange={(event) => onQueryChange(event.target.value)}
+              placeholder="Search leads"
+              className={`${inputClass} pl-9 pr-9`}
+            />
+            {query && (
+              <button
+                type="button"
+                onClick={() => onQueryChange("")}
+                className={`absolute right-2 top-1/2 -translate-y-1/2 rounded p-1 ${
+                  isDark ? "text-slate-400 hover:bg-slate-800" : "text-slate-500 hover:bg-slate-100"
+                }`}
+                aria-label="Clear search"
+              >
+                <X size={12} />
+              </button>
+            )}
+          </div>
+
+          <div className="mt-2 flex flex-wrap gap-2">
+            <button type="button" onClick={() => onStatusFilterChange("ALL")} className={chipClass(statusFilter === "ALL")}>
+              All {totalLeads}
+            </button>
+            {leadStatuses.map((status) => (
+              <button key={status} type="button" onClick={() => onStatusFilterChange(status)} className={chipClass(statusFilter === status)}>
+                {getStatusLabel(status)} {statusBreakdown[status] || 0}
+              </button>
+            ))}
+          </div>
+
           <button
             type="button"
-            onClick={() => onQueryChange("")}
-            className={`absolute right-2 top-1/2 -translate-y-1/2 rounded p-1 ${
-              isDark ? "text-slate-400 hover:bg-slate-800" : "text-slate-500 hover:bg-slate-100"
+            onClick={() => setMobileMoreOpen((prev) => !prev)}
+            className={`mt-2 inline-flex h-10 w-full items-center justify-center gap-2 rounded-xl border text-xs font-bold uppercase tracking-[0.12em] ${
+              isDark
+                ? "border-slate-700 bg-slate-950 text-slate-300"
+                : "border-slate-300 bg-white text-slate-600"
             }`}
-            aria-label="Clear search"
+            aria-expanded={mobileMoreOpen}
           >
-            <X size={12} />
+            <SlidersHorizontal size={14} />
+            {mobileMoreOpen ? "Hide Filters" : "More Filters"}
           </button>
-        )}
-      </div>
 
-      <div className="lg:col-span-2">
-        <select
-          value={statusFilter}
-          onChange={(event) => onStatusFilterChange(event.target.value)}
-          className={`h-11 w-full rounded-2xl border px-3 text-sm outline-none transition-colors ${
-            isDark
-              ? "border-slate-700 bg-slate-950/90 text-slate-100 focus:border-cyan-300/50"
-              : "border-slate-300 bg-white text-slate-700 focus:border-cyan-400"
-          }`}
-        >
-          <option value="ALL">All statuses</option>
-          {leadStatuses.map((status) => (
-            <option key={status} value={status}>
-              {getStatusLabel(status)}
-            </option>
-          ))}
-        </select>
-      </div>
+          {mobileMoreOpen ? (
+            <div className={`mt-2 space-y-2 rounded-2xl border p-2 ${
+              isDark ? "border-slate-700 bg-slate-950/90" : "border-slate-200 bg-slate-50"
+            }`}>
+              <select value={sortBy} onChange={(event) => onSortByChange(event.target.value)} className={selectClass}>
+                <option value="RECENT">Latest updated</option>
+                <option value="FOLLOW_UP">Next follow-up</option>
+                <option value="NAME">Name A-Z</option>
+              </select>
 
-      <div className="lg:col-span-2">
-        <div className={`flex h-11 items-center gap-2 rounded-2xl border px-3 ${
-          isDark ? "border-slate-700 bg-slate-950/90 text-slate-300" : "border-slate-300 bg-white text-slate-600"
-        }`}>
-          <SlidersHorizontal size={14} />
-          <select
-            value={sortBy}
-            onChange={(event) => onSortByChange(event.target.value)}
-            className="h-full w-full bg-transparent text-sm outline-none"
-          >
-            <option value="RECENT">Latest updated</option>
-            <option value="FOLLOW_UP">Next follow-up</option>
-            <option value="NAME">Name A-Z</option>
-          </select>
+              <button type="button" onClick={() => onShowDueOnlyChange(!showDueOnly)} className={`w-full ${dueButtonClass}`}>
+                <span className="inline-flex items-center gap-1.5">
+                  <CalendarClock size={13} />
+                  {showDueOnly ? "Due Mode On" : "Due Follow-ups"}
+                </span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => onViewModeChange?.("TABLE")}
+                className={`inline-flex h-10 w-full items-center justify-center gap-1.5 rounded-xl border text-[11px] font-bold uppercase tracking-[0.1em] transition-colors ${
+                  viewMode === "TABLE"
+                    ? isDark ? "border-slate-700 bg-slate-800 text-cyan-100" : "border-slate-200 bg-white text-blue-700 shadow-sm"
+                    : isDark ? "border-slate-700 text-slate-400" : "border-slate-300 text-slate-500"
+                }`}
+                aria-pressed={viewMode === "TABLE"}
+              >
+                <Table2 size={13} />
+                List View
+              </button>
+            </div>
+          ) : null}
         </div>
       </div>
-
-      <button
-        type="button"
-        onClick={() => onShowDueOnlyChange(!showDueOnly)}
-        className={`lg:col-span-2 h-11 rounded-2xl border text-xs font-semibold uppercase tracking-[0.12em] transition-colors ${
-          showDueOnly
-            ? isDark
-              ? "border-rose-300/60 bg-rose-500/20 text-rose-100"
-              : "border-rose-300 bg-rose-50 text-rose-700"
-            : isDark
-              ? "border-slate-700 bg-slate-950/90 text-slate-300 hover:border-slate-500"
-              : "border-slate-300 bg-white text-slate-600 hover:border-slate-400"
-        }`}
-      >
-        <span className="inline-flex items-center gap-1.5">
-          <CalendarClock size={13} />
-          {showDueOnly ? "Due Mode On" : "Due Follow-ups"}
-        </span>
-      </button>
-
-      <div className={`grid grid-cols-2 gap-1 rounded-2xl border p-1 lg:col-span-2 ${
-        isDark ? "border-slate-700 bg-slate-950/90" : "border-slate-300 bg-white"
-      }`}>
-        <button
-          type="button"
-          onClick={() => onViewModeChange?.("TABLE")}
-          aria-pressed={viewMode === "TABLE"}
-          className={`inline-flex h-9 items-center justify-center gap-1.5 rounded-xl text-[11px] font-bold uppercase tracking-[0.1em] transition-colors ${
-            viewMode === "TABLE"
-              ? isDark ? "bg-slate-800 text-cyan-100" : "bg-slate-100 text-blue-700 shadow-sm"
-              : isDark ? "text-slate-400 hover:text-slate-100" : "text-slate-500 hover:text-slate-900"
-          }`}
-        >
-          <Table2 size={13} />
-          Table
-        </button>
-        <button
-          type="button"
-          onClick={() => onViewModeChange?.("KANBAN")}
-          aria-pressed={viewMode === "KANBAN"}
-          className={`inline-flex h-9 items-center justify-center gap-1.5 rounded-xl text-[11px] font-bold uppercase tracking-[0.1em] transition-colors ${
-            viewMode === "KANBAN"
-              ? isDark ? "bg-slate-800 text-cyan-100" : "bg-slate-100 text-blue-700 shadow-sm"
-              : isDark ? "text-slate-400 hover:text-slate-100" : "text-slate-500 hover:text-slate-900"
-          }`}
-        >
-          <LayoutGrid size={13} />
-          Kanban
-        </button>
-      </div>
     </div>
-
-    <div className="mt-3 flex gap-2 overflow-x-auto pb-1 custom-scrollbar">
-      <button
-        type="button"
-        onClick={() => onStatusFilterChange("ALL")}
-        className={`shrink-0 rounded-full border px-3 py-1.5 text-[11px] font-semibold uppercase tracking-[0.12em] transition-colors ${
-          statusFilter === "ALL"
-            ? isDark
-              ? "border-emerald-300/55 bg-emerald-500/20 text-emerald-100"
-              : "border-emerald-300 bg-emerald-50 text-emerald-700"
-            : isDark
-              ? "border-slate-700 bg-slate-950 text-slate-300 hover:border-slate-500"
-              : "border-slate-300 bg-white text-slate-600 hover:border-slate-400"
-        }`}
-      >
-        All ({leadStatuses.reduce((sum, status) => sum + Number(statusBreakdown[status] || 0), 0)})
-      </button>
-      {leadStatuses.map((status) => (
-        <button
-          key={status}
-          type="button"
-          onClick={() => onStatusFilterChange(status)}
-          className={`shrink-0 rounded-full border px-3 py-1.5 text-[11px] font-semibold uppercase tracking-[0.12em] transition-colors ${
-            statusFilter === status
-              ? isDark
-                ? "border-cyan-300/55 bg-cyan-500/20 text-cyan-100"
-                : "border-cyan-300 bg-cyan-50 text-cyan-700"
-              : isDark
-                ? "border-slate-700 bg-slate-950 text-slate-300 hover:border-slate-500"
-                : "border-slate-300 bg-white text-slate-600 hover:border-slate-400"
-          }`}
-        >
-          {getStatusLabel(status)} ({statusBreakdown[status] || 0})
-        </button>
-      ))}
-    </div>
-    </div>
-  </div>
-);
+  );
+};
 
 export const LeadsMatrixTable = ({
   isDark,
@@ -742,6 +800,7 @@ export const LeadsMatrixTable = ({
   statusBreakdown = {},
   viewMode = "TABLE",
   onOpenLeadDetails,
+  canAssignLead = false,
   onInlineStatusChange,
   updatingInlineStatusId,
   leadStatuses = [],
@@ -792,6 +851,40 @@ export const LeadsMatrixTable = ({
 
       onInlineStatusChange?.(lead, nextStatus);
     };
+
+    if (compact) {
+      return (
+        <div
+          className="relative inline-flex shrink-0"
+          onClick={(event) => event.stopPropagation()}
+          onKeyDown={(event) => event.stopPropagation()}
+        >
+          <select
+            value={currentStatus}
+            disabled={isUpdating}
+            onChange={(event) => handleStatusSelect(event.target.value)}
+            className={`h-10 max-w-[116px] appearance-none rounded-full border py-1 pl-3 pr-7 text-[10px] font-bold uppercase outline-none transition-all focus:ring-2 ${
+              getStatusColor(lead?.status)
+            } ${
+              isUpdating ? "cursor-wait opacity-60" : "cursor-pointer"
+            } ${
+              isDark ? "focus:ring-cyan-300/20" : "focus:ring-blue-200"
+            }`}
+            title="Change lead status"
+            aria-label={`Change status for ${lead?.name || "lead"}`}
+          >
+            {leadStatuses.map((status) => (
+              <option key={status} value={status}>
+                {getStatusLabel(status)}
+              </option>
+            ))}
+          </select>
+          <span className="pointer-events-none absolute right-2.5 top-1/2 -translate-y-1/2 text-[9px] font-bold">
+            v
+          </span>
+        </div>
+      );
+    }
 
     return (
       <div
@@ -895,7 +988,108 @@ export const LeadsMatrixTable = ({
           description="Try clearing the search, switching status tabs, or turning off due follow-up mode."
         />
       ) : viewMode === "KANBAN" ? (
-        <div className="relative z-10 overflow-x-auto p-3 custom-scrollbar">
+        <>
+        <div className="relative z-10 space-y-3 p-2.5 md:hidden">
+          {leadStatuses.map((status) => {
+            const rows = filteredLeads.filter(
+              (lead) => String(lead?.status || "NEW").toUpperCase() === status,
+            );
+            const columnVisibleCount =
+              kanbanVisibleByStatus[status] || INITIAL_KANBAN_COLUMN_LEADS;
+            const visibleRows = rows.slice(0, columnVisibleCount);
+            const hiddenRowsCount = Math.max(0, rows.length - visibleRows.length);
+
+            return (
+              <section
+                key={status}
+                className={`rounded-2xl border ${
+                  isDark ? "border-slate-700 bg-slate-950/60" : "border-slate-200 bg-slate-50"
+                }`}
+              >
+                <div className={`flex items-center justify-between gap-2 border-b px-3 py-2 ${
+                  isDark ? "border-slate-700 bg-slate-950/80" : "border-slate-200 bg-white/90"
+                }`}>
+                  <StatusBadge status={status} />
+                  <span className={`text-xs font-bold ${isDark ? "text-slate-400" : "text-slate-500"}`}>
+                    {rows.length || statusBreakdown[status] || 0}
+                  </span>
+                </div>
+
+                <div className="space-y-2 p-2">
+                  {rows.length === 0 ? (
+                    <div className={`rounded-xl border border-dashed px-3 py-5 text-center text-xs ${
+                      isDark ? "border-slate-700 text-slate-500" : "border-slate-300 text-slate-400"
+                    }`}>
+                      No leads
+                    </div>
+                  ) : visibleRows.map((lead) => {
+                    const pendingAmount = getLeadPendingAmount(lead);
+                    const followUpDue = isFollowUpDue(lead);
+                    return (
+                      <button
+                        type="button"
+                        key={lead._id}
+                        onClick={() => onOpenLeadDetails(lead)}
+                        className={`w-full rounded-xl border p-3 text-left transition ${
+                          isDark
+                            ? "border-slate-700 bg-slate-900/80 hover:border-cyan-300/45"
+                            : "border-slate-200 bg-white hover:border-cyan-300"
+                        }`}
+                      >
+                        <div className="flex min-w-0 items-start justify-between gap-2">
+                          <div className="min-w-0">
+                            <p className={`truncate text-sm font-bold ${isDark ? "text-slate-100" : "text-slate-900"}`}>
+                              {lead.name || "Unnamed lead"}
+                            </p>
+                            <p className={`mt-0.5 truncate text-xs ${isDark ? "text-slate-400" : "text-slate-500"}`}>
+                              {lead.projectInterested || "Project not set"}
+                            </p>
+                          </div>
+                          <LeadSourceBadge lead={lead} />
+                        </div>
+                        <div className="mt-3 grid grid-cols-1 gap-1 text-xs">
+                          <p className={isDark ? "text-slate-300" : "text-slate-600"}>{lead.phone || "No phone"}</p>
+                          <p className={isDark ? "font-semibold text-cyan-100" : "font-semibold text-cyan-700"}>
+                            {lead.assignedTo?.name || "Unassigned"}
+                          </p>
+                          <p className={followUpDue ? "font-bold text-rose-600" : (isDark ? "text-slate-400" : "text-slate-500")}>
+                            {followUpDue ? "Overdue: " : "Next: "}
+                            {formatDate(lead.nextFollowUp)}
+                          </p>
+                          {pendingAmount ? (
+                            <p className={isDark ? "font-semibold text-amber-200" : "font-semibold text-amber-700"}>
+                              Pending {formatCurrencyInr(pendingAmount)}
+                            </p>
+                          ) : null}
+                        </div>
+                      </button>
+                    );
+                  })}
+                  {hiddenRowsCount > 0 ? (
+                    <button
+                      type="button"
+                      onClick={() =>
+                        setKanbanVisibleByStatus((prev) => ({
+                          ...prev,
+                          [status]: columnVisibleCount + KANBAN_COLUMN_INCREMENT,
+                        }))
+                      }
+                      className={`h-10 w-full rounded-xl border border-dashed px-3 text-[11px] font-bold uppercase tracking-[0.12em] transition-colors ${
+                        isDark
+                          ? "border-slate-700 text-slate-400 hover:border-cyan-300/40 hover:text-cyan-100"
+                          : "border-slate-300 text-slate-500 hover:border-cyan-300 hover:text-cyan-700"
+                      }`}
+                    >
+                      Show {Math.min(KANBAN_COLUMN_INCREMENT, hiddenRowsCount)} more
+                    </button>
+                  ) : null}
+                </div>
+              </section>
+            );
+          })}
+        </div>
+
+        <div className="relative z-10 hidden overflow-x-auto p-3 custom-scrollbar md:block">
           <div className="grid min-w-[980px] grid-cols-7 gap-3">
             {leadStatuses.map((status) => {
               const rows = filteredLeads.filter(
@@ -1000,9 +1194,10 @@ export const LeadsMatrixTable = ({
             })}
           </div>
         </div>
+        </>
       ) : (
         <>
-          <div className="relative z-10 max-h-[68vh] overflow-y-auto p-2.5 custom-scrollbar md:hidden">
+          <div className="relative z-10 p-2.5 md:hidden">
             <div className="space-y-2.5">
               {visibleLeads.map((lead) => {
                 const pendingAmount = getLeadPendingAmount(lead);
@@ -1076,11 +1271,27 @@ export const LeadsMatrixTable = ({
                       </p>
                     </div>
 
-                    <div className={`mt-3 inline-flex items-center gap-1 text-[11px] font-bold uppercase tracking-[0.13em] ${
-                      isDark ? "text-cyan-200" : "text-cyan-700"
-                    }`}>
-                      Open profile
-                      <ArrowUpRight size={12} />
+                    <div className="mt-3 flex flex-wrap items-center gap-2">
+                      <span className={`inline-flex items-center gap-1 text-[11px] font-bold uppercase tracking-[0.13em] ${
+                        isDark ? "text-cyan-200" : "text-cyan-700"
+                      }`}>
+                        Open profile
+                        <ArrowUpRight size={12} />
+                      </span>
+                      {canAssignLead ? (
+                        <button
+                          type="button"
+                          onClick={(event) => {
+                            event.stopPropagation();
+                            onOpenLeadDetails(lead);
+                          }}
+                          className={`inline-flex h-8 items-center justify-center rounded-lg border px-2.5 text-[10px] font-bold uppercase tracking-[0.1em] ${
+                            isDark ? "border-emerald-400/35 text-emerald-100" : "border-emerald-200 text-emerald-700"
+                          }`}
+                        >
+                          Assign / Transfer
+                        </button>
+                      ) : null}
                     </div>
                   </div>
                 );
@@ -1212,6 +1423,20 @@ export const LeadsMatrixTable = ({
                           </p>
                           <ArrowUpRight size={13} className={isDark ? "text-slate-500 group-hover:text-cyan-200" : "text-slate-400 group-hover:text-cyan-600"} />
                         </div>
+                        {canAssignLead ? (
+                          <button
+                            type="button"
+                            onClick={(event) => {
+                              event.stopPropagation();
+                              onOpenLeadDetails(lead);
+                            }}
+                            className={`mt-2 h-8 rounded-lg border px-2 text-[10px] font-bold uppercase tracking-[0.1em] ${
+                              isDark ? "border-emerald-400/35 text-emerald-100 hover:bg-emerald-500/10" : "border-emerald-200 text-emerald-700 hover:bg-emerald-50"
+                            }`}
+                          >
+                            Assign / Transfer
+                          </button>
+                        ) : null}
                       </div>
                     </div>
                   );
@@ -1251,7 +1476,7 @@ export const AddLeadModal = ({
   onSave,
   savingLead,
 }) => {
-  const inputClass = `h-10 w-full rounded-lg border px-3 text-sm ${
+  const inputClass = `h-11 w-full rounded-lg border px-3 text-sm md:h-10 ${
     isDark ? "border-slate-700 bg-slate-950 text-slate-200" : "border-slate-300 bg-white text-slate-700"
   }`;
   const sectionCardClass = `rounded-xl border p-3 ${
@@ -1260,7 +1485,7 @@ export const AddLeadModal = ({
   const sectionHeadingClass = `mb-2 text-[11px] font-bold uppercase tracking-[0.14em] ${
     isDark ? "text-slate-400" : "text-slate-500"
   }`;
-  const checkboxLabelClass = `inline-flex items-center gap-1.5 rounded border px-2 py-1 text-[11px] ${
+  const checkboxLabelClass = `inline-flex min-h-10 items-center gap-1.5 rounded border px-2.5 py-2 text-[11px] md:min-h-0 md:px-2 md:py-1 ${
     isDark ? "border-slate-700 bg-slate-900 text-slate-200" : "border-slate-300 bg-white text-slate-700"
   }`;
 
@@ -1277,7 +1502,7 @@ export const AddLeadModal = ({
       initial={{ opacity: 0 }}
       animate={{ opacity: 1 }}
       exit={{ opacity: 0 }}
-      className={`fixed inset-0 z-50 flex items-center justify-center p-3 pb-[calc(6.75rem+env(safe-area-inset-bottom))] sm:p-4 ${
+      className={`mobile-bottom-sheet fixed inset-0 z-50 flex items-stretch justify-center p-0 sm:items-center sm:p-4 ${
         isDark ? "bg-slate-950/70" : "bg-slate-900/40"
       }`}
     >
@@ -1285,7 +1510,7 @@ export const AddLeadModal = ({
         initial={{ scale: 0.96, y: 10 }}
         animate={{ scale: 1, y: 0 }}
         exit={{ scale: 0.96, y: 10 }}
-        className={`ui-soft-panel flex w-full max-w-3xl max-h-[calc(100dvh-8rem-env(safe-area-inset-bottom))] flex-col overflow-hidden rounded-2xl shadow-2xl sm:max-h-[92vh] ${
+        className={`mobile-fullscreen-panel ui-soft-panel flex h-dvh w-full max-w-3xl flex-col overflow-hidden rounded-none shadow-2xl sm:h-auto sm:max-h-[92vh] sm:rounded-2xl ${
           isDark ? "border-slate-700 bg-slate-900" : "border-slate-200 bg-white"
         }`}
       >
@@ -1293,13 +1518,14 @@ export const AddLeadModal = ({
           <h3 className={`text-lg font-bold ${isDark ? "text-slate-100" : "text-slate-900"}`}>Add New Lead</h3>
           <button
             onClick={onClose}
-            className={`rounded p-1 ${isDark ? "text-slate-300 hover:bg-slate-800" : "text-slate-600 hover:bg-slate-100"}`}
+            className={`inline-flex h-10 w-10 items-center justify-center rounded-xl ${isDark ? "text-slate-300 hover:bg-slate-800" : "text-slate-600 hover:bg-slate-100"}`}
+            aria-label="Close add lead modal"
           >
             <X size={16} />
           </button>
         </div>
 
-        <div className="custom-scrollbar min-h-0 flex-1 space-y-3 overflow-y-auto px-4 py-3 sm:px-5">
+        <div className="mobile-modal-scroll custom-scrollbar flex-1 space-y-3 px-3 py-3 sm:px-5">
           <select
             value={formData.inventoryId}
             onChange={(event) => onInventorySelection(event.target.value)}
@@ -1378,14 +1604,16 @@ export const AddLeadModal = ({
                   <input placeholder="Cabins" value={formData.requirementsCommercialCabins} onChange={(event) => updateField("requirementsCommercialCabins", event.target.value)} className={inputClass} />
                 </div>
                 <div className="mt-2 flex flex-wrap gap-2">
-                  <label className={checkboxLabelClass}>
-                    <input type="checkbox" checked={Boolean(formData.requirementsCommercialPantry)} onChange={(event) => updateField("requirementsCommercialPantry", event.target.checked)} />
-                    Pantry Required
-                  </label>
-                  <label className={checkboxLabelClass}>
-                    <input type="checkbox" checked={Boolean(formData.requirementsCommercialParkingAvailable)} onChange={(event) => updateField("requirementsCommercialParkingAvailable", event.target.checked)} />
-                    Parking Required
-                  </label>
+                  {LEAD_REQUIREMENT_COMMERCIAL_AMENITY_FIELDS.map((field) => (
+                    <label key={field.key} className={checkboxLabelClass}>
+                      <input
+                        type="checkbox"
+                        checked={Boolean(formData[field.key])}
+                        onChange={(event) => updateField(field.key, event.target.checked)}
+                      />
+                      {field.label}
+                    </label>
+                  ))}
                 </div>
               </div>
             ) : null}
@@ -1418,12 +1646,12 @@ export const AddLeadModal = ({
           </div>
         </div>
 
-        <div className={`sticky bottom-0 flex shrink-0 gap-2 border-t px-4 py-3 sm:px-5 ${
+        <div className={`mobile-safe-footer flex shrink-0 gap-2 border-t px-3 pt-3 sm:px-5 sm:pb-3 ${
           isDark ? "border-slate-700 bg-slate-900" : "border-slate-200 bg-white"
         }`}>
           <button
             onClick={onClose}
-            className={`h-10 flex-1 rounded-lg text-sm font-semibold ${
+            className={`h-11 flex-1 rounded-lg text-sm font-semibold md:h-10 ${
               isDark ? "bg-slate-800 text-slate-200 hover:bg-slate-700" : "bg-slate-100 text-slate-600"
             }`}
           >
@@ -1432,7 +1660,7 @@ export const AddLeadModal = ({
           <button
             onClick={onSave}
             disabled={savingLead}
-            className={`h-10 flex-1 rounded-lg text-sm font-semibold text-white disabled:opacity-60 ${
+            className={`h-11 flex-1 rounded-lg text-sm font-semibold text-white disabled:opacity-60 md:h-10 ${
               isDark ? "bg-emerald-600 hover:bg-emerald-500" : "bg-slate-900 hover:bg-emerald-600"
             }`}
           >
@@ -1458,7 +1686,7 @@ export const BulkLeadUploadModal = ({
     initial={{ opacity: 0 }}
     animate={{ opacity: 1 }}
     exit={{ opacity: 0 }}
-    className={`fixed inset-0 z-50 flex items-center justify-center p-4 ${
+    className={`mobile-bottom-sheet fixed inset-0 z-50 flex items-center justify-center p-4 ${
       isDark ? "bg-slate-950/70" : "bg-slate-900/40"
     }`}
   >
@@ -1466,7 +1694,7 @@ export const BulkLeadUploadModal = ({
       initial={{ scale: 0.96, y: 10 }}
       animate={{ scale: 1, y: 0 }}
       exit={{ scale: 0.96, y: 10 }}
-      className={`ui-soft-panel w-full max-w-2xl rounded-2xl p-5 shadow-2xl ${
+      className={`mobile-fullscreen-panel ui-soft-panel flex w-full max-w-2xl flex-col overflow-hidden rounded-2xl p-4 shadow-2xl sm:p-5 ${
         isDark ? "border-slate-700 bg-slate-900" : "border-slate-200 bg-white"
       }`}
     >
@@ -1482,7 +1710,7 @@ export const BulkLeadUploadModal = ({
         </button>
       </div>
 
-      <div className="space-y-3">
+      <div className="mobile-modal-scroll flex-1 space-y-3">
         <label className={`flex cursor-pointer items-center justify-center gap-2 rounded-xl border border-dashed px-4 py-5 text-sm ${
           isDark
             ? "border-slate-600 bg-slate-950 text-slate-300 hover:border-cyan-400/45"
@@ -1525,7 +1753,7 @@ export const BulkLeadUploadModal = ({
         />
       </div>
 
-      <div className="mt-4 flex gap-2">
+      <div className="mobile-safe-footer mt-4 flex gap-2">
         <button
           onClick={onClose}
           className={`h-10 flex-1 rounded-lg text-sm font-semibold ${

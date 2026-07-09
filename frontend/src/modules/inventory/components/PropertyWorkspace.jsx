@@ -124,7 +124,7 @@ export const PropertyCard = React.memo(({
       <button
         type="button"
         onClick={() => onView(asset?._id)}
-        className="relative block h-52 w-full overflow-hidden bg-slate-100 text-left focus:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500"
+        className="relative block h-40 w-full overflow-hidden bg-slate-100 text-left focus:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500 sm:h-52"
         aria-label={`View ${getAssetTitle(asset)}`}
       >
         {image ? (
@@ -151,9 +151,9 @@ export const PropertyCard = React.memo(({
         )}
       </button>
 
-      <div className="flex flex-1 flex-col gap-4 p-4">
+      <div className="flex flex-1 flex-col gap-3 p-3 sm:gap-4 sm:p-4">
         <div className="min-w-0">
-          <div className="flex items-start justify-between gap-3">
+          <div className="flex items-start justify-between gap-2 sm:gap-3">
             <div className="min-w-0">
               <h3 className="truncate text-base font-bold text-slate-900">{getAssetTitle(asset)}</h3>
               <p className="mt-1 flex items-center gap-1.5 truncate text-xs font-medium text-slate-500">
@@ -171,14 +171,14 @@ export const PropertyCard = React.memo(({
             </div>
           </div>
 
-          <div className="mt-3 flex flex-wrap gap-2">
+          <div className="mt-2 flex flex-wrap gap-1.5 sm:mt-3 sm:gap-2">
             <Badge variant="outline">{formatEnum(asset?.type)}</Badge>
             <Badge variant="outline">{formatEnum(asset?.inventoryType)}</Badge>
             <Badge variant="outline">{formatEnum(asset?.furnishingStatus)}</Badge>
           </div>
         </div>
 
-        <div className="grid grid-cols-2 gap-2">
+        <div className="grid grid-cols-2 gap-1.5 sm:gap-2">
           <PropertyMeta icon={Layers3} label="Area" value={getAreaLabel(asset)} />
           <PropertyMeta icon={Building2} label="Unit" value={asset?.unitNumber || asset?.propertyId} />
         </div>
@@ -201,7 +201,7 @@ export const PropertyCard = React.memo(({
           </div>
         ) : null}
 
-        <div className="mt-auto space-y-3 border-t border-slate-100 pt-3">
+        <div className="mt-auto space-y-2.5 border-t border-slate-100 pt-3 sm:space-y-3">
           <div className="flex items-center gap-2">
             <Button type="button" size="sm" variant="secondary" onClick={() => onView(asset?._id)} className="flex-1">
               <Eye size={14} />
@@ -422,7 +422,21 @@ export const PropertyWorkspace = ({
   if (viewMode === "table") {
     return (
       <>
-        <PropertyTable assets={visibleAssets} {...actionProps} />
+        <div className="hidden md:block">
+          <PropertyTable assets={visibleAssets} {...actionProps} />
+        </div>
+        <div className="grid grid-cols-1 gap-3 pb-8 md:hidden">
+          {visibleAssets.map((asset) => (
+            <PropertyCard
+              key={asset._id}
+              asset={asset}
+              deleting={actionProps.deletingId === asset._id}
+              updatingStatus={actionProps.updatingStatusId === asset._id}
+              requestingStatus={actionProps.requestingStatusId === asset._id}
+              {...actionProps}
+            />
+          ))}
+        </div>
         {hiddenCount > 0 ? (
           <div className="mt-4 flex justify-center">
             <button
@@ -440,7 +454,7 @@ export const PropertyWorkspace = ({
 
   return (
     <>
-      <div className="grid grid-cols-1 gap-5 pb-8 md:grid-cols-2 2xl:grid-cols-3">
+      <div className="grid grid-cols-1 gap-3 pb-8 sm:gap-5 md:grid-cols-2 2xl:grid-cols-3">
         {visibleAssets.map((asset) => (
           <PropertyCard
             key={asset._id}

@@ -30,17 +30,21 @@ const AppTopCommandBar = ({
   pageHeader,
 }) => {
   const [titleLead, titleAccent] = normalizeHeaderTitle(pageHeader);
+  const title = titleAccent ? `${titleLead} ${titleAccent}` : titleLead;
 
   return (
-    <header className="shrink-0 bg-slate-50/50 px-3 py-3 sm:px-4 lg:px-6">
-      <div className="flex flex-col gap-3 xl:flex-row xl:items-end xl:justify-between">
-        <div className="flex min-w-0 items-start">
-          <div className="min-w-0">
-            <h1 className="font-display text-3xl text-slate-800 tracking-widest sm:text-4xl">
-              {titleLead}
-              {titleAccent ? <span className="text-emerald-600"> {titleAccent}</span> : null}
+    <header className="shrink-0 bg-slate-50/50 px-3 py-1.5 sm:px-4 sm:py-3 lg:px-6">
+      <div className="flex min-w-0 items-center">
+        <div className="min-w-0">
+          <h1
+            className="font-display max-w-full truncate text-xl font-semibold leading-tight tracking-normal text-slate-800 sm:text-4xl sm:tracking-widest"
+            title={title}
+          >
+            <span>{titleLead}</span>
+            {titleAccent ? (
+              <span className="text-emerald-600"> {titleAccent}</span>
+            ) : null}
             </h1>
-          </div>
         </div>
       </div>
     </header>

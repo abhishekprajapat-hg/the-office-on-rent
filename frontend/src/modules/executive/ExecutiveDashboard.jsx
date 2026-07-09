@@ -5,8 +5,10 @@ import {
   CheckCircle,
   Clock3,
   MessageSquare,
+  Percent,
+  PhoneCall,
+  Send,
   Target,
-  TrendingUp,
   Users,
 } from "lucide-react";
 import AssetVault from "../inventory/AssetVault";
@@ -18,37 +20,96 @@ import LeadPerformancePanel from "../../components/dashboard/LeadPerformancePane
 import api from "../../services/api";
 import { toErrorMessage } from "../../utils/errorMessage";
 
+const getStoredUserId = () => {
+  try {
+    const user = JSON.parse(localStorage.getItem("user") || "{}");
+    return String(user?._id || user?.id || "").trim();
+  } catch {
+    return "";
+  }
+};
+
+const normalizeStatus = (value) => String(value || "").trim().toUpperCase();
+
+const parseDate = (value) => {
+  if (!value) return null;
+  const parsed = new Date(value);
+  return Number.isNaN(parsed.getTime()) ? null : parsed;
+};
+
+const isDueOnOrBeforeNow = (value) => {
+  const parsed = parseDate(value);
+  return Boolean(parsed && parsed.getTime() <= Date.now());
+};
+
+const hasManualTransferOut = (lead, currentUserId) => {
+  const ownerId = String(currentUserId || "");
+  if (!ownerId || !Array.isArray(lead?.assignmentHistory)) return false;
+  return lead.assignmentHistory.some((event) => {
+    const action = normalizeStatus(event?.action);
+    const fromId = String(event?.fromUser?._id || event?.fromUser || "");
+    const toId = String(event?.toUser?._id || event?.toUser || "");
+    return ["MANUAL_TRANSFER", "REASSIGNED"].includes(action)
+      && fromId === ownerId
+      && toId
+      && toId !== ownerId;
+  });
+};
+
+const buildInsideExecutiveMetrics = (leads = [], currentUserId = "") => {
+  const totalLeadsAssigned = leads.length;
+  const pendingFirstCalls = leads.filter((lead) =>
+    ["NEW", ""].includes(normalizeStatus(lead?.status))
+    && !lead?.lastContactedAt
+  ).length;
+  const followUpsDue = leads.filter((lead) => isDueOnOrBeforeNow(lead?.nextFollowUp)).length;
+  const qualifiedLeads = leads.filter((lead) => normalizeStatus(lead?.status) === "QUALIFIED_LEAD").length;
+  const leadsTransferred = leads.filter((lead) => hasManualTransferOut(lead, currentUserId)).length;
+  const convertedLeads = leads.filter((lead) =>
+    ["QUALIFIED_LEAD", "SITE_VISIT_REQUIRED", "SITE_VISIT", "REQUESTED", "CLOSED"].includes(
+      normalizeStatus(lead?.status),
+    )
+  ).length;
+  const conversionRatio = totalLeadsAssigned
+    ? Math.round((convertedLeads / totalLeadsAssigned) * 100)
+    : 0;
+
+  return {
+    totalLeadsAssigned,
+    pendingFirstCalls,
+    followUpsDue,
+    qualifiedLeads,
+    leadsTransferred,
+    conversionRatio,
+  };
+};
+
 const ExecutiveDashboard = () => {
   const [activeTab, setActiveTab] = useState("dashboard");
   const [stats, setStats] = useState({
-    totalLeads: 0,
-    dealsClosed: 0,
-    commission: 0,
-    inventoryCount: 0,
+    totalLeadsAssigned: 0,
+    pendingFirstCalls: 0,
+    followUpsDue: 0,
+    qualifiedLeads: 0,
+    leadsTransferred: 0,
+    conversionRatio: 0,
   });
   const [leadRows, setLeadRows] = useState([]);
 
   useEffect(() => {
     const fetchStats = async () => {
       try {
-        const [leadRes, inventoryRes] = await Promise.all([
-          api.get("/leads"),
-          api.get("/inventory"),
-        ]);
+        const currentUserId = getStoredUserId();
+        const leadRes = await api.get("/leads", {
+          params: currentUserId ? { assignedTo: currentUserId } : {},
+        });
 
         const leads = leadRes.data?.leads || [];
-        const inventoryAssets = inventoryRes.data?.assets || [];
-        const closedLeads = leads.filter((lead) => lead.status === "CLOSED");
         setLeadRows(Array.isArray(leads) ? leads : []);
-
-        setStats({
-          totalLeads: leads.length,
-          dealsClosed: closedLeads.length,
-          commission: closedLeads.length * 50000,
-          inventoryCount: Array.isArray(inventoryAssets) ? inventoryAssets.length : 0,
-        });
+        setStats(buildInsideExecutiveMetrics(Array.isArray(leads) ? leads : [], currentUserId));
       } catch (error) {
         setLeadRows([]);
+        setStats(buildInsideExecutiveMetrics([]));
         console.error("Executive stats error:", toErrorMessage(error, "Unknown error"));
       }
     };
@@ -90,34 +151,48 @@ const ExecutiveDashboard = () => {
 
 const ExecutiveOverview = ({ stats, leads, onOpen }) => (
   <div className="h-full overflow-y-auto custom-scrollbar px-4 py-6 sm:px-6 lg:px-8">
-    <div className="grid grid-cols-1 gap-5 md:grid-cols-2 xl:grid-cols-4">
+    <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-6">
       <StatCard
-        title="Total Leads"
-        value={stats.totalLeads}
-        hint="My pipeline"
+        title="Total Leads Assigned"
+        value={stats.totalLeadsAssigned}
+        hint="Owned by me"
         icon={Users}
         onClick={() => onOpen("leads")}
       />
       <StatCard
-        title="Deals Closed"
-        value={stats.dealsClosed}
-        hint="Won opportunities"
+        title="Pending First Calls"
+        value={stats.pendingFirstCalls}
+        hint="New leads to contact"
+        icon={PhoneCall}
+        onClick={() => onOpen("leads")}
+      />
+      <StatCard
+        title="Follow-ups Due"
+        value={stats.followUpsDue}
+        hint="Due now or overdue"
+        icon={Clock3}
+        onClick={() => onOpen("leads")}
+      />
+      <StatCard
+        title="Qualified Leads"
+        value={stats.qualifiedLeads}
+        hint="Ready for handoff"
         icon={CheckCircle}
         onClick={() => onOpen("leads")}
       />
       <StatCard
-        title="Commission"
-        value={`Rs ${(stats.commission / 100000).toFixed(1)}L`}
-        hint="Estimated earnings"
-        icon={TrendingUp}
-        onClick={() => onOpen("targets")}
+        title="Leads Transferred"
+        value={stats.leadsTransferred}
+        hint="Moved to next owner"
+        icon={Send}
+        onClick={() => onOpen("leads")}
       />
       <StatCard
-        title="Inventory Access"
-        value={stats.inventoryCount}
-        hint="Company units"
-        icon={Building2}
-        onClick={() => onOpen("inventory")}
+        title="Conversion Ratio"
+        value={`${stats.conversionRatio}%`}
+        hint="Qualified or beyond"
+        icon={Percent}
+        onClick={() => onOpen("targets")}
       />
     </div>
 
@@ -188,7 +263,14 @@ const ExecutiveCommandSnapshot = ({ leads, onOpen }) => {
       .sort((left, right) => left.followUpAt - right.followUpAt)
       .slice(0, 4);
 
-    const stages = ["NEW", "CONTACTED", "INTERESTED", "SITE_VISIT", "REQUESTED", "CLOSED"];
+    const stages = [
+      "NEW",
+      "CONTACTED",
+      "INTERESTED",
+      "SITE_VISIT",
+      "REQUESTED",
+      "CLOSED",
+    ];
     const funnel = stages.map((stage) => ({
       stage,
       count: leads.filter((lead) => String(lead.status || "") === stage).length,

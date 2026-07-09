@@ -74,7 +74,7 @@ const AdminRequestAlertToast = ({ userRole }) => {
   }, []);
 
   const activeAlert = useMemo(() => {
-    if (userRole !== "ADMIN") return null;
+    if (!["ADMIN", "MANAGER"].includes(userRole)) return null;
 
     return (
       recentAdminRequests.find((request) => {

@@ -13,6 +13,7 @@ const TopNavigation = ({
   userRole,
   user,
   unreadAlerts = 0,
+  unreadChats = 0,
   onMenuOpen,
 }) => {
   const location = useLocation();
@@ -34,12 +35,14 @@ const TopNavigation = ({
       className="shrink-0 border-b border-slate-200 bg-white/95 px-3 py-2 shadow-sm backdrop-blur-xl dark:border-slate-800 dark:bg-slate-950/95 sm:px-4 md:hidden"
     >
       <div className="flex items-center justify-between gap-2">
-        <div className="flex min-w-0 items-center gap-1 overflow-x-auto scrollbar-hide">
+        <div className="flex min-w-0 items-center gap-1 overflow-hidden">
           {sections.map((section) => {
             const Icon = section.icon;
             const target = getSectionTarget(section.id, userRole, user);
             const isActive = section.id === activeSectionId;
             const showAlert = section.id === "admin" && unreadAlerts > 0;
+            const showChatAlert = section.id === "chat" && unreadChats > 0;
+            const badgeCount = showAlert ? unreadAlerts : showChatAlert ? unreadChats : 0;
 
             return (
               <Tooltip key={section.id} label={section.label}>
@@ -55,9 +58,9 @@ const TopNavigation = ({
                   )}
                 >
                   <Icon aria-hidden="true" size={19} strokeWidth={isActive ? 2.4 : 1.9} />
-                  {showAlert ? (
+                  {badgeCount > 0 ? (
                     <span className="absolute right-1 top-1 flex h-4 min-w-4 items-center justify-center rounded-full bg-rose-500 px-1 text-[9px] font-bold text-white">
-                      {unreadAlerts > 99 ? "99+" : unreadAlerts}
+                      {badgeCount > 99 ? "99+" : badgeCount}
                     </span>
                   ) : null}
                 </Link>

@@ -89,13 +89,12 @@ router.patch(
 );
 
 // ======================================
-// ASSIGN LEAD (Admin + Leadership roles)
+// ASSIGN / TRANSFER LEAD (validated by controller)
 // ======================================
 router.patch(
   "/:leadId/assign",
   writeLimiter,
   authMiddleware.protect,
-  authMiddleware.checkRole(["ADMIN", "MANAGER"]),
   leadController.assignLead
 );
 

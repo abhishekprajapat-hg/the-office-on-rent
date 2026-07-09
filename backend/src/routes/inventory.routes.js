@@ -35,7 +35,13 @@ router.post(
 router.post(
   "/",
   writeLimiter,
-  authMiddleware.checkRole(["ADMIN", "MANAGER"]),
+  authMiddleware.checkRole([
+    "ADMIN",
+    "MANAGER",
+    "EXECUTIVE",
+    "FIELD_EXECUTIVE",
+    "CHANNEL_PARTNER",
+  ]),
   inventoryController.createInventory,
 );
 

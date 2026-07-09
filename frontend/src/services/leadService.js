@@ -35,8 +35,12 @@ export const updateLeadStatus = async (leadId, payload) => {
   return res.data?.lead;
 };
 
-export const assignLead = async (leadId, executiveId) => {
-  const res = await api.patch(`/leads/${leadId}/assign`, { executiveId });
+export const assignLead = async (leadId, payloadOrUserId) => {
+  const payload =
+    typeof payloadOrUserId === "object" && payloadOrUserId !== null
+      ? payloadOrUserId
+      : { assignedTo: payloadOrUserId };
+  const res = await api.patch(`/leads/${leadId}/assign`, payload);
   return res.data?.lead;
 };
 

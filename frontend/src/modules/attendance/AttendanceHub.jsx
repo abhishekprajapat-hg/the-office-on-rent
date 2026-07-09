@@ -1,6 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useState } from "react";
 import {
-  AlertCircle,
   CalendarCheck2,
   ClipboardCheck,
   CheckCircle2,
@@ -26,6 +25,7 @@ import {
   startBreakAttendance,
 } from "../../services/attendanceService";
 import { toErrorMessage } from "../../utils/errorMessage";
+import ToastNotice from "../../components/ui/ToastNotice";
 
 const ADMIN_VIEW_ROLES = new Set([
   "ADMIN",
@@ -500,19 +500,8 @@ const AttendanceHub = () => {
         </button>
       </div>
 
-      {myError ? (
-        <div className="flex items-center gap-2 rounded-2xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700 shadow-sm">
-          <AlertCircle size={16} />
-          {myError}
-        </div>
-      ) : null}
-
-      {mySuccess ? (
-        <div className="flex items-center gap-2 rounded-2xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-700 shadow-sm">
-          <CheckCircle2 size={16} />
-          {mySuccess}
-        </div>
-      ) : null}
+      <ToastNotice message={myError} type="error" />
+      <ToastNotice message={mySuccess} type="success" />
 
       {myLoading ? (
         <div className="flex h-40 items-center justify-center rounded-3xl border border-slate-200 bg-white text-slate-500 shadow-sm">
@@ -873,12 +862,7 @@ const AttendanceHub = () => {
             </div>
           </div>
 
-          {adminError ? (
-            <div className="mt-4 flex items-center gap-2 rounded-xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700">
-              <AlertCircle size={16} />
-              {adminError}
-            </div>
-          ) : null}
+          <ToastNotice message={adminError} type="error" />
 
           {adminLoading ? (
             <div className="mt-4 flex h-32 items-center justify-center rounded-2xl border border-slate-200 bg-slate-50 text-slate-500">
