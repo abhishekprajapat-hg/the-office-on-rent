@@ -1,4 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useState } from "react";
+import { useNavigate } from "react-router-dom";
 import {
   UserCircle2,
   Loader,
@@ -10,11 +11,20 @@ import {
   Shield,
   Users,
   MapPin,
+  CalendarDays,
+  RefreshCw,
+  ArrowRight,
 } from "lucide-react";
 import {
   getMyProfile,
   updateMyProfile,
 } from "../../services/userService";
+import {
+  createLeaveRequest,
+  getMyAttendance,
+  getMyLeaveBalance,
+  getMyLeaveRequests,
+} from "../../services/attendanceService";
 import { toErrorMessage } from "../../utils/errorMessage";
 import ToastNotice from "../../components/ui/ToastNotice";
 
@@ -23,9 +33,20 @@ const ROLE_LABELS = {
   MANAGER: "Manager",
   EXECUTIVE: "Executive",
   FIELD_EXECUTIVE: "Field Executive",
+  PRODUCTION_EXECUTIVE: "Production Executive",
   CHANNEL_PARTNER: "Channel Partner",
 };
 const MANAGEMENT_ROLES = ["MANAGER"];
+const WEEKDAY_LABELS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
+const ATTENDANCE_STATUS_STYLES = {
+  PRESENT: "border-emerald-200 bg-emerald-50 text-emerald-800",
+  WORKING: "border-emerald-200 bg-emerald-50 text-emerald-800",
+  BREAK: "border-indigo-200 bg-indigo-50 text-indigo-800",
+  HALF_DAY: "border-blue-200 bg-blue-50 text-blue-800",
+  ABSENT: "border-rose-200 bg-rose-50 text-rose-800",
+  LEAVE: "border-teal-200 bg-teal-50 text-teal-800",
+  PENDING: "border-amber-200 bg-amber-50 text-amber-800",
+};
 
 const formatDate = (value) => {
   if (!value) return "-";
@@ -38,6 +59,90 @@ const formatDate = (value) => {
     hour: "2-digit",
     minute: "2-digit",
   });
+};
+
+const toLocalDateInputValue = (value = new Date()) => {
+  const date = value instanceof Date ? value : new Date(value);
+  if (Number.isNaN(date.getTime())) return "";
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, "0");
+  const day = String(date.getDate()).padStart(2, "0");
+  return `${year}-${month}-${day}`;
+};
+
+const toMonthInputValue = (value = new Date()) =>
+  toLocalDateInputValue(value).slice(0, 7);
+
+const formatDuration = (minutes) => {
+  const safeMinutes = Math.max(0, Number(minutes || 0));
+  const hours = Math.floor(safeMinutes / 60);
+  const mins = safeMinutes % 60;
+  return `${hours}h ${mins}m`;
+};
+
+const formatAttendanceStatus = (status) => {
+  const normalized = String(status || "").trim().toUpperCase();
+  if (normalized === "PRESENT") return "Present";
+  if (normalized === "WORKING") return "Working";
+  if (normalized === "BREAK") return "Break";
+  if (!normalized) return "";
+  return normalized.replaceAll("_", " ");
+};
+
+const attendanceStatusClass = (status) =>
+  ATTENDANCE_STATUS_STYLES[String(status || "").trim().toUpperCase()]
+  || "border-slate-200 bg-white text-slate-600";
+
+const attendanceSummaryToneClass = (tone) => {
+  if (tone === "emerald") return "border-emerald-200 bg-emerald-50 text-emerald-800";
+  if (tone === "blue") return "border-blue-200 bg-blue-50 text-blue-800";
+  if (tone === "teal") return "border-teal-200 bg-teal-50 text-teal-800";
+  if (tone === "rose") return "border-rose-200 bg-rose-50 text-rose-800";
+  return "border-slate-200 bg-slate-50 text-slate-800";
+};
+
+const buildMonthCalendarDays = (monthKey) => {
+  const [yearRaw, monthRaw] = String(monthKey || "").split("-");
+  const year = Number.parseInt(yearRaw, 10);
+  const month = Number.parseInt(monthRaw, 10);
+  if (!Number.isFinite(year) || !Number.isFinite(month)) return [];
+
+  const firstDay = new Date(year, month - 1, 1);
+  const lastDay = new Date(year, month, 0).getDate();
+  const leadingEmpty = firstDay.getDay();
+  const days = [];
+
+  for (let index = 0; index < leadingEmpty; index += 1) {
+    days.push({ key: `empty-${index}`, dateKey: "", day: "" });
+  }
+
+  for (let day = 1; day <= lastDay; day += 1) {
+    days.push({
+      key: `${monthKey}-${String(day).padStart(2, "0")}`,
+      dateKey: `${monthKey}-${String(day).padStart(2, "0")}`,
+      day,
+    });
+  }
+
+  return days;
+};
+
+const buildDateKeysInRange = (fromDate, toDate) => {
+  if (!fromDate || !toDate) return [];
+  const [fromYear, fromMonth, fromDay] = String(fromDate).split("-").map((value) => Number.parseInt(value, 10));
+  const [toYear, toMonth, toDay] = String(toDate).split("-").map((value) => Number.parseInt(value, 10));
+  const fromMs = Date.UTC(fromYear, fromMonth - 1, fromDay);
+  const toMs = Date.UTC(toYear, toMonth - 1, toDay);
+  if (!Number.isFinite(fromMs) || !Number.isFinite(toMs) || toMs < fromMs) return [];
+
+  const rows = [];
+  for (let cursor = fromMs; cursor <= toMs; cursor += 24 * 60 * 60 * 1000) {
+    const date = new Date(cursor);
+    rows.push(
+      `${date.getUTCFullYear()}-${String(date.getUTCMonth() + 1).padStart(2, "0")}-${String(date.getUTCDate()).padStart(2, "0")}`,
+    );
+  }
+  return rows;
 };
 
 const toSummaryCards = (role, summary = {}) => {
@@ -103,6 +208,7 @@ const toSummaryCards = (role, summary = {}) => {
 };
 
 const UserProfile = () => {
+  const navigate = useNavigate();
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
@@ -111,6 +217,21 @@ const UserProfile = () => {
   const [summary, setSummary] = useState({});
   const [nameDraft, setNameDraft] = useState("");
   const [phoneDraft, setPhoneDraft] = useState("");
+  const [attendanceMonth, setAttendanceMonth] = useState(toMonthInputValue(new Date()));
+  const [attendanceLoading, setAttendanceLoading] = useState(false);
+  const [attendanceData, setAttendanceData] = useState({
+    timezone: "",
+    summary: {},
+    attendance: [],
+  });
+  const [leaveBalanceLoading, setLeaveBalanceLoading] = useState(false);
+  const [leaveBalance, setLeaveBalance] = useState(null);
+  const [leaveRequests, setLeaveRequests] = useState([]);
+  const [leaveModalOpen, setLeaveModalOpen] = useState(false);
+  const [leaveRange, setLeaveRange] = useState({ fromDate: "", toDate: "" });
+  const [leaveType, setLeaveType] = useState("CASUAL");
+  const [leaveReason, setLeaveReason] = useState("");
+  const [leaveSubmitting, setLeaveSubmitting] = useState(false);
 
   const fetchProfile = useCallback(async () => {
     try {
@@ -135,6 +256,66 @@ const UserProfile = () => {
     fetchProfile();
   }, [fetchProfile]);
 
+  const loadAttendanceCalendar = useCallback(async () => {
+    try {
+      setAttendanceLoading(true);
+      const payload = await getMyAttendance({ month: attendanceMonth });
+      setAttendanceData({
+        timezone: payload.timezone || "",
+        summary: payload.summary || {},
+        attendance: Array.isArray(payload.attendance) ? payload.attendance : [],
+      });
+    } catch (attendanceError) {
+      setError(toErrorMessage(attendanceError, "Failed to load attendance calendar"));
+    } finally {
+      setAttendanceLoading(false);
+    }
+  }, [attendanceMonth]);
+
+  useEffect(() => {
+    loadAttendanceCalendar();
+  }, [loadAttendanceCalendar]);
+
+  const loadLeaveBalance = useCallback(async () => {
+    if (!profile || profile.role === "ADMIN") {
+      setLeaveBalance(null);
+      return;
+    }
+
+    try {
+      setLeaveBalanceLoading(true);
+      const payload = await getMyLeaveBalance({ month: attendanceMonth });
+      setLeaveBalance(payload);
+    } catch (balanceError) {
+      setError(toErrorMessage(balanceError, "Failed to load leave balance"));
+      setLeaveBalance(null);
+    } finally {
+      setLeaveBalanceLoading(false);
+    }
+  }, [attendanceMonth, profile]);
+
+  useEffect(() => {
+    loadLeaveBalance();
+  }, [loadLeaveBalance]);
+
+  const loadLeaveRequests = useCallback(async () => {
+    if (!profile || profile.role === "ADMIN") {
+      setLeaveRequests([]);
+      return;
+    }
+
+    try {
+      const rows = await getMyLeaveRequests();
+      setLeaveRequests(Array.isArray(rows) ? rows : []);
+    } catch (leaveError) {
+      setError(toErrorMessage(leaveError, "Failed to load leave requests"));
+    }
+  }, [profile]);
+
+  useEffect(() => {
+    loadLeaveRequests();
+  }, [loadLeaveRequests]);
+
   useEffect(() => {
     if (!success) return undefined;
     const timer = setTimeout(() => setSuccess(""), 1800);
@@ -145,6 +326,109 @@ const UserProfile = () => {
     () => toSummaryCards(profile?.role, summary),
     [profile?.role, summary],
   );
+  const attendanceByDate = useMemo(() => {
+    const map = new Map();
+    attendanceData.attendance.forEach((row) => {
+      if (row?.attendanceDate) {
+        map.set(row.attendanceDate, row);
+      }
+    });
+    return map;
+  }, [attendanceData.attendance]);
+  const calendarDays = useMemo(
+    () => buildMonthCalendarDays(attendanceMonth),
+    [attendanceMonth],
+  );
+  const attendanceSummaryCards = useMemo(() => {
+    const summaryRow = attendanceData.summary || {};
+    return [
+      { key: "present", label: "Present", value: summaryRow.presentDays ?? 0, tone: "emerald" },
+      { key: "half", label: "Half Day", value: summaryRow.halfDays ?? 0, tone: "blue" },
+      { key: "leave", label: "Leave", value: summaryRow.leaveDays ?? 0, tone: "teal" },
+      { key: "absent", label: "Absent", value: summaryRow.absentDays ?? 0, tone: "rose" },
+    ];
+  }, [attendanceData.summary]);
+  const pendingLeaveByDate = useMemo(() => {
+    const map = new Map();
+    leaveRequests
+      .filter((row) => String(row?.status || "").toUpperCase() === "PENDING")
+      .forEach((row) => {
+        buildDateKeysInRange(row.fromDate, row.toDate).forEach((dateKey) => {
+          map.set(dateKey, row);
+        });
+      });
+    return map;
+  }, [leaveRequests]);
+  const selectedLeaveDates = useMemo(() => {
+    if (!leaveRange.fromDate || !leaveRange.toDate) return new Set();
+    return new Set(buildDateKeysInRange(leaveRange.fromDate, leaveRange.toDate));
+  }, [leaveRange.fromDate, leaveRange.toDate]);
+
+  const handleRefreshAttendanceSection = useCallback(async () => {
+    await Promise.all([
+      loadAttendanceCalendar(),
+      loadLeaveBalance(),
+      loadLeaveRequests(),
+    ]);
+  }, [loadAttendanceCalendar, loadLeaveBalance, loadLeaveRequests]);
+
+  const handleCalendarDateClick = (dateKey) => {
+    if (!dateKey || profile?.role === "ADMIN") return;
+
+    setLeaveRange((prev) => {
+      if (!leaveModalOpen || !prev.fromDate) {
+        return { fromDate: dateKey, toDate: dateKey };
+      }
+      return dateKey < prev.fromDate
+        ? { fromDate: dateKey, toDate: prev.fromDate }
+        : { fromDate: prev.fromDate, toDate: dateKey };
+    });
+    setLeaveModalOpen(true);
+  };
+
+  const closeLeaveModal = () => {
+    setLeaveModalOpen(false);
+    setLeaveRange({ fromDate: "", toDate: "" });
+    setLeaveType("CASUAL");
+    setLeaveReason("");
+  };
+
+  const handleSubmitLeaveFromProfile = async (event) => {
+    event.preventDefault();
+    const fromDate = String(leaveRange.fromDate || "").trim();
+    const toDate = String(leaveRange.toDate || fromDate).trim();
+    const reason = String(leaveReason || "").trim();
+    if (!fromDate || !toDate) {
+      setError("Please select leave dates.");
+      return;
+    }
+    if (!reason) {
+      setError("Reason is required.");
+      return;
+    }
+
+    try {
+      setLeaveSubmitting(true);
+      setError("");
+      const result = await createLeaveRequest({
+        fromDate,
+        toDate,
+        leaveType,
+        reason,
+      });
+      setSuccess(result.message || "Leave request created");
+      closeLeaveModal();
+      await Promise.all([
+        loadLeaveRequests(),
+        loadLeaveBalance(),
+        loadAttendanceCalendar(),
+      ]);
+    } catch (submitError) {
+      setError(toErrorMessage(submitError, "Failed to submit leave request"));
+    } finally {
+      setLeaveSubmitting(false);
+    }
+  };
 
   const handleSave = async () => {
     if (!profile) return;
@@ -256,8 +540,18 @@ const UserProfile = () => {
               </div>
             </div>
 
-            <div className="mt-4 flex justify-end">
+            <div className="mt-4 flex flex-wrap justify-end gap-2">
               <button
+                type="button"
+                onClick={() => navigate("/attendance")}
+                className="h-10 px-4 rounded-lg border border-cyan-200 bg-cyan-50 text-cyan-700 text-sm font-semibold inline-flex items-center gap-2 hover:border-cyan-300 hover:bg-cyan-100"
+              >
+                <CalendarDays size={14} />
+                Attendance Page
+                <ArrowRight size={14} />
+              </button>
+              <button
+                type="button"
                 onClick={handleSave}
                 disabled={saving}
                 className="h-10 px-4 rounded-lg bg-cyan-600 text-white text-sm font-semibold inline-flex items-center gap-2 hover:bg-cyan-500 disabled:opacity-60"
@@ -307,6 +601,236 @@ const UserProfile = () => {
               </div>
             </div>
           </div>
+
+          <section className="ui-soft-panel rounded-2xl border bg-white p-5">
+            <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+              <div className="flex items-center gap-2">
+                <CalendarDays size={17} className="text-cyan-600" />
+                <div>
+                  <h3 className="text-base font-semibold text-slate-900">Attendance Calendar</h3>
+                  <p className="text-[11px] uppercase tracking-widest text-slate-400">
+                    Month: {attendanceMonth}
+                  </p>
+                </div>
+              </div>
+
+              <div className="flex flex-wrap items-center gap-2">
+                <input
+                  type="month"
+                  value={attendanceMonth}
+                  onChange={(event) => setAttendanceMonth(event.target.value)}
+                  className="h-10 rounded-lg border border-slate-300 bg-white px-3 text-sm text-slate-800 outline-none transition focus:border-cyan-400 focus:ring-2 focus:ring-cyan-100"
+                />
+                <button
+                  type="button"
+                  onClick={handleRefreshAttendanceSection}
+                  disabled={attendanceLoading || leaveBalanceLoading}
+                  className="inline-flex h-10 items-center gap-2 rounded-lg border border-slate-300 bg-white px-3 text-xs font-semibold text-slate-700 transition hover:border-cyan-300 hover:bg-cyan-50 hover:text-cyan-700 disabled:cursor-not-allowed disabled:opacity-60"
+                >
+                  {attendanceLoading || leaveBalanceLoading ? <Loader size={14} className="animate-spin" /> : <RefreshCw size={14} />}
+                  Refresh
+                </button>
+              </div>
+            </div>
+
+            {profile.role !== "ADMIN" ? (
+              <div className="mt-4 grid grid-cols-1 gap-3 lg:grid-cols-[minmax(0,360px)_1fr]">
+                <div className="rounded-2xl border border-emerald-200 bg-emerald-50 px-4 py-4 text-emerald-800">
+                  <p className="text-[10px] font-bold uppercase tracking-widest">Leave Balance</p>
+                  <p className="mt-2 text-3xl font-semibold">{Number(leaveBalance?.available || 0)}</p>
+                  <p className="mt-1 text-xs text-emerald-700">
+                    Total leaves available
+                  </p>
+                </div>
+                <div className="rounded-2xl border border-cyan-100 bg-cyan-50/45 px-4 py-4">
+                  <div>
+                    <p className="text-[10px] font-bold uppercase tracking-widest text-cyan-700">
+                      Monthly Leave Rule
+                    </p>
+                    <p className="text-xs text-slate-500">
+                      Every month on 1st date, 1 leave is added. Unused leave carries forward.
+                    </p>
+                  </div>
+                  <p className="mt-3 text-xs font-semibold text-slate-600">
+                    Since {leaveBalance?.accrualStartMonth || "-"} | {Number(leaveBalance?.monthlyAccrual || 1)} leave/month
+                  </p>
+                </div>
+              </div>
+            ) : null}
+
+            <div className="mt-4 grid grid-cols-2 gap-3 lg:grid-cols-4">
+              {attendanceSummaryCards.map((card) => (
+                <div
+                  key={card.key}
+                  className={`rounded-xl border px-3 py-3 ${attendanceSummaryToneClass(card.tone)}`}
+                >
+                  <p className="text-[10px] font-bold uppercase tracking-widest opacity-75">{card.label}</p>
+                  <p className="mt-1 text-xl font-semibold">{Number(card.value || 0)}</p>
+                </div>
+              ))}
+            </div>
+
+            <div className="mt-4 overflow-hidden rounded-2xl border border-slate-200">
+              <div className="grid grid-cols-7 border-b border-slate-200 bg-slate-50">
+                {WEEKDAY_LABELS.map((label) => (
+                  <div
+                    key={label}
+                    className="px-2 py-2 text-center text-[10px] font-bold uppercase tracking-widest text-slate-500"
+                  >
+                    {label}
+                  </div>
+                ))}
+              </div>
+
+              <div className="grid grid-cols-7 bg-white">
+                {calendarDays.map((day) => {
+                  const attendanceRow = day.dateKey ? attendanceByDate.get(day.dateKey) : null;
+                  const pendingLeave = day.dateKey ? pendingLeaveByDate.get(day.dateKey) : null;
+                  const isSelectedLeaveDate = day.dateKey ? selectedLeaveDates.has(day.dateKey) : false;
+                  const statusLabel = pendingLeave ? "Leave Pending" : attendanceRow ? formatAttendanceStatus(attendanceRow.status) : "";
+                  const isLate = Boolean(attendanceRow?.isLateCheckIn);
+
+                  return (
+                    <button
+                      type="button"
+                      key={day.key}
+                      onClick={() => handleCalendarDateClick(day.dateKey)}
+                      disabled={!day.dateKey || profile.role === "ADMIN"}
+                      className={`min-h-[96px] border-b border-r border-slate-100 p-2 text-left transition ${
+                        day.dateKey ? "bg-white hover:bg-cyan-50" : "bg-slate-50/60"
+                      } ${
+                        isSelectedLeaveDate ? "ring-2 ring-inset ring-cyan-400" : ""
+                      }`}
+                    >
+                      {day.dateKey ? (
+                        <div className="flex h-full flex-col gap-1.5">
+                          <span className="text-xs font-semibold text-slate-900">{day.day}</span>
+                          {pendingLeave ? (
+                            <>
+                              <span className="inline-flex w-fit rounded-full border border-amber-200 bg-amber-50 px-2 py-0.5 text-[10px] font-bold text-amber-800">
+                                {statusLabel}
+                              </span>
+                              <span className="text-[10px] text-slate-500">
+                                Awaiting approval
+                              </span>
+                            </>
+                          ) : attendanceRow ? (
+                            <>
+                              <span className={`inline-flex w-fit rounded-full border px-2 py-0.5 text-[10px] font-bold ${attendanceStatusClass(attendanceRow.status)}`}>
+                                {statusLabel}
+                              </span>
+                              <span className={`text-[10px] ${isLate ? "font-bold text-rose-700" : "text-slate-500"}`}>
+                                In: {formatDate(attendanceRow.checkInAt)}
+                              </span>
+                              <span className="text-[10px] text-slate-500">
+                                Work: {formatDuration(attendanceRow.workedMinutes)}
+                              </span>
+                            </>
+                          ) : (
+                            <span className="mt-auto text-[10px] text-slate-400">No record</span>
+                          )}
+                        </div>
+                      ) : null}
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+          </section>
+
+          {leaveModalOpen && profile.role !== "ADMIN" ? (
+            <div className="pointer-events-none fixed inset-0 z-50 flex items-end justify-end p-4">
+              <form
+                onSubmit={handleSubmitLeaveFromProfile}
+                className="pointer-events-auto w-full max-w-md rounded-2xl border border-slate-200 bg-white p-4 shadow-2xl"
+              >
+                <div className="flex items-start justify-between gap-3">
+                  <div>
+                    <h3 className="text-base font-semibold text-slate-900">Apply Leave</h3>
+                    <p className="text-xs text-slate-500">
+                      Select another calendar date to extend the range.
+                    </p>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={closeLeaveModal}
+                    className="rounded-lg border border-slate-200 px-2 py-1 text-xs font-semibold text-slate-600 hover:bg-slate-50"
+                  >
+                    Close
+                  </button>
+                </div>
+
+                <div className="mt-4 grid grid-cols-2 gap-3">
+                  <label className="text-xs font-semibold text-slate-600">
+                    From
+                    <input
+                      type="date"
+                      value={leaveRange.fromDate}
+                      onChange={(event) => {
+                        const value = event.target.value;
+                        setLeaveRange((prev) => ({
+                          fromDate: value,
+                          toDate: prev.toDate && prev.toDate >= value ? prev.toDate : value,
+                        }));
+                      }}
+                      className="mt-1 h-10 w-full rounded-lg border border-slate-300 px-3 text-sm"
+                    />
+                  </label>
+                  <label className="text-xs font-semibold text-slate-600">
+                    To
+                    <input
+                      type="date"
+                      value={leaveRange.toDate}
+                      onChange={(event) => {
+                        const value = event.target.value;
+                        setLeaveRange((prev) => ({
+                          fromDate: prev.fromDate && prev.fromDate <= value ? prev.fromDate : value,
+                          toDate: value,
+                        }));
+                      }}
+                      className="mt-1 h-10 w-full rounded-lg border border-slate-300 px-3 text-sm"
+                    />
+                  </label>
+                </div>
+
+                <label className="mt-3 block text-xs font-semibold text-slate-600">
+                  Leave Type
+                  <select
+                    value={leaveType}
+                    onChange={(event) => setLeaveType(event.target.value)}
+                    className="mt-1 h-10 w-full rounded-lg border border-slate-300 bg-white px-3 text-sm"
+                  >
+                    <option value="CASUAL">Casual</option>
+                    <option value="SICK">Sick</option>
+                    <option value="EMERGENCY">Emergency</option>
+                    <option value="UNPAID">Unpaid</option>
+                    <option value="OTHER">Other</option>
+                  </select>
+                </label>
+
+                <label className="mt-3 block text-xs font-semibold text-slate-600">
+                  Reason
+                  <textarea
+                    value={leaveReason}
+                    onChange={(event) => setLeaveReason(event.target.value)}
+                    rows={3}
+                    maxLength={500}
+                    placeholder="Reason for leave"
+                    className="mt-1 w-full resize-none rounded-lg border border-slate-300 px-3 py-2 text-sm"
+                  />
+                </label>
+
+                <button
+                  type="submit"
+                  disabled={leaveSubmitting}
+                  className="mt-4 inline-flex h-10 w-full items-center justify-center gap-2 rounded-lg bg-cyan-600 px-4 text-sm font-semibold text-white hover:bg-cyan-500 disabled:cursor-not-allowed disabled:opacity-60"
+                >
+                  {leaveSubmitting ? <Loader size={14} className="animate-spin" /> : <CalendarDays size={14} />}
+                  Submit Leave Request
+                </button>
+              </form>
+            </div>
+          ) : null}
 
           {summaryCards.length > 0 && (
             <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">

@@ -13,10 +13,17 @@ router.post("/check-in", writeLimiter, attendanceController.checkIn);
 router.post("/break/start", writeLimiter, attendanceController.startBreak);
 router.post("/break/end", writeLimiter, attendanceController.endBreak);
 router.post("/check-out", writeLimiter, attendanceController.checkOut);
+router.patch(
+  "/users/:userId/:date/status",
+  writeLimiter,
+  attendanceController.updateUserAttendanceStatus,
+);
+router.get("/users/:userId", attendanceController.getUserAttendanceForAdmin);
 router.get("/daily", attendanceController.getDailyAttendanceForAdmin);
 router.get("/policy", attendanceController.getAttendancePolicy);
 router.patch("/policy", writeLimiter, attendanceController.upsertAttendancePolicy);
 
+router.get("/leave-balance/my", attendanceController.getMyLeaveBalance);
 router.post("/leave-requests", writeLimiter, attendanceController.createLeaveRequest);
 router.get("/leave-requests/my", attendanceController.getMyLeaveRequests);
 router.get("/leave-requests/admin", attendanceController.getAdminLeaveRequests);

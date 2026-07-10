@@ -8,7 +8,8 @@ const getSectionTarget = (sectionId, userRole, user) => {
   return groups[0]?.items[0]?.path || "/dashboard";
 };
 
-const PRIORITY_SECTIONS = ["leads", "inventory", "chat", "calendar"];
+const DEFAULT_PRIORITY_SECTIONS = ["leads", "inventory", "chat", "calendar"];
+const PRODUCTION_PRIORITY_SECTIONS = ["dashboard", "reports", "chat", "settings"];
 
 const MobileBottomNav = ({
   userRole,
@@ -19,7 +20,11 @@ const MobileBottomNav = ({
   const location = useLocation();
   const sections = getVisibleSections(userRole, user);
   const activeSectionId = getActiveSectionId(location.pathname, userRole, user);
-  const priority = PRIORITY_SECTIONS
+  const prioritySectionIds =
+    userRole === "PRODUCTION_EXECUTIVE"
+      ? PRODUCTION_PRIORITY_SECTIONS
+      : DEFAULT_PRIORITY_SECTIONS;
+  const priority = prioritySectionIds
     .map((id) => sections.find((section) => section.id === id))
     .filter(Boolean)
     .slice(0, 4);

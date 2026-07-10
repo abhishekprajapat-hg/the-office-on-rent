@@ -4,6 +4,7 @@ const USER_ROLES = Object.freeze({
   INSIDE_EXECUTIVE: "INSIDE_EXECUTIVE",
   EXECUTIVE: "EXECUTIVE",
   FIELD_EXECUTIVE: "FIELD_EXECUTIVE",
+  PRODUCTION_EXECUTIVE: "PRODUCTION_EXECUTIVE",
   CHANNEL_PARTNER: "CHANNEL_PARTNER",
 });
 
@@ -21,6 +22,10 @@ const INSIDE_EXECUTIVE_ROLES = Object.freeze([
   USER_ROLES.INSIDE_EXECUTIVE,
 ]);
 
+const PRODUCTION_ROLES = Object.freeze([
+  USER_ROLES.PRODUCTION_EXECUTIVE,
+]);
+
 const LEAD_MANAGEMENT_ROLES = Object.freeze([
   USER_ROLES.ADMIN,
   ...MANAGEMENT_ROLES,
@@ -32,6 +37,7 @@ const ROLE_LABELS = Object.freeze({
   [USER_ROLES.INSIDE_EXECUTIVE]: "Inside Executive",
   [USER_ROLES.EXECUTIVE]: "Executive",
   [USER_ROLES.FIELD_EXECUTIVE]: "Field Executive",
+  [USER_ROLES.PRODUCTION_EXECUTIVE]: "Production Executive",
   [USER_ROLES.CHANNEL_PARTNER]: "Channel Partner",
 });
 
@@ -41,6 +47,7 @@ const ROLE_PARENT_RULES = Object.freeze({
   [USER_ROLES.INSIDE_EXECUTIVE]: [USER_ROLES.MANAGER],
   [USER_ROLES.EXECUTIVE]: [USER_ROLES.MANAGER],
   [USER_ROLES.FIELD_EXECUTIVE]: [USER_ROLES.MANAGER],
+  [USER_ROLES.PRODUCTION_EXECUTIVE]: [USER_ROLES.MANAGER],
   [USER_ROLES.CHANNEL_PARTNER]: [USER_ROLES.MANAGER],
 });
 
@@ -49,6 +56,7 @@ const AUTO_PARENT_POOL_BY_ROLE = Object.freeze({
   [USER_ROLES.INSIDE_EXECUTIVE]: [USER_ROLES.MANAGER],
   [USER_ROLES.EXECUTIVE]: [USER_ROLES.MANAGER],
   [USER_ROLES.FIELD_EXECUTIVE]: [USER_ROLES.MANAGER],
+  [USER_ROLES.PRODUCTION_EXECUTIVE]: [USER_ROLES.MANAGER],
   [USER_ROLES.CHANNEL_PARTNER]: [USER_ROLES.MANAGER],
 });
 
@@ -56,6 +64,7 @@ const DEFAULT_DESCENDANT_DEPTH = 8;
 
 const isManagementRole = (role) => MANAGEMENT_ROLES.includes(role);
 const isExecutiveRole = (role) => EXECUTIVE_ROLES.includes(role);
+const isProductionRole = (role) => PRODUCTION_ROLES.includes(role);
 const isLeadManagementRole = (role) => LEAD_MANAGEMENT_ROLES.includes(role);
 
 const getAllowedParentRoles = (role) => ROLE_PARENT_RULES[role] || [];
@@ -66,6 +75,7 @@ module.exports = {
   MANAGEMENT_ROLES,
   EXECUTIVE_ROLES,
   INSIDE_EXECUTIVE_ROLES,
+  PRODUCTION_ROLES,
   LEAD_MANAGEMENT_ROLES,
   ROLE_LABELS,
   ROLE_PARENT_RULES,
@@ -73,6 +83,7 @@ module.exports = {
   DEFAULT_DESCENDANT_DEPTH,
   isManagementRole,
   isExecutiveRole,
+  isProductionRole,
   isLeadManagementRole,
   getAllowedParentRoles,
   getAutoParentRoles,

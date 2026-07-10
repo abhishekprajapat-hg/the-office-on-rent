@@ -2714,7 +2714,7 @@ const TeamChat = ({ theme = "light" }) => {
       <Motion.div
         initial={{ opacity: 0, y: 12 }}
         animate={{ opacity: 1, y: 0 }}
-        className={`ui-soft-panel chat-workspace grid min-h-0 flex-1 w-full grid-cols-1 overflow-hidden rounded-none border-0 shadow-none sm:rounded-2xl sm:border sm:shadow-sm md:grid-cols-[360px_minmax(0,1fr)] xl:grid-cols-[360px_minmax(0,1fr)_320px] ${
+        className={`ui-soft-panel chat-workspace grid min-h-0 flex-1 w-full grid-cols-1 overflow-hidden rounded-none border-0 shadow-none sm:rounded-2xl sm:border sm:shadow-sm md:grid-cols-[360px_minmax(0,1fr)] ${
           isDark ? "bg-slate-900/70" : "bg-white/95"
         }`}
       >
@@ -2899,14 +2899,14 @@ const TeamChat = ({ theme = "light" }) => {
 
           <ToastNotice message={error} type="error" />
 
-          <div className={`chat-message-surface relative flex min-h-0 flex-1 flex-col overflow-hidden ${isDark ? "bg-slate-950/45" : "bg-slate-50"}`}>
+          <div className={`chat-message-surface relative flex min-h-0 w-full flex-1 flex-col overflow-hidden ${isDark ? "bg-slate-950/45" : "bg-slate-50"}`}>
             <div className={`chat-message-pattern pointer-events-none absolute inset-0 opacity-45 ${
               isDark
                 ? "bg-[radial-gradient(circle_at_20%_20%,rgba(34,211,238,0.14),transparent_40%),radial-gradient(circle_at_80%_0%,rgba(14,165,233,0.12),transparent_35%),linear-gradient(45deg,rgba(15,23,42,0.75)_25%,transparent_25%,transparent_50%,rgba(15,23,42,0.75)_50%,rgba(15,23,42,0.75)_75%,transparent_75%,transparent)] bg-[length:220px_220px]"
                 : "bg-[radial-gradient(circle_at_25%_20%,rgba(16,185,129,0.14),transparent_42%),radial-gradient(circle_at_85%_0%,rgba(74,222,128,0.1),transparent_35%),linear-gradient(45deg,rgba(255,255,255,0.58)_25%,transparent_25%,transparent_50%,rgba(255,255,255,0.58)_50%,rgba(255,255,255,0.58)_75%,transparent_75%,transparent)] bg-[length:220px_220px]"
             }`}
             />
-            <div className="chat-message-scroll relative min-h-0 flex-1 space-y-3 overflow-y-auto px-3 py-4 sm:px-5 custom-scrollbar">
+            <div className="chat-message-scroll relative min-h-0 w-full flex-1 space-y-3 overflow-y-auto px-3 py-4 sm:px-5 custom-scrollbar">
             {messagesLoading ? (
               <div className={`text-sm ${isDark ? "text-slate-400" : "text-slate-500"}`}>
                 Loading messages...
@@ -3149,7 +3149,7 @@ const TeamChat = ({ theme = "light" }) => {
 
           <form
             onSubmit={handleSend}
-            className={`chat-composer shrink-0 border-t px-3 pt-2.5 pb-[calc(0.625rem+env(safe-area-inset-bottom))] sm:px-4 ${isDark ? "border-slate-700 bg-slate-900/85" : "border-slate-200 bg-[#f0f2f5]"}`}
+            className={`chat-composer w-full shrink-0 border-t px-3 pt-2.5 pb-[calc(0.625rem+env(safe-area-inset-bottom))] sm:px-4 ${isDark ? "border-slate-700 bg-slate-900/85" : "border-slate-200 bg-[#f0f2f5]"}`}
           >
             {queuedShare && (
               <div className={`mb-3 rounded-xl border p-2.5 ${isDark ? "border-emerald-400/25 bg-emerald-500/10" : "border-emerald-200 bg-emerald-50/80"}`}>

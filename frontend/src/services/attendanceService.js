@@ -60,6 +60,47 @@ export const getDailyAttendanceForAdmin = async (params = {}) => {
   };
 };
 
+export const getUserAttendanceForAdmin = async (userId, params = {}) => {
+  const id = String(userId || "").trim();
+  if (!id) {
+    return {
+      timezone: "",
+      from: "",
+      to: "",
+      user: null,
+      summary: {},
+      attendance: [],
+      count: 0,
+    };
+  }
+
+  const res = await api.get(`/attendance/users/${id}`, { params });
+  return {
+    timezone: res.data?.timezone || "",
+    from: res.data?.from || "",
+    to: res.data?.to || "",
+    user: res.data?.user || null,
+    summary: res.data?.summary || {},
+    attendance: Array.isArray(res.data?.attendance) ? res.data.attendance : [],
+    count: Number(res.data?.count || 0),
+  };
+};
+
+export const updateUserAttendanceStatus = async (userId, date, payload = {}) => {
+  const id = String(userId || "").trim();
+  const attendanceDate = String(date || "").trim();
+  if (!id || !attendanceDate) {
+    throw new Error("User and attendance date are required");
+  }
+
+  const res = await api.patch(`/attendance/users/${id}/${attendanceDate}/status`, payload);
+  return {
+    message: res.data?.message || "Attendance status updated",
+    user: res.data?.user || null,
+    attendance: res.data?.attendance || null,
+  };
+};
+
 export const getAttendancePolicy = async () => {
   const res = await api.get("/attendance/policy");
   return res.data?.policy || null;
@@ -70,6 +111,22 @@ export const updateAttendancePolicy = async (payload = {}) => {
   return {
     message: res.data?.message || "Attendance policy updated",
     policy: res.data?.policy || null,
+  };
+};
+
+export const getMyLeaveBalance = async (params = {}) => {
+  const res = await api.get("/attendance/leave-balance/my", { params });
+  return {
+    month: res.data?.month || "",
+    timezone: res.data?.timezone || "",
+    monthlyAccrual: Number(res.data?.monthlyAccrual || 0),
+    accrualStartMonth: res.data?.accrualStartMonth || "",
+    monthsAccrued: Number(res.data?.monthsAccrued || 0),
+    accrued: Number(res.data?.accrued || 0),
+    used: Number(res.data?.used || 0),
+    pending: Number(res.data?.pending || 0),
+    available: Number(res.data?.available || 0),
+    carryForward: Number(res.data?.carryForward || 0),
   };
 };
 

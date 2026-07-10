@@ -22,6 +22,7 @@ const AdminRequestAlertToast = lazy(() => import("./components/layout/AdminReque
 const ManagerDashboard = lazy(() => import("./modules/manager/ManagerDashboard"));
 const ExecutiveDashboard = lazy(() => import("./modules/executive/ExecutiveDashboard"));
 const FieldDashboard = lazy(() => import("./modules/field/FieldDashboard"));
+const ProductionExecutiveDashboard = lazy(() => import("./modules/production/ProductionExecutiveDashboard"));
 const TeamManager = lazy(() => import("./modules/admin/TeamManager"));
 const UserDetailsEditor = lazy(() => import("./modules/admin/UserDetailsEditor"));
 const AdminNotifications = lazy(() => import("./modules/admin/AdminNotifications"));
@@ -67,12 +68,13 @@ const FORCE_LIGHT_ROUTE_PREFIXES = [
   "/shared",
 ];
 const MANAGEMENT_ROLES = ["MANAGER"];
-const CHAT_REFRESH_FALLBACK_ROLES = ["EXECUTIVE", "FIELD_EXECUTIVE"];
+const CHAT_REFRESH_FALLBACK_ROLES = ["EXECUTIVE", "FIELD_EXECUTIVE", "PRODUCTION_EXECUTIVE"];
 const ROLE_LABELS = {
   ADMIN: "Admin",
   MANAGER: "Manager",
   EXECUTIVE: "Executive",
   FIELD_EXECUTIVE: "Field Executive",
+  PRODUCTION_EXECUTIVE: "Production Executive",
   CHANNEL_PARTNER: "Channel Partner",
 };
 
@@ -101,6 +103,12 @@ const resolveHomeHeader = (userRole) => {
         title: "Field Command Center",
         subtitle: "Ground movement, follow-up tasks and site visit execution",
         scopeLabel: "Route Desk",
+      };
+    case "PRODUCTION_EXECUTIVE":
+      return {
+        title: "Production Command Center",
+        subtitle: "Tasks, deadlines, attendance and internal collaboration",
+        scopeLabel: "Production Desk",
       };
     default:
       return {
@@ -218,6 +226,14 @@ const resolvePageHeader = (pathname, userRole) => {
   }
 
   if (pathname.startsWith("/targets")) {
+    if (userRole === "PRODUCTION_EXECUTIVE") {
+      return {
+        title: "Performance Command Center",
+        subtitle: "Task completion, pending work and productivity signals",
+        scopeLabel: "Performance",
+      };
+    }
+
     return {
       title: "Targets Command Center",
       subtitle: "Goal pacing, conversion momentum and ownership tracking",
@@ -554,6 +570,8 @@ export default function App() {
         return <ExecutiveDashboard />;
       case "FIELD_EXECUTIVE":
         return <FieldDashboard />;
+      case "PRODUCTION_EXECUTIVE":
+        return <ProductionExecutiveDashboard />;
       case "CHANNEL_PARTNER":
         return <Navigate to="/leads" />;
       default:
@@ -661,14 +679,14 @@ export default function App() {
       <Route
         path="/tasks"
         element={
-          canAccess(["ADMIN", ...MANAGEMENT_ROLES, "EXECUTIVE", "FIELD_EXECUTIVE"])
+          canAccess(["ADMIN", ...MANAGEMENT_ROLES, "EXECUTIVE", "FIELD_EXECUTIVE", "PRODUCTION_EXECUTIVE"])
             ? <TaskManager theme={theme} />
             : <Navigate to="/" />
         }
       />
       <Route
         path="/attendance"
-        element={canAccess(["ADMIN", ...MANAGEMENT_ROLES, "EXECUTIVE", "FIELD_EXECUTIVE", "CHANNEL_PARTNER"]) ? <AttendanceHub /> : <Navigate to="/" />}
+        element={canAccess(["ADMIN", ...MANAGEMENT_ROLES, "EXECUTIVE", "FIELD_EXECUTIVE", "PRODUCTION_EXECUTIVE", "CHANNEL_PARTNER"]) ? <AttendanceHub /> : <Navigate to="/" />}
       />
       <Route
         path="/admin/notifications"
@@ -696,12 +714,18 @@ export default function App() {
       />
       <Route
         path="/targets"
-        element={canAccess(["ADMIN", ...MANAGEMENT_ROLES, "EXECUTIVE", "FIELD_EXECUTIVE"]) ? <Performance /> : <Navigate to="/" />}
+        element={
+          userRole === "PRODUCTION_EXECUTIVE"
+            ? <ProductionExecutiveDashboard mode="performance" />
+            : canAccess(["ADMIN", ...MANAGEMENT_ROLES, "EXECUTIVE", "FIELD_EXECUTIVE"])
+              ? <Performance />
+              : <Navigate to="/" />
+        }
       />
       <Route
         path="/chat"
         element={
-          canAccess(["ADMIN", ...MANAGEMENT_ROLES, "EXECUTIVE", "FIELD_EXECUTIVE"])
+          canAccess(["ADMIN", ...MANAGEMENT_ROLES, "EXECUTIVE", "FIELD_EXECUTIVE", "PRODUCTION_EXECUTIVE"])
             ? <TeamChat theme={theme} />
             : <Navigate to="/" />
         }
@@ -714,6 +738,7 @@ export default function App() {
             ...MANAGEMENT_ROLES,
             "EXECUTIVE",
             "FIELD_EXECUTIVE",
+            "PRODUCTION_EXECUTIVE",
             "CHANNEL_PARTNER",
           ])
             ? <UserProfile />

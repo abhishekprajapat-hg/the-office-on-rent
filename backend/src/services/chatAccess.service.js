@@ -49,131 +49,32 @@ const canInitiateDirectChat = ({ initiator, recipient }) => {
     return { allowed: false, reason: "Inactive users cannot chat" };
   }
 
-  if (isAdminRole(initiator.role)) {
-    return { allowed: true, type: CHAT_ROOM_TYPES.DIRECT };
+  const initiatorCompanyId = toObjectIdString(initiator.companyId);
+  const recipientCompanyId = toObjectIdString(recipient.companyId);
+  if (
+    (initiatorCompanyId || recipientCompanyId)
+    && initiatorCompanyId !== recipientCompanyId
+  ) {
+    return { allowed: false, reason: "Cannot message users outside your company" };
   }
 
-  if (isManagerRole(initiator.role)) {
-    if (isAdminRole(recipient.role) || isManagerRole(recipient.role)) {
-      return { allowed: true, type: CHAT_ROOM_TYPES.DIRECT };
-    }
-
-    if (isExecutiveRole(recipient.role) && isManagerOf(initiator, recipient)) {
-      return { allowed: true, type: CHAT_ROOM_TYPES.DIRECT };
-    }
-
-    return {
-      allowed: false,
-      reason: "Leadership can chat only with admin, leadership peers, and own team",
-    };
-  }
-
-  if (initiator.role === USER_ROLES.EXECUTIVE) {
-    if (isAdminRole(recipient.role)) {
-      return {
-        allowed: true,
-        type: CHAT_ROOM_TYPES.ESCALATION,
-        escalation: {
-          managerToNotify: initiator.parentId || null,
-        },
-      };
-    }
-
-    if (isManagerRole(recipient.role) && isManagerOf(recipient, initiator)) {
-      return { allowed: true, type: CHAT_ROOM_TYPES.DIRECT };
-    }
-
-    if (recipient.role === USER_ROLES.EXECUTIVE && isSameManager(initiator, recipient)) {
-      return { allowed: true, type: CHAT_ROOM_TYPES.DIRECT };
-    }
-
-    return {
-      allowed: false,
-      reason: "Executive can chat with reporting leader, same-team executives, or admin escalation only",
-    };
-  }
-
-  if (initiator.role === USER_ROLES.FIELD_EXECUTIVE) {
-    if (isAdminRole(recipient.role)) {
-      return {
-        allowed: true,
-        type: CHAT_ROOM_TYPES.ESCALATION,
-        escalation: {
-          managerToNotify: initiator.parentId || null,
-        },
-      };
-    }
-
-    if (isManagerRole(recipient.role) && isManagerOf(recipient, initiator)) {
-      return { allowed: true, type: CHAT_ROOM_TYPES.DIRECT };
-    }
-
-    return {
-      allowed: false,
-      reason: "Field Executive can chat with reporting leader or admin escalation only",
-    };
-  }
-
-  return { allowed: false, reason: "Role not allowed for direct chat" };
+  return { allowed: true, type: CHAT_ROOM_TYPES.DIRECT };
 };
 
 const buildContactQueryForUser = (user) => {
   const userId = toObjectIdString(user?._id);
-  const managerId = toObjectIdString(user?.parentId);
+  const companyId = toObjectIdString(user?.companyId);
 
   const baseQuery = {
     isActive: true,
     _id: { $ne: userId },
   };
 
-  if (isAdminRole(user?.role)) {
-    return baseQuery;
+  if (companyId) {
+    baseQuery.companyId = companyId;
   }
 
-  if (isManagerRole(user?.role)) {
-    return {
-      ...baseQuery,
-      $or: [
-        { role: USER_ROLES.ADMIN },
-        { role: { $in: MANAGEMENT_ROLES } },
-        { role: { $in: EXECUTIVE_ROLES }, parentId: user._id },
-      ],
-    };
-  }
-
-  if (user?.role === USER_ROLES.EXECUTIVE) {
-    const query = {
-      ...baseQuery,
-      $or: [
-        { role: USER_ROLES.ADMIN },
-        {
-          role: USER_ROLES.EXECUTIVE,
-          parentId: user.parentId || null,
-        },
-      ],
-    };
-
-    if (managerId) {
-      query.$or.push({ role: { $in: MANAGEMENT_ROLES }, _id: user.parentId });
-    }
-
-    return query;
-  }
-
-  if (user?.role === USER_ROLES.FIELD_EXECUTIVE) {
-    const query = {
-      ...baseQuery,
-      $or: [{ role: USER_ROLES.ADMIN }],
-    };
-
-    if (managerId) {
-      query.$or.push({ role: { $in: MANAGEMENT_ROLES }, _id: user.parentId });
-    }
-
-    return query;
-  }
-
-  return { _id: null };
+  return baseQuery;
 };
 
 const getLeadParticipantIdsFromLeadDoc = (lead) =>

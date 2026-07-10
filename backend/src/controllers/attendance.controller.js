@@ -35,13 +35,20 @@ const MAX_LEAVE_SPAN_DAYS = Number.parseInt(
   10,
 ) || 45;
 const DAY_MS = 24 * 60 * 60 * 1000;
+const HALF_DAY_PRODUCTIVE_MINUTES = 4 * 60;
+const FULL_DAY_PRODUCTIVE_MINUTES = (7 * 60) + 30;
+const LATE_CHECK_IN_CUTOFF_MINUTES = 11 * 60;
+const LIVE_ATTENDANCE_STATUS = Object.freeze({
+  WORKING: "WORKING",
+  BREAK: "BREAK",
+});
 const DEFAULT_POLICY = Object.freeze({
   timezone: DEFAULT_TIMEZONE,
   shiftStartMinutes: 10 * 60,
   shiftEndMinutes: 19 * 60,
-  graceMinutes: 15,
+  graceMinutes: 60,
   halfDayMinutes: 240,
-  fullDayMinutes: 480,
+  fullDayMinutes: 450,
   weeklyOffDays: [0],
   allowCheckoutDuringBreak: true,
   notes: "",
@@ -394,25 +401,54 @@ const resolveAttendanceStatus = ({
     return ATTENDANCE_STATUS.ABSENT;
   }
 
-  if (effectiveWorkedMinutes < safePolicy.halfDayMinutes) {
-    return ATTENDANCE_STATUS.HALF_DAY;
+  if (effectiveWorkedMinutes < HALF_DAY_PRODUCTIVE_MINUTES) {
+    return ATTENDANCE_STATUS.ABSENT;
   }
 
-  const checkInMinutes = toMinutesOfDayInTimezone(checkInAt, safePolicy.timezone);
-  const lateCutoffMinutes = safePolicy.shiftStartMinutes + safePolicy.graceMinutes;
-  if (checkInMinutes > lateCutoffMinutes) {
-    return ATTENDANCE_STATUS.LATE;
+  if (effectiveWorkedMinutes < FULL_DAY_PRODUCTIVE_MINUTES) {
+    return ATTENDANCE_STATUS.HALF_DAY;
   }
 
   if (
     ATTENDANCE_DATE_PATTERN.test(attendanceDate)
     && safePolicy.weeklyOffDays.includes(new Date(toUtcMsFromDateKey(attendanceDate)).getUTCDay())
-    && effectiveWorkedMinutes < safePolicy.fullDayMinutes
+    && effectiveWorkedMinutes < FULL_DAY_PRODUCTIVE_MINUTES
   ) {
     return ATTENDANCE_STATUS.PRESENT;
   }
 
   return ATTENDANCE_STATUS.PRESENT;
+};
+
+const getMonthSpanInclusive = (fromMonthKey, toMonthKey) => {
+  if (!MONTH_KEY_PATTERN.test(fromMonthKey) || !MONTH_KEY_PATTERN.test(toMonthKey)) return 0;
+  const [fromYearRaw, fromMonthRaw] = fromMonthKey.split("-");
+  const [toYearRaw, toMonthRaw] = toMonthKey.split("-");
+  const fromYear = Number.parseInt(fromYearRaw, 10);
+  const fromMonth = Number.parseInt(fromMonthRaw, 10);
+  const toYear = Number.parseInt(toYearRaw, 10);
+  const toMonth = Number.parseInt(toMonthRaw, 10);
+  if (
+    !Number.isFinite(fromYear)
+    || !Number.isFinite(fromMonth)
+    || !Number.isFinite(toYear)
+    || !Number.isFinite(toMonth)
+  ) {
+    return 0;
+  }
+  const diff = ((toYear - fromYear) * 12) + (toMonth - fromMonth);
+  return diff < 0 ? 0 : diff + 1;
+};
+
+const toMonthKeyFromDate = (value, timezone = DEFAULT_TIMEZONE) =>
+  toDateKeyInTimezone(value, timezone).slice(0, 7);
+
+const isLateCheckInTime = (checkInAt, policy = DEFAULT_POLICY) => {
+  const safeCheckInAt = toSafeDate(checkInAt);
+  if (!safeCheckInAt) return false;
+  const safePolicy = toPolicyView(policy || DEFAULT_POLICY);
+  return toMinutesOfDayInTimezone(safeCheckInAt, safePolicy.timezone)
+    > LATE_CHECK_IN_CUTOFF_MINUTES;
 };
 
 const applyWorkingSnapshot = (
@@ -454,25 +490,46 @@ const applyWorkingSnapshot = (
   attendance.workedMinutes = Math.max(0, grossWorkedMinutes - appliedBreakMinutes);
 };
 
+const resolveLiveAttendanceStatus = ({
+  isOnBreak,
+}) => {
+  if (isOnBreak) {
+    return LIVE_ATTENDANCE_STATUS.BREAK;
+  }
+
+  return LIVE_ATTENDANCE_STATUS.WORKING;
+};
+
 const toAttendanceView = (row, policy = DEFAULT_POLICY) => {
   const normalizedBreaks = normalizeBreakSessions(row?.breakSessions, {
     includeOpenTill: new Date(),
   });
+  const isOnBreak = Boolean(normalizedBreaks.activeBreakStartedAt);
   const referenceEnd = row?.checkOutAt || new Date();
   const grossWorkedMinutes = toWorkedMinutes(row?.checkInAt, referenceEnd);
   const breakMinutes = row?.checkOutAt
     ? Number(row?.totalBreakMinutes || normalizedBreaks.closedBreakMinutes || 0)
     : normalizedBreaks.effectiveBreakMinutes;
-  const resolvedWorkedMinutes = row?.checkOutAt
+  const isManualStatus = row?.source === ATTENDANCE_SOURCE.MANUAL;
+  const resolvedWorkedMinutes = isManualStatus
+    ? Number(row?.workedMinutes || 0)
+    : row?.checkOutAt
     ? Number(row?.workedMinutes || 0)
     : Math.max(0, grossWorkedMinutes - breakMinutes);
-  const status = row?.checkOutAt && row?.checkInAt
-    ? (row.status || resolveAttendanceStatus({
-      attendanceDate: row.attendanceDate,
-      checkInAt: row.checkInAt,
-      workedMinutes: resolvedWorkedMinutes,
-      policy,
-    }))
+  const isLateCheckIn = isLateCheckInTime(row?.checkInAt, policy);
+  const status = isManualStatus
+    ? (row?.status || ATTENDANCE_STATUS.PENDING)
+    : row?.checkInAt
+    ? (row?.checkOutAt
+      ? resolveAttendanceStatus({
+        attendanceDate: row.attendanceDate,
+        checkInAt: row.checkInAt,
+        workedMinutes: resolvedWorkedMinutes,
+        policy,
+      })
+      : resolveLiveAttendanceStatus({
+        isOnBreak,
+      }))
     : (row?.status || ATTENDANCE_STATUS.PENDING);
 
   return {
@@ -498,7 +555,8 @@ const toAttendanceView = (row, policy = DEFAULT_POLICY) => {
       };
     }),
     activeBreakStartedAt: normalizedBreaks.activeBreakStartedAt,
-    isOnBreak: Boolean(normalizedBreaks.activeBreakStartedAt),
+    isOnBreak,
+    isLateCheckIn,
     status,
     source: row.source || ATTENDANCE_SOURCE.WEB,
     checkInNote: row.checkInNote || "",
@@ -555,6 +613,7 @@ const getScopedUsersForAttendanceViewer = async (viewer) => {
     return User.find({
       companyId: viewer.companyId,
       isActive: true,
+      role: { $ne: USER_ROLES.ADMIN },
     })
       .select("_id name email role")
       .sort({ name: 1 })
@@ -634,6 +693,16 @@ const ensureManageAttendanceRole = (req, res) => {
   if (!canManageAttendance(req.user?.role)) {
     res.status(403).json({
       message: "Only admin and management roles can perform this action",
+    });
+    return false;
+  }
+  return true;
+};
+
+const ensurePersonalAttendanceRole = (req, res) => {
+  if (req.user?.role === USER_ROLES.ADMIN) {
+    res.status(403).json({
+      message: "Admin users audit attendance and cannot mark personal attendance",
     });
     return false;
   }
@@ -743,6 +812,7 @@ exports.checkIn = async (req, res) => {
     if (!req.user?.companyId) {
       return res.status(403).json({ message: "Company context is required" });
     }
+    if (!ensurePersonalAttendanceRole(req, res)) return null;
 
     const policy = await resolvePolicyForCompany(req.user.companyId);
     const now = new Date();
@@ -822,6 +892,7 @@ exports.startBreak = async (req, res) => {
     if (!req.user?.companyId) {
       return res.status(403).json({ message: "Company context is required" });
     }
+    if (!ensurePersonalAttendanceRole(req, res)) return null;
 
     const policy = await resolvePolicyForCompany(req.user.companyId);
     const now = new Date();
@@ -887,6 +958,7 @@ exports.endBreak = async (req, res) => {
     if (!req.user?.companyId) {
       return res.status(403).json({ message: "Company context is required" });
     }
+    if (!ensurePersonalAttendanceRole(req, res)) return null;
 
     const policy = await resolvePolicyForCompany(req.user.companyId);
     const now = new Date();
@@ -947,6 +1019,7 @@ exports.checkOut = async (req, res) => {
     if (!req.user?.companyId) {
       return res.status(403).json({ message: "Company context is required" });
     }
+    if (!ensurePersonalAttendanceRole(req, res)) return null;
 
     const policy = await resolvePolicyForCompany(req.user.companyId);
     const now = new Date();
@@ -1017,11 +1090,87 @@ exports.checkOut = async (req, res) => {
   }
 };
 
+exports.getMyLeaveBalance = async (req, res) => {
+  try {
+    if (!req.user?.companyId) {
+      return res.status(403).json({ message: "Company context is required" });
+    }
+    if (req.user?.role === USER_ROLES.ADMIN) {
+      return res.status(403).json({ message: "Admin users do not have employee leave balance" });
+    }
+
+    const policy = await resolvePolicyForCompany(req.user.companyId);
+    const requestedMonth = toTrimmedString(req.query.month) || toMonthKeyFromDate(new Date(), policy.timezone);
+    if (!MONTH_KEY_PATTERN.test(requestedMonth)) {
+      return res.status(400).json({ message: "month must be in YYYY-MM format" });
+    }
+
+    const user = await User.findOne({
+      _id: req.user._id,
+      companyId: req.user.companyId,
+      isActive: true,
+    })
+      .select("_id createdAt role")
+      .lean();
+
+    if (!user) {
+      return res.status(404).json({ message: "User not found" });
+    }
+    if (user.role === USER_ROLES.ADMIN) {
+      return res.status(403).json({ message: "Admin users do not have employee leave balance" });
+    }
+
+    const startMonth = toMonthKeyFromDate(user.createdAt || new Date(), policy.timezone);
+    const monthsAccrued = getMonthSpanInclusive(startMonth, requestedMonth);
+    const accrued = monthsAccrued;
+    const requestedMonthRange = resolveMonthRange(requestedMonth);
+
+    const leaveRows = await LeaveRequest.find({
+      companyId: req.user.companyId,
+      userId: req.user._id,
+      status: { $in: ["PENDING", "APPROVED"] },
+      leaveType: { $ne: "UNPAID" },
+      fromDate: { $lte: requestedMonthRange.to },
+    })
+      .select("_id fromDate toDate totalDays leaveType status")
+      .lean();
+
+    const used = leaveRows
+      .filter((row) => row.status === "APPROVED")
+      .reduce((sum, row) => sum + Number(row.totalDays || 0), 0);
+    const pending = leaveRows
+      .filter((row) => row.status === "PENDING")
+      .reduce((sum, row) => sum + Number(row.totalDays || 0), 0);
+    const available = Math.max(0, accrued - used);
+
+    return res.json({
+      month: requestedMonth,
+      timezone: policy.timezone,
+      monthlyAccrual: 1,
+      accrualStartMonth: startMonth,
+      monthsAccrued,
+      accrued,
+      used,
+      pending,
+      available,
+      carryForward: available,
+    });
+  } catch (error) {
+    logger.error({
+      requestId: req.requestId || null,
+      error: error.message,
+      message: "getMyLeaveBalance failed",
+    });
+    return res.status(500).json({ message: "Server error" });
+  }
+};
+
 exports.createLeaveRequest = async (req, res) => {
   try {
     if (!req.user?.companyId) {
       return res.status(403).json({ message: "Company context is required" });
     }
+    if (!ensurePersonalAttendanceRole(req, res)) return null;
 
     const fromDate = toTrimmedString(req.body?.fromDate);
     const toDate = toTrimmedString(req.body?.toDate) || fromDate;
@@ -1092,6 +1241,8 @@ exports.getMyLeaveRequests = async (req, res) => {
     if (!req.user?.companyId) {
       return res.status(403).json({ message: "Company context is required" });
     }
+    if (!ensurePersonalAttendanceRole(req, res)) return null;
+
     const rows = await LeaveRequest.find({
       companyId: req.user.companyId,
       userId: req.user._id,
@@ -1555,9 +1706,14 @@ exports.getMyAttendance = async (req, res) => {
       String(right.attendanceDate || "").localeCompare(String(left.attendanceDate || "")));
 
     const presentDays = attendance.filter((row) =>
-      [ATTENDANCE_STATUS.PRESENT, ATTENDANCE_STATUS.LATE].includes(row.status)).length;
-    const lateDays = attendance.filter((row) => row.status === ATTENDANCE_STATUS.LATE).length;
+      [
+        ATTENDANCE_STATUS.PRESENT,
+        LIVE_ATTENDANCE_STATUS.WORKING,
+        LIVE_ATTENDANCE_STATUS.BREAK,
+      ].includes(row.status)).length;
+    const lateDays = attendance.filter((row) => row.isLateCheckIn).length;
     const halfDays = attendance.filter((row) => row.status === ATTENDANCE_STATUS.HALF_DAY).length;
+    const absentDays = attendance.filter((row) => row.status === ATTENDANCE_STATUS.ABSENT).length;
     const leaveDays = attendance.filter((row) => row.status === ATTENDANCE_STATUS.LEAVE).length;
     const pendingDays = attendance.filter((row) => row.status === ATTENDANCE_STATUS.PENDING).length;
     const totalWorkedMinutes = attendance.reduce(
@@ -1580,6 +1736,7 @@ exports.getMyAttendance = async (req, res) => {
         presentDays,
         lateDays,
         halfDays,
+        absentDays,
         leaveDays,
         pendingDays,
         totalWorkedMinutes,
@@ -1611,6 +1768,253 @@ exports.getMyAttendance = async (req, res) => {
   }
 };
 
+exports.getUserAttendanceForAdmin = async (req, res) => {
+  try {
+    if (!req.user?.companyId) {
+      return res.status(403).json({ message: "Company context is required" });
+    }
+    if (!ensureManageAttendanceRole(req, res)) return null;
+
+    const targetUserId = toTrimmedString(req.params?.userId);
+    if (!targetUserId) {
+      return res.status(400).json({ message: "userId is required" });
+    }
+
+    const inScope = await ensureUserInScope({
+      actor: req.user,
+      targetUserId,
+    });
+    if (!inScope) {
+      return res.status(403).json({ message: "User is outside your attendance scope" });
+    }
+
+    const targetUser = await User.findOne({
+      _id: targetUserId,
+      companyId: req.user.companyId,
+    })
+      .select("_id name email role")
+      .lean();
+    if (!targetUser) {
+      return res.status(404).json({ message: "User not found" });
+    }
+
+    const policy = await resolvePolicyForCompany(req.user.companyId);
+    const range = resolveRangeFromQuery(req.query);
+    if (range.error) {
+      return res.status(400).json({ message: range.error });
+    }
+
+    const query = {
+      companyId: req.user.companyId,
+      userId: targetUser._id,
+      attendanceDate: { $gte: range.from, $lte: range.to },
+    };
+
+    const [rows, leaveMap] = await Promise.all([
+      Attendance.find(query)
+        .sort({ attendanceDate: -1, checkInAt: -1, createdAt: -1 })
+        .lean(),
+      getApprovedLeavesMap({
+        companyId: req.user.companyId,
+        userIds: [targetUser._id],
+        fromDate: range.from,
+        toDate: range.to,
+      }),
+    ]);
+
+    const attendanceMap = new Map(
+      rows.map((row) => [String(row.attendanceDate), toAttendanceView(row, policy)]),
+    );
+    const userLeaveMap = leaveMap.get(String(targetUser._id)) || new Map();
+    userLeaveMap.forEach((leaveRow, dateKey) => {
+      if (attendanceMap.has(dateKey)) return;
+      attendanceMap.set(dateKey, {
+        _id: `leave:${targetUser._id}:${dateKey}`,
+        attendanceDate: dateKey,
+        checkInAt: null,
+        checkOutAt: null,
+        workedMinutes: 0,
+        workedHours: 0,
+        totalBreakMinutes: 0,
+        totalBreakHours: 0,
+        breakSessions: [],
+        activeBreakStartedAt: null,
+        isOnBreak: false,
+        isLateCheckIn: false,
+        status: ATTENDANCE_STATUS.LEAVE,
+        source: leaveRow.leaveType || "LEAVE",
+        checkInNote: "",
+        checkOutNote: leaveRow.reason || "",
+        createdAt: leaveRow.createdAt || null,
+        updatedAt: leaveRow.updatedAt || null,
+      });
+    });
+
+    const attendance = [...attendanceMap.values()].sort((left, right) =>
+      String(right.attendanceDate || "").localeCompare(String(left.attendanceDate || "")));
+
+    const presentDays = attendance.filter((row) =>
+      [
+        ATTENDANCE_STATUS.PRESENT,
+        LIVE_ATTENDANCE_STATUS.WORKING,
+        LIVE_ATTENDANCE_STATUS.BREAK,
+      ].includes(row.status)).length;
+    const lateDays = attendance.filter((row) => row.isLateCheckIn).length;
+    const halfDays = attendance.filter((row) => row.status === ATTENDANCE_STATUS.HALF_DAY).length;
+    const absentDays = attendance.filter((row) => row.status === ATTENDANCE_STATUS.ABSENT).length;
+    const leaveDays = attendance.filter((row) => row.status === ATTENDANCE_STATUS.LEAVE).length;
+    const pendingDays = attendance.filter((row) => row.status === ATTENDANCE_STATUS.PENDING).length;
+    const totalWorkedMinutes = attendance.reduce(
+      (sum, row) => sum + Number(row.workedMinutes || 0),
+      0,
+    );
+    const totalBreakMinutes = attendance.reduce(
+      (sum, row) => sum + Number(row.totalBreakMinutes || 0),
+      0,
+    );
+
+    return res.json({
+      timezone: policy.timezone,
+      from: range.from,
+      to: range.to,
+      user: toUserView(targetUser),
+      policy,
+      summary: {
+        totalDays: attendance.length,
+        presentDays,
+        lateDays,
+        halfDays,
+        absentDays,
+        leaveDays,
+        pendingDays,
+        totalWorkedMinutes,
+        totalWorkedHours: Math.round((totalWorkedMinutes / 60) * 100) / 100,
+        totalBreakMinutes,
+        totalBreakHours: Math.round((totalBreakMinutes / 60) * 100) / 100,
+      },
+      attendance,
+      count: attendance.length,
+    });
+  } catch (error) {
+    logger.error({
+      requestId: req.requestId || null,
+      error: error.message,
+      message: "getUserAttendanceForAdmin failed",
+    });
+    return res.status(500).json({ message: "Server error" });
+  }
+};
+
+exports.updateUserAttendanceStatus = async (req, res) => {
+  try {
+    if (!req.user?.companyId) {
+      return res.status(403).json({ message: "Company context is required" });
+    }
+    if (!ensureManageAttendanceRole(req, res)) return null;
+
+    const targetUserId = toTrimmedString(req.params?.userId);
+    const attendanceDate = toTrimmedString(req.params?.date);
+    const nextStatus = toTrimmedString(req.body?.status).toUpperCase();
+    const note = toTrimmedString(req.body?.note).slice(0, 240);
+
+    if (!targetUserId) {
+      return res.status(400).json({ message: "userId is required" });
+    }
+    if (!ATTENDANCE_DATE_PATTERN.test(attendanceDate)) {
+      return res.status(400).json({ message: "date must be in YYYY-MM-DD format" });
+    }
+    if (![
+      ATTENDANCE_STATUS.PRESENT,
+      ATTENDANCE_STATUS.HALF_DAY,
+      ATTENDANCE_STATUS.ABSENT,
+    ].includes(nextStatus)) {
+      return res.status(400).json({ message: "status must be PRESENT, HALF_DAY, or ABSENT" });
+    }
+
+    const canAccessTarget = await ensureUserInScope({
+      actor: req.user,
+      targetUserId,
+    });
+    if (!canAccessTarget) {
+      return res.status(403).json({ message: "User is outside your attendance scope" });
+    }
+
+    const targetUser = await User.findOne({
+      _id: targetUserId,
+      companyId: req.user.companyId,
+      isActive: true,
+    })
+      .select("_id name email role")
+      .lean();
+    if (!targetUser) {
+      return res.status(404).json({ message: "User not found" });
+    }
+    if (targetUser.role === USER_ROLES.ADMIN) {
+      return res.status(403).json({ message: "Admin attendance cannot be marked manually" });
+    }
+
+    const policy = await resolvePolicyForCompany(req.user.companyId);
+    let attendance = await Attendance.findOne({
+      companyId: req.user.companyId,
+      userId: targetUser._id,
+      attendanceDate,
+    });
+
+    if (!attendance) {
+      attendance = new Attendance({
+        companyId: req.user.companyId,
+        userId: targetUser._id,
+        attendanceDate,
+      });
+    }
+
+    attendance.status = nextStatus;
+    attendance.source = ATTENDANCE_SOURCE.MANUAL;
+    attendance.totalBreakMinutes = nextStatus === ATTENDANCE_STATUS.ABSENT
+      ? 0
+      : Number(attendance.totalBreakMinutes || 0);
+    attendance.breakSessions = nextStatus === ATTENDANCE_STATUS.ABSENT
+      ? []
+      : normalizeBreakSessions(attendance.breakSessions).sessions;
+    attendance.workedMinutes = nextStatus === ATTENDANCE_STATUS.PRESENT
+      ? Number(policy.fullDayMinutes || DEFAULT_POLICY.fullDayMinutes)
+      : nextStatus === ATTENDANCE_STATUS.HALF_DAY
+        ? Number(policy.halfDayMinutes || DEFAULT_POLICY.halfDayMinutes)
+        : 0;
+
+    if (nextStatus === ATTENDANCE_STATUS.ABSENT) {
+      attendance.checkInAt = null;
+      attendance.checkOutAt = null;
+      attendance.checkInNote = note || "Marked absent manually";
+      attendance.checkOutNote = "";
+    } else {
+      attendance.checkInNote = note || `Marked ${nextStatus.toLowerCase().replaceAll("_", " ")} manually`;
+    }
+
+    attendance.metadata = {
+      ...(attendance.metadata || {}),
+      manualStatusBy: req.user._id,
+      manualStatusAt: new Date(),
+      manualStatusNote: note,
+    };
+
+    await attendance.save();
+
+    return res.json({
+      message: "Attendance status updated",
+      user: toUserView(targetUser),
+      attendance: toAttendanceView(attendance.toObject(), policy),
+    });
+  } catch (error) {
+    logger.error({
+      requestId: req.requestId || null,
+      error: error.message,
+      message: "updateUserAttendanceStatus failed",
+    });
+    return res.status(500).json({ message: "Server error" });
+  }
+};
+
 exports.getDailyAttendanceForAdmin = async (req, res) => {
   try {
     if (!req.user?.companyId) {
@@ -1633,6 +2037,7 @@ exports.getDailyAttendanceForAdmin = async (req, res) => {
           totalUsers: 0,
           checkedIn: 0,
           checkedOut: 0,
+          activeLogins: 0,
           onBreak: 0,
           leave: 0,
           absent: 0,
@@ -1667,11 +2072,12 @@ exports.getDailyAttendanceForAdmin = async (req, res) => {
     const statusFilter = toTrimmedString(req.query.status).toUpperCase();
     const validStatusFilter = statusFilter && [
       ATTENDANCE_STATUS.PRESENT,
-      ATTENDANCE_STATUS.LATE,
       ATTENDANCE_STATUS.HALF_DAY,
       ATTENDANCE_STATUS.PENDING,
       ATTENDANCE_STATUS.ABSENT,
       ATTENDANCE_STATUS.LEAVE,
+      LIVE_ATTENDANCE_STATUS.WORKING,
+      LIVE_ATTENDANCE_STATUS.BREAK,
       "ON_BREAK",
     ].includes(statusFilter)
       ? statusFilter
@@ -1739,7 +2145,10 @@ exports.getDailyAttendanceForAdmin = async (req, res) => {
       })
       .filter((row) => {
         if (!validStatusFilter) return true;
-        if (validStatusFilter === "ON_BREAK") {
+        if (
+          validStatusFilter === "ON_BREAK"
+          || validStatusFilter === LIVE_ATTENDANCE_STATUS.BREAK
+        ) {
           return Boolean(row.attendance.isOnBreak);
         }
         return row.attendance.status === validStatusFilter;
@@ -1749,6 +2158,8 @@ exports.getDailyAttendanceForAdmin = async (req, res) => {
 
     const checkedIn = rows.filter((row) => Boolean(row.attendance.checkInAt)).length;
     const checkedOut = rows.filter((row) => Boolean(row.attendance.checkOutAt)).length;
+    const activeLogins = rows.filter((row) =>
+      Boolean(row.attendance.checkInAt) && !row.attendance.checkOutAt).length;
     const onBreak = rows.filter((row) => Boolean(row.attendance.isOnBreak)).length;
     const leave = rows.filter((row) => row.attendance.status === ATTENDANCE_STATUS.LEAVE).length;
     const absent = rows.filter((row) => row.attendance.status === ATTENDANCE_STATUS.ABSENT).length;
@@ -1761,6 +2172,7 @@ exports.getDailyAttendanceForAdmin = async (req, res) => {
         totalUsers: rows.length,
         checkedIn,
         checkedOut,
+        activeLogins,
         onBreak,
         leave,
         absent,

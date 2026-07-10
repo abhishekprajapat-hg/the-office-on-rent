@@ -647,7 +647,7 @@ const ensureLeadRoomAccess = async ({ user, room }) => {
 const getContactUsers = async (user) => {
   const criteria = buildContactQueryForUser(user);
   const users = await User.find(criteria)
-    .select("_id name role parentId")
+    .select("_id name role parentId companyId")
     .lean();
 
   return users.map(toUserDto).sort(sortByName);
@@ -702,8 +702,13 @@ const createOrGetDirectRoom = async ({ initiator, recipientId }) => {
     throw createHttpError(400, "Recipient is required");
   }
 
-  const recipient = await User.findOne({ _id: recipientId, isActive: true })
-    .select("_id name role parentId isActive")
+  const recipientCriteria = { _id: recipientId, isActive: true };
+  if (initiator?.companyId) {
+    recipientCriteria.companyId = initiator.companyId;
+  }
+
+  const recipient = await User.findOne(recipientCriteria)
+    .select("_id name role parentId companyId isActive")
     .lean();
 
   if (!recipient) {
@@ -847,55 +852,20 @@ const createGroupRoom = async ({ creator, name, participantIds = [], teamId = nu
     );
   }
 
-  const participants = await User.find({
+  const participantCriteria = {
     _id: { $in: finalParticipants },
     isActive: true,
-  })
-    .select("_id role parentId isActive")
+  };
+  if (creator?.companyId) {
+    participantCriteria.companyId = creator.companyId;
+  }
+
+  const participants = await User.find(participantCriteria)
+    .select("_id role parentId companyId isActive")
     .lean();
 
   if (participants.length !== finalParticipants.length) {
     throw createHttpError(400, "Some participants are invalid or inactive");
-  }
-
-  const byId = new Map(
-    participants.map((participant) => [toObjectIdString(participant._id), participant]),
-  );
-
-  if (isManagerRole(creator.role)) {
-    finalParticipants.forEach((participantId) => {
-      const participant = byId.get(toObjectIdString(participantId));
-      const isCreator = toObjectIdString(participant._id) === toObjectIdString(creator._id);
-      const isOwnTeamMember =
-        EXECUTIVE_ROLES.includes(participant.role)
-        && toObjectIdString(participant.parentId) === toObjectIdString(creator._id);
-
-      if (!isCreator && !isOwnTeamMember) {
-        throw createHttpError(
-          403,
-          "Leadership can create groups only with users from their own team",
-        );
-      }
-    });
-
-    teamId = creator._id;
-  }
-
-  if (creator.role === USER_ROLES.ADMIN && teamId) {
-    finalParticipants.forEach((participantId) => {
-      const participant = byId.get(toObjectIdString(participantId));
-      const isCreator = toObjectIdString(participant._id) === toObjectIdString(creator._id);
-      if (isCreator) {
-        return;
-      }
-
-      const inTeam =
-        toObjectIdString(participant._id) === toObjectIdString(teamId)
-        || toObjectIdString(participant.parentId) === toObjectIdString(teamId);
-      if (!inTeam) {
-        throw createHttpError(403, "Admin team group cannot include cross-team users");
-      }
-    });
   }
 
   const room = await ChatRoom.create({

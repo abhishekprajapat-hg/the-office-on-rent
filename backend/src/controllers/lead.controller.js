@@ -2055,8 +2055,8 @@ const toLeadStatusRequestDealPayment = (saleMeta = {}) => {
 
 exports.bulkUploadLeads = async (req, res) => {
   try {
-    if (![USER_ROLES.ADMIN, ...MANAGEMENT_ROLES].includes(req.user?.role)) {
-      return res.status(403).json({ message: "Only ADMIN or MANAGER can bulk upload leads" });
+    if (![USER_ROLES.ADMIN, ...MANAGEMENT_ROLES, ...EXECUTIVE_ROLES].includes(req.user?.role)) {
+      return res.status(403).json({ message: "Only ADMIN, MANAGER, or EXECUTIVE can bulk upload leads" });
     }
 
     const companyId = toObjectIdString(req.user?.companyId);

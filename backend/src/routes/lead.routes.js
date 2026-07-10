@@ -18,7 +18,13 @@ router.post(
   "/bulk",
   writeLimiter,
   authMiddleware.protect,
-  authMiddleware.checkRole(["ADMIN", "MANAGER"]),
+  authMiddleware.checkRole([
+    "ADMIN",
+    "MANAGER",
+    "INSIDE_EXECUTIVE",
+    "EXECUTIVE",
+    "FIELD_EXECUTIVE",
+  ]),
   leadController.bulkUploadLeads,
 );
 

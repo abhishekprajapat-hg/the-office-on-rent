@@ -47,6 +47,8 @@ const PRIORITIES = [
 
 export default function TaskManager({ theme = "light" }) {
   const isDark = theme === "dark";
+  const currentRole = String(localStorage.getItem("role") || "").trim().toUpperCase();
+  const isProductionExecutive = currentRole === "PRODUCTION_EXECUTIVE";
 
   // State
   const [tasks, setTasks] = useState([]);
@@ -106,7 +108,7 @@ export default function TaskManager({ theme = "light" }) {
       if (statusFilter) filters.status = statusFilter;
       if (priorityFilter) filters.priority = priorityFilter;
       if (assigneeFilter) filters.assignedTo = assigneeFilter;
-      if (leadFilter) filters.leadId = leadFilter;
+      if (!isProductionExecutive && leadFilter) filters.leadId = leadFilter;
       if (searchQuery) filters.search = searchQuery;
       if (tagFilter) filters.tag = tagFilter;
 
@@ -114,7 +116,7 @@ export default function TaskManager({ theme = "light" }) {
         getTasks(filters),
         getTaskStats(),
         getUsers(),
-        getAllLeads()
+        isProductionExecutive ? Promise.resolve([]) : getAllLeads()
       ]);
 
       setTasks(tasksData);
@@ -127,7 +129,7 @@ export default function TaskManager({ theme = "light" }) {
     } finally {
       setLoading(false);
     }
-  }, [statusFilter, priorityFilter, assigneeFilter, leadFilter, searchQuery, tagFilter]);
+  }, [statusFilter, priorityFilter, assigneeFilter, leadFilter, searchQuery, tagFilter, isProductionExecutive]);
 
   useEffect(() => {
     fetchData();
@@ -203,7 +205,7 @@ export default function TaskManager({ theme = "light" }) {
         priority: formData.priority,
         dueDate: formData.dueDate || null,
         assignedTo: formData.assignedTo || null,
-        leadId: formData.leadId || null,
+        leadId: isProductionExecutive ? null : formData.leadId || null,
         subtasks: formData.subtasks,
         tags: formData.tags
       };
@@ -683,16 +685,18 @@ export default function TaskManager({ theme = "light" }) {
               ))}
             </select>
 
-            <select
-              value={leadFilter}
-              onChange={(e) => setLeadFilter(e.target.value)}
-              className={`h-10 rounded-lg border px-2 text-xs font-medium sm:h-8 ${styles.input} sm:max-w-[150px]`}
-            >
-              <option value="">All Leads</option>
-              {leads.map(l => (
-                <option key={l._id} value={l._id}>{l.name}</option>
-              ))}
-            </select>
+            {!isProductionExecutive && (
+              <select
+                value={leadFilter}
+                onChange={(e) => setLeadFilter(e.target.value)}
+                className={`h-10 rounded-lg border px-2 text-xs font-medium sm:h-8 ${styles.input} sm:max-w-[150px]`}
+              >
+                <option value="">All Leads</option>
+                {leads.map(l => (
+                  <option key={l._id} value={l._id}>{l.name}</option>
+                ))}
+              </select>
+            )}
 
             <select
               value={tagFilter}
@@ -705,7 +709,7 @@ export default function TaskManager({ theme = "light" }) {
               ))}
             </select>
 
-            {(statusFilter || priorityFilter || assigneeFilter || leadFilter || searchQuery || tagFilter) && (
+            {(statusFilter || priorityFilter || assigneeFilter || (!isProductionExecutive && leadFilter) || searchQuery || tagFilter) && (
               <button
                 onClick={() => {
                   setStatusFilter("");
@@ -876,7 +880,7 @@ export default function TaskManager({ theme = "light" }) {
                             {/* Metadata (Lead, Assignee, Date) */}
                             <div className="mt-3 pt-2 border-t border-slate-800/10 dark:border-white/5 space-y-1.5 text-[10px]">
                               {/* Linked Lead */}
-                              {task.leadId && (
+                              {!isProductionExecutive && task.leadId && (
                                 <div className={`flex items-center gap-1 truncate ${styles.label}`}>
                                   <LinkIcon size={10} className="shrink-0" />
                                   <span className="truncate">Lead: {task.leadId.name}</span>
@@ -989,10 +993,14 @@ export default function TaskManager({ theme = "light" }) {
                       <div className={`font-semibold ${expired ? "text-rose-500" : styles.title}`}>
                         {task.dueDate ? formatDate(task.dueDate) : "-"}
                       </div>
-                      <div className={styles.label}>Lead</div>
-                      <div className={`truncate font-semibold ${styles.title}`}>
-                        {task.leadId?.name || "-"}
-                      </div>
+                      {!isProductionExecutive && (
+                        <>
+                          <div className={styles.label}>Lead</div>
+                          <div className={`truncate font-semibold ${styles.title}`}>
+                            {task.leadId?.name || "-"}
+                          </div>
+                        </>
+                      )}
                       <div className={styles.label}>Assignee</div>
                       <div className={`truncate font-semibold ${styles.title}`}>
                         {task.assignedTo?.name || "-"}
@@ -1030,7 +1038,7 @@ export default function TaskManager({ theme = "light" }) {
                     <th className="p-4">Status</th>
                     <th className="p-4">Priority</th>
                     <th className="p-4">Due Date</th>
-                    <th className="p-4">Linked Lead</th>
+                    {!isProductionExecutive && <th className="p-4">Linked Lead</th>}
                     <th className="p-4">Assignee</th>
                     <th className="p-4 text-right">Actions</th>
                   </tr>
@@ -1096,16 +1104,18 @@ export default function TaskManager({ theme = "light" }) {
                           {task.dueDate ? formatDate(task.dueDate) : "-"}
                           {expired && <span className="text-[9px] uppercase font-bold tracking-wider ml-1 bg-rose-500/10 border border-rose-500/20 px-1 py-0.5 rounded">Overdue</span>}
                         </td>
-                        <td className="p-4">
-                          {task.leadId ? (
-                            <div className="flex items-center gap-1">
-                              <LinkIcon size={10} className="text-slate-500" />
-                              <span className="font-medium">{task.leadId.name}</span>
-                            </div>
-                          ) : (
-                            <span className="text-slate-550 italic">-</span>
-                          )}
-                        </td>
+                        {!isProductionExecutive && (
+                          <td className="p-4">
+                            {task.leadId ? (
+                              <div className="flex items-center gap-1">
+                                <LinkIcon size={10} className="text-slate-500" />
+                                <span className="font-medium">{task.leadId.name}</span>
+                              </div>
+                            ) : (
+                              <span className="text-slate-550 italic">-</span>
+                            )}
+                          </td>
+                        )}
                         <td className="p-4">
                           {task.assignedTo ? (
                             <div className="flex items-center gap-1.5">
@@ -1275,22 +1285,23 @@ export default function TaskManager({ theme = "light" }) {
                   </div>
                 </div>
 
-                {/* Related Lead */}
-                <div className="space-y-1">
-                  <label className={`text-[10px] font-bold uppercase tracking-wider ${styles.label}`}>
-                    Link to Lead (Optional)
-                  </label>
-                  <select
-                    value={formData.leadId}
-                    onChange={(e) => setFormData(prev => ({ ...prev, leadId: e.target.value }))}
-                    className={`w-full h-10 px-3 rounded-xl border text-sm ${styles.input}`}
-                  >
-                    <option value="">No linked lead</option>
-                    {leads.map(l => (
-                      <option key={l._id} value={l._id}>{l.name} ({l.phone})</option>
-                    ))}
-                  </select>
-                </div>
+                {!isProductionExecutive && (
+                  <div className="space-y-1">
+                    <label className={`text-[10px] font-bold uppercase tracking-wider ${styles.label}`}>
+                      Link to Lead (Optional)
+                    </label>
+                    <select
+                      value={formData.leadId}
+                      onChange={(e) => setFormData(prev => ({ ...prev, leadId: e.target.value }))}
+                      className={`w-full h-10 px-3 rounded-xl border text-sm ${styles.input}`}
+                    >
+                      <option value="">No linked lead</option>
+                      {leads.map(l => (
+                        <option key={l._id} value={l._id}>{l.name} ({l.phone})</option>
+                      ))}
+                    </select>
+                  </div>
+                )}
 
                 {/* Subtasks Section */}
                 <div className="space-y-2">

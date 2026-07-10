@@ -1,4 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useState } from "react";
+import { useNavigate } from "react-router-dom";
 import {
   CalendarCheck2,
   ClipboardCheck,
@@ -23,6 +24,7 @@ import {
   getMyAttendance,
   reviewLeaveRequest,
   startBreakAttendance,
+  updateUserAttendanceStatus,
 } from "../../services/attendanceService";
 import { toErrorMessage } from "../../utils/errorMessage";
 import ToastNotice from "../../components/ui/ToastNotice";
@@ -34,6 +36,8 @@ const ADMIN_VIEW_ROLES = new Set([
 
 const STATUS_STYLES = {
   PRESENT: "bg-emerald-100 text-emerald-700 border-emerald-200",
+  WORKING: "bg-emerald-100 text-emerald-700 border-emerald-200",
+  BREAK: "bg-indigo-100 text-indigo-700 border-indigo-200",
   LATE: "bg-yellow-100 text-yellow-700 border-yellow-200",
   HALF_DAY: "bg-blue-100 text-blue-700 border-blue-200",
   LEAVE: "bg-teal-100 text-teal-700 border-teal-200",
@@ -43,6 +47,11 @@ const STATUS_STYLES = {
 };
 
 const LEAVE_TYPE_OPTIONS = ["CASUAL", "SICK", "EMERGENCY", "UNPAID", "OTHER"];
+const MANUAL_ATTENDANCE_STATUS_OPTIONS = [
+  { label: "Present", value: "PRESENT" },
+  { label: "Half Day", value: "HALF_DAY" },
+  { label: "Absent", value: "ABSENT" },
+];
 
 const getRoleFromStorage = () =>
   String(localStorage.getItem("role") || "").trim().toUpperCase();
@@ -100,9 +109,23 @@ const formatDuration = (minutes) => {
 const statusBadgeClass = (status) =>
   STATUS_STYLES[status] || "bg-slate-100 text-slate-700 border-slate-200";
 
+const formatAttendanceStatus = (status) => {
+  const normalized = String(status || "ABSENT").trim().toUpperCase();
+  if (normalized === "PRESENT") return "Present";
+  if (normalized === "WORKING") return "Working";
+  if (normalized === "BREAK") return "Break";
+  if (normalized === "LATE") return "Working";
+  return normalized.replaceAll("_", " ");
+};
+
+const checkInTimeClass = (isLate) =>
+  isLate ? "text-sm font-semibold text-rose-700" : "text-sm text-slate-700";
+
 const AttendanceHub = () => {
+  const navigate = useNavigate();
   const [viewerRole] = useState(getRoleFromStorage);
   const isAdminViewer = ADMIN_VIEW_ROLES.has(viewerRole);
+  const canUsePersonalAttendance = viewerRole !== "ADMIN";
 
   const [month, setMonth] = useState(toMonthInputValue(new Date()));
   const [myLoading, setMyLoading] = useState(true);
@@ -122,6 +145,7 @@ const AttendanceHub = () => {
   const [adminLoading, setAdminLoading] = useState(false);
   const [adminRefreshing, setAdminRefreshing] = useState(false);
   const [adminError, setAdminError] = useState("");
+  const [manualStatusAction, setManualStatusAction] = useState("");
   const [adminData, setAdminData] = useState({
     timezone: "",
     date: "",
@@ -139,12 +163,27 @@ const AttendanceHub = () => {
     reason: "",
   });
 
+  const openUserProfile = useCallback(
+    (targetUserId) => {
+      const normalizedUserId = String(targetUserId || "").trim();
+      if (!normalizedUserId) return;
+      navigate(`/admin/users/${normalizedUserId}`);
+    },
+    [navigate],
+  );
+
   const [adminWorkflowLoading, setAdminWorkflowLoading] = useState(false);
   const [adminLeaveRequests, setAdminLeaveRequests] = useState([]);
   const [adminLeaveStatusFilter, setAdminLeaveStatusFilter] = useState("PENDING");
   const [reviewAction, setReviewAction] = useState("");
 
   const loadMyAttendance = useCallback(async ({ quiet = false } = {}) => {
+    if (!canUsePersonalAttendance) {
+      setMyLoading(false);
+      setMyRefreshing(false);
+      return;
+    }
+
     if (quiet) {
       setMyRefreshing(true);
     } else {
@@ -166,7 +205,7 @@ const AttendanceHub = () => {
       setMyLoading(false);
       setMyRefreshing(false);
     }
-  }, [month]);
+  }, [canUsePersonalAttendance, month]);
 
   const loadAdminAttendance = useCallback(async ({
     quiet = false,
@@ -202,6 +241,11 @@ const AttendanceHub = () => {
   }, [adminDate, adminStatus, isAdminViewer]);
 
   const loadLeaveRequestsData = useCallback(async () => {
+    if (!canUsePersonalAttendance) {
+      setLeaveLoading(false);
+      return;
+    }
+
     setLeaveLoading(true);
     try {
       const rows = await getMyLeaveRequests();
@@ -211,7 +255,7 @@ const AttendanceHub = () => {
     } finally {
       setLeaveLoading(false);
     }
-  }, []);
+  }, [canUsePersonalAttendance]);
 
   const loadAdminWorkflowData = useCallback(async () => {
     if (!isAdminViewer) return;
@@ -254,19 +298,23 @@ const AttendanceHub = () => {
   }, [mySuccess]);
 
   const todayAttendance = myData.today;
-  const canCheckIn = !todayAttendance?.checkInAt;
-  const canCheckOut = Boolean(todayAttendance?.checkInAt) && !todayAttendance?.checkOutAt;
+  const canCheckIn = canUsePersonalAttendance && !todayAttendance?.checkInAt;
+  const canCheckOut = canUsePersonalAttendance && Boolean(todayAttendance?.checkInAt) && !todayAttendance?.checkOutAt;
   const isOnBreak = Boolean(todayAttendance?.isOnBreak);
   const canStartBreak =
-    Boolean(todayAttendance?.checkInAt)
+    canUsePersonalAttendance
+    && Boolean(todayAttendance?.checkInAt)
     && !todayAttendance?.checkOutAt
     && !isOnBreak;
   const canEndBreak =
-    Boolean(todayAttendance?.checkInAt)
+    canUsePersonalAttendance
+    && Boolean(todayAttendance?.checkInAt)
     && !todayAttendance?.checkOutAt
     && isOnBreak;
 
   const handleCheckIn = async () => {
+    if (!canUsePersonalAttendance) return;
+
     try {
       setAttendanceAction("checkin");
       setMyError("");
@@ -284,6 +332,8 @@ const AttendanceHub = () => {
   };
 
   const handleCheckOut = async () => {
+    if (!canUsePersonalAttendance) return;
+
     if (typeof window !== "undefined") {
       const warningLines = [
         "Are you sure you want to check out for today?",
@@ -313,6 +363,8 @@ const AttendanceHub = () => {
   };
 
   const handleStartBreak = async () => {
+    if (!canUsePersonalAttendance) return;
+
     try {
       setAttendanceAction("breakstart");
       setMyError("");
@@ -330,6 +382,8 @@ const AttendanceHub = () => {
   };
 
   const handleEndBreak = async () => {
+    if (!canUsePersonalAttendance) return;
+
     try {
       setAttendanceAction("breakend");
       setMyError("");
@@ -348,6 +402,8 @@ const AttendanceHub = () => {
 
   const handleSubmitLeaveRequest = async (event) => {
     event.preventDefault();
+    if (!canUsePersonalAttendance) return;
+
     const fromDate = String(leaveForm.fromDate || "").trim();
     const toDate = String(leaveForm.toDate || "").trim();
     const reason = String(leaveForm.reason || "").trim();
@@ -421,6 +477,31 @@ const AttendanceHub = () => {
     }
   };
 
+  const handleManualStatusChange = async (row, nextStatus) => {
+    const userId = String(row?.user?._id || "").trim();
+    const date = String(adminData.date || adminDate || "").trim();
+    if (!userId || !date || !nextStatus) return;
+
+    const actionKey = `${userId}:${date}`;
+    try {
+      setManualStatusAction(actionKey);
+      setAdminError("");
+      const result = await updateUserAttendanceStatus(userId, date, {
+        status: nextStatus,
+      });
+      setMySuccess(result.message || "Attendance status updated");
+      await loadAdminAttendance({
+        quiet: true,
+        date: adminDate,
+        status: adminStatus,
+      });
+    } catch (error) {
+      setAdminError(toErrorMessage(error, "Failed to update attendance status"));
+    } finally {
+      setManualStatusAction("");
+    }
+  };
+
   const todayStatus = todayAttendance?.status || "ABSENT";
   const todayWorkedMinutes = Number(todayAttendance?.workedMinutes || 0);
   const todayBreakMinutes = Number(todayAttendance?.totalBreakMinutes || 0);
@@ -450,6 +531,11 @@ const AttendanceHub = () => {
         key: "halfDays",
         label: "Half Days",
         value: Number(summary.halfDays || 0),
+      },
+      {
+        key: "absentDays",
+        label: "Absent Days",
+        value: Number(summary.absentDays || 0),
       },
       {
         key: "leaveDays",
@@ -482,34 +568,36 @@ const AttendanceHub = () => {
         <div className="absolute bottom-0 left-1/3 h-56 w-56 rounded-full bg-indigo-300/25 blur-3xl" />
       </div>
 
-      <div className="flex flex-wrap items-center justify-end gap-2">
-        <input
-          type="month"
-          value={month}
-          onChange={(event) => setMonth(event.target.value)}
-          className="h-10 rounded-xl border border-slate-300 bg-white px-3 text-sm text-slate-800 shadow-sm outline-none transition focus:border-cyan-400 focus:ring-2 focus:ring-cyan-100"
-        />
-        <button
-          type="button"
-          onClick={() => loadMyAttendance({ quiet: true })}
-          disabled={myLoading || myRefreshing}
-          className="inline-flex h-10 items-center gap-2 rounded-xl border border-slate-300 bg-white px-3 text-xs font-semibold text-slate-700 shadow-sm transition hover:border-cyan-300 hover:bg-cyan-50 hover:text-cyan-700 disabled:cursor-not-allowed disabled:opacity-60"
-        >
-          {myRefreshing ? <Loader2 size={14} className="animate-spin" /> : <RefreshCw size={14} />}
-          Refresh
-        </button>
-      </div>
-
-      <ToastNotice message={myError} type="error" />
-      <ToastNotice message={mySuccess} type="success" />
-
-      {myLoading ? (
-        <div className="flex h-40 items-center justify-center rounded-3xl border border-slate-200 bg-white text-slate-500 shadow-sm">
-          <Loader2 size={18} className="mr-2 animate-spin" />
-          Loading attendance...
-        </div>
-      ) : (
+      {canUsePersonalAttendance ? (
         <>
+          <div className="flex flex-wrap items-center justify-end gap-2">
+            <input
+              type="month"
+              value={month}
+              onChange={(event) => setMonth(event.target.value)}
+              className="h-10 rounded-xl border border-slate-300 bg-white px-3 text-sm text-slate-800 shadow-sm outline-none transition focus:border-cyan-400 focus:ring-2 focus:ring-cyan-100"
+            />
+            <button
+              type="button"
+              onClick={() => loadMyAttendance({ quiet: true })}
+              disabled={myLoading || myRefreshing}
+              className="inline-flex h-10 items-center gap-2 rounded-xl border border-slate-300 bg-white px-3 text-xs font-semibold text-slate-700 shadow-sm transition hover:border-cyan-300 hover:bg-cyan-50 hover:text-cyan-700 disabled:cursor-not-allowed disabled:opacity-60"
+            >
+              {myRefreshing ? <Loader2 size={14} className="animate-spin" /> : <RefreshCw size={14} />}
+              Refresh
+            </button>
+          </div>
+
+          <ToastNotice message={myError} type="error" />
+          <ToastNotice message={mySuccess} type="success" />
+
+          {myLoading ? (
+            <div className="flex h-40 items-center justify-center rounded-3xl border border-slate-200 bg-white text-slate-500 shadow-sm">
+              <Loader2 size={18} className="mr-2 animate-spin" />
+              Loading attendance...
+            </div>
+          ) : (
+            <>
           <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
             <div className="rounded-3xl border border-slate-200 bg-white p-4 shadow-[0_18px_45px_-34px_rgba(15,23,42,0.35)] lg:col-span-2">
               <div className="flex flex-wrap items-center justify-between gap-3">
@@ -523,7 +611,7 @@ const AttendanceHub = () => {
                 </div>
                 <div className="flex items-center gap-2">
                   <span className={`inline-flex items-center rounded-full border px-2.5 py-1 text-xs font-semibold ${statusBadgeClass(todayStatus)}`}>
-                    {todayStatus.replaceAll("_", " ")}
+                    {formatAttendanceStatus(todayStatus)}
                   </span>
                   {isOnBreak ? (
                     <span className="inline-flex items-center rounded-full border border-indigo-200 bg-indigo-100 px-2.5 py-1 text-xs font-semibold text-indigo-700">
@@ -536,7 +624,9 @@ const AttendanceHub = () => {
               <div className="mt-4 grid grid-cols-1 gap-3 sm:grid-cols-4">
                 <div className="rounded-2xl border border-slate-200 bg-slate-50/85 px-3 py-2.5">
                   <p className="text-[10px] font-semibold uppercase tracking-[0.12em] text-slate-500">Check In</p>
-                  <p className="mt-1 text-sm font-semibold text-slate-800">{formatDateTime(todayAttendance?.checkInAt)}</p>
+                  <p className={`mt-1 ${checkInTimeClass(todayAttendance?.isLateCheckIn)}`}>
+                    {formatDateTime(todayAttendance?.checkInAt)}
+                  </p>
                 </div>
                 <div className="rounded-2xl border border-slate-200 bg-slate-50/85 px-3 py-2.5">
                   <p className="text-[10px] font-semibold uppercase tracking-[0.12em] text-slate-500">Check Out</p>
@@ -688,10 +778,12 @@ const AttendanceHub = () => {
                         </td>
                         <td className="px-4 py-3">
                           <span className={`inline-flex items-center rounded-full border px-2 py-1 text-xs font-semibold ${statusBadgeClass(row.status)}`}>
-                            {String(row.status || "ABSENT").replaceAll("_", " ")}
+                            {formatAttendanceStatus(row.status)}
                           </span>
                         </td>
-                        <td className="px-4 py-3 text-sm text-slate-700">{formatDateTime(row.checkInAt)}</td>
+                        <td className={`px-4 py-3 ${checkInTimeClass(row.isLateCheckIn)}`}>
+                          {formatDateTime(row.checkInAt)}
+                        </td>
                         <td className="px-4 py-3 text-sm text-slate-700">{formatDateTime(row.checkOutAt)}</td>
                         <td className="px-4 py-3 text-sm font-semibold text-indigo-700">
                           {formatDuration(row.totalBreakMinutes || 0)}
@@ -810,8 +902,10 @@ const AttendanceHub = () => {
 
           </div>
 
+            </>
+          )}
         </>
-      )}
+      ) : null}
 
       {isAdminViewer ? (
         <>
@@ -837,11 +931,11 @@ const AttendanceHub = () => {
                 className="h-10 rounded-xl border border-slate-300 bg-white px-3 text-sm text-slate-800 outline-none transition focus:border-cyan-400 focus:ring-2 focus:ring-cyan-100"
               >
                 <option value="">All Statuses</option>
+                <option value="WORKING">Working</option>
+                <option value="BREAK">Break</option>
                 <option value="PRESENT">Present</option>
-                <option value="LATE">Late</option>
                 <option value="HALF_DAY">Half Day</option>
                 <option value="PENDING">Pending</option>
-                <option value="ON_BREAK">On Break</option>
                 <option value="LEAVE">Leave</option>
                 <option value="ABSENT">Absent</option>
               </select>
@@ -877,8 +971,10 @@ const AttendanceHub = () => {
                   <p className="mt-1 text-xl font-semibold text-slate-900">{Number(adminData.summary?.totalUsers || 0)}</p>
                 </div>
                 <div className="rounded-2xl border border-emerald-200 bg-emerald-50 px-3 py-3">
-                  <p className="text-[10px] uppercase tracking-[0.12em] text-emerald-700">Checked In</p>
-                  <p className="mt-1 text-xl font-semibold text-emerald-800">{Number(adminData.summary?.checkedIn || 0)}</p>
+                  <p className="text-[10px] uppercase tracking-[0.12em] text-emerald-700">Active Login</p>
+                  <p className="mt-1 text-xl font-semibold text-emerald-800">
+                    {Number(adminData.summary?.activeLogins ?? adminData.summary?.checkedIn ?? 0)}
+                  </p>
                 </div>
                 <div className="rounded-2xl border border-cyan-200 bg-cyan-50 px-3 py-3">
                   <p className="text-[10px] uppercase tracking-[0.12em] text-cyan-700">Checked Out</p>
@@ -927,15 +1023,46 @@ const AttendanceHub = () => {
                                 </div>
                               </div>
                             </td>
-                            <td className="px-4 py-3 text-xs font-semibold text-slate-600">
-                              {row.user?.role || "-"}
+                            <td className="px-4 py-3">
+                              {row.user?._id ? (
+                                <button
+                                  type="button"
+                                  onClick={() => openUserProfile(row.user?._id)}
+                                  className="text-left text-xs font-semibold text-cyan-700 underline-offset-2 transition hover:text-cyan-900 hover:underline focus:outline-none focus-visible:ring-2 focus-visible:ring-cyan-500 focus-visible:ring-offset-2"
+                                  title="Open profile"
+                                >
+                                  {row.user?.role || "-"}
+                                </button>
+                              ) : (
+                                <span className="text-xs font-semibold text-slate-600">{row.user?.role || "-"}</span>
+                              )}
                             </td>
                             <td className="px-4 py-3">
-                              <span className={`inline-flex items-center rounded-full border px-2 py-1 text-xs font-semibold ${statusBadgeClass(row.attendance?.status)}`}>
-                                {String(row.attendance?.status || "ABSENT").replaceAll("_", " ")}
-                              </span>
+                              <div className="flex flex-col gap-1">
+                                <span className={`inline-flex w-fit items-center rounded-full border px-2 py-1 text-xs font-semibold ${statusBadgeClass(row.attendance?.status)}`}>
+                                  {formatAttendanceStatus(row.attendance?.status)}
+                                </span>
+                                <select
+                                  value={
+                                    MANUAL_ATTENDANCE_STATUS_OPTIONS.some((option) => option.value === row.attendance?.status)
+                                      ? row.attendance?.status
+                                      : ""
+                                  }
+                                  onChange={(event) => handleManualStatusChange(row, event.target.value)}
+                                  disabled={manualStatusAction === `${String(row.user?._id || "").trim()}:${String(adminData.date || adminDate || "").trim()}`}
+                                  className="h-8 w-32 rounded-lg border border-slate-300 bg-white px-2 text-xs font-semibold text-slate-700 outline-none transition focus:border-cyan-400 focus:ring-2 focus:ring-cyan-100 disabled:cursor-not-allowed disabled:opacity-60"
+                                  title="Manual status"
+                                >
+                                  <option value="">Manual</option>
+                                  {MANUAL_ATTENDANCE_STATUS_OPTIONS.map((option) => (
+                                    <option key={option.value} value={option.value}>
+                                      {option.label}
+                                    </option>
+                                  ))}
+                                </select>
+                              </div>
                             </td>
-                            <td className="px-4 py-3 text-sm text-slate-700">
+                            <td className={`px-4 py-3 ${checkInTimeClass(row.attendance?.isLateCheckIn)}`}>
                               {formatDateTime(row.attendance?.checkInAt)}
                             </td>
                             <td className="px-4 py-3 text-sm text-slate-700">

@@ -1062,8 +1062,10 @@ const LeadsMatrix = () => {
   const canAddLead =
     userRole === "ADMIN"
     || MANAGEMENT_ROLES.includes(userRole)
+    || isExecutiveUser
     || userRole === "CHANNEL_PARTNER";
-  const canBulkUploadLeads = userRole === "ADMIN" || MANAGEMENT_ROLES.includes(userRole);
+  const canBulkUploadLeads =
+    userRole === "ADMIN" || MANAGEMENT_ROLES.includes(userRole) || isExecutiveUser;
   const canAssignLead = CRM_ASSIGNABLE_ROLES.includes(userRole);
   const canManageLeadProperties = userRole !== "CHANNEL_PARTNER";
   const canConfigureSiteLocation =

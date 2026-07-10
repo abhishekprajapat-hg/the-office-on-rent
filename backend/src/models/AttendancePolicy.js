@@ -30,7 +30,7 @@ const attendancePolicySchema = new mongoose.Schema(
       type: Number,
       min: 0,
       max: 180,
-      default: 15,
+      default: 60,
     },
     halfDayMinutes: {
       type: Number,
@@ -42,7 +42,7 @@ const attendancePolicySchema = new mongoose.Schema(
       type: Number,
       min: 0,
       max: 1000,
-      default: 480,
+      default: 450,
     },
     weeklyOffDays: {
       type: [Number],

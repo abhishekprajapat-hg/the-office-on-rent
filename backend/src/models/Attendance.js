@@ -136,6 +136,21 @@ const attendanceSchema = new mongoose.Schema(
         trim: true,
         default: "",
       },
+      manualStatusBy: {
+        type: mongoose.Schema.Types.ObjectId,
+        ref: "User",
+        default: null,
+      },
+      manualStatusAt: {
+        type: Date,
+        default: null,
+      },
+      manualStatusNote: {
+        type: String,
+        trim: true,
+        maxlength: 240,
+        default: "",
+      },
     },
   },
   { timestamps: true },

@@ -24,6 +24,7 @@ const ROLE_OPTIONS = [
   { label: "Manager", value: "MANAGER" },
   { label: "Executive", value: "EXECUTIVE" },
   { label: "Field Executive", value: "FIELD_EXECUTIVE" },
+  { label: "Production Executive", value: "PRODUCTION_EXECUTIVE" },
   { label: "Channel Partner", value: "CHANNEL_PARTNER" },
 ];
 
@@ -33,6 +34,7 @@ const REPORTING_PARENT_ROLES = {
   MANAGER: ["ADMIN"],
   EXECUTIVE: ["MANAGER"],
   FIELD_EXECUTIVE: ["MANAGER"],
+  PRODUCTION_EXECUTIVE: ["MANAGER"],
   CHANNEL_PARTNER: ["MANAGER"],
 };
 const ROLE_LABELS = {
@@ -40,6 +42,7 @@ const ROLE_LABELS = {
   MANAGER: "Manager",
   EXECUTIVE: "Executive",
   FIELD_EXECUTIVE: "Field Executive",
+  PRODUCTION_EXECUTIVE: "Production Executive",
   CHANNEL_PARTNER: "Channel Partner",
 };
 const DEFAULT_BROKERAGE_VALUE = 50000;
@@ -48,6 +51,7 @@ const ROLE_HIERARCHY = [
   { role: "MANAGER", reportsTo: "Admin", scope: "Team and portfolio controls" },
   { role: "EXECUTIVE", reportsTo: "Manager", scope: "Assigned leads" },
   { role: "FIELD_EXECUTIVE", reportsTo: "Manager", scope: "Field visits" },
+  { role: "PRODUCTION_EXECUTIVE", reportsTo: "Manager", scope: "Production tasks" },
   { role: "CHANNEL_PARTNER", reportsTo: "Manager", scope: "Partner-created leads" },
 ];
 

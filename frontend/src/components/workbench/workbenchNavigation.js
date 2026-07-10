@@ -23,6 +23,7 @@ import {
 
 const MANAGEMENT_ROLES = ["ADMIN", "MANAGER"];
 const SALES_ROLES = [...MANAGEMENT_ROLES, "EXECUTIVE", "FIELD_EXECUTIVE"];
+const PRODUCTION_ROLES = ["PRODUCTION_EXECUTIVE"];
 const PARTNER_ROLES = ["CHANNEL_PARTNER"];
 
 export const ACTIVITY_SECTIONS = [
@@ -98,9 +99,9 @@ export const WORKBENCH_MENU = {
     {
       group: "Workspace",
       items: [
-        { label: "Home", path: "/dashboard", icon: Home, roles: [...SALES_ROLES, ...PARTNER_ROLES] },
-        { label: "Tasks", path: "/tasks", icon: CheckSquare, roles: SALES_ROLES },
-        { label: "Attendance", path: "/attendance", icon: UserCheck, roles: [...SALES_ROLES, ...PARTNER_ROLES] },
+        { label: "Home", path: "/dashboard", icon: Home, roles: [...SALES_ROLES, ...PRODUCTION_ROLES, ...PARTNER_ROLES] },
+        { label: "Tasks", path: "/tasks", icon: CheckSquare, roles: [...SALES_ROLES, ...PRODUCTION_ROLES] },
+        { label: "Attendance", path: "/attendance", icon: UserCheck, roles: [...SALES_ROLES, ...PRODUCTION_ROLES, ...PARTNER_ROLES] },
       ],
     },
   ],
@@ -137,6 +138,7 @@ export const WORKBENCH_MENU = {
         { label: "Reports", path: "/reports", icon: BarChart3, roles: MANAGEMENT_ROLES },
         { label: "Leaderboard", path: "/leaderboard", icon: Trophy, roles: [...SALES_ROLES, ...PARTNER_ROLES] },
         { label: "Targets", path: "/targets", icon: Target, roles: SALES_ROLES },
+        { label: "Performance", path: "/targets", icon: Target, roles: PRODUCTION_ROLES },
       ],
     },
   ],
@@ -152,7 +154,7 @@ export const WORKBENCH_MENU = {
     {
       group: "Collaboration",
       items: [
-        { label: "Team Chat", path: "/chat", icon: MessageSquare, roles: SALES_ROLES },
+        { label: "Team Chat", path: "/chat", icon: MessageSquare, roles: [...SALES_ROLES, ...PRODUCTION_ROLES] },
       ],
     },
   ],
@@ -172,7 +174,7 @@ export const WORKBENCH_MENU = {
       group: "Account",
       items: [
         { label: "Settings", path: "/settings", icon: Settings, roles: MANAGEMENT_ROLES },
-        { label: "Profile", path: "/profile", icon: UserCircle2, roles: [...SALES_ROLES, ...PARTNER_ROLES] },
+        { label: "Profile", path: "/profile", icon: UserCircle2, roles: [...SALES_ROLES, ...PRODUCTION_ROLES, ...PARTNER_ROLES] },
       ],
     },
   ],
