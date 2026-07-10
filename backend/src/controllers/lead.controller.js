@@ -12,6 +12,7 @@ const {
 const {
   USER_ROLES,
   EXECUTIVE_ROLES,
+  MANUAL_LEAD_TRANSFER_TARGET_ROLES,
   MANAGEMENT_ROLES,
   isManagementRole,
 } = require("../constants/role.constants");
@@ -208,7 +209,8 @@ const LEAD_REQUIREMENT_AREA_UNITS = Object.freeze(["SQ_FT", "SQ_M"]);
 const CRM_ASSIGNABLE_ROLES = Object.freeze([
   USER_ROLES.ADMIN,
   ...MANAGEMENT_ROLES,
-  ...EXECUTIVE_ROLES,
+  USER_ROLES.INSIDE_EXECUTIVE,
+  USER_ROLES.EXECUTIVE,
 ]);
 const MANUAL_TRANSFER_REASON_FALLBACK = "Manual lead transfer";
 const MAX_ASSIGNMENT_REASON_LENGTH = 500;
@@ -2643,8 +2645,10 @@ exports.assignLead = async (req, res) => {
       return res.status(400).json({ message: "Target user must be active and in your company" });
     }
 
-    if (!CRM_ASSIGNABLE_ROLES.includes(targetUser.role)) {
-      return res.status(400).json({ message: "Target user is not an authorized CRM user" });
+    if (!MANUAL_LEAD_TRANSFER_TARGET_ROLES.includes(targetUser.role)) {
+      return res.status(400).json({
+        message: "Lead can only be assigned to an Executive or Field Executive",
+      });
     }
 
     const topManager = await getAncestorByRoles({

@@ -19,6 +19,34 @@ const ATTENDANCE_SOURCE = Object.freeze({
   MANUAL: "MANUAL",
 });
 
+const attendanceLocationSchema = new mongoose.Schema(
+  {
+    latitude: {
+      type: Number,
+      min: -90,
+      max: 90,
+      default: null,
+    },
+    longitude: {
+      type: Number,
+      min: -180,
+      max: 180,
+      default: null,
+    },
+    accuracy: {
+      type: Number,
+      min: 0,
+      default: null,
+    },
+    distanceMeters: {
+      type: Number,
+      min: 0,
+      default: null,
+    },
+  },
+  { _id: false },
+);
+
 const breakSessionSchema = new mongoose.Schema(
   {
     startAt: {
@@ -76,6 +104,14 @@ const attendanceSchema = new mongoose.Schema(
     },
     checkOutAt: {
       type: Date,
+      default: null,
+    },
+    checkInLocation: {
+      type: attendanceLocationSchema,
+      default: null,
+    },
+    checkOutLocation: {
+      type: attendanceLocationSchema,
       default: null,
     },
     workedMinutes: {

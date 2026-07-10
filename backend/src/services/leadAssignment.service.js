@@ -4,6 +4,7 @@ const LeadActivity = require("../models/leadActivity.model");
 const {
   USER_ROLES,
   EXECUTIVE_ROLES,
+  LEAD_OWNER_ROLES,
   INSIDE_EXECUTIVE_ROLES,
   MANAGEMENT_ROLES,
   isManagementRole,
@@ -291,7 +292,7 @@ const autoAssignLead = async ({ lead, requester = null, performedBy = null }) =>
   const actorId = performedBy || requester?._id || null;
   const resolvedCompanyId = requester?.companyId || lead?.companyId || null;
 
-  if (requester && INSIDE_EXECUTIVE_ROLES.includes(requester.role) && requester.isActive) {
+  if (requester && LEAD_OWNER_ROLES.includes(requester.role) && requester.isActive) {
     await persistAssignment({
       lead,
       executive: requester,
@@ -309,7 +310,7 @@ const autoAssignLead = async ({ lead, requester = null, performedBy = null }) =>
   }
 
   const executiveQuery = {
-    role: { $in: INSIDE_EXECUTIVE_ROLES },
+    role: { $in: LEAD_OWNER_ROLES },
     isActive: true,
   };
   if (resolvedCompanyId) {
@@ -322,10 +323,10 @@ const autoAssignLead = async ({ lead, requester = null, performedBy = null }) =>
     .lean();
 
   if (!activeExecutives.length) {
-    await createNoAssignmentActivity(lead._id, actorId, "no active inside executive available");
+    await createNoAssignmentActivity(lead._id, actorId, "no active executive available");
     return {
       assigned: false,
-      reason: "NO_ACTIVE_INSIDE_EXECUTIVE",
+      reason: "NO_ACTIVE_EXECUTIVE",
       mode: null,
       executive: null,
       manager: null,
@@ -428,7 +429,7 @@ const redistributePipelineLeads = async ({
   includeUnassigned = false,
 } = {}) => {
   const query = {
-    role: { $in: INSIDE_EXECUTIVE_ROLES },
+    role: { $in: LEAD_OWNER_ROLES },
     isActive: true,
   };
 
@@ -461,7 +462,13 @@ const redistributePipelineLeads = async ({
     pipelineLeadQuery.companyId = companyId;
   }
 
-  if (!includeUnassigned) {
+  if (includeUnassigned) {
+    pipelineLeadQuery.$or = [
+      { assignedTo: { $in: executiveObjectIds } },
+      { assignedTo: null },
+      { assignedTo: { $exists: false } },
+    ];
+  } else {
     pipelineLeadQuery.assignedTo = { $in: executiveObjectIds };
   }
 

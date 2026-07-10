@@ -12,6 +12,8 @@ const {
 const {
   USER_ROLES,
   EXECUTIVE_ROLES,
+  LEAD_OWNER_ROLES,
+  MANUAL_LEAD_TRANSFER_TARGET_ROLES,
   PRODUCTION_ROLES,
   MANAGEMENT_ROLES,
   ROLE_LABELS,
@@ -77,8 +79,8 @@ const canUseAdminTools = (role) => ADMIN_TOOL_ROLES.includes(role);
 const CRM_ASSIGNABLE_ROLES = [
   USER_ROLES.ADMIN,
   ...MANAGEMENT_ROLES,
-  ...EXECUTIVE_ROLES,
-  ...PRODUCTION_ROLES,
+  USER_ROLES.INSIDE_EXECUTIVE,
+  USER_ROLES.EXECUTIVE,
 ];
 const BROKERAGE_MODES = Object.freeze(["FLAT", "PERCENTAGE"]);
 const DEFAULT_BROKERAGE_VALUE = 50000;
@@ -823,7 +825,7 @@ exports.getUsers = async (req, res) => {
       }
       query = {
         ...companyScope,
-        role: { $in: CRM_ASSIGNABLE_ROLES },
+        role: { $in: MANUAL_LEAD_TRANSFER_TARGET_ROLES },
         isActive: true,
       };
     } else if (req.user.role === USER_ROLES.ADMIN) {
@@ -1993,13 +1995,17 @@ exports.rebalanceExecutives = async (req, res) => {
       isActive: true,
       companyId: req.user.companyId,
     })
-      .select("_id name parentId createdAt")
+      .select("_id name role parentId createdAt")
       .sort({ createdAt: 1 })
       .lean();
 
     if (!executives.length) {
       return res.json({ message: "No active executive found", updated: 0 });
     }
+
+    const leadOwners = executives.filter((executive) =>
+      LEAD_OWNER_ROLES.includes(executive.role),
+    );
 
     const bulkOps = [];
     for (let i = 0; i < executives.length; i += 1) {
@@ -2021,7 +2027,7 @@ exports.rebalanceExecutives = async (req, res) => {
     // Rebalance active pipeline leads (including currently unassigned leads)
     // with the same load-aware strategy used during auto-assignment.
     const leadRebalance = await redistributePipelineLeads({
-      executiveIds: executives.map((executive) => executive._id),
+      executiveIds: leadOwners.map((executive) => executive._id),
       companyId: req.user.companyId,
       includeUnassigned: true,
     });
@@ -2059,7 +2065,7 @@ exports.rebalanceExecutives = async (req, res) => {
       {
         $match: {
           companyId: req.user.companyId,
-          assignedTo: { $in: executives.map((e) => e._id) },
+          assignedTo: { $in: leadOwners.map((e) => e._id) },
         },
       },
       {
@@ -2085,7 +2091,7 @@ exports.rebalanceExecutives = async (req, res) => {
       ]),
     );
 
-    const leadDistributionByExecutive = executives.map((executive) => {
+    const leadDistributionByExecutive = leadOwners.map((executive) => {
       const row = leadRowByExecutiveId.get(String(executive._id)) || null;
 
       return {

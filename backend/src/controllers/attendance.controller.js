@@ -38,6 +38,12 @@ const DAY_MS = 24 * 60 * 60 * 1000;
 const HALF_DAY_PRODUCTIVE_MINUTES = 4 * 60;
 const FULL_DAY_PRODUCTIVE_MINUTES = (7 * 60) + 30;
 const LATE_CHECK_IN_CUTOFF_MINUTES = 11 * 60;
+const DEFAULT_OFFICE_RADIUS_METERS = Math.min(
+  5000,
+  Math.max(10, Number.parseInt(process.env.ATTENDANCE_OFFICE_RADIUS_METERS || "200", 10) || 200),
+);
+const DEFAULT_GEOFENCE_ENABLED =
+  String(process.env.ATTENDANCE_GEOFENCE_ENABLED || "").trim().toLowerCase() === "true";
 const LIVE_ATTENDANCE_STATUS = Object.freeze({
   WORKING: "WORKING",
   BREAK: "BREAK",
@@ -51,6 +57,10 @@ const DEFAULT_POLICY = Object.freeze({
   fullDayMinutes: 450,
   weeklyOffDays: [0],
   allowCheckoutDuringBreak: true,
+  geofenceEnabled: DEFAULT_GEOFENCE_ENABLED,
+  officeLatitude: Number.parseFloat(process.env.ATTENDANCE_OFFICE_LATITUDE || ""),
+  officeLongitude: Number.parseFloat(process.env.ATTENDANCE_OFFICE_LONGITUDE || ""),
+  officeRadiusMeters: DEFAULT_OFFICE_RADIUS_METERS,
   notes: "",
 });
 
@@ -117,6 +127,90 @@ const toPositiveInteger = (value, fallback = 0) => {
 };
 
 const clampInteger = (value, min, max) => Math.min(max, Math.max(min, value));
+
+const toCoordinate = (value, min, max) => {
+  if (value === null || value === undefined || value === "") return null;
+  const parsed = Number.parseFloat(value);
+  if (!Number.isFinite(parsed) || parsed < min || parsed > max) return null;
+  return parsed;
+};
+
+const hasValidOfficeGeofence = (policy = {}) =>
+  Number.isFinite(policy.officeLatitude)
+  && Number.isFinite(policy.officeLongitude)
+  && Number(policy.officeRadiusMeters || 0) > 0;
+
+const toRadians = (degrees) => (degrees * Math.PI) / 180;
+
+const calculateDistanceMeters = (first, second) => {
+  const earthRadiusMeters = 6371000;
+  const deltaLat = toRadians(second.latitude - first.latitude);
+  const deltaLon = toRadians(second.longitude - first.longitude);
+  const firstLat = toRadians(first.latitude);
+  const secondLat = toRadians(second.latitude);
+
+  const haversine =
+    Math.sin(deltaLat / 2) ** 2
+    + Math.cos(firstLat) * Math.cos(secondLat) * Math.sin(deltaLon / 2) ** 2;
+  return Math.round(
+    earthRadiusMeters * 2 * Math.atan2(Math.sqrt(haversine), Math.sqrt(1 - haversine)),
+  );
+};
+
+const parseAttendanceLocation = (value = {}) => {
+  const latitude = toCoordinate(value?.latitude ?? value?.lat, -90, 90);
+  const longitude = toCoordinate(value?.longitude ?? value?.lng, -180, 180);
+  if (!Number.isFinite(latitude) || !Number.isFinite(longitude)) return null;
+
+  const accuracy = Number.parseFloat(value?.accuracy);
+  return {
+    latitude,
+    longitude,
+    accuracy: Number.isFinite(accuracy) && accuracy >= 0 ? Math.round(accuracy) : null,
+  };
+};
+
+const validateAttendanceGeofence = ({ policy, location, actionLabel }) => {
+  if (!policy.geofenceEnabled) return null;
+
+  if (!hasValidOfficeGeofence(policy)) {
+    return {
+      status: 400,
+      message: "Office geofence is enabled but office coordinates are not configured",
+    };
+  }
+
+  if (!location) {
+    return {
+      status: 400,
+      message: `Location permission is required for ${actionLabel}`,
+    };
+  }
+
+  const distanceMeters = calculateDistanceMeters(
+    {
+      latitude: policy.officeLatitude,
+      longitude: policy.officeLongitude,
+    },
+    location,
+  );
+  const radiusMeters = Number(policy.officeRadiusMeters || DEFAULT_OFFICE_RADIUS_METERS);
+
+  if (distanceMeters > radiusMeters) {
+    return {
+      status: 403,
+      message: `You are outside the office geofence. Allowed range is ${radiusMeters} m.`,
+      distanceMeters,
+    };
+  }
+
+  return {
+    location: {
+      ...location,
+      distanceMeters,
+    },
+  };
+};
 
 const toDateKeyInTimezone = (input, timezone = DEFAULT_TIMEZONE) => {
   const date = toSafeDate(input);
@@ -365,6 +459,8 @@ const toPolicyView = (policy = null) => {
     1000,
   );
   const weeklyOffDays = normalizeWeeklyOffDays(source.weeklyOffDays);
+  const officeLatitude = toCoordinate(source.officeLatitude, -90, 90);
+  const officeLongitude = toCoordinate(source.officeLongitude, -180, 180);
 
   return {
     timezone,
@@ -378,6 +474,16 @@ const toPolicyView = (policy = null) => {
       Object.prototype.hasOwnProperty.call(source || {}, "allowCheckoutDuringBreak")
         ? Boolean(source.allowCheckoutDuringBreak)
         : DEFAULT_POLICY.allowCheckoutDuringBreak,
+    geofenceEnabled: Object.prototype.hasOwnProperty.call(source || {}, "geofenceEnabled")
+      ? Boolean(source.geofenceEnabled)
+      : DEFAULT_POLICY.geofenceEnabled,
+    officeLatitude,
+    officeLongitude,
+    officeRadiusMeters: clampInteger(
+      toInteger(source.officeRadiusMeters, DEFAULT_POLICY.officeRadiusMeters),
+      10,
+      5000,
+    ),
     notes: toTrimmedString(source.notes).slice(0, 500),
   };
 };
@@ -561,6 +667,8 @@ const toAttendanceView = (row, policy = DEFAULT_POLICY) => {
     source: row.source || ATTENDANCE_SOURCE.WEB,
     checkInNote: row.checkInNote || "",
     checkOutNote: row.checkOutNote || "",
+    checkInLocation: row.checkInLocation || null,
+    checkOutLocation: row.checkOutLocation || null,
     createdAt: row.createdAt || null,
     updatedAt: row.updatedAt || null,
   };
@@ -780,11 +888,29 @@ exports.upsertAttendancePolicy = async (req, res) => {
       allowCheckoutDuringBreak: Object.prototype.hasOwnProperty.call(req.body || {}, "allowCheckoutDuringBreak")
         ? Boolean(req.body.allowCheckoutDuringBreak)
         : DEFAULT_POLICY.allowCheckoutDuringBreak,
+      geofenceEnabled: Object.prototype.hasOwnProperty.call(req.body || {}, "geofenceEnabled")
+        ? Boolean(req.body.geofenceEnabled)
+        : DEFAULT_POLICY.geofenceEnabled,
+      officeLatitude: toCoordinate(req.body?.officeLatitude, -90, 90),
+      officeLongitude: toCoordinate(req.body?.officeLongitude, -180, 180),
+      officeRadiusMeters: clampInteger(
+        toInteger(req.body?.officeRadiusMeters, DEFAULT_POLICY.officeRadiusMeters),
+        10,
+        5000,
+      ),
       notes: toTrimmedString(req.body?.notes).slice(0, 500),
     };
 
     if (!payload.weeklyOffDays.length) {
       payload.weeklyOffDays = [...DEFAULT_POLICY.weeklyOffDays];
+    }
+    if (
+      payload.geofenceEnabled
+      && (!Number.isFinite(payload.officeLatitude) || !Number.isFinite(payload.officeLongitude))
+    ) {
+      return res.status(400).json({
+        message: "Valid office latitude and longitude are required when geofence is enabled",
+      });
     }
 
     const updated = await AttendancePolicy.findOneAndUpdate(
@@ -826,6 +952,18 @@ exports.checkIn = async (req, res) => {
       ? rawSource
       : ATTENDANCE_SOURCE.WEB;
     const checkInNote = toTrimmedString(req.body?.note).slice(0, 240);
+    const parsedLocation = parseAttendanceLocation(req.body?.location);
+    const geofenceResult = validateAttendanceGeofence({
+      policy,
+      location: parsedLocation,
+      actionLabel: "check-in",
+    });
+    if (geofenceResult?.status) {
+      return res.status(geofenceResult.status).json({
+        message: geofenceResult.message,
+        distanceMeters: geofenceResult.distanceMeters,
+      });
+    }
     const userAgent = toTrimmedString(req.headers["user-agent"]).slice(0, 400);
     const ipAddress =
       toTrimmedString(req.headers["x-forwarded-for"]).split(",")[0].trim()
@@ -857,6 +995,8 @@ exports.checkIn = async (req, res) => {
     attendance.workedMinutes = 0;
     attendance.totalBreakMinutes = 0;
     attendance.breakSessions = [];
+    attendance.checkInLocation = geofenceResult?.location || parsedLocation || null;
+    attendance.checkOutLocation = null;
     attendance.status = ATTENDANCE_STATUS.PENDING;
     attendance.source = source;
     attendance.checkInNote = checkInNote;
@@ -1053,6 +1193,19 @@ exports.checkOut = async (req, res) => {
       });
     }
 
+    const parsedLocation = parseAttendanceLocation(req.body?.location);
+    const geofenceResult = validateAttendanceGeofence({
+      policy,
+      location: parsedLocation,
+      actionLabel: "check-out",
+    });
+    if (geofenceResult?.status) {
+      return res.status(geofenceResult.status).json({
+        message: geofenceResult.message,
+        distanceMeters: geofenceResult.distanceMeters,
+      });
+    }
+
     attendance.checkOutAt = now;
     applyWorkingSnapshot(attendance, {
       referenceTime: now,
@@ -1065,6 +1218,7 @@ exports.checkOut = async (req, res) => {
       policy,
     });
     attendance.checkOutNote = toTrimmedString(req.body?.note).slice(0, 240);
+    attendance.checkOutLocation = geofenceResult?.location || parsedLocation || null;
     attendance.metadata = {
       ...(attendance.metadata || {}),
       checkOutIp:
@@ -2054,7 +2208,7 @@ exports.getDailyAttendanceForAdmin = async (req, res) => {
         userId: { $in: userIds },
       })
         .select(
-          "_id userId attendanceDate checkInAt checkOutAt workedMinutes totalBreakMinutes breakSessions status source checkInNote checkOutNote createdAt updatedAt",
+          "_id userId attendanceDate checkInAt checkOutAt checkInLocation checkOutLocation workedMinutes totalBreakMinutes breakSessions status source checkInNote checkOutNote createdAt updatedAt",
         )
         .lean(),
       getApprovedLeavesMap({

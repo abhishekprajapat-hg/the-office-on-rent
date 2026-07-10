@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { MessageSquare, X } from "lucide-react";
+import { CheckSquare, MessageSquare, X } from "lucide-react";
 import { useLocation, useNavigate } from "react-router-dom";
 import { useChatNotifications } from "../../context/useChatNotifications";
 
@@ -112,12 +112,19 @@ const ChatMessageAlertToast = () => {
   const handleOpenChat = useCallback(() => {
     if (!activeAlert) return;
     dismissActiveAlert();
+    if (activeAlert.source === "task") {
+      navigate(activeAlert.targetPath || "/tasks");
+      return;
+    }
+
     navigate("/chat", {
       state: { openConversationId: activeAlert.conversationId },
     });
   }, [activeAlert, dismissActiveAlert, navigate]);
 
   if (!activeAlert) return null;
+
+  const isTaskAlert = activeAlert.source === "task";
 
   return (
     <div className="pointer-events-none fixed bottom-4 right-4 z-[112] w-[min(92vw,24rem)]">
@@ -139,7 +146,7 @@ const ChatMessageAlertToast = () => {
                 isDark ? "bg-emerald-500/15 text-emerald-200" : "bg-emerald-50 text-emerald-700"
               }`}
             >
-              <MessageSquare size={17} />
+              {isTaskAlert ? <CheckSquare size={17} /> : <MessageSquare size={17} />}
             </span>
             <span className="min-w-0">
               <span
@@ -147,7 +154,7 @@ const ChatMessageAlertToast = () => {
                   isDark ? "text-cyan-300" : "text-cyan-700"
                 }`}
               >
-                New chat message
+                {isTaskAlert ? "Task notification" : "New chat message"}
               </span>
               <span className="mt-0.5 block truncate text-sm font-semibold">
                 {activeAlert.senderName || "New message"}

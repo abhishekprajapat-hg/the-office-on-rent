@@ -71,8 +71,10 @@ const LEAD_LIST_FIELDS = [
 ].join(",");
 
 const EXECUTIVE_ROLES = ["INSIDE_EXECUTIVE", "EXECUTIVE", "FIELD_EXECUTIVE"];
+const LEAD_OWNER_ROLES = ["INSIDE_EXECUTIVE", "EXECUTIVE"];
+const MANUAL_LEAD_TRANSFER_TARGET_ROLES = [...LEAD_OWNER_ROLES, "FIELD_EXECUTIVE"];
 const MANAGEMENT_ROLES = ["MANAGER"];
-const CRM_ASSIGNABLE_ROLES = ["ADMIN", ...MANAGEMENT_ROLES, ...EXECUTIVE_ROLES];
+const MANUAL_LEAD_TRANSFER_ACTOR_ROLES = ["ADMIN", ...MANAGEMENT_ROLES, ...LEAD_OWNER_ROLES];
 const SITE_VISIT_RADIUS_METERS = 200;
 const DEAL_PAYMENT_MODES = [
   { value: "UPI", label: "UPI" },
@@ -1066,7 +1068,7 @@ const LeadsMatrix = () => {
     || userRole === "CHANNEL_PARTNER";
   const canBulkUploadLeads =
     userRole === "ADMIN" || MANAGEMENT_ROLES.includes(userRole) || isExecutiveUser;
-  const canAssignLead = CRM_ASSIGNABLE_ROLES.includes(userRole);
+  const canAssignLead = MANUAL_LEAD_TRANSFER_ACTOR_ROLES.includes(userRole);
   const canManageLeadProperties = userRole !== "CHANNEL_PARTNER";
   const canConfigureSiteLocation =
     userRole === "ADMIN" || MANAGEMENT_ROLES.includes(userRole);
@@ -1128,7 +1130,9 @@ const LeadsMatrix = () => {
       });
       const users = response?.users || [];
       const list = users.filter(
-        (user) => user.isActive !== false && CRM_ASSIGNABLE_ROLES.includes(user.role),
+        (user) =>
+          user.isActive !== false
+          && MANUAL_LEAD_TRANSFER_TARGET_ROLES.includes(user.role),
       );
       setExecutives(list);
     } catch (fetchError) {

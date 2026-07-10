@@ -2995,19 +2995,18 @@ const TeamChat = ({ theme = "light" }) => {
                                 setActiveMessageActionId((prev) => (prev === messageId ? "" : messageId));
                               }}
                               disabled={!canOpenMessageActions || isMessageActionLoading}
-                              className={`inline-flex h-6 items-center gap-1 rounded-full border px-2 text-[10px] font-semibold ${
+                              className={`inline-flex h-6 w-6 items-center justify-center rounded-full border text-[10px] font-semibold ${
                                 isDark
                                   ? "border-slate-700 text-slate-300 hover:border-cyan-400/40 hover:text-cyan-200"
                                   : "border-slate-300 text-slate-600 hover:border-emerald-400 hover:text-emerald-700"
                               } disabled:cursor-not-allowed disabled:opacity-60`}
                               title={canDeleteForEveryone ? "Delete options" : "Delete for me"}
+                              aria-label={canDeleteForEveryone ? "Open delete options" : "Delete for me"}
                             >
-                              <Trash2 size={11} />
-                              {canDeleteForEveryone ? "Delete" : "Delete for me"}
-                              {canDeleteForEveryone && <MoreVertical size={11} />}
+                              {canDeleteForEveryone ? <MoreVertical size={12} /> : <Trash2 size={12} />}
                             </button>
                             {isMessageActionOpen && (
-                              <div className={`absolute right-0 top-6 z-20 min-w-[168px] overflow-hidden rounded-lg border shadow-lg ${
+                              <div className={`absolute right-0 top-7 z-50 min-w-[168px] overflow-hidden rounded-lg border shadow-lg ${
                                 isDark ? "border-slate-700 bg-slate-900" : "border-slate-200 bg-white"
                               }`}>
                                 <button

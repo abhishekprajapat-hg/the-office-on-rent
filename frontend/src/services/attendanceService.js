@@ -43,6 +43,7 @@ export const getMyAttendance = async (params = {}) => {
     from: res.data?.from || "",
     to: res.data?.to || "",
     today: res.data?.today || null,
+    policy: res.data?.policy || null,
     summary: res.data?.summary || {},
     attendance: Array.isArray(res.data?.attendance) ? res.data.attendance : [],
     pagination: res.data?.pagination || null,

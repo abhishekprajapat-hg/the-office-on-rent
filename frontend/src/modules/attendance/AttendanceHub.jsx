@@ -8,6 +8,7 @@ import {
   Loader2,
   LogIn,
   LogOut,
+  MapPin,
   PauseCircle,
   PlayCircle,
   RefreshCw,
@@ -20,10 +21,12 @@ import {
   endBreakAttendance,
   getAdminLeaveRequests,
   getDailyAttendanceForAdmin,
+  getAttendancePolicy,
   getMyLeaveRequests,
   getMyAttendance,
   reviewLeaveRequest,
   startBreakAttendance,
+  updateAttendancePolicy,
   updateUserAttendanceStatus,
 } from "../../services/attendanceService";
 import { toErrorMessage } from "../../utils/errorMessage";
@@ -121,6 +124,54 @@ const formatAttendanceStatus = (status) => {
 const checkInTimeClass = (isLate) =>
   isLate ? "text-sm font-semibold text-rose-700" : "text-sm text-slate-700";
 
+const EMPTY_POLICY_FORM = {
+  geofenceEnabled: false,
+  officeLatitude: "",
+  officeLongitude: "",
+  officeRadiusMeters: 200,
+};
+
+const toLocationPayload = (coords = {}) => ({
+  latitude: coords.latitude,
+  longitude: coords.longitude,
+  accuracy: coords.accuracy,
+});
+
+const requestAttendanceLocation = ({ required = false } = {}) =>
+  new Promise((resolve, reject) => {
+    if (typeof navigator === "undefined" || !navigator.geolocation) {
+      if (required) {
+        reject(new Error("Location is required but this browser does not support geolocation"));
+      } else {
+        resolve(null);
+      }
+      return;
+    }
+
+    navigator.geolocation.getCurrentPosition(
+      (position) => resolve(toLocationPayload(position.coords || {})),
+      () => {
+        if (required) {
+          reject(new Error("Please allow location access to mark attendance"));
+        } else {
+          resolve(null);
+        }
+      },
+      {
+        enableHighAccuracy: true,
+        timeout: 15000,
+        maximumAge: 0,
+      },
+    );
+  });
+
+const formatDistance = (meters) => {
+  const safeMeters = Number(meters);
+  if (!Number.isFinite(safeMeters)) return "-";
+  if (safeMeters >= 1000) return `${(safeMeters / 1000).toFixed(2)} km`;
+  return `${Math.round(safeMeters)} m`;
+};
+
 const AttendanceHub = () => {
   const navigate = useNavigate();
   const [viewerRole] = useState(getRoleFromStorage);
@@ -136,6 +187,7 @@ const AttendanceHub = () => {
   const [myData, setMyData] = useState({
     timezone: "",
     today: null,
+    policy: null,
     summary: {},
     attendance: [],
   });
@@ -152,6 +204,11 @@ const AttendanceHub = () => {
     summary: {},
     attendance: [],
   });
+  const [policyLoading, setPolicyLoading] = useState(false);
+  const [policySaving, setPolicySaving] = useState(false);
+  const [policyError, setPolicyError] = useState("");
+  const [attendancePolicy, setAttendancePolicy] = useState(null);
+  const [policyForm, setPolicyForm] = useState(EMPTY_POLICY_FORM);
 
   const [leaveLoading, setLeaveLoading] = useState(false);
   const [leaveSubmitting, setLeaveSubmitting] = useState(false);
@@ -196,6 +253,7 @@ const AttendanceHub = () => {
       setMyData({
         timezone: payload.timezone || "",
         today: payload.today || null,
+        policy: payload.policy || null,
         summary: payload.summary || {},
         attendance: Array.isArray(payload.attendance) ? payload.attendance : [],
       });
@@ -273,6 +331,26 @@ const AttendanceHub = () => {
     }
   }, [adminLeaveStatusFilter, isAdminViewer]);
 
+  const loadAttendancePolicy = useCallback(async () => {
+    if (!isAdminViewer) return;
+
+    setPolicyLoading(true);
+    try {
+      const policy = await getAttendancePolicy();
+      setAttendancePolicy(policy || null);
+      setPolicyForm({
+        geofenceEnabled: Boolean(policy?.geofenceEnabled),
+        officeLatitude: policy?.officeLatitude ?? "",
+        officeLongitude: policy?.officeLongitude ?? "",
+        officeRadiusMeters: Number(policy?.officeRadiusMeters || 200),
+      });
+    } catch (error) {
+      setPolicyError(toErrorMessage(error, "Failed to load attendance policy"));
+    } finally {
+      setPolicyLoading(false);
+    }
+  }, [isAdminViewer]);
+
   useEffect(() => {
     loadMyAttendance();
   }, [loadMyAttendance]);
@@ -290,6 +368,11 @@ const AttendanceHub = () => {
     if (!isAdminViewer) return;
     loadAdminWorkflowData();
   }, [isAdminViewer, loadAdminWorkflowData]);
+
+  useEffect(() => {
+    if (!isAdminViewer) return;
+    loadAttendancePolicy();
+  }, [isAdminViewer, loadAttendancePolicy]);
 
   useEffect(() => {
     if (!mySuccess) return undefined;
@@ -318,7 +401,11 @@ const AttendanceHub = () => {
     try {
       setAttendanceAction("checkin");
       setMyError("");
-      const result = await checkInAttendance({ source: "WEB" });
+      const location = await requestAttendanceLocation();
+      const result = await checkInAttendance({
+        source: "WEB",
+        ...(location ? { location } : {}),
+      });
       setMySuccess(result.message || "Checked in successfully");
       await loadMyAttendance({ quiet: true });
       if (isAdminViewer) {
@@ -349,7 +436,11 @@ const AttendanceHub = () => {
     try {
       setAttendanceAction("checkout");
       setMyError("");
-      const result = await checkOutAttendance({ source: "WEB" });
+      const location = await requestAttendanceLocation();
+      const result = await checkOutAttendance({
+        source: "WEB",
+        ...(location ? { location } : {}),
+      });
       setMySuccess(result.message || "Checked out successfully");
       await loadMyAttendance({ quiet: true });
       if (isAdminViewer) {
@@ -359,6 +450,64 @@ const AttendanceHub = () => {
       setMyError(toErrorMessage(error, "Check-out failed"));
     } finally {
       setAttendanceAction("");
+    }
+  };
+
+  const handleSaveAttendancePolicy = async (event) => {
+    event.preventDefault();
+    if (!isAdminViewer) return;
+
+    const geofenceEnabled = Boolean(policyForm.geofenceEnabled);
+    const officeLatitude = String(policyForm.officeLatitude || "").trim();
+    const officeLongitude = String(policyForm.officeLongitude || "").trim();
+    const officeRadiusMeters = Number(policyForm.officeRadiusMeters || 200);
+
+    if (geofenceEnabled && (!officeLatitude || !officeLongitude)) {
+      setPolicyError("Office latitude and longitude are required when geofence is enabled");
+      return;
+    }
+
+    try {
+      setPolicySaving(true);
+      setPolicyError("");
+      const result = await updateAttendancePolicy({
+        ...(attendancePolicy || {}),
+        geofenceEnabled,
+        officeLatitude: officeLatitude || null,
+        officeLongitude: officeLongitude || null,
+        officeRadiusMeters,
+      });
+      setAttendancePolicy(result.policy || null);
+      setPolicyForm({
+        geofenceEnabled: Boolean(result.policy?.geofenceEnabled),
+        officeLatitude: result.policy?.officeLatitude ?? "",
+        officeLongitude: result.policy?.officeLongitude ?? "",
+        officeRadiusMeters: Number(result.policy?.officeRadiusMeters || 200),
+      });
+      setMySuccess(result.message || "Attendance policy updated");
+    } catch (error) {
+      setPolicyError(toErrorMessage(error, "Failed to save attendance policy"));
+    } finally {
+      setPolicySaving(false);
+    }
+  };
+
+  const handleUseCurrentOfficeLocation = async () => {
+    if (!isAdminViewer) return;
+
+    try {
+      setPolicySaving(true);
+      setPolicyError("");
+      const location = await requestAttendanceLocation({ required: true });
+      setPolicyForm((prev) => ({
+        ...prev,
+        officeLatitude: Number(location.latitude).toFixed(6),
+        officeLongitude: Number(location.longitude).toFixed(6),
+      }));
+    } catch (error) {
+      setPolicyError(toErrorMessage(error, "Failed to read current location"));
+    } finally {
+      setPolicySaving(false);
     }
   };
 
@@ -703,6 +852,29 @@ const AttendanceHub = () => {
                 </p>
               ) : null}
 
+              {(todayAttendance?.checkInLocation || todayAttendance?.checkOutLocation) ? (
+                <div className="mt-4 grid grid-cols-1 gap-2 sm:grid-cols-2">
+                  <div className="rounded-2xl border border-emerald-100 bg-emerald-50/80 px-3 py-2.5">
+                    <p className="inline-flex items-center gap-1 text-[10px] font-semibold uppercase tracking-[0.12em] text-emerald-700">
+                      <MapPin size={12} />
+                      Check In Distance
+                    </p>
+                    <p className="mt-1 text-sm font-semibold text-emerald-900">
+                      {formatDistance(todayAttendance?.checkInLocation?.distanceMeters)}
+                    </p>
+                  </div>
+                  <div className="rounded-2xl border border-cyan-100 bg-cyan-50/80 px-3 py-2.5">
+                    <p className="inline-flex items-center gap-1 text-[10px] font-semibold uppercase tracking-[0.12em] text-cyan-700">
+                      <MapPin size={12} />
+                      Check Out Distance
+                    </p>
+                    <p className="mt-1 text-sm font-semibold text-cyan-900">
+                      {formatDistance(todayAttendance?.checkOutLocation?.distanceMeters)}
+                    </p>
+                  </div>
+                </div>
+              ) : null}
+
               <div className="mt-4 rounded-2xl border border-slate-200 bg-slate-50/80 p-3">
                 <p className="text-[10px] font-semibold uppercase tracking-[0.12em] text-slate-500">
                   Break Sessions Today
@@ -759,6 +931,7 @@ const AttendanceHub = () => {
                     <th className="px-4 py-3">Status</th>
                     <th className="px-4 py-3">Check In</th>
                     <th className="px-4 py-3">Check Out</th>
+                    <th className="px-4 py-3">Geofence</th>
                     <th className="px-4 py-3">Break</th>
                     <th className="px-4 py-3">Duration</th>
                   </tr>
@@ -766,7 +939,7 @@ const AttendanceHub = () => {
                 <tbody className="divide-y divide-slate-100">
                   {myData.attendance.length === 0 ? (
                     <tr>
-                      <td className="px-4 py-4 text-sm text-slate-500" colSpan={6}>
+                      <td className="px-4 py-4 text-sm text-slate-500" colSpan={7}>
                         No attendance records found for selected month.
                       </td>
                     </tr>
@@ -785,6 +958,10 @@ const AttendanceHub = () => {
                           {formatDateTime(row.checkInAt)}
                         </td>
                         <td className="px-4 py-3 text-sm text-slate-700">{formatDateTime(row.checkOutAt)}</td>
+                        <td className="px-4 py-3 text-xs font-semibold text-slate-600">
+                          <div>In: {formatDistance(row.checkInLocation?.distanceMeters)}</div>
+                          <div>Out: {formatDistance(row.checkOutLocation?.distanceMeters)}</div>
+                        </td>
                         <td className="px-4 py-3 text-sm font-semibold text-indigo-700">
                           {formatDuration(row.totalBreakMinutes || 0)}
                         </td>
@@ -910,6 +1087,87 @@ const AttendanceHub = () => {
       {isAdminViewer ? (
         <>
           <section className="rounded-3xl border border-slate-200 bg-white p-4 shadow-[0_18px_45px_-34px_rgba(15,23,42,0.35)]">
+            <form onSubmit={handleSaveAttendancePolicy} className="flex flex-col gap-4">
+              <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+                <div>
+                  <h2 className="text-xl font-semibold text-slate-900">Attendance Geofence</h2>
+                  <p className="mt-1 text-xs uppercase tracking-[0.14em] text-slate-500">
+                    Office range for check-in and check-out
+                  </p>
+                </div>
+                <label className="inline-flex items-center gap-2 text-sm font-semibold text-slate-700">
+                  <input
+                    type="checkbox"
+                    checked={Boolean(policyForm.geofenceEnabled)}
+                    onChange={(event) =>
+                      setPolicyForm((prev) => ({ ...prev, geofenceEnabled: event.target.checked }))}
+                    className="h-4 w-4 rounded border-slate-300 text-cyan-600 focus:ring-cyan-500"
+                  />
+                  Enable geofence
+                </label>
+              </div>
+
+              <ToastNotice message={policyError} type="error" />
+
+              <div className="grid grid-cols-1 gap-3 md:grid-cols-4">
+                <label className="text-xs font-semibold uppercase tracking-[0.12em] text-slate-500">
+                  Latitude
+                  <input
+                    type="number"
+                    step="any"
+                    value={policyForm.officeLatitude}
+                    onChange={(event) =>
+                      setPolicyForm((prev) => ({ ...prev, officeLatitude: event.target.value }))}
+                    className="mt-1 h-10 w-full rounded-xl border border-slate-300 bg-white px-3 text-sm font-semibold text-slate-800 outline-none transition focus:border-cyan-400 focus:ring-2 focus:ring-cyan-100"
+                  />
+                </label>
+                <label className="text-xs font-semibold uppercase tracking-[0.12em] text-slate-500">
+                  Longitude
+                  <input
+                    type="number"
+                    step="any"
+                    value={policyForm.officeLongitude}
+                    onChange={(event) =>
+                      setPolicyForm((prev) => ({ ...prev, officeLongitude: event.target.value }))}
+                    className="mt-1 h-10 w-full rounded-xl border border-slate-300 bg-white px-3 text-sm font-semibold text-slate-800 outline-none transition focus:border-cyan-400 focus:ring-2 focus:ring-cyan-100"
+                  />
+                </label>
+                <label className="text-xs font-semibold uppercase tracking-[0.12em] text-slate-500">
+                  Radius
+                  <input
+                    type="number"
+                    min="10"
+                    max="5000"
+                    value={policyForm.officeRadiusMeters}
+                    onChange={(event) =>
+                      setPolicyForm((prev) => ({ ...prev, officeRadiusMeters: event.target.value }))}
+                    className="mt-1 h-10 w-full rounded-xl border border-slate-300 bg-white px-3 text-sm font-semibold text-slate-800 outline-none transition focus:border-cyan-400 focus:ring-2 focus:ring-cyan-100"
+                  />
+                </label>
+                <div className="flex items-end gap-2">
+                  <button
+                    type="button"
+                    onClick={handleUseCurrentOfficeLocation}
+                    disabled={policyLoading || policySaving}
+                    className="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-slate-300 bg-white text-cyan-700 transition hover:border-cyan-300 hover:bg-cyan-50 disabled:cursor-not-allowed disabled:opacity-60"
+                    title="Use current location"
+                  >
+                    <MapPin size={15} />
+                  </button>
+                  <button
+                    type="submit"
+                    disabled={policyLoading || policySaving}
+                    className="inline-flex h-10 w-full items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-cyan-600 to-emerald-600 px-4 text-sm font-semibold text-white transition hover:from-cyan-700 hover:to-emerald-700 disabled:cursor-not-allowed disabled:opacity-60"
+                  >
+                    {policySaving ? <Loader2 size={14} className="animate-spin" /> : <MapPin size={14} />}
+                    Save
+                  </button>
+                </div>
+              </div>
+            </form>
+          </section>
+
+          <section className="rounded-3xl border border-slate-200 bg-white p-4 shadow-[0_18px_45px_-34px_rgba(15,23,42,0.35)]">
           <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
             <div>
               <h2 className="text-xl font-semibold text-slate-900">Team Daily Attendance</h2>
@@ -1000,6 +1258,7 @@ const AttendanceHub = () => {
                         <th className="px-4 py-3">Status</th>
                         <th className="px-4 py-3">Check In</th>
                         <th className="px-4 py-3">Check Out</th>
+                        <th className="px-4 py-3">Geofence</th>
                         <th className="px-4 py-3">Break</th>
                         <th className="px-4 py-3">Duration</th>
                       </tr>
@@ -1007,7 +1266,7 @@ const AttendanceHub = () => {
                     <tbody className="divide-y divide-slate-100">
                       {adminData.attendance.length === 0 ? (
                         <tr>
-                          <td className="px-4 py-4 text-sm text-slate-500" colSpan={7}>
+                          <td className="px-4 py-4 text-sm text-slate-500" colSpan={8}>
                             No users found for selected filters.
                           </td>
                         </tr>
@@ -1067,6 +1326,10 @@ const AttendanceHub = () => {
                             </td>
                             <td className="px-4 py-3 text-sm text-slate-700">
                               {formatDateTime(row.attendance?.checkOutAt)}
+                            </td>
+                            <td className="px-4 py-3 text-xs font-semibold text-slate-600">
+                              <div>In: {formatDistance(row.attendance?.checkInLocation?.distanceMeters)}</div>
+                              <div>Out: {formatDistance(row.attendance?.checkOutLocation?.distanceMeters)}</div>
                             </td>
                             <td className="px-4 py-3 text-sm font-semibold text-indigo-700">
                               {formatDuration(row.attendance?.totalBreakMinutes || 0)}

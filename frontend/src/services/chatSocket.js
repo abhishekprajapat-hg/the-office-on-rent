@@ -11,8 +11,14 @@ const buildSocketOptions = (token) => ({
   reconnectionDelay: 700,
   reconnectionDelayMax: 6000,
   timeout: 10000,
-  auth: {
-    token,
+  auth: (callback) => {
+    const latestToken =
+      typeof window !== "undefined"
+        ? localStorage.getItem("token")
+        : "";
+    callback({
+      token: latestToken || token,
+    });
   },
 });
 

@@ -59,6 +59,28 @@ const attendancePolicySchema = new mongoose.Schema(
       type: Boolean,
       default: true,
     },
+    geofenceEnabled: {
+      type: Boolean,
+      default: false,
+    },
+    officeLatitude: {
+      type: Number,
+      min: -90,
+      max: 90,
+      default: null,
+    },
+    officeLongitude: {
+      type: Number,
+      min: -180,
+      max: 180,
+      default: null,
+    },
+    officeRadiusMeters: {
+      type: Number,
+      min: 10,
+      max: 5000,
+      default: 200,
+    },
     notes: {
       type: String,
       trim: true,

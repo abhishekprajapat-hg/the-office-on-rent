@@ -839,7 +839,9 @@ export default function App() {
                     </WorkbenchShell>
                     <ChatMessageAlertToast />
                     <FollowUpReminderToast enabled={isLoggedIn && !isPublicPage} />
-                    {userRole === "ADMIN" ? <AdminRequestAlertToast userRole={userRole} /> : null}
+                    {["ADMIN", "MANAGER"].includes(userRole) ? (
+                      <AdminRequestAlertToast userRole={userRole} />
+                    ) : null}
                   </>
                 )
               ) : (

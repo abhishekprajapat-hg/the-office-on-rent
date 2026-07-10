@@ -114,6 +114,28 @@ const extractIncomingMessageEvent = (payload = {}) => {
   };
 };
 
+const normalizeTaskNotificationEvent = (payload = {}, eventType = "task:updated") => {
+  if (!payload || typeof payload !== "object") return null;
+
+  const task = payload.task || {};
+  const taskId = String(task?._id || payload.taskId || "").trim();
+  const createdAt = task?.updatedAt || task?.createdAt || new Date().toISOString();
+  const eventId = String(payload.eventId || "").trim()
+    || `${eventType}:${taskId || "task"}:${new Date(createdAt).getTime()}`;
+  const title = String(task?.title || "").trim();
+  const preview = String(payload.message || "").trim()
+    || (title ? `Task update: ${title}` : "Task updated");
+
+  return {
+    id: eventId,
+    source: "task",
+    targetPath: "/tasks",
+    senderName: eventType === "task:created" ? "New task" : "Task update",
+    preview,
+    createdAt,
+  };
+};
+
 const normalizeAdminRequestEvent = (payload = {}) => {
   if (!payload || typeof payload !== "object") return null;
 
@@ -134,6 +156,32 @@ const normalizeAdminRequestEvent = (payload = {}) => {
       requestType: "PASSWORD_CHANGE",
       createdAt,
       preview: `${requestedByName} requested password change`,
+      leadId: "",
+      requestId,
+      inventoryId: "",
+      payload,
+    };
+  }
+
+  if (source === "user-delete") {
+    const requestId = String(payload.requestId || "").trim();
+    if (!requestId) return null;
+
+    const targetName = String(
+      payload.targetUser?.name || payload.snapshot?.name || "",
+    ).trim() || "User";
+    const requestedByName = String(payload.requestedBy?.name || "").trim();
+    const createdAt = payload.createdAt || new Date().toISOString();
+    const eventId = String(payload.eventId || "").trim() || `user-delete:${requestId}`;
+
+    return {
+      eventId,
+      source: "user-delete",
+      requestType: "USER_DELETE",
+      createdAt,
+      preview: requestedByName
+        ? `${requestedByName} requested deletion for ${targetName}`
+        : `Delete request for ${targetName}`,
       leadId: "",
       requestId,
       inventoryId: "",
@@ -440,6 +488,8 @@ export const ChatNotificationProvider = ({ children, enabled = true }) => {
         setRecentNotifications((prev) => [
           {
             id: `${messageId}:${Date.now()}`,
+            source: "chat",
+            targetPath: "/chat",
             conversationId,
             messageId,
             senderName,
@@ -466,6 +516,43 @@ export const ChatNotificationProvider = ({ children, enabled = true }) => {
         }
       }
     };
+
+    const onTaskEvent = (payload = {}, eventType = "task:updated") => {
+      const event = normalizeTaskNotificationEvent(payload, eventType);
+      if (!event?.id) return;
+
+      if (seenMessageIdsRef.current.has(event.id)) {
+        return;
+      }
+      seenMessageIdsRef.current.add(event.id);
+      if (seenMessageIdsRef.current.size > 2000) {
+        seenMessageIdsRef.current.clear();
+      }
+
+      setRecentNotifications((prev) => [
+        event,
+        ...prev,
+      ].slice(0, MAX_RECENT_NOTIFICATIONS));
+
+      if (
+        typeof window !== "undefined"
+        && "Notification" in window
+        && Notification.permission === "granted"
+        && document.hidden
+      ) {
+        try {
+          new Notification(event.senderName, {
+            body: event.preview,
+            tag: event.id,
+          });
+        } catch {
+          // ignore browser notification errors
+        }
+      }
+    };
+    const onTaskCreated = (payload) => onTaskEvent(payload, "task:created");
+    const onTaskUpdated = (payload) => onTaskEvent(payload, "task:updated");
+    const onTaskDeleted = (payload) => onTaskEvent(payload, "task:deleted");
 
     const onAdminRequestEvent = (payload = {}) => {
       if (!["ADMIN", "MANAGER"].includes(getCurrentUserRole())) return;
@@ -533,6 +620,10 @@ export const ChatNotificationProvider = ({ children, enabled = true }) => {
     socket.on("lead:deal:closed", onAdminRequestEvent);
     socket.on("lead:payment:remaining:collected", onAdminRequestEvent);
     socket.on("inventory:request:created", onAdminRequestEvent);
+    socket.on("user-delete:request:created", onAdminRequestEvent);
+    socket.on("task:created", onTaskCreated);
+    socket.on("task:updated", onTaskUpdated);
+    socket.on("task:deleted", onTaskDeleted);
 
     return () => {
       disposed = true;
@@ -548,6 +639,10 @@ export const ChatNotificationProvider = ({ children, enabled = true }) => {
       socket.off("lead:deal:closed", onAdminRequestEvent);
       socket.off("lead:payment:remaining:collected", onAdminRequestEvent);
       socket.off("inventory:request:created", onAdminRequestEvent);
+      socket.off("user-delete:request:created", onAdminRequestEvent);
+      socket.off("task:created", onTaskCreated);
+      socket.off("task:updated", onTaskUpdated);
+      socket.off("task:deleted", onTaskDeleted);
       releaseChatSocket(socket);
       setSocketConnected(false);
       setActiveConversationId("");
