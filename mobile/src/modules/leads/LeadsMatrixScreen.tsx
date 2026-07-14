@@ -33,14 +33,38 @@ import type { InventoryAsset, Lead } from "../../types";
 import { AppButton, AppCard, AppChip, AppInput } from "../../components/common/ui";
 import { colors } from "../../theme/tokens";
 
-const LEAD_STATUSES = ["ALL", "NEW", "CONTACTED", "INTERESTED", "SITE_VISIT", "CLOSED", "LOST"];
+const LEAD_STATUSES = [
+  "ALL",
+  "NEW",
+  "CONTACTED",
+  "INTERESTED",
+  "SITE_VISIT_SCHEDULED",
+  "SITE_VISIT",
+  "SITE_VISIT_OVERDUE",
+  "MISSING_IN_ACTION",
+  "NOT_PICKING_CALLS",
+  "INVALID",
+  "OWNER",
+  "BROKER",
+  "REQUESTED",
+  "CLOSED",
+  "LOST",
+];
 const EXECUTIVE_ROLES = new Set(["EXECUTIVE", "FIELD_EXECUTIVE"]);
 
 const statusPillStyles = {
   NEW: { bg: "#eff6ff", border: "#bfdbfe", text: "#1d4ed8" },
   CONTACTED: { bg: "#fffbeb", border: "#fde68a", text: "#a16207" },
   INTERESTED: { bg: "#ecfdf5", border: "#bbf7d0", text: "#15803d" },
+  SITE_VISIT_SCHEDULED: { bg: "#ecfeff", border: "#a5f3fc", text: "#0e7490" },
   SITE_VISIT: { bg: "#f5f3ff", border: "#ddd6fe", text: "#6d28d9" },
+  SITE_VISIT_OVERDUE: { bg: "#fef2f2", border: "#fecaca", text: "#b91c1c" },
+  MISSING_IN_ACTION: { bg: "#fefce8", border: "#fde68a", text: "#854d0e" },
+  NOT_PICKING_CALLS: { bg: "#fefce8", border: "#fde68a", text: "#854d0e" },
+  INVALID: { bg: "#f4f4f5", border: "#d4d4d8", text: "#52525b" },
+  OWNER: { bg: "#eff6ff", border: "#bfdbfe", text: "#1d4ed8" },
+  BROKER: { bg: "#faf5ff", border: "#e9d5ff", text: "#7e22ce" },
+  REQUESTED: { bg: "#fff7ed", border: "#fed7aa", text: "#c2410c" },
   CLOSED: { bg: "#0f172a", border: "#0f172a", text: "#ffffff" },
   LOST: { bg: "#fff1f2", border: "#fecdd3", text: "#be123c" },
 } as const;

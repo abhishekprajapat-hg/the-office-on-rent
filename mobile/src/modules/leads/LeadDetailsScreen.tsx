@@ -57,7 +57,22 @@ import type { Lead } from "../../types";
 import { AppButton, AppCard, AppChip, AppInput } from "../../components/common/ui";
 import { colors } from "../../theme/tokens";
 
-const STATUSES = ["NEW", "CONTACTED", "INTERESTED", "SITE_VISIT", "REQUESTED", "CLOSED", "LOST"];
+const STATUSES = [
+  "NEW",
+  "CONTACTED",
+  "INTERESTED",
+  "SITE_VISIT_SCHEDULED",
+  "SITE_VISIT",
+  "SITE_VISIT_OVERDUE",
+  "MISSING_IN_ACTION",
+  "NOT_PICKING_CALLS",
+  "INVALID",
+  "OWNER",
+  "BROKER",
+  "REQUESTED",
+  "CLOSED",
+  "LOST",
+];
 const CLOSED_STATUS = "CLOSED";
 const DEAL_PAYMENT_MODES = [
   { value: "UPI", label: "UPI" },
@@ -182,6 +197,7 @@ const createDefaultLeadRequirementsDraft = () => ({
   commercial: {
     seats: "",
     cabins: "",
+    conferenceRooms: "",
     parkingAvailable: false,
     pantry: false,
   },
@@ -226,6 +242,7 @@ const mapLeadRequirementsToDraft = (requirements: any = {}) => {
     commercial: {
       seats: toRequirementDraftText(commercial?.seats),
       cabins: toRequirementDraftText(commercial?.cabins),
+      conferenceRooms: toRequirementDraftText(commercial?.conferenceRooms),
       parkingAvailable: Boolean(commercial?.parkingAvailable),
       pantry: Boolean(commercial?.pantry),
     },
@@ -255,6 +272,7 @@ const toAmountNumber = (value: any) => {
 const toRequirementTransactionType = (value: any) => {
   const normalized = String(value || "").trim().toUpperCase();
   if (normalized === "RENT") return "RENT";
+  if (normalized === "LEASE") return "LEASE";
   if (normalized === "SALE") return "SALE";
   return "";
 };
@@ -271,6 +289,7 @@ const buildLeadRequirementsPayloadFromDraft = (draft: any = {}) => ({
   commercial: {
     seats: toAmountNumber(draft?.commercial?.seats),
     cabins: toAmountNumber(draft?.commercial?.cabins),
+    conferenceRooms: toAmountNumber(draft?.commercial?.conferenceRooms),
     parkingAvailable: Boolean(draft?.commercial?.parkingAvailable),
     pantry: Boolean(draft?.commercial?.pantry),
   },
@@ -298,7 +317,31 @@ const LEAD_REQUIREMENT_FURNISHING_OPTIONS = [
   { value: "WARM_SHELL", label: "Warm Shell" },
   { value: "MANAGED_OFFICE", label: "Managed Office" },
   { value: "COWORKING", label: "Coworking" },
+  { value: "SHOPS", label: "Shops" },
+  { value: "SHOWROOMS", label: "Showrooms" },
+  { value: "CAFES", label: "Cafes" },
+  { value: "ROOFTOP", label: "Rooftop" },
 ];
+
+const COMMERCIAL_ONLY_FURNISHING_VALUES = new Set([
+  "BARE_SHELL",
+  "WARM_SHELL",
+  "MANAGED_OFFICE",
+  "COWORKING",
+  "SHOPS",
+  "SHOWROOMS",
+  "CAFES",
+  "ROOFTOP",
+]);
+
+const getRequirementFurnishingOptions = (inventoryType = "") => {
+  if (String(inventoryType).trim().toUpperCase() !== "RESIDENTIAL") {
+    return LEAD_REQUIREMENT_FURNISHING_OPTIONS;
+  }
+  return LEAD_REQUIREMENT_FURNISHING_OPTIONS.filter(
+    (option) => !COMMERCIAL_ONLY_FURNISHING_VALUES.has(option.value),
+  );
+};
 
 const LEAD_REQUIREMENT_BHK_OPTIONS = [
   { value: "", label: "Any BHK" },
@@ -483,12 +526,30 @@ export const LeadDetailsScreen = () => {
     }));
   }, []);
 
+  const updateRequirementInventoryType = useCallback((value: string) => {
+    const nextType = String(value || "").trim().toUpperCase();
+    setRequirementsDraft((prev: any) => {
+      const nextFurnishingOptions = getRequirementFurnishingOptions(nextType);
+      const nextFurnishingStatus = nextFurnishingOptions.some(
+        (option) => option.value === prev?.furnishingStatus,
+      )
+        ? prev?.furnishingStatus
+        : "";
+      return {
+        ...prev,
+        inventoryType: value,
+        furnishingStatus: nextFurnishingStatus,
+      };
+    });
+  }, []);
+
   const updateRequirementCommercialField = useCallback((field: string, value: any) => {
     setRequirementsDraft((prev: any) => ({
       ...prev,
       commercial: {
         seats: "",
         cabins: "",
+        conferenceRooms: "",
         parkingAvailable: false,
         pantry: false,
         ...prev.commercial,
@@ -2562,7 +2623,7 @@ export const LeadDetailsScreen = () => {
               key={`req-inv-${item.value}`}
               label={item.label}
               active={requirementsDraft?.inventoryType === item.value}
-              onPress={() => updateRequirementRootField("inventoryType", item.value)}
+              onPress={() => updateRequirementInventoryType(item.value)}
               style={styles.modalChip as object}
             />
           ))}
@@ -2572,7 +2633,8 @@ export const LeadDetailsScreen = () => {
         <View style={styles.modalChipWrap}>
           {[
             { value: "", label: "Any" },
-            { value: "SALE", label: "Sale" },
+            { value: "SALE", label: "Purchase" },
+            { value: "LEASE", label: "Lease" },
             { value: "RENT", label: "Rent" },
           ].map((item) => (
             <AppChip
@@ -2587,7 +2649,7 @@ export const LeadDetailsScreen = () => {
 
         <Text style={styles.metricLabel}>Furnishing Status</Text>
         <View style={styles.modalChipWrap}>
-          {LEAD_REQUIREMENT_FURNISHING_OPTIONS.map((item) => (
+          {getRequirementFurnishingOptions(requirementsDraft?.inventoryType).map((item) => (
             <AppChip
               key={`req-furn-${item.value}`}
               label={item.label}
@@ -2681,6 +2743,16 @@ export const LeadDetailsScreen = () => {
                   value={requirementsDraft?.commercial?.cabins || ""}
                   onChangeText={(val: string) => updateRequirementCommercialField("cabins", val)}
                   placeholder="Cabins"
+                  keyboardType="phone-pad"
+                />
+              </View>
+              <View style={{ flex: 1 }}>
+                <Text style={styles.metricLabel}>Conference Room</Text>
+                <AppInput
+                  style={[styles.input as object, styles.twoColInput as object]}
+                  value={requirementsDraft?.commercial?.conferenceRooms || ""}
+                  onChangeText={(val: string) => updateRequirementCommercialField("conferenceRooms", val)}
+                  placeholder="Conference Room"
                   keyboardType="phone-pad"
                 />
               </View>

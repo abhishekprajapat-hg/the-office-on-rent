@@ -20,18 +20,18 @@ const FieldOpsVisitsSection = ({
     ) : (
       <div className="mt-3 space-y-2">
         {visitsTimeline.map((lead) => (
-          <div key={lead._id} className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-2.5">
+          <div key={lead._id} className="overflow-hidden rounded-xl border border-slate-200 bg-slate-50 px-3 py-2.5">
             <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
-              <div>
+              <div className="min-w-0 flex-1">
                 <p className="text-sm font-medium text-slate-800">{lead.name || "-"}</p>
-                <p className="text-xs text-slate-500">
+                <p className="break-words text-xs leading-relaxed text-slate-500">
                   {lead.assignedTo?.name || "Unassigned"} | {lead.projectInterested || "Project not set"}
                 </p>
-                <p className="mt-0.5 text-xs text-slate-500">
+                <p className="mt-0.5 break-words text-xs leading-relaxed text-slate-500">
                   Location: {getLeadLocationLabel(lead)}
                 </p>
               </div>
-              <span className="inline-flex w-fit rounded-full border border-slate-300 bg-white px-2 py-1 text-[10px] font-semibold uppercase tracking-[0.08em] text-slate-600">
+              <span className="inline-flex w-fit shrink-0 items-center rounded-full border border-slate-300 bg-white px-3 py-1.5 text-[11px] font-semibold leading-none text-slate-600 shadow-sm sm:whitespace-nowrap">
                 {formatDateTime(lead.nextFollowUp || lead.createdAt)}
               </span>
             </div>

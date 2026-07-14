@@ -638,40 +638,26 @@ const FinancialCore = () => {
 
   const topBroker = brokerDashboard.rows[0] || null;
 
-  const followUps = useMemo(() => {
-    const now = new Date();
-    const next7Days = new Date(now);
-    next7Days.setDate(next7Days.getDate() + 7);
-
-    const upcoming = scopedLeads
-      .filter((lead) => !["CLOSED", "LOST"].includes(String(lead.status || "")))
-      .filter((lead) => toDate(lead.nextFollowUp))
-      .map((lead) => {
-        const followUpDate = toDate(lead.nextFollowUp);
-        return {
-          ...lead,
-          followUpDate,
-          isOverdue: followUpDate ? followUpDate < now : false,
-        };
-      })
-      .sort((a, b) => a.followUpDate - b.followUpDate);
-
-    return {
-      overdue: upcoming.filter((lead) => lead.isOverdue),
-      thisWeek: upcoming.filter(
-        (lead) => lead.followUpDate >= now && lead.followUpDate <= next7Days,
-      ),
-      all: upcoming,
-    };
-  }, [scopedLeads]);
-
   const recentClosures = useMemo(
     () =>
       scopedLeads
         .filter((lead) => String(lead.status || "") === "CLOSED")
         .sort((a, b) => new Date(getLeadClosingDate(b)) - new Date(getLeadClosingDate(a)))
-        .slice(0, 8),
+        .slice(0, 12),
     [scopedLeads],
+  );
+
+  const recentClosureTotals = useMemo(
+    () =>
+      recentClosures.reduce(
+        (acc, lead) => {
+          acc.received += getRecordedBrokerageReceived(lead);
+          acc.distributed += getRecordedBrokerageDistributed(lead);
+          return acc;
+        },
+        { received: 0, distributed: 0 },
+      ),
+    [recentClosures],
   );
 
   const statusRows = useMemo(
@@ -685,7 +671,7 @@ const FinancialCore = () => {
   );
 
   const openLeadWorkspace = useCallback(
-    ({ status = "", query = "", dueOnly = false, leadId = "" } = {}) => {
+    ({ status = "", query = "", leadId = "" } = {}) => {
       const normalizedStatus = String(status || "").trim().toUpperCase();
       const normalizedQuery = String(query || "").trim();
       const normalizedLeadId = String(leadId || "").trim();
@@ -697,10 +683,6 @@ const FinancialCore = () => {
 
       if (normalizedQuery) {
         searchParams.set("q", normalizedQuery);
-      }
-
-      if (dueOnly) {
-        searchParams.set("due", "1");
       }
 
       const targetPath = normalizedLeadId
@@ -1071,120 +1053,113 @@ const FinancialCore = () => {
         </section>
       </div>
 
-      <div className="grid grid-cols-1 gap-5 xl:grid-cols-2">
-        <section className="ui-soft-panel rounded-2xl border border-slate-200 bg-white p-4">
-          <div className="flex items-center justify-between gap-2">
+      <section className="ui-soft-panel rounded-2xl border border-slate-200 bg-white p-4">
+        <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
+          <div>
             <h2 className="text-sm font-semibold uppercase tracking-[0.14em] text-slate-600">
               Recent Closed Deals
             </h2>
+            <p className="mt-1 text-sm text-slate-500">
+              Latest 12 closures with brokerage collection and payout status.
+            </p>
+          </div>
+          <div className="flex flex-wrap gap-2 text-xs">
+            <span className="rounded-full border border-emerald-200 bg-emerald-50 px-3 py-1 font-semibold text-emerald-700">
+              Received {formatCurrency(recentClosureTotals.received)}
+            </span>
+            <span className="rounded-full border border-indigo-200 bg-indigo-50 px-3 py-1 font-semibold text-indigo-700">
+              Distributed {formatCurrency(recentClosureTotals.distributed)}
+            </span>
             <button
               type="button"
               onClick={() => openLeadWorkspace({ status: "CLOSED" })}
-              className="text-xs font-semibold text-slate-600 hover:text-slate-900"
+              className="rounded-full border border-slate-300 bg-white px-3 py-1 font-semibold text-slate-600 hover:border-slate-500 hover:text-slate-900"
             >
-              Open Leads
+              Open Closed Leads
             </button>
           </div>
+        </div>
 
-          {recentClosures.length === 0 ? (
-            <EmptyState text="No closed deals in selected range." />
-          ) : (
-            <div className="mt-3 overflow-x-auto">
-              <table className="min-w-full text-sm">
-                <thead>
-                  <tr className="text-left text-xs uppercase tracking-wider text-slate-500">
-                    <th className="py-2 pr-3">Deal ID</th>
-                    <th className="py-2 pr-3">Project</th>
-                    <th className="py-2 pr-3">Client</th>
-                    <th className="py-2 pr-3">Brokerage Received</th>
-                    <th className="py-2 pr-3">Brokerage Distributed</th>
-                    <th className="py-2 pr-3">Net Brokerage Counted in Revenue</th>
-                    <th className="py-2 pr-3">Closing Date</th>
-                    <th className="py-2">Closing Executive</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {recentClosures.map((lead) => (
-                    <tr
-                      key={lead._id}
-                      className="cursor-pointer border-t border-slate-100 hover:bg-slate-50"
-                      onClick={() => openLeadWorkspace({ leadId: lead._id })}
-                    >
-                      <td className="py-2 pr-3 text-slate-800">
-                        <div className="font-medium">{String(lead._id || "").slice(-8) || "-"}</div>
-                        <div className="text-xs text-slate-500">{lead.phone || "-"}</div>
-                      </td>
-                      <td className="py-2 pr-3 text-slate-700">{lead.projectInterested || "-"}</td>
-                      <td className="py-2 pr-3 text-slate-700">
-                        <div className="font-medium">{lead.name || "-"}</div>
-                        <div className="text-xs text-slate-500">{lead.email || "No email"}</div>
-                      </td>
-                      <td className="py-2 pr-3 text-slate-700">{formatCurrency(getRecordedBrokerageReceived(lead))}</td>
-                      <td className="py-2 pr-3 text-slate-700">{formatCurrency(getRecordedBrokerageDistributed(lead))}</td>
-                      <td className="py-2 pr-3 font-semibold text-slate-900">{formatCurrency(getRecordedBrokerageReceived(lead))}</td>
-                      <td className="py-2 pr-3 text-slate-600">{formatDateTime(getLeadClosingDate(lead))}</td>
-                      <td className="py-2 text-slate-600">{getLeadClosingExecutiveName(lead)}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          )}
-        </section>
-
-        <section className="ui-soft-panel rounded-2xl border border-slate-200 bg-white p-4">
-          <div className="flex items-center justify-between gap-2">
-            <h2 className="text-sm font-semibold uppercase tracking-[0.14em] text-slate-600">
-              Follow-up Watchlist
-            </h2>
-            <Clock3 size={15} className="text-slate-500" />
-          </div>
-
-          <div className="mt-3 flex flex-wrap gap-2 text-xs">
-            <button
-              type="button"
-              onClick={() => openLeadWorkspace({ dueOnly: true })}
-              className="rounded-full bg-red-50 px-2.5 py-1 font-semibold text-red-700 border border-red-200 hover:border-red-300"
-            >
-              Overdue: {followUps.overdue.length}
-            </button>
-            <button
-              type="button"
-              onClick={() => openLeadWorkspace({ status: "ALL" })}
-              className="rounded-full bg-amber-50 px-2.5 py-1 font-semibold text-amber-700 border border-amber-200 hover:border-amber-300"
-            >
-              Next 7 days: {followUps.thisWeek.length}
-            </button>
-          </div>
-
-          {followUps.all.length === 0 ? (
-            <EmptyState text="No upcoming follow-ups in selected range." />
-          ) : (
-            <div className="mt-3 space-y-2">
-              {followUps.all.slice(0, 8).map((lead) => (
+        {recentClosures.length === 0 ? (
+          <EmptyState text="No closed deals in selected range." />
+        ) : (
+          <div className="mt-4 grid grid-cols-1 gap-3 xl:grid-cols-2">
+            {recentClosures.map((lead) => {
+              const brokerageReceived = getRecordedBrokerageReceived(lead);
+              const brokerageDistributed = getRecordedBrokerageDistributed(lead);
+              return (
                 <button
                   key={lead._id}
                   type="button"
                   onClick={() => openLeadWorkspace({ leadId: lead._id })}
-                  className={`rounded-lg border px-3 py-2 ${
-                    lead.isOverdue ? "border-red-200 bg-red-50" : "border-slate-200 bg-slate-50"
-                  } w-full text-left`}
+                  className="group rounded-xl border border-slate-200 bg-slate-50 p-4 text-left transition-colors hover:border-slate-300 hover:bg-white"
                 >
-                  <div className="flex items-start justify-between gap-3">
-                    <div>
-                      <p className="text-sm font-medium text-slate-800">{lead.name || "-"}</p>
-                      <p className="text-xs text-slate-500">{lead.projectInterested || "-"}</p>
+                  <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                    <div className="min-w-0">
+                      <p className="text-sm font-semibold text-slate-900">
+                        {lead.name || "Unnamed Client"}
+                      </p>
+                      <p className="mt-1 break-words text-xs text-slate-500">
+                        {lead.projectInterested || "Project not set"}
+                      </p>
+                      <div className="mt-2 flex flex-wrap gap-2 text-[11px] font-semibold uppercase tracking-[0.08em]">
+                        <span className="rounded-full bg-white px-2.5 py-1 text-slate-600 ring-1 ring-slate-200">
+                          {String(lead._id || "").slice(-8) || "No ID"}
+                        </span>
+                        <span className="rounded-full bg-white px-2.5 py-1 text-slate-600 ring-1 ring-slate-200">
+                          {lead.phone || "No phone"}
+                        </span>
+                      </div>
                     </div>
-                    <p className={`text-xs font-semibold ${lead.isOverdue ? "text-red-700" : "text-slate-600"}`}>
-                      {formatDateTime(lead.nextFollowUp)}
-                    </p>
+                    <div className="shrink-0 rounded-lg border border-slate-200 bg-white px-3 py-2 text-left sm:text-right">
+                      <p className="text-[10px] font-semibold uppercase tracking-[0.12em] text-slate-500">
+                        Closed
+                      </p>
+                      <p className="mt-1 text-xs font-semibold text-slate-800">
+                        {formatDateTime(getLeadClosingDate(lead))}
+                      </p>
+                    </div>
+                  </div>
+
+                  <div className="mt-4 grid grid-cols-1 gap-2 sm:grid-cols-3">
+                    <div className="rounded-lg border border-emerald-100 bg-emerald-50 px-3 py-2">
+                      <p className="text-[10px] font-semibold uppercase tracking-[0.12em] text-emerald-700">
+                        Received
+                      </p>
+                      <p className="mt-1 text-sm font-semibold text-slate-900">
+                        {formatCurrency(brokerageReceived)}
+                      </p>
+                    </div>
+                    <div className="rounded-lg border border-indigo-100 bg-indigo-50 px-3 py-2">
+                      <p className="text-[10px] font-semibold uppercase tracking-[0.12em] text-indigo-700">
+                        Distributed
+                      </p>
+                      <p className="mt-1 text-sm font-semibold text-slate-900">
+                        {formatCurrency(brokerageDistributed)}
+                      </p>
+                    </div>
+                    <div className="rounded-lg border border-slate-200 bg-white px-3 py-2">
+                      <p className="text-[10px] font-semibold uppercase tracking-[0.12em] text-slate-500">
+                        Revenue Counted
+                      </p>
+                      <p className="mt-1 text-sm font-semibold text-slate-900">
+                        {formatCurrency(brokerageReceived)}
+                      </p>
+                    </div>
+                  </div>
+
+                  <div className="mt-3 flex flex-col gap-1 text-xs text-slate-500 sm:flex-row sm:items-center sm:justify-between">
+                    <span>{lead.email || "No email"}</span>
+                    <span className="font-medium text-slate-600">
+                      Executive: {getLeadClosingExecutiveName(lead)}
+                    </span>
                   </div>
                 </button>
-              ))}
-            </div>
-          )}
-        </section>
-      </div>
+              );
+            })}
+          </div>
+        )}
+      </section>
 
       <section className="ui-soft-panel rounded-2xl border border-slate-200 bg-white p-4">
         <h2 className="text-sm font-semibold uppercase tracking-[0.14em] text-slate-600">

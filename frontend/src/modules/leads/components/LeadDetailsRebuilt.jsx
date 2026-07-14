@@ -29,6 +29,12 @@ import {
   updateTask as apiUpdateTask,
   deleteTask as apiDeleteTask,
 } from "../../../services/taskService";
+import {
+  FURNISHING_OPTIONS,
+  getPropertySubtypeConfig,
+  getPropertySubtypeLabel,
+  getPropertySubtypeOptions,
+} from "../../../config/propertyRequirementConfig";
 
 const approvalLabel = (status) => {
   if (status === "APPROVED") return "Approved";
@@ -233,57 +239,6 @@ const CLOUDINARY_UPLOAD_PRESET = "samvid_upload";
 const MAX_CLOSURE_DOCUMENTS = 20;
 const MAX_CLOSURE_FILE_SIZE_BYTES = 25 * 1024 * 1024;
 const CLOSURE_DOCUMENT_ACCEPT = "image/*,application/pdf";
-const LEAD_REQUIREMENT_FURNISHING_OPTIONS = [
-  { value: "", label: "Any Furnishing" },
-  { value: "UNFURNISHED", label: "Unfurnished" },
-  { value: "SEMI_FURNISHED", label: "Semi Furnished" },
-  { value: "FULLY_FURNISHED", label: "Fully Furnished" },
-  { value: "BARE_SHELL", label: "Bare Shell" },
-  { value: "WARM_SHELL", label: "Warm Shell" },
-  { value: "MANAGED_OFFICE", label: "Managed Office" },
-  { value: "COWORKING", label: "Coworking" },
-];
-const LEAD_REQUIREMENT_BHK_OPTIONS = [
-  { value: "", label: "Any BHK" },
-  { value: "1BHK", label: "1 BHK" },
-  { value: "2BHK", label: "2 BHK" },
-  { value: "3BHK", label: "3 BHK" },
-  { value: "4BHK", label: "4 BHK" },
-  { value: "5BHK", label: "5 BHK" },
-  { value: "STUDIO", label: "Studio" },
-  { value: "OTHER", label: "Other" },
-];
-const LEAD_REQUIREMENT_COMMERCIAL_AMENITY_FIELDS = [
-  { key: "parkingAvailable", label: "Parking" },
-  { key: "pantry", label: "Pantry" },
-  { key: "receptionArea", label: "Reception Area" },
-  { key: "waitingArea", label: "Waiting Area" },
-  { key: "cafeteria", label: "Cafeteria" },
-  { key: "serverRoom", label: "Server / IT Room" },
-  { key: "storageRoom", label: "Storage Room" },
-  { key: "breakoutArea", label: "Breakout Area" },
-  { key: "liftAvailable", label: "Lift Available" },
-  { key: "powerBackup", label: "Power Backup" },
-  { key: "centralAC", label: "Central AC" },
-  { key: "fireSafety", label: "Fire Safety" },
-  { key: "readyToMove", label: "Ready to Move" },
-  { key: "underConstruction", label: "Under Construction" },
-];
-const LEAD_REQUIREMENT_RESIDENTIAL_AMENITY_FIELDS = [
-  { key: "lift", label: "Lift" },
-  { key: "security", label: "Security" },
-  { key: "gym", label: "Gym" },
-  { key: "swimmingPool", label: "Swimming Pool" },
-  { key: "clubhouse", label: "Clubhouse" },
-  { key: "powerBackup", label: "Power Backup" },
-  { key: "parking", label: "Parking" },
-  { key: "studyRoom", label: "Study Room" },
-  { key: "servantRoom", label: "Servant Room" },
-  { key: "modularKitchen", label: "Modular Kitchen" },
-  { key: "electricityBackup", label: "Electricity Backup" },
-  { key: "gasPipeline", label: "Gas Pipeline" },
-];
-
 const detectClosureDocumentKind = (mimeType = "") => {
   const normalizedMimeType = String(mimeType || "").trim().toLowerCase();
   if (normalizedMimeType.startsWith("image/")) return "image";
@@ -707,8 +662,19 @@ const LeadDetailsRebuiltContent = ({
   const normalizedRequirementInventoryType = String(
     requirementsDraft?.inventoryType || "",
   ).trim().toUpperCase();
-  const isCommercialRequirement = normalizedRequirementInventoryType === "COMMERCIAL";
-  const isResidentialRequirement = normalizedRequirementInventoryType === "RESIDENTIAL";
+  const normalizedRequirementPropertySubtype = String(
+    requirementsDraft?.propertySubtype || "",
+  ).trim().toUpperCase();
+  const propertySubtypeOptions = getPropertySubtypeOptions(normalizedRequirementInventoryType);
+  const propertySubtypeConfig = getPropertySubtypeConfig(
+    normalizedRequirementInventoryType,
+    normalizedRequirementPropertySubtype,
+  );
+  const showFurnishing = !propertySubtypeConfig || propertySubtypeConfig.showFurnishing !== false;
+  const furnishingOptions = showFurnishing ? FURNISHING_OPTIONS : [];
+  const furnishingValue = furnishingOptions.some((option) => option.value === requirementsDraft?.furnishingStatus)
+    ? requirementsDraft?.furnishingStatus
+    : "";
 
   const updateRequirementRootField = React.useCallback(
     (field, value) => {
@@ -720,28 +686,44 @@ const LeadDetailsRebuiltContent = ({
     [setRequirementsDraft],
   );
 
-  const updateRequirementCommercialField = React.useCallback(
+  const updateRequirementInventoryType = React.useCallback(
+    (value) => {
+      setRequirementsDraft((prev) => {
+        return {
+          ...(prev || {}),
+          inventoryType: value,
+          propertySubtype: "",
+          subtypeData: {},
+          furnishingStatus: FURNISHING_OPTIONS.some((option) => option.value === prev?.furnishingStatus)
+            ? prev?.furnishingStatus
+            : "",
+        };
+      });
+    },
+    [setRequirementsDraft],
+  );
+
+  const updateRequirementPropertySubtype = React.useCallback(
+    (value) => {
+      const nextConfig = getPropertySubtypeConfig(normalizedRequirementInventoryType, value);
+      setRequirementsDraft((prev) => ({
+        ...(prev || {}),
+        propertySubtype: value,
+        subtypeData: {},
+        furnishingStatus: nextConfig?.showFurnishing === false
+          ? ""
+          : prev?.furnishingStatus || "",
+      }));
+    },
+    [normalizedRequirementInventoryType, setRequirementsDraft],
+  );
+
+  const updateRequirementSubtypeField = React.useCallback(
     (field, value) => {
       setRequirementsDraft((prev) => ({
         ...(prev || {}),
-        commercial: {
-          seats: "",
-          cabins: "",
-          parkingAvailable: false,
-          pantry: false,
-          receptionArea: false,
-          waitingArea: false,
-          cafeteria: false,
-          serverRoom: false,
-          storageRoom: false,
-          breakoutArea: false,
-          liftAvailable: false,
-          powerBackup: false,
-          centralAC: false,
-          fireSafety: false,
-          readyToMove: false,
-          underConstruction: false,
-          ...(prev?.commercial || {}),
+        subtypeData: {
+          ...(prev?.subtypeData || {}),
           [field]: value,
         },
       }));
@@ -749,64 +731,63 @@ const LeadDetailsRebuiltContent = ({
     [setRequirementsDraft],
   );
 
-  const updateRequirementResidentialField = React.useCallback(
-    (field, value) => {
-      setRequirementsDraft((prev) => ({
-        ...(prev || {}),
-        residential: {
-          bhkType: "",
-          floor: "",
-          amenities: {
-            lift: false,
-            security: false,
-            gym: false,
-            swimmingPool: false,
-            clubhouse: false,
-            powerBackup: false,
-            parking: false,
-            studyRoom: false,
-            servantRoom: false,
-            modularKitchen: false,
-            electricityBackup: false,
-            gasPipeline: false,
-            ...(prev?.residential?.amenities || {}),
-          },
-          ...(prev?.residential || {}),
-          [field]: value,
-        },
-      }));
-    },
-    [setRequirementsDraft],
-  );
+  const renderSubtypeField = React.useCallback(
+    (field) => {
+      const value = requirementsDraft?.subtypeData?.[field.key] ?? "";
+      const labelClass = `text-[10px] font-bold uppercase tracking-wider ${isDark ? "text-slate-400" : "text-slate-500"}`;
+      const inputClassName = `h-9 w-full rounded-lg border px-2.5 text-sm ${input}`;
 
-  const updateRequirementResidentialAmenity = React.useCallback(
-    (field, value) => {
-      setRequirementsDraft((prev) => ({
-        ...(prev || {}),
-        residential: {
-          bhkType: "",
-          floor: "",
-          ...(prev?.residential || {}),
-          amenities: {
-            lift: false,
-            security: false,
-            gym: false,
-            swimmingPool: false,
-            clubhouse: false,
-            powerBackup: false,
-            parking: false,
-            studyRoom: false,
-            servantRoom: false,
-            modularKitchen: false,
-            electricityBackup: false,
-            gasPipeline: false,
-            ...(prev?.residential?.amenities || {}),
-            [field]: value,
-          },
-        },
-      }));
+      if (field.type === "checkbox") {
+        return (
+          <label key={field.key} className={`inline-flex min-h-9 items-center gap-1.5 rounded-lg border px-2.5 py-1.5 text-xs ${isDark ? "border-slate-700 bg-slate-950 text-slate-200" : "border-slate-300 bg-white text-slate-700"}`}>
+            <input
+              type="checkbox"
+              checked={Boolean(value)}
+              onChange={(event) => updateRequirementSubtypeField(field.key, event.target.checked)}
+            />
+            {field.label}
+          </label>
+        );
+      }
+
+      return (
+        <label key={field.key} className={`space-y-1 ${field.fullWidth ? "sm:col-span-2" : ""}`}>
+          <span className={labelClass}>{field.label}</span>
+          {field.type === "select" ? (
+            <select
+              value={value}
+              onChange={(event) => updateRequirementSubtypeField(field.key, event.target.value)}
+              className={inputClassName}
+            >
+              <option value="">{field.label}</option>
+              {(field.options || []).map((option) => (
+                <option key={option} value={option}>{option}</option>
+              ))}
+            </select>
+          ) : field.type === "textarea" ? (
+            <textarea
+              value={value}
+              onChange={(event) => updateRequirementSubtypeField(field.key, event.target.value)}
+              placeholder={field.placeholder || field.label}
+              rows={3}
+              className={`min-h-24 w-full rounded-lg border px-2.5 py-2 text-sm ${input}`}
+            />
+          ) : (
+            <input
+              type={field.type === "date" ? "date" : field.type === "number" ? "number" : "text"}
+              min={field.min}
+              max={field.max}
+              step={field.step || (field.type === "number" ? "any" : undefined)}
+              value={value}
+              onChange={(event) => updateRequirementSubtypeField(field.key, event.target.value)}
+              placeholder={field.placeholder || field.label}
+              className={inputClassName}
+            />
+          )}
+        </label>
+      );
     },
-    [setRequirementsDraft],
+    [input, isDark, requirementsDraft?.subtypeData, updateRequirementSubtypeField],
   );
 
   const relatedInventoryRows = React.useMemo(
@@ -1912,7 +1893,7 @@ const LeadDetailsRebuiltContent = ({
           </button>
         </div>
 
-        <div className="mt-4 grid grid-cols-2 gap-2 xl:grid-cols-4">
+        <div className="mt-4 grid grid-cols-2 gap-2 xl:grid-cols-3">
           <div className={`rounded-2xl border px-2.5 py-2 sm:px-3 sm:py-2.5 ${card}`}>
             <p className={`text-[9px] uppercase tracking-[0.1em] sm:text-[10px] sm:tracking-[0.12em] ${isDark ? "text-slate-400" : "text-slate-500"}`}>Assigned</p>
             <p className={`mt-0.5 truncate text-[11px] font-semibold sm:mt-1 sm:text-xs ${isDark ? "text-slate-100" : "text-slate-800"}`}>
@@ -1923,12 +1904,6 @@ const LeadDetailsRebuiltContent = ({
             <p className={`text-[9px] uppercase tracking-[0.1em] sm:text-[10px] sm:tracking-[0.12em] ${isDark ? "text-slate-400" : "text-slate-500"}`}>Follow-up</p>
             <p className={`mt-0.5 truncate text-[11px] font-semibold sm:mt-1 sm:text-xs ${isDark ? "text-slate-100" : "text-slate-800"}`}>
               {formatDate(followUpDraft || selectedLead?.nextFollowUp)}
-            </p>
-          </div>
-          <div className={`rounded-2xl border px-2.5 py-2 sm:px-3 sm:py-2.5 ${card}`}>
-            <p className={`text-[9px] uppercase tracking-[0.1em] sm:text-[10px] sm:tracking-[0.12em] ${isDark ? "text-slate-400" : "text-slate-500"}`}>Approval</p>
-            <p className={`mt-0.5 truncate text-[11px] font-semibold sm:mt-1 sm:text-xs ${isDark ? "text-slate-100" : "text-slate-800"}`}>
-              {approvalLabel(currentApprovalStatus)}
             </p>
           </div>
           <div className={`rounded-2xl border px-2.5 py-2 sm:px-3 sm:py-2.5 ${card}`}>
@@ -2038,6 +2013,11 @@ const LeadDetailsRebuiltContent = ({
             <div className={`text-xs font-bold uppercase tracking-widest ${isDark ? "text-slate-400" : "text-slate-500"}`}>
               Lead Requirements
             </div>
+            {normalizedRequirementPropertySubtype ? (
+              <div className={`mt-2 inline-flex rounded-full border px-2.5 py-1 text-[11px] font-semibold ${isDark ? "border-cyan-300/40 bg-cyan-500/10 text-cyan-100" : "border-cyan-200 bg-cyan-50 text-cyan-700"}`}>
+                {getPropertySubtypeLabel(normalizedRequirementInventoryType, normalizedRequirementPropertySubtype) || normalizedRequirementPropertySubtype}
+              </div>
+            ) : null}
             <div className="mt-2 grid grid-cols-1 gap-2 sm:grid-cols-2">
               <label className="space-y-1">
                 <span className={`text-[10px] font-bold uppercase tracking-wider ${isDark ? "text-slate-400" : "text-slate-500"}`}>
@@ -2045,7 +2025,7 @@ const LeadDetailsRebuiltContent = ({
                 </span>
                 <select
                   value={requirementsDraft?.inventoryType || ""}
-                  onChange={(event) => updateRequirementRootField("inventoryType", event.target.value)}
+                  onChange={(event) => updateRequirementInventoryType(event.target.value)}
                   className={`h-9 w-full rounded-lg border px-2.5 text-sm ${input}`}
                 >
                   <option value="">Any</option>
@@ -2053,6 +2033,23 @@ const LeadDetailsRebuiltContent = ({
                   <option value="RESIDENTIAL">Residential</option>
                 </select>
               </label>
+              {normalizedRequirementInventoryType ? (
+                <label className="space-y-1">
+                  <span className={`text-[10px] font-bold uppercase tracking-wider ${isDark ? "text-slate-400" : "text-slate-500"}`}>
+                    {normalizedRequirementInventoryType === "COMMERCIAL" ? "Commercial Property Type" : "Residential Property Type"}
+                  </span>
+                  <select
+                    value={requirementsDraft?.propertySubtype || ""}
+                    onChange={(event) => updateRequirementPropertySubtype(event.target.value)}
+                    className={`h-9 w-full rounded-lg border px-2.5 text-sm ${input}`}
+                  >
+                    <option value="">Any</option>
+                    {propertySubtypeOptions.map((option) => (
+                      <option key={option.value} value={option.value}>{option.label}</option>
+                    ))}
+                  </select>
+                </label>
+              ) : null}
               <label className="space-y-1">
                 <span className={`text-[10px] font-bold uppercase tracking-wider ${isDark ? "text-slate-400" : "text-slate-500"}`}>
                   Deal Type
@@ -2063,26 +2060,29 @@ const LeadDetailsRebuiltContent = ({
                   className={`h-9 w-full rounded-lg border px-2.5 text-sm ${input}`}
                 >
                   <option value="">Any</option>
-                  <option value="SALE">Sale</option>
+                  <option value="SALE">Purchase</option>
+                  <option value="LEASE">Lease</option>
                   <option value="RENT">Rent</option>
                 </select>
               </label>
-              <label className="space-y-1">
-                <span className={`text-[10px] font-bold uppercase tracking-wider ${isDark ? "text-slate-400" : "text-slate-500"}`}>
-                  Furnishing
-                </span>
-                <select
-                  value={requirementsDraft?.furnishingStatus || ""}
-                  onChange={(event) => updateRequirementRootField("furnishingStatus", event.target.value)}
-                  className={`h-9 w-full rounded-lg border px-2.5 text-sm ${input}`}
-                >
-                  {LEAD_REQUIREMENT_FURNISHING_OPTIONS.map((option) => (
-                    <option key={option.value || "any-furnishing"} value={option.value}>
-                      {option.label}
-                    </option>
-                  ))}
-                </select>
-              </label>
+              {showFurnishing ? (
+                <label className="space-y-1">
+                  <span className={`text-[10px] font-bold uppercase tracking-wider ${isDark ? "text-slate-400" : "text-slate-500"}`}>
+                    Furnishing
+                  </span>
+                  <select
+                    value={furnishingValue}
+                    onChange={(event) => updateRequirementRootField("furnishingStatus", event.target.value)}
+                    className={`h-9 w-full rounded-lg border px-2.5 text-sm ${input}`}
+                  >
+                    {furnishingOptions.map((option) => (
+                      <option key={option.value || "any-furnishing"} value={option.value}>
+                        {option.label}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+              ) : null}
               <label className="space-y-1">
                 <span className={`text-[10px] font-bold uppercase tracking-wider ${isDark ? "text-slate-400" : "text-slate-500"}`}>
                   Area Unit
@@ -2150,84 +2150,20 @@ const LeadDetailsRebuiltContent = ({
               </label>
             </div>
 
-            {isCommercialRequirement ? (
+            {propertySubtypeConfig ? (
               <div className={`mt-3 rounded-xl border p-2.5 ${softCard}`}>
                 <div className={`text-[10px] font-bold uppercase tracking-wider ${isDark ? "text-slate-400" : "text-slate-500"}`}>
-                  Commercial Preferences
+                  {propertySubtypeConfig.label} Preferences
                 </div>
                 <div className="mt-2 grid grid-cols-1 gap-2 sm:grid-cols-2">
-                  <input
-                    type="number"
-                    step="1"
-                    min="0"
-                    value={requirementsDraft?.commercial?.seats || ""}
-                    onChange={(event) => updateRequirementCommercialField("seats", event.target.value)}
-                    placeholder="Seats / Workstations"
-                    className={`h-9 w-full rounded-lg border px-2.5 text-sm ${input}`}
-                  />
-                  <input
-                    type="number"
-                    step="1"
-                    min="0"
-                    value={requirementsDraft?.commercial?.cabins || ""}
-                    onChange={(event) => updateRequirementCommercialField("cabins", event.target.value)}
-                    placeholder="Cabins"
-                    className={`h-9 w-full rounded-lg border px-2.5 text-sm ${input}`}
-                  />
+                  {(propertySubtypeConfig.fields || [])
+                    .filter((field) => field.type !== "checkbox")
+                    .map(renderSubtypeField)}
                 </div>
                 <div className="mt-2 flex flex-wrap gap-1.5">
-                  {LEAD_REQUIREMENT_COMMERCIAL_AMENITY_FIELDS.map((field) => (
-                    <label key={field.key} className={`inline-flex items-center gap-1.5 rounded-lg border px-2 py-1 text-[11px] ${button}`}>
-                      <input
-                        type="checkbox"
-                        checked={Boolean(requirementsDraft?.commercial?.[field.key])}
-                        onChange={(event) => updateRequirementCommercialField(field.key, event.target.checked)}
-                      />
-                      {field.label}
-                    </label>
-                  ))}
-                </div>
-              </div>
-            ) : null}
-
-            {isResidentialRequirement ? (
-              <div className={`mt-3 rounded-xl border p-2.5 ${softCard}`}>
-                <div className={`text-[10px] font-bold uppercase tracking-wider ${isDark ? "text-slate-400" : "text-slate-500"}`}>
-                  Residential Preferences
-                </div>
-                <div className="mt-2 grid grid-cols-1 gap-2 sm:grid-cols-2">
-                  <select
-                    value={requirementsDraft?.residential?.bhkType || ""}
-                    onChange={(event) => updateRequirementResidentialField("bhkType", event.target.value)}
-                    className={`h-9 w-full rounded-lg border px-2.5 text-sm ${input}`}
-                  >
-                    {LEAD_REQUIREMENT_BHK_OPTIONS.map((option) => (
-                      <option key={option.value || "any-bhk"} value={option.value}>
-                        {option.label}
-                      </option>
-                    ))}
-                  </select>
-                  <input
-                    type="number"
-                    step="1"
-                    min="0"
-                    value={requirementsDraft?.residential?.floor || ""}
-                    onChange={(event) => updateRequirementResidentialField("floor", event.target.value)}
-                    placeholder="Preferred floor"
-                    className={`h-9 w-full rounded-lg border px-2.5 text-sm ${input}`}
-                  />
-                </div>
-                <div className="mt-2 flex flex-wrap gap-1.5">
-                  {LEAD_REQUIREMENT_RESIDENTIAL_AMENITY_FIELDS.map((field) => (
-                    <label key={field.key} className={`inline-flex items-center gap-1.5 rounded-lg border px-2 py-1 text-[11px] ${button}`}>
-                      <input
-                        type="checkbox"
-                        checked={Boolean(requirementsDraft?.residential?.amenities?.[field.key])}
-                        onChange={(event) => updateRequirementResidentialAmenity(field.key, event.target.checked)}
-                      />
-                      {field.label}
-                    </label>
-                  ))}
+                  {(propertySubtypeConfig.fields || [])
+                    .filter((field) => field.type === "checkbox")
+                    .map(renderSubtypeField)}
                 </div>
               </div>
             ) : null}

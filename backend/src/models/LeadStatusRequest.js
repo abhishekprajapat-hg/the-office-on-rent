@@ -22,7 +22,22 @@ const leadStatusRequestSchema = new mongoose.Schema(
     },
     proposedStatus: {
       type: String,
-      enum: ["NEW", "CONTACTED", "INTERESTED", "SITE_VISIT", "REQUESTED", "CLOSED", "LOST"],
+      enum: [
+        "NEW",
+        "CONTACTED",
+        "INTERESTED",
+        "SITE_VISIT_SCHEDULED",
+        "SITE_VISIT",
+        "SITE_VISIT_OVERDUE",
+        "MISSING_IN_ACTION",
+        "NOT_PICKING_CALLS",
+        "INVALID",
+        "OWNER",
+        "BROKER",
+        "REQUESTED",
+        "CLOSED",
+        "LOST",
+      ],
       required: true,
     },
     proposedNextFollowUp: {

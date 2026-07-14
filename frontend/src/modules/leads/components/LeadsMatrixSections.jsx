@@ -7,10 +7,10 @@ import {
   Building2,
   CalendarClock,
   CheckCircle2,
+  ChevronDown,
   Eye,
   Filter,
   History,
-  LayoutGrid,
   Loader,
   Mail,
   Mic,
@@ -23,7 +23,6 @@ import {
   Search,
   SlidersHorizontal,
   Sparkles,
-  Table2,
   Trash2,
   UploadCloud,
   Users2,
@@ -32,6 +31,12 @@ import {
 import { EmptyState, Skeleton } from "../../../components/ui";
 import { StatusBadge } from "../../../components/crm";
 import ToastNotice from "../../../components/ui/ToastNotice";
+import {
+  FURNISHING_OPTIONS,
+  INVENTORY_TYPE_OPTIONS,
+  getPropertySubtypeConfig,
+  getPropertySubtypeOptions,
+} from "../../../config/propertyRequirementConfig";
 
 const INR_CURRENCY_FORMATTER = new Intl.NumberFormat("en-IN", {
   style: "currency",
@@ -44,6 +49,31 @@ const formatCurrencyInr = (value) => {
   if (!Number.isFinite(amount) || amount <= 0) return "-";
   return INR_CURRENCY_FORMATTER.format(amount);
 };
+
+const AddLeadFieldShell = ({ title, className = "", fieldTitleClass, children }) => (
+  <label className={`block space-y-1 ${className}`}>
+    <span className={fieldTitleClass}>{title}</span>
+    {children}
+  </label>
+);
+
+const AddLeadSelectControl = ({ value, onChange, inputClass, isDark, children }) => (
+  <div className="relative">
+    <select
+      value={value}
+      onChange={onChange}
+      className={`${inputClass} appearance-none pr-10`}
+    >
+      {children}
+    </select>
+    <ChevronDown
+      size={16}
+      className={`pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 ${
+        isDark ? "text-slate-400" : "text-slate-500"
+      }`}
+    />
+  </div>
+);
 
 const getLeadPendingAmount = (lead) => {
   if (!lead || typeof lead !== "object") return null;
@@ -162,60 +192,6 @@ const getInventoryQuickInfo = (inventory = {}) =>
   ]
     .filter(Boolean)
     .join(" | ");
-
-const LEAD_REQUIREMENT_FURNISHING_OPTIONS = [
-  { value: "", label: "Any Furnishing" },
-  { value: "UNFURNISHED", label: "Unfurnished" },
-  { value: "SEMI_FURNISHED", label: "Semi Furnished" },
-  { value: "FULLY_FURNISHED", label: "Fully Furnished" },
-  { value: "BARE_SHELL", label: "Bare Shell" },
-  { value: "WARM_SHELL", label: "Warm Shell" },
-  { value: "MANAGED_OFFICE", label: "Managed Office" },
-  { value: "COWORKING", label: "Coworking" },
-];
-
-const LEAD_REQUIREMENT_BHK_OPTIONS = [
-  { value: "", label: "Any BHK" },
-  { value: "1BHK", label: "1 BHK" },
-  { value: "2BHK", label: "2 BHK" },
-  { value: "3BHK", label: "3 BHK" },
-  { value: "4BHK", label: "4 BHK" },
-  { value: "5BHK", label: "5 BHK" },
-  { value: "STUDIO", label: "Studio" },
-  { value: "OTHER", label: "Other" },
-];
-
-const LEAD_REQUIREMENT_COMMERCIAL_AMENITY_FIELDS = [
-  { key: "requirementsCommercialPantry", label: "Pantry" },
-  { key: "requirementsCommercialParkingAvailable", label: "Parking" },
-  { key: "requirementsCommercialReceptionArea", label: "Reception Area" },
-  { key: "requirementsCommercialWaitingArea", label: "Waiting Area" },
-  { key: "requirementsCommercialCafeteria", label: "Cafeteria" },
-  { key: "requirementsCommercialServerRoom", label: "Server / IT Room" },
-  { key: "requirementsCommercialStorageRoom", label: "Storage Room" },
-  { key: "requirementsCommercialBreakoutArea", label: "Breakout Area" },
-  { key: "requirementsCommercialLiftAvailable", label: "Lift Available" },
-  { key: "requirementsCommercialPowerBackup", label: "Power Backup" },
-  { key: "requirementsCommercialCentralAC", label: "Central AC" },
-  { key: "requirementsCommercialFireSafety", label: "Fire Safety" },
-  { key: "requirementsCommercialReadyToMove", label: "Ready to Move" },
-  { key: "requirementsCommercialUnderConstruction", label: "Under Construction" },
-];
-
-const LEAD_REQUIREMENT_RESIDENTIAL_AMENITY_FIELDS = [
-  { key: "requirementsResidentialAmenityLift", label: "Lift" },
-  { key: "requirementsResidentialAmenitySecurity", label: "Security" },
-  { key: "requirementsResidentialAmenityGym", label: "Gym" },
-  { key: "requirementsResidentialAmenitySwimmingPool", label: "Swimming Pool" },
-  { key: "requirementsResidentialAmenityClubhouse", label: "Clubhouse" },
-  { key: "requirementsResidentialAmenityPowerBackup", label: "Power Backup" },
-  { key: "requirementsResidentialAmenityParking", label: "Parking" },
-  { key: "requirementsResidentialAmenityStudyRoom", label: "Study Room" },
-  { key: "requirementsResidentialAmenityServantRoom", label: "Servant Room" },
-  { key: "requirementsResidentialAmenityModularKitchen", label: "Modular Kitchen" },
-  { key: "requirementsResidentialAmenityElectricityBackup", label: "Electricity Backup" },
-  { key: "requirementsResidentialAmenityGasPipeline", label: "Gas Pipeline" },
-];
 
 export const LeadsMatrixToolbar = ({
   isDark,
@@ -531,29 +507,14 @@ export const LeadsMatrixFilters = ({
   statusFilter,
   onStatusFilterChange,
   leadStatuses,
-  statusBreakdown,
+  propertySubtypeFilter = "",
+  onPropertySubtypeFilterChange,
+  propertySubtypeOptions = [],
   sortBy,
   onSortByChange,
-  showDueOnly,
-  onShowDueOnlyChange,
-  viewMode = "TABLE",
-  onViewModeChange,
   getStatusLabel,
 }) => {
   const [mobileMoreOpen, setMobileMoreOpen] = React.useState(false);
-  const totalLeads = leadStatuses.reduce(
-    (sum, status) => sum + Number(statusBreakdown[status] || 0),
-    0,
-  );
-  const chipClass = (active) => `shrink-0 rounded-full border px-3 py-2 text-[11px] font-semibold uppercase tracking-[0.08em] transition-colors ${
-    active
-      ? isDark
-        ? "border-cyan-300/55 bg-cyan-500/20 text-cyan-100"
-        : "border-cyan-300 bg-cyan-50 text-cyan-700"
-      : isDark
-        ? "border-slate-700 bg-slate-950 text-slate-300 hover:border-slate-500"
-        : "border-slate-300 bg-white text-slate-600 hover:border-slate-400"
-  }`;
   const inputClass = `h-11 w-full rounded-2xl border text-sm outline-none transition-colors ${
     isDark
       ? "border-slate-700 bg-slate-950/90 text-slate-100 placeholder:text-slate-500 focus:border-cyan-300/50"
@@ -564,16 +525,6 @@ export const LeadsMatrixFilters = ({
       ? "border-slate-700 bg-slate-950/90 text-slate-100 focus:border-cyan-300/50"
       : "border-slate-300 bg-white text-slate-700 focus:border-cyan-400"
   }`;
-  const dueButtonClass = `h-11 rounded-2xl border text-xs font-semibold uppercase tracking-[0.12em] transition-colors ${
-    showDueOnly
-      ? isDark
-        ? "border-rose-300/60 bg-rose-500/20 text-rose-100"
-        : "border-rose-300 bg-rose-50 text-rose-700"
-      : isDark
-        ? "border-slate-700 bg-slate-950/90 text-slate-300 hover:border-slate-500"
-        : "border-slate-300 bg-white text-slate-600 hover:border-slate-400"
-  }`;
-
   return (
     <div className={`ui-soft-panel relative mb-2 overflow-hidden rounded-2xl p-2.5 md:mb-4 md:rounded-3xl md:p-4 ${
       isDark
@@ -605,8 +556,8 @@ export const LeadsMatrixFilters = ({
             </p>
           </div>
 
-          <div className="grid grid-cols-2 gap-2.5 sm:gap-3 lg:grid-cols-12">
-            <div className="relative col-span-2 lg:col-span-4">
+          <div className="flex flex-wrap items-center gap-2.5 sm:gap-3">
+            <div className="relative min-w-[260px] flex-[1_1_280px]">
               <Search className={`absolute left-3 top-1/2 -translate-y-1/2 ${isDark ? "text-slate-400" : "text-slate-500"}`} size={15} />
               <input
                 type="text"
@@ -629,7 +580,7 @@ export const LeadsMatrixFilters = ({
               )}
             </div>
 
-            <div className="lg:col-span-2">
+            <div className="min-w-[160px] flex-[1_1_170px]">
               <select value={statusFilter} onChange={(event) => onStatusFilterChange(event.target.value)} className={selectClass}>
                 <option value="ALL">All statuses</option>
                 {leadStatuses.map((status) => (
@@ -638,7 +589,20 @@ export const LeadsMatrixFilters = ({
               </select>
             </div>
 
-            <div className="lg:col-span-2">
+            <div className="min-w-[180px] flex-[1_1_190px]">
+              <select
+                value={propertySubtypeFilter}
+                onChange={(event) => onPropertySubtypeFilterChange?.(event.target.value)}
+                className={selectClass}
+              >
+                <option value="">All property types</option>
+                {propertySubtypeOptions.map((option) => (
+                  <option key={option.value} value={option.value}>{option.label}</option>
+                ))}
+              </select>
+            </div>
+
+            <div className="min-w-[170px] flex-[0_1_190px]">
               <div className={`flex h-11 items-center gap-2 rounded-2xl border px-3 ${
                 isDark ? "border-slate-700 bg-slate-950/90 text-slate-300" : "border-slate-300 bg-white text-slate-600"
               }`}>
@@ -655,54 +619,6 @@ export const LeadsMatrixFilters = ({
               </div>
             </div>
 
-            <button type="button" onClick={() => onShowDueOnlyChange(!showDueOnly)} className={`col-span-2 lg:col-span-2 ${dueButtonClass}`}>
-              <span className="inline-flex items-center gap-1.5">
-                <CalendarClock size={13} />
-                {showDueOnly ? "Due Mode On" : "Due Follow-ups"}
-              </span>
-            </button>
-
-            <div className={`col-span-2 grid grid-cols-2 gap-1 rounded-2xl border p-1 lg:col-span-2 ${
-              isDark ? "border-slate-700 bg-slate-950/90" : "border-slate-300 bg-white"
-            }`}>
-              <button
-                type="button"
-                onClick={() => onViewModeChange?.("TABLE")}
-                aria-pressed={viewMode === "TABLE"}
-                className={`inline-flex h-9 items-center justify-center gap-1.5 rounded-xl text-[11px] font-bold uppercase tracking-[0.1em] transition-colors ${
-                  viewMode === "TABLE"
-                    ? isDark ? "bg-slate-800 text-cyan-100" : "bg-slate-100 text-blue-700 shadow-sm"
-                    : isDark ? "text-slate-400 hover:text-slate-100" : "text-slate-500 hover:text-slate-900"
-                }`}
-              >
-                <Table2 size={13} />
-                Table
-              </button>
-              <button
-                type="button"
-                onClick={() => onViewModeChange?.("KANBAN")}
-                aria-pressed={viewMode === "KANBAN"}
-                className={`inline-flex h-9 items-center justify-center gap-1.5 rounded-xl text-[11px] font-bold uppercase tracking-[0.1em] transition-colors ${
-                  viewMode === "KANBAN"
-                    ? isDark ? "bg-slate-800 text-cyan-100" : "bg-slate-100 text-blue-700 shadow-sm"
-                    : isDark ? "text-slate-400 hover:text-slate-100" : "text-slate-500 hover:text-slate-900"
-                }`}
-              >
-                <LayoutGrid size={13} />
-                Kanban
-              </button>
-            </div>
-          </div>
-
-          <div className="mt-3 flex flex-wrap gap-2 sm:-mx-1 sm:flex-nowrap sm:overflow-x-auto sm:px-1 sm:pb-1 sm:custom-scrollbar">
-            <button type="button" onClick={() => onStatusFilterChange("ALL")} className={chipClass(statusFilter === "ALL")}>
-              All ({totalLeads})
-            </button>
-            {leadStatuses.map((status) => (
-              <button key={status} type="button" onClick={() => onStatusFilterChange(status)} className={chipClass(statusFilter === status)}>
-                {getStatusLabel(status)} ({statusBreakdown[status] || 0})
-              </button>
-            ))}
           </div>
         </div>
 
@@ -730,17 +646,6 @@ export const LeadsMatrixFilters = ({
             )}
           </div>
 
-          <div className="mt-2 flex flex-wrap gap-2">
-            <button type="button" onClick={() => onStatusFilterChange("ALL")} className={chipClass(statusFilter === "ALL")}>
-              All {totalLeads}
-            </button>
-            {leadStatuses.map((status) => (
-              <button key={status} type="button" onClick={() => onStatusFilterChange(status)} className={chipClass(statusFilter === status)}>
-                {getStatusLabel(status)} {statusBreakdown[status] || 0}
-              </button>
-            ))}
-          </div>
-
           <button
             type="button"
             onClick={() => setMobileMoreOpen((prev) => !prev)}
@@ -759,32 +664,23 @@ export const LeadsMatrixFilters = ({
             <div className={`mt-2 space-y-2 rounded-2xl border p-2 ${
               isDark ? "border-slate-700 bg-slate-950/90" : "border-slate-200 bg-slate-50"
             }`}>
+              <select
+                value={propertySubtypeFilter}
+                onChange={(event) => onPropertySubtypeFilterChange?.(event.target.value)}
+                className={selectClass}
+              >
+                <option value="">All property types</option>
+                {propertySubtypeOptions.map((option) => (
+                  <option key={option.value} value={option.value}>{option.label}</option>
+                ))}
+              </select>
+
               <select value={sortBy} onChange={(event) => onSortByChange(event.target.value)} className={selectClass}>
                 <option value="RECENT">Latest updated</option>
                 <option value="FOLLOW_UP">Next follow-up</option>
                 <option value="NAME">Name A-Z</option>
               </select>
 
-              <button type="button" onClick={() => onShowDueOnlyChange(!showDueOnly)} className={`w-full ${dueButtonClass}`}>
-                <span className="inline-flex items-center gap-1.5">
-                  <CalendarClock size={13} />
-                  {showDueOnly ? "Due Mode On" : "Due Follow-ups"}
-                </span>
-              </button>
-
-              <button
-                type="button"
-                onClick={() => onViewModeChange?.("TABLE")}
-                className={`inline-flex h-10 w-full items-center justify-center gap-1.5 rounded-xl border text-[11px] font-bold uppercase tracking-[0.1em] transition-colors ${
-                  viewMode === "TABLE"
-                    ? isDark ? "border-slate-700 bg-slate-800 text-cyan-100" : "border-slate-200 bg-white text-blue-700 shadow-sm"
-                    : isDark ? "border-slate-700 text-slate-400" : "border-slate-300 text-slate-500"
-                }`}
-                aria-pressed={viewMode === "TABLE"}
-              >
-                <Table2 size={13} />
-                List View
-              </button>
             </div>
           ) : null}
         </div>
@@ -1479,6 +1375,9 @@ export const AddLeadModal = ({
   const inputClass = `h-11 w-full rounded-lg border px-3 text-sm md:h-10 ${
     isDark ? "border-slate-700 bg-slate-950 text-slate-200" : "border-slate-300 bg-white text-slate-700"
   }`;
+  const fieldTitleClass = `text-[11px] font-bold uppercase tracking-[0.08em] ${
+    isDark ? "text-slate-400" : "text-slate-500"
+  }`;
   const sectionCardClass = `rounded-xl border p-3 ${
     isDark ? "border-slate-700 bg-slate-950/55" : "border-slate-200 bg-slate-50/60"
   }`;
@@ -1490,11 +1389,109 @@ export const AddLeadModal = ({
   }`;
 
   const requirementInventoryType = String(formData.requirementsInventoryType || "").trim().toUpperCase();
-  const isCommercialRequirement = requirementInventoryType === "COMMERCIAL";
-  const isResidentialRequirement = requirementInventoryType === "RESIDENTIAL";
+  const requirementPropertySubtype = String(formData.requirementsPropertySubtype || "").trim().toUpperCase();
+  const propertySubtypeOptions = getPropertySubtypeOptions(requirementInventoryType);
+  const propertySubtypeConfig = getPropertySubtypeConfig(requirementInventoryType, requirementPropertySubtype);
+  const showFurnishing = !propertySubtypeConfig || propertySubtypeConfig.showFurnishing !== false;
+  const furnishingOptions = showFurnishing ? FURNISHING_OPTIONS : [];
+  const furnishingValue = furnishingOptions.some((option) => option.value === formData.requirementsFurnishingStatus)
+    ? formData.requirementsFurnishingStatus
+    : "";
 
   const updateField = (field, value) => {
     setFormData((prev) => ({ ...prev, [field]: value }));
+  };
+
+  const updateRequirementInventoryType = (value) => {
+    setFormData((prev) => {
+      const nextFurnishingOptions = FURNISHING_OPTIONS;
+      const nextFurnishingStatus = nextFurnishingOptions.some(
+        (option) => option.value === prev.requirementsFurnishingStatus,
+      )
+        ? prev.requirementsFurnishingStatus
+        : "";
+      return {
+        ...prev,
+        requirementsInventoryType: value,
+        requirementsPropertySubtype: "",
+        requirementsSubtypeData: {},
+        requirementsFurnishingStatus: nextFurnishingStatus,
+      };
+    });
+  };
+
+  const updateRequirementPropertySubtype = (value) => {
+    const nextConfig = getPropertySubtypeConfig(requirementInventoryType, value);
+    setFormData((prev) => ({
+      ...prev,
+      requirementsPropertySubtype: value,
+      requirementsSubtypeData: {},
+      requirementsFurnishingStatus: nextConfig?.showFurnishing === false
+        ? ""
+        : prev.requirementsFurnishingStatus,
+    }));
+  };
+
+  const updateSubtypeField = (fieldKey, value) => {
+    setFormData((prev) => ({
+      ...prev,
+      requirementsSubtypeData: {
+        ...(prev.requirementsSubtypeData || {}),
+        [fieldKey]: value,
+      },
+    }));
+  };
+
+  const renderDynamicField = (field) => {
+    const value = formData.requirementsSubtypeData?.[field.key] ?? "";
+    const commonInputProps = {
+      className: inputClass,
+      placeholder: field.placeholder || field.label,
+    };
+
+    if (field.type === "checkbox") {
+      return (
+        <label key={field.key} className={checkboxLabelClass}>
+          <input
+            type="checkbox"
+            checked={Boolean(value)}
+            onChange={(event) => updateSubtypeField(field.key, event.target.checked)}
+          />
+          {field.label}
+        </label>
+      );
+    }
+
+    return (
+      <AddLeadFieldShell fieldTitleClass={fieldTitleClass} key={field.key} title={field.label} className={field.fullWidth ? "md:col-span-2" : ""}>
+        {field.type === "select" ? (
+          <AddLeadSelectControl inputClass={inputClass} isDark={isDark} value={value} onChange={(event) => updateSubtypeField(field.key, event.target.value)}>
+            <option value="">{field.label}</option>
+            {(field.options || []).map((option) => (
+              <option key={option} value={option}>{option}</option>
+            ))}
+          </AddLeadSelectControl>
+        ) : field.type === "textarea" ? (
+          <textarea
+            {...commonInputProps}
+            value={value}
+            onChange={(event) => updateSubtypeField(field.key, event.target.value)}
+            rows={3}
+            className={`${inputClass} h-auto min-h-24 py-2`}
+          />
+        ) : (
+          <input
+            {...commonInputProps}
+            type={field.type === "date" ? "date" : field.type === "number" ? "number" : "text"}
+            min={field.min}
+            max={field.max}
+            step={field.step || (field.type === "number" ? "any" : undefined)}
+            value={value}
+            onChange={(event) => updateSubtypeField(field.key, event.target.value)}
+          />
+        )}
+      </AddLeadFieldShell>
+    );
   };
 
   return (
@@ -1526,124 +1523,142 @@ export const AddLeadModal = ({
         </div>
 
         <div className="mobile-modal-scroll custom-scrollbar flex-1 space-y-3 px-3 py-3 sm:px-5">
-          <select
-            value={formData.inventoryId}
-            onChange={(event) => onInventorySelection(event.target.value)}
-            className={inputClass}
-          >
-            <option value="">Select Inventory (optional)</option>
-            {inventoryOptions.map((inventory) => {
-              const inventoryLabel = getInventoryLeadLabel(inventory) || "Inventory Unit";
-              const inventoryLocation = getInventoryLocationLabel(inventory);
-              const inventoryQuickInfo = getInventoryQuickInfo(inventory);
-              const optionText = [
-                inventoryLabel,
-                inventoryLocation,
-                inventoryQuickInfo,
-              ]
-                .filter(Boolean)
-                .join(" | ");
-              return (
-                <option key={inventory._id} value={inventory._id}>
-                  {optionText || inventoryLabel}
-                </option>
-              );
-            })}
-          </select>
-
           <div className="grid grid-cols-1 gap-2 md:grid-cols-2">
-            <input placeholder="Name" value={formData.name} onChange={(event) => updateField("name", event.target.value)} className={inputClass} />
-            <input placeholder="Phone" value={formData.phone} onChange={(event) => updateField("phone", event.target.value)} className={inputClass} />
-            <input placeholder="Email" value={formData.email} onChange={(event) => updateField("email", event.target.value)} className={inputClass} />
-            <input placeholder="City" value={formData.city} onChange={(event) => updateField("city", event.target.value)} className={inputClass} />
-            <input placeholder="Project Interested" value={formData.projectInterested} onChange={(event) => updateField("projectInterested", event.target.value)} className={`md:col-span-2 ${inputClass}`} />
+            <AddLeadFieldShell fieldTitleClass={fieldTitleClass} title="Name">
+              <input placeholder="Name" value={formData.name} onChange={(event) => updateField("name", event.target.value)} className={inputClass} />
+            </AddLeadFieldShell>
+            <AddLeadFieldShell fieldTitleClass={fieldTitleClass} title="Phone">
+              <input placeholder="Phone" value={formData.phone} onChange={(event) => updateField("phone", event.target.value)} className={inputClass} />
+            </AddLeadFieldShell>
+            <AddLeadFieldShell fieldTitleClass={fieldTitleClass} title="Email">
+              <input placeholder="Email" value={formData.email} onChange={(event) => updateField("email", event.target.value)} className={inputClass} />
+            </AddLeadFieldShell>
+            <AddLeadFieldShell fieldTitleClass={fieldTitleClass} title="City">
+              <input placeholder="City" value={formData.city} onChange={(event) => updateField("city", event.target.value)} className={inputClass} />
+            </AddLeadFieldShell>
+            <AddLeadFieldShell fieldTitleClass={fieldTitleClass} title="Location" className="md:col-span-2">
+              <input
+                placeholder="Add multiple locations separated by comma"
+                value={formData.preferredLocations}
+                onChange={(event) => updateField("preferredLocations", event.target.value)}
+                className={inputClass}
+              />
+            </AddLeadFieldShell>
           </div>
 
           <div className="grid grid-cols-1 gap-2 md:grid-cols-2">
-            <input placeholder="Site Latitude (optional)" value={formData.siteLat} onChange={(event) => updateField("siteLat", event.target.value)} className={inputClass} />
-            <input placeholder="Site Longitude (optional)" value={formData.siteLng} onChange={(event) => updateField("siteLng", event.target.value)} className={inputClass} />
+            <AddLeadFieldShell fieldTitleClass={fieldTitleClass} title="Site Latitude">
+              <input placeholder="Site Latitude (optional)" value={formData.siteLat} onChange={(event) => updateField("siteLat", event.target.value)} className={inputClass} />
+            </AddLeadFieldShell>
+            <AddLeadFieldShell fieldTitleClass={fieldTitleClass} title="Site Longitude">
+              <input placeholder="Site Longitude (optional)" value={formData.siteLng} onChange={(event) => updateField("siteLng", event.target.value)} className={inputClass} />
+            </AddLeadFieldShell>
           </div>
 
           <div className={sectionCardClass}>
             <div className={sectionHeadingClass}>Lead Requirement (Inventory Filters)</div>
 
             <div className="grid grid-cols-1 gap-2 md:grid-cols-2">
-              <select value={formData.requirementsInventoryType} onChange={(event) => updateField("requirementsInventoryType", event.target.value)} className={inputClass}>
-                <option value="">Inventory Type (Any)</option>
-                <option value="COMMERCIAL">Commercial</option>
-                <option value="RESIDENTIAL">Residential</option>
-              </select>
-              <select value={formData.requirementsTransactionType} onChange={(event) => updateField("requirementsTransactionType", event.target.value)} className={inputClass}>
-                <option value="">Deal Type (Any)</option>
-                <option value="SALE">Sale</option>
-                <option value="RENT">Rent</option>
-              </select>
-              <select value={formData.requirementsFurnishingStatus} onChange={(event) => updateField("requirementsFurnishingStatus", event.target.value)} className={inputClass}>
-                {LEAD_REQUIREMENT_FURNISHING_OPTIONS.map((option) => (
-                  <option key={option.value || "any-furnishing"} value={option.value}>{option.label}</option>
-                ))}
-              </select>
-              <select value={formData.requirementsAreaUnit} onChange={(event) => updateField("requirementsAreaUnit", event.target.value)} className={inputClass}>
-                <option value="SQ_FT">Area Unit: sq ft</option>
-                <option value="SQ_M">Area Unit: sq m</option>
-              </select>
+              <AddLeadFieldShell fieldTitleClass={fieldTitleClass} title="Inventory Type">
+                <AddLeadSelectControl inputClass={inputClass} isDark={isDark} value={formData.requirementsInventoryType} onChange={(event) => updateRequirementInventoryType(event.target.value)}>
+                  {INVENTORY_TYPE_OPTIONS.map((option) => (
+                    <option key={option.value || "any-inventory-type"} value={option.value}>{option.label}</option>
+                  ))}
+                </AddLeadSelectControl>
+              </AddLeadFieldShell>
+              {requirementInventoryType ? (
+                <AddLeadFieldShell fieldTitleClass={fieldTitleClass} title={requirementInventoryType === "COMMERCIAL" ? "Commercial Property Type" : "Residential Property Type"}>
+                  <AddLeadSelectControl inputClass={inputClass} isDark={isDark} value={formData.requirementsPropertySubtype} onChange={(event) => updateRequirementPropertySubtype(event.target.value)}>
+                    <option value="">Property Type (Any)</option>
+                    {propertySubtypeOptions.map((option) => (
+                      <option key={option.value} value={option.value}>{option.label}</option>
+                    ))}
+                  </AddLeadSelectControl>
+                </AddLeadFieldShell>
+              ) : null}
+              <AddLeadFieldShell fieldTitleClass={fieldTitleClass} title="Deal Type">
+                <AddLeadSelectControl inputClass={inputClass} isDark={isDark} value={formData.requirementsTransactionType} onChange={(event) => updateField("requirementsTransactionType", event.target.value)}>
+                  <option value="">Deal Type (Any)</option>
+                  <option value="SALE">Purchase</option>
+                  <option value="LEASE">Lease</option>
+                  <option value="RENT">Rent</option>
+                </AddLeadSelectControl>
+              </AddLeadFieldShell>
+              {showFurnishing ? (
+                <AddLeadFieldShell fieldTitleClass={fieldTitleClass} title="Furnishing">
+                  <AddLeadSelectControl inputClass={inputClass} isDark={isDark} value={furnishingValue} onChange={(event) => updateField("requirementsFurnishingStatus", event.target.value)}>
+                    {furnishingOptions.map((option) => (
+                      <option key={option.value || "any-furnishing"} value={option.value}>{option.label}</option>
+                    ))}
+                  </AddLeadSelectControl>
+                </AddLeadFieldShell>
+              ) : null}
+              <AddLeadFieldShell fieldTitleClass={fieldTitleClass} title="Area Unit">
+                <AddLeadSelectControl inputClass={inputClass} isDark={isDark} value={formData.requirementsAreaUnit} onChange={(event) => updateField("requirementsAreaUnit", event.target.value)}>
+                  <option value="SQ_FT">Area Unit: sq ft</option>
+                </AddLeadSelectControl>
+              </AddLeadFieldShell>
             </div>
 
             <div className="mt-2 grid grid-cols-1 gap-2 md:grid-cols-2">
-              <input placeholder="Budget Min" value={formData.requirementsBudgetMin} onChange={(event) => updateField("requirementsBudgetMin", event.target.value)} className={inputClass} />
-              <input placeholder="Budget Max" value={formData.requirementsBudgetMax} onChange={(event) => updateField("requirementsBudgetMax", event.target.value)} className={inputClass} />
-              <input placeholder="Area Min" value={formData.requirementsAreaMin} onChange={(event) => updateField("requirementsAreaMin", event.target.value)} className={inputClass} />
-              <input placeholder="Area Max" value={formData.requirementsAreaMax} onChange={(event) => updateField("requirementsAreaMax", event.target.value)} className={inputClass} />
+              <AddLeadFieldShell fieldTitleClass={fieldTitleClass} title="Budget Min">
+                <input placeholder="Budget Min" value={formData.requirementsBudgetMin} onChange={(event) => updateField("requirementsBudgetMin", event.target.value)} className={inputClass} />
+              </AddLeadFieldShell>
+              <AddLeadFieldShell fieldTitleClass={fieldTitleClass} title="Budget Max">
+                <input placeholder="Budget Max" value={formData.requirementsBudgetMax} onChange={(event) => updateField("requirementsBudgetMax", event.target.value)} className={inputClass} />
+              </AddLeadFieldShell>
+              <AddLeadFieldShell fieldTitleClass={fieldTitleClass} title="Area Min">
+                <input placeholder="Area Min" value={formData.requirementsAreaMin} onChange={(event) => updateField("requirementsAreaMin", event.target.value)} className={inputClass} />
+              </AddLeadFieldShell>
+              <AddLeadFieldShell fieldTitleClass={fieldTitleClass} title="Area Max">
+                <input placeholder="Area Max" value={formData.requirementsAreaMax} onChange={(event) => updateField("requirementsAreaMax", event.target.value)} className={inputClass} />
+              </AddLeadFieldShell>
             </div>
 
-            {isCommercialRequirement ? (
+            {propertySubtypeConfig ? (
               <div className="mt-2">
-                <div className={sectionHeadingClass}>Commercial Preferences</div>
+                <div className={sectionHeadingClass}>{propertySubtypeConfig.label} Preferences</div>
                 <div className="grid grid-cols-1 gap-2 md:grid-cols-2">
-                  <input placeholder="Seats / Workstations" value={formData.requirementsCommercialSeats} onChange={(event) => updateField("requirementsCommercialSeats", event.target.value)} className={inputClass} />
-                  <input placeholder="Cabins" value={formData.requirementsCommercialCabins} onChange={(event) => updateField("requirementsCommercialCabins", event.target.value)} className={inputClass} />
+                  {(propertySubtypeConfig.fields || [])
+                    .filter((field) => field.type !== "checkbox")
+                    .map(renderDynamicField)}
                 </div>
                 <div className="mt-2 flex flex-wrap gap-2">
-                  {LEAD_REQUIREMENT_COMMERCIAL_AMENITY_FIELDS.map((field) => (
-                    <label key={field.key} className={checkboxLabelClass}>
-                      <input
-                        type="checkbox"
-                        checked={Boolean(formData[field.key])}
-                        onChange={(event) => updateField(field.key, event.target.checked)}
-                      />
-                      {field.label}
-                    </label>
-                  ))}
-                </div>
-              </div>
-            ) : null}
-
-            {isResidentialRequirement ? (
-              <div className="mt-2">
-                <div className={sectionHeadingClass}>Residential Preferences</div>
-                <div className="grid grid-cols-1 gap-2 md:grid-cols-2">
-                  <select value={formData.requirementsResidentialBhkType} onChange={(event) => updateField("requirementsResidentialBhkType", event.target.value)} className={inputClass}>
-                    {LEAD_REQUIREMENT_BHK_OPTIONS.map((option) => (
-                      <option key={option.value || "any-bhk"} value={option.value}>{option.label}</option>
-                    ))}
-                  </select>
-                  <input placeholder="Preferred Floor" value={formData.requirementsResidentialFloor} onChange={(event) => updateField("requirementsResidentialFloor", event.target.value)} className={inputClass} />
-                </div>
-                <div className="mt-2 flex flex-wrap gap-2">
-                  {LEAD_REQUIREMENT_RESIDENTIAL_AMENITY_FIELDS.map((field) => (
-                    <label key={field.key} className={checkboxLabelClass}>
-                      <input
-                        type="checkbox"
-                        checked={Boolean(formData[field.key])}
-                        onChange={(event) => updateField(field.key, event.target.checked)}
-                      />
-                      {field.label}
-                    </label>
-                  ))}
+                  {(propertySubtypeConfig.fields || [])
+                    .filter((field) => field.type === "checkbox")
+                    .map(renderDynamicField)}
                 </div>
               </div>
             ) : null}
           </div>
+
+          <AddLeadFieldShell fieldTitleClass={fieldTitleClass} title="Select Inventory">
+            <AddLeadSelectControl
+              inputClass={inputClass}
+              isDark={isDark}
+              value={formData.inventoryId}
+              onChange={(event) => onInventorySelection(event.target.value)}
+            >
+              <option value="">Select Inventory (optional)</option>
+              {inventoryOptions.map((inventory) => {
+                const inventoryLabel = getInventoryLeadLabel(inventory) || "Inventory Unit";
+                const inventoryLocation = getInventoryLocationLabel(inventory);
+                const inventoryQuickInfo = getInventoryQuickInfo(inventory);
+                const optionText = [
+                  inventoryLabel,
+                  inventoryLocation,
+                  inventoryQuickInfo,
+                ]
+                  .filter(Boolean)
+                  .join(" | ");
+                return (
+                  <option key={inventory._id} value={inventory._id}>
+                    {optionText || inventoryLabel}
+                  </option>
+                );
+              })}
+            </AddLeadSelectControl>
+          </AddLeadFieldShell>
         </div>
 
         <div className={`mobile-safe-footer flex shrink-0 gap-2 border-t px-3 pt-3 sm:px-5 sm:pb-3 ${

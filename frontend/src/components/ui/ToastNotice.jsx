@@ -1,4 +1,5 @@
 import React from "react";
+import { createPortal } from "react-dom";
 import { AlertCircle, CheckCircle2, Info, XCircle } from "lucide-react";
 
 const TOAST_STYLES = {
@@ -35,9 +36,9 @@ const ToastNotice = ({
       ? "bottom-4"
       : "top-4";
 
-  return (
+  const toast = (
     <div
-      className={`pointer-events-none fixed inset-x-3 ${positionClass} z-[200] flex sm:inset-x-auto sm:right-4`}
+      className={`pointer-events-none fixed inset-x-3 ${positionClass} z-[9999] flex sm:inset-x-auto sm:right-4`}
       role={type === "error" ? "alert" : "status"}
       aria-live={type === "error" ? "assertive" : "polite"}
     >
@@ -49,6 +50,9 @@ const ToastNotice = ({
       </div>
     </div>
   );
+
+  if (typeof document === "undefined") return toast;
+  return createPortal(toast, document.body);
 };
 
 export default ToastNotice;

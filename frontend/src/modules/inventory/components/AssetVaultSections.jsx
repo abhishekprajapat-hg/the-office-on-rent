@@ -72,7 +72,7 @@ export const AssetVaultFilters = ({
   amenitiesFilter,
   onAmenitiesFilterChange,
 }) => (
-  <div className="z-20 space-y-2 rounded-2xl border border-slate-200 bg-white/95 p-2.5 shadow-sm backdrop-blur md:sticky md:top-4 md:space-y-3 md:p-3">
+  <div className="z-20 space-y-2 rounded-2xl border border-slate-200 bg-white/95 p-2.5 shadow-sm backdrop-blur md:space-y-3 md:p-3">
     <div className="grid grid-cols-1 gap-3 lg:grid-cols-[1fr_auto_220px]">
       <div className="relative">
         <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={16} />

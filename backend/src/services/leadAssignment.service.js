@@ -18,7 +18,13 @@ const PIPELINE_STATUSES = [
   "NEW",
   "CONTACTED",
   "INTERESTED",
+  "SITE_VISIT_SCHEDULED",
   "SITE_VISIT",
+  "SITE_VISIT_OVERDUE",
+  "MISSING_IN_ACTION",
+  "NOT_PICKING_CALLS",
+  "OWNER",
+  "BROKER",
 ];
 const AUTO_ASSIGNMENT_REASON = "New lead automatically assigned to Inside Executive";
 

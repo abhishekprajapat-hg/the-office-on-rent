@@ -26,7 +26,7 @@ export interface AuthPayload {
 
 export interface LeadRequirements {
   inventoryType?: "COMMERCIAL" | "RESIDENTIAL" | "";
-  transactionType?: "SALE" | "RENT" | "";
+  transactionType?: "SALE" | "LEASE" | "RENT" | "";
   furnishingStatus?: string;
   budgetMin?: number | null;
   budgetMax?: number | null;
@@ -36,6 +36,7 @@ export interface LeadRequirements {
   commercial?: {
     seats?: number | null;
     cabins?: number | null;
+    conferenceRooms?: number | null;
     parkingAvailable?: boolean;
     pantry?: boolean;
   };

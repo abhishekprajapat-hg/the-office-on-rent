@@ -26,6 +26,8 @@ if (trustProxyRaw) {
     const parsed = Number.parseInt(trustProxyRaw, 10);
     app.set("trust proxy", Number.isFinite(parsed) ? parsed : trustProxyRaw);
   }
+} else if (process.env.NODE_ENV === "production") {
+  app.set("trust proxy", 1);
 }
 
 const configuredOrigins = (process.env.CORS_ORIGIN || "")

@@ -40,6 +40,59 @@ const resolveClientIp = (req) =>
     .split(",")[0]
     .trim();
 
+const sanitizeSubdomain = (value) =>
+  String(value || "")
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9-]/g, "-")
+    .replace(/-{2,}/g, "-")
+    .replace(/^-+|-+$/g, "")
+    .slice(0, 63);
+
+const buildFallbackCompanyName = (user) =>
+  String(process.env.CLIENT_COMPANY_NAME || user?.name || "Client Company").trim();
+
+const resolveUniqueSubdomain = async (user, companyId) => {
+  const base =
+    sanitizeSubdomain(process.env.CLIENT_COMPANY_SLUG)
+    || sanitizeSubdomain(buildFallbackCompanyName(user))
+    || sanitizeSubdomain(String(user?.email || "").split("@")[0])
+    || `tenant-${String(companyId).slice(-8)}`;
+
+  for (let attempt = 0; attempt < 100; attempt += 1) {
+    const suffix = attempt === 0 ? "" : `-${attempt}`;
+    const candidate = `${base.slice(0, 63 - suffix.length)}${suffix}`;
+    const existing = await Company.findOne({ subdomain: candidate }).select("_id").lean();
+    if (!existing) return candidate;
+  }
+
+  return `tenant-${String(companyId).slice(-12)}`;
+};
+
+const ensureCompanyContextForLogin = async (user, companyId) => {
+  let company = await Company.findById(companyId)
+    .select("_id status name subdomain customDomain")
+    .lean();
+
+  if (company || user.role !== USER_ROLES.ADMIN) {
+    return company;
+  }
+
+  const subdomain = await resolveUniqueSubdomain(user, companyId);
+  company = await Company.create({
+    _id: companyId,
+    name: buildFallbackCompanyName(user),
+    subdomain,
+    ownerUserId: user._id,
+    status: "ACTIVE",
+    metadata: {
+      repairedAtLogin: new Date().toISOString(),
+    },
+  });
+
+  return company.toObject();
+};
+
 const resolveCompanyContextForLogin = async (user) => {
   if (user.companyId) return user.companyId;
 
@@ -149,7 +202,7 @@ exports.login = async (req, res) => {
       });
     }
 
-    const company = await Company.findById(companyId).select("_id status name subdomain customDomain").lean();
+    const company = await ensureCompanyContextForLogin(user, companyId);
     if (!company || company.status !== "ACTIVE") {
       return res.status(403).json({
         message: "Company is inactive. Please contact support.",

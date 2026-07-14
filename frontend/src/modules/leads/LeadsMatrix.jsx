@@ -30,12 +30,23 @@ import {
   LeadsMatrixToolbar,
 } from "./components/LeadsMatrixSections";
 import { LeadDetailsRebuilt } from "./components/LeadDetailsRebuilt";
+import {
+  getPropertySubtypeConfig,
+  getPropertySubtypeOptions,
+} from "../../config/propertyRequirementConfig";
 
 const LEAD_STATUSES = [
   "NEW",
   "CONTACTED",
   "INTERESTED",
+  "SITE_VISIT_SCHEDULED",
   "SITE_VISIT",
+  "SITE_VISIT_OVERDUE",
+  "MISSING_IN_ACTION",
+  "NOT_PICKING_CALLS",
+  "INVALID",
+  "OWNER",
+  "BROKER",
   "REQUESTED",
   "CLOSED",
   "LOST",
@@ -48,10 +59,13 @@ const LEAD_SORT_OPTIONS = {
   NAME: "NAME",
 };
 
-const LEAD_VIEW_MODES = {
-  TABLE: "TABLE",
-  KANBAN: "KANBAN",
-};
+const ALL_PROPERTY_SUBTYPE_OPTIONS = Array.from(
+  new Map(
+    ["COMMERCIAL", "RESIDENTIAL"]
+      .flatMap((inventoryType) => getPropertySubtypeOptions(inventoryType))
+      .map((option) => [option.value, option]),
+  ).values(),
+);
 const LEAD_LIST_PAGE_LIMIT = 100;
 const LEAD_LIST_FIELDS = [
   "_id",
@@ -59,7 +73,9 @@ const LEAD_LIST_FIELDS = [
   "phone",
   "email",
   "city",
+  "preferredLocations",
   "projectInterested",
+  "requirements",
   "source",
   "status",
   "assignedTo",
@@ -99,10 +115,13 @@ const defaultFormData = {
   phone: "",
   email: "",
   city: "",
+  preferredLocations: "",
   projectInterested: "",
   siteLat: "",
   siteLng: "",
   requirementsInventoryType: "",
+  requirementsPropertySubtype: "",
+  requirementsSubtypeData: {},
   requirementsTransactionType: "",
   requirementsFurnishingStatus: "",
   requirementsBudgetMin: "",
@@ -112,6 +131,8 @@ const defaultFormData = {
   requirementsAreaUnit: "SQ_FT",
   requirementsCommercialSeats: "",
   requirementsCommercialCabins: "",
+  requirementsCommercialConferenceRooms: "",
+  requirementsCommercialConferenceSeats: "",
   requirementsCommercialParkingAvailable: false,
   requirementsCommercialPantry: false,
   requirementsCommercialReceptionArea: false,
@@ -144,6 +165,8 @@ const defaultFormData = {
 
 const createDefaultLeadRequirementsDraft = () => ({
   inventoryType: "",
+  propertySubtype: "",
+  subtypeData: {},
   transactionType: "",
   furnishingStatus: "",
   budgetMin: "",
@@ -154,6 +177,8 @@ const createDefaultLeadRequirementsDraft = () => ({
   commercial: {
     seats: "",
     cabins: "",
+    conferenceRooms: "",
+    conferenceSeats: "",
     parkingAvailable: false,
     pantry: false,
     receptionArea: false,
@@ -194,6 +219,25 @@ const toRequirementDraftText = (value) => {
   return String(value).trim();
 };
 
+const toPreferredLocationsList = (value) => {
+  const source = Array.isArray(value)
+    ? value
+    : String(value || "").split(/[\n,]+/);
+
+  const seen = new Set();
+  return source
+    .map((item) => String(item || "").trim())
+    .filter(Boolean)
+    .map((item) => item.slice(0, 120))
+    .filter((item) => {
+      const key = item.toLowerCase();
+      if (seen.has(key)) return false;
+      seen.add(key);
+      return true;
+    })
+    .slice(0, 20);
+};
+
 const mapLeadRequirementsToDraft = (requirements = {}) => {
   const base = createDefaultLeadRequirementsDraft();
   const commercial = requirements?.commercial || {};
@@ -202,6 +246,10 @@ const mapLeadRequirementsToDraft = (requirements = {}) => {
 
   return {
     inventoryType: toRequirementDraftText(requirements?.inventoryType).toUpperCase(),
+    propertySubtype: toRequirementDraftText(requirements?.propertySubtype).toUpperCase(),
+    subtypeData: requirements?.subtypeData && typeof requirements.subtypeData === "object"
+      ? { ...requirements.subtypeData }
+      : {},
     transactionType: toRequirementDraftText(requirements?.transactionType).toUpperCase(),
     furnishingStatus: toRequirementDraftText(requirements?.furnishingStatus).toUpperCase(),
     budgetMin: toRequirementDraftText(requirements?.budgetMin),
@@ -212,6 +260,8 @@ const mapLeadRequirementsToDraft = (requirements = {}) => {
     commercial: {
       seats: toRequirementDraftText(commercial?.seats),
       cabins: toRequirementDraftText(commercial?.cabins),
+      conferenceRooms: toRequirementDraftText(commercial?.conferenceRooms),
+      conferenceSeats: toRequirementDraftText(commercial?.conferenceSeats),
       parkingAvailable: Boolean(commercial?.parkingAvailable),
       pantry: Boolean(commercial?.pantry),
       receptionArea: Boolean(commercial?.receptionArea),
@@ -248,18 +298,30 @@ const mapLeadRequirementsToDraft = (requirements = {}) => {
   };
 };
 
-const buildLeadRequirementsPayloadFromDraft = (draft = {}) => ({
-  inventoryType: String(draft?.inventoryType || "").trim().toUpperCase(),
-  transactionType: toRequirementTransactionType(draft?.transactionType),
-  furnishingStatus: String(draft?.furnishingStatus || "").trim().toUpperCase(),
-  budgetMin: toAmountNumber(draft?.budgetMin),
-  budgetMax: toAmountNumber(draft?.budgetMax),
-  areaMin: toAmountNumber(draft?.areaMin),
-  areaMax: toAmountNumber(draft?.areaMax),
-  areaUnit: toRequirementAreaUnit(draft?.areaUnit),
-  commercial: {
+const buildLeadRequirementsPayloadFromDraft = (draft = {}) => {
+  const propertySubtype = String(draft?.propertySubtype || "").trim().toUpperCase();
+  const payload = {
+    inventoryType: String(draft?.inventoryType || "").trim().toUpperCase(),
+    propertySubtype,
+    subtypeData: draft?.subtypeData && typeof draft.subtypeData === "object"
+      ? { ...draft.subtypeData }
+      : {},
+    transactionType: toRequirementTransactionType(draft?.transactionType),
+    furnishingStatus: String(draft?.furnishingStatus || "").trim().toUpperCase(),
+    budgetMin: toAmountNumber(draft?.budgetMin),
+    budgetMax: toAmountNumber(draft?.budgetMax),
+    areaMin: toAmountNumber(draft?.areaMin),
+    areaMax: toAmountNumber(draft?.areaMax),
+    areaUnit: toRequirementAreaUnit(draft?.areaUnit),
+  };
+
+  if (propertySubtype) return payload;
+
+  payload.commercial = {
     seats: toAmountNumber(draft?.commercial?.seats),
     cabins: toAmountNumber(draft?.commercial?.cabins),
+    conferenceRooms: toAmountNumber(draft?.commercial?.conferenceRooms),
+    conferenceSeats: toAmountNumber(draft?.commercial?.conferenceSeats),
     parkingAvailable: Boolean(draft?.commercial?.parkingAvailable),
     pantry: Boolean(draft?.commercial?.pantry),
     receptionArea: Boolean(draft?.commercial?.receptionArea),
@@ -274,8 +336,8 @@ const buildLeadRequirementsPayloadFromDraft = (draft = {}) => ({
     fireSafety: Boolean(draft?.commercial?.fireSafety),
     readyToMove: Boolean(draft?.commercial?.readyToMove),
     underConstruction: Boolean(draft?.commercial?.underConstruction),
-  },
-  residential: {
+  };
+  payload.residential = {
     bhkType: String(draft?.residential?.bhkType || "").trim().toUpperCase(),
     floor: toAmountNumber(draft?.residential?.floor),
     amenities: {
@@ -292,8 +354,9 @@ const buildLeadRequirementsPayloadFromDraft = (draft = {}) => ({
       electricityBackup: Boolean(draft?.residential?.amenities?.electricityBackup),
       gasPipeline: Boolean(draft?.residential?.amenities?.gasPipeline),
     },
-  },
-});
+  };
+  return payload;
+};
 
 const getInventoryLeadLabel = (inventoryLike = {}) => {
   const propertyId = String(inventoryLike?.propertyId || "").trim();
@@ -353,13 +416,65 @@ const toRequirementAreaUnit = (value) =>
 const toRequirementTransactionType = (value) => {
   const normalized = String(value || "").trim().toUpperCase();
   if (normalized === "RENT") return "RENT";
+  if (normalized === "LEASE") return "LEASE";
   if (normalized === "SALE") return "SALE";
+  return "";
+};
+
+const validateLeadRequirementDraft = ({
+  inventoryType,
+  propertySubtype,
+  budgetMin,
+  budgetMax,
+  areaMin,
+  areaMax,
+  subtypeData,
+} = {}) => {
+  const parsedBudgetMin = toAmountNumber(budgetMin);
+  const parsedBudgetMax = toAmountNumber(budgetMax);
+  const parsedAreaMin = toAmountNumber(areaMin);
+  const parsedAreaMax = toAmountNumber(areaMax);
+
+  const numericChecks = [
+    ["Budget Min", parsedBudgetMin],
+    ["Budget Max", parsedBudgetMax],
+    ["Area Min", parsedAreaMin],
+    ["Area Max", parsedAreaMax],
+  ];
+
+  for (const [label, value] of numericChecks) {
+    if (value !== null && value < 0) return `${label} cannot be negative`;
+  }
+  if (parsedBudgetMin !== null && parsedBudgetMax !== null && parsedBudgetMin > parsedBudgetMax) {
+    return "Budget Min cannot be greater than Budget Max";
+  }
+  if (parsedAreaMin !== null && parsedAreaMax !== null && parsedAreaMin > parsedAreaMax) {
+    return "Area Min cannot be greater than Area Max";
+  }
+
+  const subtypeConfig = getPropertySubtypeConfig(inventoryType, propertySubtype);
+  if (!subtypeConfig) return "";
+
+  for (const field of subtypeConfig.fields || []) {
+    const value = subtypeData?.[field.key];
+    if (field.type === "number") {
+      const numericValue = toAmountNumber(value);
+      if (numericValue !== null && numericValue < 0) {
+        return `${field.label} cannot be negative`;
+      }
+    }
+    if (field.required && String(value || "").trim() === "") {
+      return `${field.label} is required`;
+    }
+  }
+
   return "";
 };
 
 const hasLeadRequirements = (formData = {}) => {
   const textFields = [
     formData.requirementsInventoryType,
+    formData.requirementsPropertySubtype,
     formData.requirementsTransactionType,
     formData.requirementsFurnishingStatus,
     formData.requirementsBudgetMin,
@@ -368,8 +483,11 @@ const hasLeadRequirements = (formData = {}) => {
     formData.requirementsAreaMax,
     formData.requirementsCommercialSeats,
     formData.requirementsCommercialCabins,
+    formData.requirementsCommercialConferenceRooms,
+    formData.requirementsCommercialConferenceSeats,
     formData.requirementsResidentialBhkType,
     formData.requirementsResidentialFloor,
+    ...Object.values(formData.requirementsSubtypeData || {}),
   ];
 
   if (textFields.some((value) => String(value || "").trim() !== "")) {
@@ -482,8 +600,21 @@ const getStatusColor = (status) => {
       return "bg-amber-50 text-amber-700 border-amber-200";
     case "INTERESTED":
       return "bg-emerald-50 text-emerald-700 border-emerald-200";
+    case "SITE_VISIT_SCHEDULED":
+      return "bg-cyan-50 text-cyan-700 border-cyan-200";
     case "SITE_VISIT":
       return "bg-violet-50 text-violet-700 border-violet-200";
+    case "SITE_VISIT_OVERDUE":
+      return "bg-red-50 text-red-700 border-red-200";
+    case "MISSING_IN_ACTION":
+    case "NOT_PICKING_CALLS":
+      return "bg-yellow-50 text-yellow-800 border-yellow-200";
+    case "INVALID":
+      return "bg-zinc-100 text-zinc-700 border-zinc-300";
+    case "OWNER":
+      return "bg-sky-50 text-sky-700 border-sky-200";
+    case "BROKER":
+      return "bg-purple-50 text-purple-700 border-purple-200";
     case "REQUESTED":
       return "bg-orange-50 text-orange-700 border-orange-200";
     case "CLOSED":
@@ -659,7 +790,8 @@ const normalizeBulkDate = (value) => {
 const normalizeBulkTransactionType = (value) => {
   const normalized = normalizeBulkCellText(value).toLowerCase();
   if (!normalized) return "";
-  if (/\b(rent|lease)\b/.test(normalized)) return "RENT";
+  if (/\blease\b/.test(normalized)) return "LEASE";
+  if (/\brent\b/.test(normalized)) return "RENT";
   if (/\b(purchase|sale|buy|sell)\b/.test(normalized)) return "SALE";
   return "";
 };
@@ -716,6 +848,13 @@ const resolveBulkLeadStatus = ({ sheetName = "", row = {} }) => {
     .join(" ");
 
   if (/\b(close|closed|token)\b/.test(haystack)) return "CLOSED";
+  if (/\b(site\s*visit\s*(scheduled|schedule)|visit\s*(scheduled|schedule))\b/.test(haystack)) return "SITE_VISIT_SCHEDULED";
+  if (/\b(site\s*visit\s*(overdue|over\s*due|over\s*deu)|visit\s*(overdue|over\s*due|over\s*deu))\b/.test(haystack)) return "SITE_VISIT_OVERDUE";
+  if (/\b(missing\s*in\s*action|mia)\b/.test(haystack)) return "MISSING_IN_ACTION";
+  if (/\b(not\s*picking|not\s*pick|call\s*not\s*picked|no\s*answer)\b/.test(haystack)) return "NOT_PICKING_CALLS";
+  if (/\b(invalid|invaild|wrong\s*number)\b/.test(haystack)) return "INVALID";
+  if (/\b(owner)\b/.test(haystack)) return "OWNER";
+  if (/\b(broker)\b/.test(haystack)) return "BROKER";
   if (/\bvisit|visited|revisit\b/.test(haystack)) return "SITE_VISIT";
   if (/\binterested|interest\b/.test(haystack)) return "INTERESTED";
   if (/\btransfer|contacted|follow\s*up|callback|call back\b/.test(haystack)) return "CONTACTED";
@@ -772,13 +911,17 @@ const buildBulkLeadRequirements = (row) => {
 
   const seatsMatch = requirementText.match(/(\d+)\s*(?:seat|seater|seats)\b/i);
   const cabinMatch = requirementText.match(/(\d+)\s*(?:cabin|cabins)\b/i);
+  const conferenceSeatsMatch = requirementText.match(/(\d+)\s*(?:conference\s*seat|conference\s*seater|conference\s*seats)\b/i);
   const areaMatch = requirementText.match(/(\d+(?:\.\d+)?)\s*(?:sq\s*ft|sqft|sqfit|sft)\b/i);
-  if (seatsMatch || cabinMatch) {
+  if (seatsMatch || cabinMatch || conferenceSeatsMatch) {
     requirements.inventoryType = "COMMERCIAL";
     requirements.transactionType = transactionType || "RENT";
     requirements.commercial = {};
     if (seatsMatch) requirements.commercial.seats = Number.parseInt(seatsMatch[1], 10);
     if (cabinMatch) requirements.commercial.cabins = Number.parseInt(cabinMatch[1], 10);
+    if (conferenceSeatsMatch) {
+      requirements.commercial.conferenceSeats = Number.parseInt(conferenceSeatsMatch[1], 10);
+    }
   }
   if (areaMatch) {
     const area = Number.parseFloat(areaMatch[1]);
@@ -998,9 +1141,8 @@ const LeadsMatrix = () => {
 
   const [query, setQuery] = useState("");
   const [statusFilter, setStatusFilter] = useState("ALL");
+  const [propertySubtypeFilter, setPropertySubtypeFilter] = useState("");
   const [sortBy, setSortBy] = useState(LEAD_SORT_OPTIONS.RECENT);
-  const [showDueOnly, setShowDueOnly] = useState(false);
-  const [viewMode, setViewMode] = useState(LEAD_VIEW_MODES.TABLE);
   const [nowMs, setNowMs] = useState(0);
   const debouncedQuery = useDebouncedValue(query, 180);
 
@@ -1239,8 +1381,6 @@ const LeadsMatrix = () => {
     const search = new URLSearchParams(location.search || "");
     const statusParam = String(search.get("status") || "").trim().toUpperCase();
     const queryParam = search.get("q");
-    const dueParam = String(search.get("due") || "").trim().toLowerCase();
-
     if (statusParam && LEAD_STATUS_SET.has(statusParam)) {
       setStatusFilter(statusParam);
     } else {
@@ -1253,7 +1393,6 @@ const LeadsMatrix = () => {
       setQuery("");
     }
 
-    setShowDueOnly(["1", "true", "yes"].includes(dueParam));
   }, [isRouteDetailsView, location.search]);
 
   useEffect(() => {
@@ -1341,10 +1480,11 @@ const LeadsMatrix = () => {
 
   const filteredLeads = useMemo(() => {
     const normalized = debouncedQuery.trim().toLowerCase();
-    const now = nowMs;
 
     const filtered = leads.filter((lead) => {
       const statusMatch = statusFilter === "ALL" || lead.status === statusFilter;
+      const leadPropertySubtype = String(lead?.requirements?.propertySubtype || "").trim().toUpperCase();
+      const propertySubtypeMatch = !propertySubtypeFilter || leadPropertySubtype === propertySubtypeFilter;
       const relatedInventorySearchValue = getLeadRelatedInventories(lead)
         .map((inventory) => getInventoryLeadSearchText(inventory))
         .join(" ");
@@ -1357,6 +1497,8 @@ const LeadsMatrix = () => {
           lead.email,
           lead.city,
           lead.projectInterested,
+          lead.requirements?.inventoryType,
+          lead.requirements?.propertySubtype,
           lead.assignedTo?.name,
           lead.createdBy?.name,
           lead.createdBy?.partnerCode,
@@ -1365,10 +1507,7 @@ const LeadsMatrix = () => {
           .map((value) => String(value || "").toLowerCase())
           .some((value) => value.includes(normalized));
 
-      const followUpMs = getDateMs(lead.nextFollowUp);
-      const dueMatch = !showDueOnly || (followUpMs > 0 && followUpMs <= now && !["REQUESTED", "CLOSED", "LOST"].includes(String(lead.status || "")));
-
-      return statusMatch && searchMatch && dueMatch;
+      return statusMatch && propertySubtypeMatch && searchMatch;
     });
 
     const sorted = [...filtered];
@@ -1395,7 +1534,7 @@ const LeadsMatrix = () => {
       return bMs - aMs;
     });
     return sorted;
-  }, [debouncedQuery, leads, nowMs, showDueOnly, sortBy, statusFilter]);
+  }, [debouncedQuery, leads, propertySubtypeFilter, sortBy, statusFilter]);
 
   const metrics = useMemo(() => {
     const closed = statusBreakdown.CLOSED || 0;
@@ -1740,8 +1879,13 @@ const LeadsMatrix = () => {
       const commercialBuilding = selectedInventory?.commercialDetails?.buildingDetails || {};
       const residentialDetails = selectedInventory?.residentialDetails || {};
       const residentialAmenities = residentialDetails?.amenities || {};
+      const propertySubtype =
+        inventoryType === "COMMERCIAL"
+          ? String(selectedInventory?.commercialDetails?.officeType || "").trim().toUpperCase()
+          : String(residentialDetails?.propertyType || "").trim().toUpperCase();
       const commercialSeats = toAmountNumber(commercialLayout?.seats);
       const commercialCabins = toAmountNumber(commercialLayout?.totalCabins);
+      const commercialConferenceRooms = toAmountNumber(commercialLayout?.conferenceRooms);
       const commercialParkingSlots = toAmountNumber(commercialBuilding?.parkingSlots);
       const commercialParkingType = String(commercialBuilding?.parkingType || "").trim().toUpperCase();
       const residentialFloor = toAmountNumber(selectedInventory?.floorNumber);
@@ -1758,6 +1902,11 @@ const LeadsMatrix = () => {
           inventoryType === "COMMERCIAL" || inventoryType === "RESIDENTIAL"
             ? inventoryType
             : prev.requirementsInventoryType,
+        requirementsPropertySubtype:
+          getPropertySubtypeConfig(inventoryType, propertySubtype)
+            ? propertySubtype
+            : prev.requirementsPropertySubtype,
+        requirementsSubtypeData: {},
         requirementsTransactionType: transactionType,
         requirementsFurnishingStatus:
           String(selectedInventory?.furnishingStatus || "").trim().toUpperCase()
@@ -1779,6 +1928,10 @@ const LeadsMatrix = () => {
           commercialCabins === null
             ? prev.requirementsCommercialCabins
             : String(commercialCabins),
+        requirementsCommercialConferenceRooms:
+          commercialConferenceRooms === null
+            ? prev.requirementsCommercialConferenceRooms
+            : String(commercialConferenceRooms),
         requirementsCommercialParkingAvailable:
           (commercialParkingSlots !== null && commercialParkingSlots > 0)
           || (Boolean(commercialParkingType) && commercialParkingType !== "NONE"),
@@ -1840,6 +1993,20 @@ const LeadsMatrix = () => {
       return;
     }
 
+    const requirementValidationError = validateLeadRequirementDraft({
+      inventoryType: formData.requirementsInventoryType,
+      propertySubtype: formData.requirementsPropertySubtype,
+      budgetMin: formData.requirementsBudgetMin,
+      budgetMax: formData.requirementsBudgetMax,
+      areaMin: formData.requirementsAreaMin,
+      areaMax: formData.requirementsAreaMax,
+      subtypeData: formData.requirementsSubtypeData,
+    });
+    if (requirementValidationError) {
+      setError(requirementValidationError);
+      return;
+    }
+
     try {
       setSavingLead(true);
       setError("");
@@ -1849,6 +2016,7 @@ const LeadsMatrix = () => {
         phone: formData.phone.trim(),
         email: formData.email.trim(),
         city: formData.city.trim(),
+        preferredLocations: toPreferredLocationsList(formData.preferredLocations),
         projectInterested: formData.projectInterested.trim(),
       };
 
@@ -1865,8 +2033,13 @@ const LeadsMatrix = () => {
       }
 
       if (hasLeadRequirements(formData)) {
+        const propertySubtype = String(formData.requirementsPropertySubtype || "").trim().toUpperCase();
         payload.requirements = {
           inventoryType: String(formData.requirementsInventoryType || "").trim().toUpperCase(),
+          propertySubtype,
+          subtypeData: formData.requirementsSubtypeData && typeof formData.requirementsSubtypeData === "object"
+            ? { ...formData.requirementsSubtypeData }
+            : {},
           transactionType: toRequirementTransactionType(formData.requirementsTransactionType),
           furnishingStatus: String(formData.requirementsFurnishingStatus || "").trim().toUpperCase(),
           budgetMin: toAmountNumber(formData.requirementsBudgetMin),
@@ -1874,9 +2047,14 @@ const LeadsMatrix = () => {
           areaMin: toAmountNumber(formData.requirementsAreaMin),
           areaMax: toAmountNumber(formData.requirementsAreaMax),
           areaUnit: toRequirementAreaUnit(formData.requirementsAreaUnit),
-          commercial: {
+        };
+
+        if (!propertySubtype) {
+          payload.requirements.commercial = {
             seats: toAmountNumber(formData.requirementsCommercialSeats),
             cabins: toAmountNumber(formData.requirementsCommercialCabins),
+            conferenceRooms: toAmountNumber(formData.requirementsCommercialConferenceRooms),
+            conferenceSeats: toAmountNumber(formData.requirementsCommercialConferenceSeats),
             parkingAvailable: Boolean(formData.requirementsCommercialParkingAvailable),
             pantry: Boolean(formData.requirementsCommercialPantry),
             receptionArea: Boolean(formData.requirementsCommercialReceptionArea),
@@ -1891,8 +2069,8 @@ const LeadsMatrix = () => {
             fireSafety: Boolean(formData.requirementsCommercialFireSafety),
             readyToMove: Boolean(formData.requirementsCommercialReadyToMove),
             underConstruction: Boolean(formData.requirementsCommercialUnderConstruction),
-          },
-          residential: {
+          };
+          payload.requirements.residential = {
             bhkType: String(formData.requirementsResidentialBhkType || "").trim().toUpperCase(),
             floor: toAmountNumber(formData.requirementsResidentialFloor),
             amenities: {
@@ -1909,8 +2087,8 @@ const LeadsMatrix = () => {
               electricityBackup: Boolean(formData.requirementsResidentialAmenityElectricityBackup),
               gasPipeline: Boolean(formData.requirementsResidentialAmenityGasPipeline),
             },
-          },
-        };
+          };
+        }
       }
 
       const created = await createLead(payload);
@@ -2049,6 +2227,16 @@ const LeadsMatrix = () => {
       const isClosedFlow =
         ["CLOSED", "REQUESTED"].includes(normalizedStatusDraft)
         || ["CLOSED", "REQUESTED"].includes(normalizedLeadStatus);
+      const isClosingDealIntent =
+        (
+          normalizedStatusDraft === "CLOSED"
+          && normalizedLeadStatus !== "CLOSED"
+        )
+        || (
+          canReviewDealPayment
+          && normalizedApprovalStatus === "APPROVED"
+          && normalizedLeadStatus !== "CLOSED"
+        );
       const isExecutiveClosingDeal =
         isExecutiveUser
         && normalizedStatusDraft === "CLOSED"
@@ -2125,7 +2313,7 @@ const LeadsMatrix = () => {
         return;
       }
 
-      if (isClosedFlow && (effectiveBrokerageReceived === null || effectiveBrokerageReceived < 0)) {
+      if (isClosingDealIntent && (effectiveBrokerageReceived === null || effectiveBrokerageReceived < 0)) {
         setError("Brokerage Received is required and cannot be negative when closing the deal");
         setSavingUpdates(false);
         return;
@@ -2161,6 +2349,13 @@ const LeadsMatrix = () => {
         && !["APPROVED", "REJECTED"].includes(normalizedApprovalStatus)
       ) {
         setError("Admin decision must be Approve or Reject");
+        setSavingUpdates(false);
+        return;
+      }
+
+      const requirementValidationError = validateLeadRequirementDraft(requirementsDraft);
+      if (requirementValidationError) {
+        setError(requirementValidationError);
         setSavingUpdates(false);
         return;
       }
@@ -2227,8 +2422,12 @@ const LeadsMatrix = () => {
           payload.dealPayment = dealPaymentPayload;
         }
 
-        payload.brokerageReceived = effectiveBrokerageReceived;
-        payload.brokerageDistributed = parsedBrokerageDistributed || 0;
+        if (isClosingDealIntent || brokerageReceivedDraft !== "" || brokerageDistributedDraft !== "") {
+          if (effectiveBrokerageReceived !== null) {
+            payload.brokerageReceived = effectiveBrokerageReceived;
+          }
+          payload.brokerageDistributed = parsedBrokerageDistributed || 0;
+        }
       }
 
       if (String(statusDraft || "").toUpperCase() === "CLOSED") {
@@ -2495,8 +2694,23 @@ const LeadsMatrix = () => {
   const selectedLeadSiteLng = toCoordinateNumber(selectedLead?.siteLocation?.lng);
   const selectedLeadRelatedInventories = getLeadRelatedInventories(selectedLead);
   const selectedLeadActiveInventoryId = toObjectIdString(selectedLead?.inventoryId);
+  const selectedLeadRequirementInventoryType = String(selectedLead?.requirements?.inventoryType || "").trim().toUpperCase();
+  const selectedLeadRequirementSubtype = String(selectedLead?.requirements?.propertySubtype || "").trim().toUpperCase();
   const availableRelatedInventoryOptions = inventoryOptions.filter(
-    (inventory) => toInventoryApiStatus(inventory?.status) === "Available",
+    (inventory) => {
+      if (toInventoryApiStatus(inventory?.status) !== "Available") return false;
+      const inventoryType = String(inventory?.inventoryType || "").trim().toUpperCase();
+      if (selectedLeadRequirementInventoryType && inventoryType !== selectedLeadRequirementInventoryType) {
+        return false;
+      }
+      if (selectedLeadRequirementSubtype) {
+        const inventorySubtype = inventoryType === "COMMERCIAL"
+          ? String(inventory?.commercialDetails?.officeType || "").trim().toUpperCase()
+          : String(inventory?.residentialDetails?.propertyType || "").trim().toUpperCase();
+        if (inventorySubtype && inventorySubtype !== selectedLeadRequirementSubtype) return false;
+      }
+      return true;
+    },
   );
 
   return (
@@ -2560,13 +2774,11 @@ const LeadsMatrix = () => {
                 statusFilter={statusFilter}
                 onStatusFilterChange={setStatusFilter}
                 leadStatuses={LEAD_STATUSES}
-                statusBreakdown={statusBreakdown}
+                propertySubtypeFilter={propertySubtypeFilter}
+                onPropertySubtypeFilterChange={setPropertySubtypeFilter}
+                propertySubtypeOptions={ALL_PROPERTY_SUBTYPE_OPTIONS}
                 sortBy={sortBy}
                 onSortByChange={setSortBy}
-                showDueOnly={showDueOnly}
-                onShowDueOnlyChange={setShowDueOnly}
-                viewMode={viewMode}
-                onViewModeChange={setViewMode}
                 getStatusLabel={getStatusLabel}
               />
             </div>
@@ -2576,7 +2788,6 @@ const LeadsMatrix = () => {
               loading={loading}
               filteredLeads={filteredLeads}
               statusBreakdown={statusBreakdown}
-              viewMode={viewMode}
               onOpenLeadDetails={handleOpenLeadDetailsPage}
               canAssignLead={canAssignLead}
               onInlineStatusChange={handleInlineStatusChange}

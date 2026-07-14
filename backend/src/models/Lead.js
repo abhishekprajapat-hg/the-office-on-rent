@@ -6,6 +6,10 @@ const leadSchema = new mongoose.Schema(
     phone: { type: String, required: true, index: true },
     email: String,
     city: String,
+    preferredLocations: {
+      type: [String],
+      default: [],
+    },
     projectInterested: String,
     companyId: {
       type: mongoose.Schema.Types.ObjectId,
@@ -54,7 +58,7 @@ const leadSchema = new mongoose.Schema(
       },
       transactionType: {
         type: String,
-        enum: ["SALE", "RENT", ""],
+        enum: ["SALE", "LEASE", "RENT", ""],
         default: "",
         trim: true,
       },
@@ -62,6 +66,15 @@ const leadSchema = new mongoose.Schema(
         type: String,
         default: "",
         trim: true,
+      },
+      propertySubtype: {
+        type: String,
+        default: "",
+        trim: true,
+      },
+      subtypeData: {
+        type: mongoose.Schema.Types.Mixed,
+        default: () => ({}),
       },
       budgetMin: {
         type: Number,
@@ -96,6 +109,16 @@ const leadSchema = new mongoose.Schema(
           default: null,
         },
         cabins: {
+          type: Number,
+          min: 0,
+          default: null,
+        },
+        conferenceRooms: {
+          type: Number,
+          min: 0,
+          default: null,
+        },
+        conferenceSeats: {
           type: Number,
           min: 0,
           default: null,
@@ -161,7 +184,14 @@ const leadSchema = new mongoose.Schema(
         "NEW",
         "CONTACTED",
         "INTERESTED",
+        "SITE_VISIT_SCHEDULED",
         "SITE_VISIT",
+        "SITE_VISIT_OVERDUE",
+        "MISSING_IN_ACTION",
+        "NOT_PICKING_CALLS",
+        "INVALID",
+        "OWNER",
+        "BROKER",
         "REQUESTED",
         "CLOSED",
         "LOST"
