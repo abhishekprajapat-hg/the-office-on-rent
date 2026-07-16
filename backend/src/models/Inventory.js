@@ -70,18 +70,31 @@ const commercialDetailsSchema = new mongoose.Schema(
         "FULLY_FURNISHED",
         "MANAGED_OFFICE",
         "COWORKING",
+        "OFFICE",
+        "SHOP",
+        "SHOWROOM",
+        "CAFE",
+        "ROOFTOP",
+        "WAREHOUSE",
+        "INDUSTRIAL",
+        "OTHER",
       ],
       default: "",
       trim: true,
     },
     officeLayout: {
       totalCabins: { type: Number, default: null, min: 0 },
+      cabinSeats: { type: Number, default: null, min: 0 },
       workstations: { type: Number, default: null, min: 0 },
       seats: { type: Number, default: null, min: 0 },
       conferenceRooms: { type: Number, default: null, min: 0 },
-      meetingRooms: { type: Number, default: null, min: 0 },
+      conferenceSeats: { type: Number, default: null, min: 0 },
       receptionArea: { type: Boolean, default: false },
       waitingArea: { type: Boolean, default: false },
+    },
+    subtypeData: {
+      type: mongoose.Schema.Types.Mixed,
+      default: () => ({}),
     },
     amenities: {
       pantry: { type: Boolean, default: false },
@@ -129,9 +142,13 @@ const residentialDetailsSchema = new mongoose.Schema(
   {
     propertyType: {
       type: String,
-      enum: ["FLAT", "VILLA", "BUILDER_FLOOR", "PLOT", "OTHER", ""],
+      enum: ["FLAT", "HOUSE", "PLOT", "PG_HOSTEL", "OTHER", ""],
       default: "",
       trim: true,
+    },
+    subtypeData: {
+      type: mongoose.Schema.Types.Mixed,
+      default: () => ({}),
     },
     bhkType: {
       type: String,
@@ -210,6 +227,11 @@ const inventorySchema = new mongoose.Schema(
     price: {
       type: Number,
       required: true,
+      min: 0,
+    },
+    rent: {
+      type: Number,
+      default: null,
       min: 0,
     },
     deposit: {

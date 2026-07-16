@@ -18,40 +18,42 @@ const select = (key) => ({ key, type: "select" });
 const PROPERTY_REQUIREMENT_CONFIG = {
   COMMERCIAL: {
     OFFICE: [
-      number("seats"), number("cabins"), number("conferenceRooms"), number("conferenceSeats"), text("preferredFloor"),
+      number("seats"), number("workstations"), number("cabins"), number("cabinSeats"), number("conferenceRooms"), number("conferenceSeats"),
       bool("receptionArea"), bool("waitingArea"), bool("pantry"), bool("cafeteria"),
       bool("serverRoom"), bool("storageRoom"), bool("breakoutArea"), bool("parking"),
       bool("liftAvailable"), bool("powerBackup"), bool("centralAC"),
     ],
     COWORKING: [
-      number("requiredSeats"), select("deskType"), number("privateCabins"), number("meetingRooms"),
-      number("perSeatBudget"), bool("internetRequired"), bool("printingFacility"),
-      bool("reception"), bool("pantry"), bool("parking"), bool("access24x7"), bool("powerBackup"),
+      number("requiredSeats"), select("deskType"), number("privateCabins"), number("workstation"),
+      bool("internetRequired"), bool("printingFacility"), bool("reception"), bool("pantry"),
+      bool("reservedParking"), bool("access27x7"), bool("commonConference"), bool("teaCoffee"),
+      bool("powerBackup"),
     ],
     MANAGED_OFFICE: [
-      number("requiredSeats"), number("cabins"), number("meetingRooms"), bool("brandingRequired"),
-      bool("itSetupRequired"), bool("dedicatedReception"), text("leaseDuration"), date("moveInDate"),
-      select("budgetMode"), bool("pantry"), bool("parking"), bool("powerBackup"), bool("centralAC"),
+      number("seats"), number("workstations"), number("cabins"), number("cabinSeats"), number("conferenceRooms"), number("conferenceSeats"),
+      bool("receptionArea"), bool("waitingArea"), bool("pantry"), bool("cafeteria"),
+      bool("serverRoom"), bool("storageRoom"), bool("breakoutArea"), bool("parking"),
+      bool("liftAvailable"), bool("powerBackup"), bool("centralAC"),
     ],
     SHOP: [
-      text("preferredFloor"), bool("groundFloorPreferred"), number("carpetArea"), number("frontage"),
+      bool("groundFloorPreferred"), number("carpetArea"), select("ceilingHeight"),
       select("roadType"), bool("cornerShop"), bool("washroom"), bool("parking"),
-      text("suitableBusinessCategory"), date("possessionDate"),
+      bool("nearMall"), bool("inMall"), bool("seatoutArea"),
+      text("suitableBusinessCategory"), select("moveInDate"),
     ],
     SHOWROOM: [
-      text("preferredFloor"), number("carpetArea"), number("frontage"), number("ceilingHeight"),
-      bool("mainRoadVisibility"), number("displayArea"), number("parkingCapacity"),
-      text("brandCategory"), bool("washroom"), text("powerLoad"), date("possessionDate"),
+      number("carpetArea"), select("ceilingHeight"), bool("mainRoadVisibility"),
+      number("displayArea"), bool("mezzanineFloor"), bool("washroom"), select("moveInDate"),
     ],
     CAFE: [
-      number("indoorArea"), number("outdoorArea"), number("seatingCapacity"), bool("kitchenAvailable"),
+      number("seatingCapacity"), bool("kitchenAvailable"),
       bool("exhaustProvision"), bool("gasConnection"), bool("fireNocRequired"), bool("washroom"),
       bool("parking"), bool("highFootfallPreferred"), bool("outdoorSeatingRequired"),
     ],
     ROOFTOP: [
       number("totalRooftopArea"), number("coveredArea"), number("openArea"), bool("liftAccess"),
       bool("washroom"), bool("kitchenSetup"), select("intendedUse"),
-      bool("commercialPermissionRequired"), text("viewPreference"), bool("parking"),
+      bool("commercialPermissionRequired"), bool("parking"),
     ],
     WAREHOUSE: [
       number("warehouseArea"), number("clearHeight"), number("entryGateHeight"), bool("truckAccess"),
@@ -80,39 +82,11 @@ const PROPERTY_REQUIREMENT_CONFIG = {
       bool("privateParking"), bool("garden"), bool("terrace"), bool("servantRoom"),
       bool("storageRoom"), bool("powerBackup"), bool("gasPipeline"), bool("separateEntry"),
     ],
-    VILLA: [
-      select("bhkType"), number("plotArea"), number("builtUpArea"), number("numberOfFloors"),
-      number("bathrooms"), number("balconies"), text("facing"), bool("privateGarden"),
-      bool("privatePool"), number("parkingCapacity"), bool("servantRoom"), bool("studyRoom"),
-      bool("clubhouse"), bool("security"), bool("powerBackup"), bool("gatedCommunity"),
-    ],
-    PENTHOUSE: [
-      select("bhkType"), text("preferredFloor"), number("terraceArea"), bool("privateTerrace"),
-      bool("privateLift"), number("bathrooms"), number("balconies"), bool("servantRoom"),
-      bool("studyRoom"), bool("parking"), bool("powerBackup"), bool("clubhouse"),
-      bool("swimmingPool"), text("viewPreference"),
-    ],
-    STUDIO_APARTMENT: [
-      number("carpetArea"), text("preferredFloor"), bool("attachedBathroom"), text("kitchenType"),
-      bool("balcony"), bool("parking"), bool("lift"), bool("security"), bool("powerBackup"),
-      select("suitableFor"),
-    ],
-    BUILDER_FLOOR: [
-      select("bhkType"), text("preferredFloor"), number("totalFloors"), bool("independentEntry"),
-      bool("parking"), bool("lift"), bool("terraceRights"), number("balconies"),
-      number("bathrooms"), text("facing"), bool("powerBackup"), text("propertyAge"),
-    ],
     PLOT: [
-      number("plotArea"), number("plotLength"), number("plotWidth"), number("frontage"),
+      number("plotArea"), number("plotLength"), number("plotWidth"),
       number("roadWidth"), text("facing"), bool("cornerPlot"), bool("gatedColony"),
       bool("approvedColony"), bool("boundaryWall"), bool("constructionAllowed"),
       text("ownershipType"), select("suitableFor"),
-    ],
-    FARM_HOUSE: [
-      number("landArea"), number("builtUpArea"), number("bedrooms"), number("bathrooms"),
-      bool("existingConstruction"), bool("boundaryWall"), bool("waterConnection"),
-      bool("electricityConnection"), bool("roadAccess"), bool("gardenPlantation"),
-      bool("swimmingPool"), bool("servantQuarter"), bool("parking"), text("distanceFromCity"),
     ],
     PG_HOSTEL: [
       select("occupancyType"), select("sharingType"), number("numberOfBeds"), number("perBedBudget"),

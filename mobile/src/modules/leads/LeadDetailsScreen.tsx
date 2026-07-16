@@ -221,9 +221,6 @@ const toRequirementDraftText = (value: any) => {
   return String(value).trim();
 };
 
-const toRequirementAreaUnit = (value: any) =>
-  String(value || "").trim().toUpperCase() === "SQ_M" ? "SQ_M" : "SQ_FT";
-
 const mapLeadRequirementsToDraft = (requirements: any = {}) => {
   const base = createDefaultLeadRequirementsDraft();
   const commercial = requirements?.commercial || {};
@@ -236,9 +233,9 @@ const mapLeadRequirementsToDraft = (requirements: any = {}) => {
     furnishingStatus: toRequirementDraftText(requirements?.furnishingStatus).toUpperCase(),
     budgetMin: toRequirementDraftText(requirements?.budgetMin),
     budgetMax: toRequirementDraftText(requirements?.budgetMax),
-    areaMin: toRequirementDraftText(requirements?.areaMin),
-    areaMax: toRequirementDraftText(requirements?.areaMax),
-    areaUnit: toRequirementAreaUnit(requirements?.areaUnit || base.areaUnit),
+    areaMin: "",
+    areaMax: "",
+    areaUnit: base.areaUnit,
     commercial: {
       seats: toRequirementDraftText(commercial?.seats),
       cabins: toRequirementDraftText(commercial?.cabins),
@@ -283,9 +280,9 @@ const buildLeadRequirementsPayloadFromDraft = (draft: any = {}) => ({
   furnishingStatus: String(draft?.furnishingStatus || "").trim().toUpperCase(),
   budgetMin: toAmountNumber(draft?.budgetMin),
   budgetMax: toAmountNumber(draft?.budgetMax),
-  areaMin: toAmountNumber(draft?.areaMin),
-  areaMax: toAmountNumber(draft?.areaMax),
-  areaUnit: toRequirementAreaUnit(draft?.areaUnit),
+  areaMin: null,
+  areaMax: null,
+  areaUnit: null,
   commercial: {
     seats: toAmountNumber(draft?.commercial?.seats),
     cabins: toAmountNumber(draft?.commercial?.cabins),
@@ -2660,22 +2657,6 @@ export const LeadDetailsScreen = () => {
           ))}
         </View>
 
-        <Text style={styles.metricLabel}>Area Unit</Text>
-        <View style={styles.modalChipWrap}>
-          {[
-            { value: "SQ_FT", label: "Sq Ft" },
-            { value: "SQ_M", label: "Sq M" },
-          ].map((item) => (
-            <AppChip
-              key={`req-unit-${item.value}`}
-              label={item.label}
-              active={requirementsDraft?.areaUnit === item.value}
-              onPress={() => updateRequirementRootField("areaUnit", item.value)}
-              style={styles.modalChip as object}
-            />
-          ))}
-        </View>
-
         <View style={styles.twoColRow}>
           <View style={{ flex: 1 }}>
             <Text style={styles.metricLabel}>Budget Min</Text>
@@ -2694,29 +2675,6 @@ export const LeadDetailsScreen = () => {
               value={requirementsDraft?.budgetMax || ""}
               onChangeText={(val: string) => updateRequirementRootField("budgetMax", val)}
               placeholder="Max budget"
-              keyboardType="phone-pad"
-            />
-          </View>
-        </View>
-
-        <View style={styles.twoColRow}>
-          <View style={{ flex: 1 }}>
-            <Text style={styles.metricLabel}>Area Min</Text>
-            <AppInput
-              style={[styles.input as object, styles.twoColInput as object]}
-              value={requirementsDraft?.areaMin || ""}
-              onChangeText={(val: string) => updateRequirementRootField("areaMin", val)}
-              placeholder="Min area"
-              keyboardType="phone-pad"
-            />
-          </View>
-          <View style={{ flex: 1 }}>
-            <Text style={styles.metricLabel}>Area Max</Text>
-            <AppInput
-              style={[styles.input as object, styles.twoColInput as object]}
-              value={requirementsDraft?.areaMax || ""}
-              onChangeText={(val: string) => updateRequirementRootField("areaMax", val)}
-              placeholder="Max area"
               keyboardType="phone-pad"
             />
           </View>

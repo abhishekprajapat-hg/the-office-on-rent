@@ -348,7 +348,7 @@ const SharedInventoryView = () => {
                 {transactionType === "Rent" ? "Monthly Rent" : "Asking Price"}
               </p>
               <p className="text-3xl sm:text-4xl font-extrabold tracking-tight">
-                {formatPrice(inventory?.price)}
+                {formatPrice(transactionType === "Rent" ? (inventory?.rent ?? inventory?.price) : inventory?.price)}
               </p>
             </div>
             <div className="flex flex-wrap gap-4">
@@ -485,14 +485,15 @@ const SharedInventoryView = () => {
         {isCommercial && commercialDetails && (
           <SectionCard title="Commercial Office Details" icon={<Building2 size={15} />}>
             <div className="space-y-1">
-              <InfoRow label="Office Type" value={formatEnumLabel(commercialDetails?.officeType)} />
-              <InfoRow label="Total Cabins" value={commercialDetails?.officeLayout?.totalCabins} />
+              <InfoRow label="Commercial Property Type" value={formatEnumLabel(commercialDetails?.officeType)} />
+              <InfoRow label="Cabins" value={commercialDetails?.officeLayout?.totalCabins} />
+              <InfoRow label="Cabin Seats" value={commercialDetails?.officeLayout?.cabinSeats} />
               <InfoRow label="Workstations" value={commercialDetails?.officeLayout?.workstations} />
               <InfoRow label="Seats" value={commercialDetails?.officeLayout?.seats} />
               <InfoRow label="Conference Rooms" value={commercialDetails?.officeLayout?.conferenceRooms} />
-              <InfoRow label="Meeting Rooms" value={commercialDetails?.officeLayout?.meetingRooms} />
-              <InfoRow label="Parking Type" value={formatEnumLabel(commercialDetails?.buildingDetails?.parkingType)} />
-              <InfoRow label="Parking Slots" value={commercialDetails?.buildingDetails?.parkingSlots} />
+              <InfoRow label="Conference Seats" value={commercialDetails?.officeLayout?.conferenceSeats} />
+              <InfoRow label="Reserved Parking Type" value={formatEnumLabel(commercialDetails?.buildingDetails?.parkingType)} />
+              <InfoRow label="Reserved Parking Slots" value={commercialDetails?.buildingDetails?.parkingSlots} />
               <InfoRow label="Total Floors" value={commercialDetails?.buildingDetails?.totalFloors} />
               <InfoRow label="Ready to Move" value={formatYesNo(commercialDetails?.availability?.readyToMove)} />
               <InfoRow label="Available From" value={formatDate(commercialDetails?.availability?.availableFrom)} />
@@ -527,7 +528,7 @@ const SharedInventoryView = () => {
               <InfoRow label="Bedrooms" value={residentialDetails?.bedrooms} />
               <InfoRow label="Bathrooms" value={residentialDetails?.bathrooms} />
               <InfoRow label="Balcony" value={residentialDetails?.balcony} />
-              <InfoRow label="Parking Slots" value={residentialDetails?.parking} />
+              <InfoRow label="Reserved Parking Slots" value={residentialDetails?.parking} />
               <InfoRow label="Study Room" value={residentialDetails?.studyRoom ? "Yes" : null} />
               <InfoRow label="Servant Room" value={residentialDetails?.servantRoom ? "Yes" : null} />
               <InfoRow label="Water Supply" value={formatEnumLabel(residentialDetails?.utilities?.waterSupply)} />

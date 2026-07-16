@@ -75,6 +75,30 @@ const AddLeadSelectControl = ({ value, onChange, inputClass, isDark, children })
   </div>
 );
 
+const AddLeadAdornedInput = ({
+  adornment,
+  adornmentPosition = "left",
+  inputClass,
+  isDark,
+  ...inputProps
+}) => (
+  <div className="relative">
+    <input
+      {...inputProps}
+      className={`${inputClass} ${adornmentPosition === "left" ? "pl-9" : "pr-12"}`}
+    />
+    <span
+      className={`pointer-events-none absolute top-1/2 -translate-y-1/2 text-xs font-bold ${
+        adornmentPosition === "left" ? "left-3" : "right-3"
+      } ${isDark ? "text-slate-400" : "text-slate-500"}`}
+    >
+      {adornment}
+    </span>
+  </div>
+);
+
+const CUSTOM_NUMBER_OPTION_VALUE = "__CUSTOM_NUMBER__";
+
 const getLeadPendingAmount = (lead) => {
   if (!lead || typeof lead !== "object") return null;
   const paymentType = String(lead?.dealPayment?.paymentType || "").trim().toUpperCase();
@@ -1372,6 +1396,7 @@ export const AddLeadModal = ({
   onSave,
   savingLead,
 }) => {
+  const [customNumberFields, setCustomNumberFields] = React.useState({});
   const inputClass = `h-11 w-full rounded-lg border px-3 text-sm md:h-10 ${
     isDark ? "border-slate-700 bg-slate-950 text-slate-200" : "border-slate-300 bg-white text-slate-700"
   }`;
@@ -1429,6 +1454,9 @@ export const AddLeadModal = ({
       requirementsFurnishingStatus: nextConfig?.showFurnishing === false
         ? ""
         : prev.requirementsFurnishingStatus,
+      requirementsAreaMin: "",
+      requirementsAreaMax: "",
+      requirementsAreaUnit: "SQ_FT",
     }));
   };
 
@@ -1442,8 +1470,19 @@ export const AddLeadModal = ({
     }));
   };
 
+  const updateCustomNumberField = (fieldKey, isCustom) => {
+    setCustomNumberFields((prev) => ({ ...prev, [fieldKey]: isCustom }));
+  };
+
   const renderDynamicField = (field) => {
     const value = formData.requirementsSubtypeData?.[field.key] ?? "";
+    const selectOptions = field.options || [];
+    const normalizedValue = String(value || "");
+    const isCustomNumberValue = field.allowCustomNumber
+      && normalizedValue
+      && !selectOptions.includes(normalizedValue);
+    const isCustomNumberMode = Boolean(customNumberFields[field.key] || isCustomNumberValue);
+    const selectValue = isCustomNumberMode ? CUSTOM_NUMBER_OPTION_VALUE : normalizedValue;
     const commonInputProps = {
       className: inputClass,
       placeholder: field.placeholder || field.label,
@@ -1465,12 +1504,41 @@ export const AddLeadModal = ({
     return (
       <AddLeadFieldShell fieldTitleClass={fieldTitleClass} key={field.key} title={field.label} className={field.fullWidth ? "md:col-span-2" : ""}>
         {field.type === "select" ? (
-          <AddLeadSelectControl inputClass={inputClass} isDark={isDark} value={value} onChange={(event) => updateSubtypeField(field.key, event.target.value)}>
-            <option value="">{field.label}</option>
-            {(field.options || []).map((option) => (
-              <option key={option} value={option}>{option}</option>
-            ))}
-          </AddLeadSelectControl>
+          <>
+            <AddLeadSelectControl
+              inputClass={inputClass}
+              isDark={isDark}
+              value={selectValue}
+              onChange={(event) => {
+                if (event.target.value === CUSTOM_NUMBER_OPTION_VALUE) {
+                  updateCustomNumberField(field.key, true);
+                  updateSubtypeField(field.key, "");
+                  return;
+                }
+                updateCustomNumberField(field.key, false);
+                updateSubtypeField(field.key, event.target.value);
+              }}
+            >
+              <option value="">{field.label}</option>
+              {selectOptions.map((option) => (
+                <option key={option} value={option}>{option}</option>
+              ))}
+              {field.allowCustomNumber ? (
+                <option value={CUSTOM_NUMBER_OPTION_VALUE}>Custom Number</option>
+              ) : null}
+            </AddLeadSelectControl>
+            {field.allowCustomNumber && isCustomNumberMode ? (
+              <input
+                type="number"
+                min="0"
+                step="1"
+                value={normalizedValue === CUSTOM_NUMBER_OPTION_VALUE ? "" : normalizedValue}
+                onChange={(event) => updateSubtypeField(field.key, event.target.value)}
+                placeholder="Enter custom number"
+                className={`${inputClass} mt-2`}
+              />
+            ) : null}
+          </>
         ) : field.type === "textarea" ? (
           <textarea
             {...commonInputProps}
@@ -1593,25 +1661,14 @@ export const AddLeadModal = ({
                   </AddLeadSelectControl>
                 </AddLeadFieldShell>
               ) : null}
-              <AddLeadFieldShell fieldTitleClass={fieldTitleClass} title="Area Unit">
-                <AddLeadSelectControl inputClass={inputClass} isDark={isDark} value={formData.requirementsAreaUnit} onChange={(event) => updateField("requirementsAreaUnit", event.target.value)}>
-                  <option value="SQ_FT">Area Unit: sq ft</option>
-                </AddLeadSelectControl>
-              </AddLeadFieldShell>
             </div>
 
             <div className="mt-2 grid grid-cols-1 gap-2 md:grid-cols-2">
               <AddLeadFieldShell fieldTitleClass={fieldTitleClass} title="Budget Min">
-                <input placeholder="Budget Min" value={formData.requirementsBudgetMin} onChange={(event) => updateField("requirementsBudgetMin", event.target.value)} className={inputClass} />
+                <AddLeadAdornedInput type="number" step="any" adornment="₹" inputClass={inputClass} isDark={isDark} placeholder="Budget Min" value={formData.requirementsBudgetMin} onChange={(event) => updateField("requirementsBudgetMin", event.target.value)} />
               </AddLeadFieldShell>
               <AddLeadFieldShell fieldTitleClass={fieldTitleClass} title="Budget Max">
-                <input placeholder="Budget Max" value={formData.requirementsBudgetMax} onChange={(event) => updateField("requirementsBudgetMax", event.target.value)} className={inputClass} />
-              </AddLeadFieldShell>
-              <AddLeadFieldShell fieldTitleClass={fieldTitleClass} title="Area Min">
-                <input placeholder="Area Min" value={formData.requirementsAreaMin} onChange={(event) => updateField("requirementsAreaMin", event.target.value)} className={inputClass} />
-              </AddLeadFieldShell>
-              <AddLeadFieldShell fieldTitleClass={fieldTitleClass} title="Area Max">
-                <input placeholder="Area Max" value={formData.requirementsAreaMax} onChange={(event) => updateField("requirementsAreaMax", event.target.value)} className={inputClass} />
+                <AddLeadAdornedInput type="number" step="any" adornment="₹" inputClass={inputClass} isDark={isDark} placeholder="Budget Max" value={formData.requirementsBudgetMax} onChange={(event) => updateField("requirementsBudgetMax", event.target.value)} />
               </AddLeadFieldShell>
             </div>
 

@@ -18,12 +18,31 @@ const Login = ({ onLogin, portal = "GENERAL" }) => {
     setIsLoading(true);
     setError("");
 
-    try {
-      const res = await api.post("/auth/login", {
+    const submitLogin = (loginPortal) =>
+      api.post("/auth/login", {
         email,
         password: passcode,
-        portal,
+        portal: loginPortal,
       });
+
+    try {
+      let res;
+
+      try {
+        res = await submitLogin(portal);
+      } catch (err) {
+        const errorMessage = toErrorMessage(err, "Login failed");
+        const shouldRetryAsAdmin =
+          portal === "GENERAL"
+          && err?.response?.status === 403
+          && /admin must login via admin portal/i.test(errorMessage);
+
+        if (!shouldRetryAsAdmin) {
+          throw err;
+        }
+
+        res = await submitLogin("ADMIN");
+      }
 
       const { token, refreshToken, user } = res.data;
 
@@ -78,6 +97,7 @@ const Login = ({ onLogin, portal = "GENERAL" }) => {
           <input
             type="email"
             placeholder="Email"
+            autoComplete="username"
             required
             value={email}
             onChange={(e) => setEmail(e.target.value)}
@@ -92,6 +112,7 @@ const Login = ({ onLogin, portal = "GENERAL" }) => {
             <input
               type="password"
               required
+              autoComplete="current-password"
               value={passcode}
               onChange={(e) => setPasscode(e.target.value)}
               placeholder="Password"

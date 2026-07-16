@@ -2,6 +2,7 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { useNavigate } from "react-router-dom";
 import { motion as Motion, AnimatePresence } from "framer-motion";
 import {
+  ChevronDown,
   MapPin,
   X,
   Loader,
@@ -35,8 +36,41 @@ import {
   PropertyWorkspace,
 } from "./components/PropertyWorkspace";
 import { buildInventoryMetrics } from "./components/propertyWorkspaceUtils";
+import {
+  FURNISHING_OPTIONS,
+  getPropertySubtypeConfig,
+  getPropertySubtypeOptions,
+} from "../../config/propertyRequirementConfig";
 
 const STATUS_OPTIONS = ["Available", "Blocked", "Sold"];
+const CUSTOM_NUMBER_OPTION_VALUE = "__CUSTOM_NUMBER__";
+const SHOW_LEGACY_INVENTORY_DETAIL_FIELDS = false;
+const INVENTORY_MODAL_INPUT_CLASS =
+  "h-11 w-full rounded-lg border border-slate-300 bg-white px-3 text-sm text-slate-700 focus:outline-none focus:border-blue-500 md:h-10";
+const INVENTORY_MODAL_FIELD_TITLE_CLASS =
+  "text-[11px] font-bold uppercase tracking-[0.08em] text-slate-500";
+const INVENTORY_MODAL_SECTION_CLASS =
+  "rounded-xl border border-slate-200 bg-slate-50/60 p-3";
+const INVENTORY_MODAL_SECTION_HEADING_CLASS =
+  "mb-2 text-[11px] font-bold uppercase tracking-[0.14em] text-slate-500";
+const INVENTORY_MODAL_CHECKBOX_CLASS =
+  "inline-flex min-h-10 items-center gap-1.5 rounded border border-slate-300 bg-white px-2.5 py-2 text-[11px] text-slate-700 md:min-h-0 md:px-2 md:py-1";
+
+const InventoryModalSelect = ({ value, onChange, className = "", children }) => (
+  <div className="relative">
+    <select
+      value={value}
+      onChange={onChange}
+      className={`${INVENTORY_MODAL_INPUT_CLASS} appearance-none pr-10 ${className}`}
+    >
+      {children}
+    </select>
+    <ChevronDown
+      size={16}
+      className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-slate-500"
+    />
+  </div>
+);
 const STATUS_UPDATE_OPTIONS = [
   { label: "Available", value: "Available" },
   { label: "Blocked", value: "Blocked" },
@@ -51,6 +85,7 @@ const INVENTORY_LIST_FIELDS = [
   "propertyId",
   "inventoryType",
   "price",
+  "rent",
   "deposit",
   "type",
   "category",
@@ -181,15 +216,17 @@ const DEFAULT_FORM = {
   locationLat: "",
   locationLng: "",
   price: "",
+  rent: "",
   type: "Sale",
   category: "Office",
   status: "Available",
   officeType: "",
   commercialTotalCabins: "",
+  commercialCabinSeats: "",
   commercialWorkstations: "",
   commercialSeats: "",
   commercialConferenceRooms: "",
-  commercialMeetingRooms: "",
+  commercialConferenceSeats: "",
   commercialReceptionArea: false,
   commercialWaitingArea: false,
   commercialPantry: false,
@@ -209,6 +246,7 @@ const DEFAULT_FORM = {
   commercialReadyToMove: false,
   commercialUnderConstruction: false,
   commercialAvailableFrom: "",
+  inventorySubtypeData: {},
   residentialPropertyType: "",
   residentialBhkType: "",
   residentialBedrooms: "",
@@ -246,6 +284,64 @@ const toNumberOrNull = (value) => {
   const parsed = Number(value);
   return Number.isFinite(parsed) ? parsed : null;
 };
+
+const normalizeInventoryResidentialPropertyType = (value) => {
+  const normalized = String(value || "").trim().toUpperCase();
+  if (normalized === "INDEPENDENT_HOUSE" || normalized === "VILLA" || normalized === "BUILDER_FLOOR") {
+    return "HOUSE";
+  }
+  if (normalized === "APARTMENT") return "FLAT";
+  if (normalized === "PG" || normalized === "HOSTEL" || normalized === "PG / HOSTEL") return "PG_HOSTEL";
+  if (["FLAT", "HOUSE", "PLOT", "PG_HOSTEL", "OTHER"].includes(normalized)) return normalized;
+  return "";
+};
+
+const normalizeInventoryCategory = (value, inventoryType = "COMMERCIAL") => {
+  const normalized = String(value || "").trim().toLowerCase();
+  if (String(inventoryType || "").trim().toUpperCase() === "RESIDENTIAL") {
+    if (["apartment", "apartments", "flat", "flats"].includes(normalized)) return "Flat";
+    if (["house", "houses", "villa", "villas", "builder floor", "builder_floor"].includes(normalized)) {
+      return "House";
+    }
+    if (["pg", "hostel", "pg / hostel", "pg_hostel"].includes(normalized)) return "PG / Hostel";
+    if (["plot", "plots", "land"].includes(normalized)) return "Plot";
+    if (normalized === "other") return "Other";
+    return "Flat";
+  }
+
+  if (["coworking"].includes(normalized)) return "Coworking";
+  if (["managed office", "managed_office"].includes(normalized)) return "Managed Office";
+  if (["shop", "showroom", "cafe", "rooftop", "warehouse", "industrial", "other"].includes(normalized)) {
+    return normalized.charAt(0).toUpperCase() + normalized.slice(1);
+  }
+  return "Office";
+};
+
+const titleCaseFromToken = (value) =>
+  String(value || "")
+    .trim()
+    .toLowerCase()
+    .split("_")
+    .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
+    .join(" ");
+
+const toSubtypeDataNumber = (subtypeData = {}, ...keys) => {
+  for (const key of keys) {
+    const value = toNumberOrNull(subtypeData?.[key]);
+    if (value !== null) return value;
+  }
+  return null;
+};
+
+const getSubtypeCheckbox = (subtypeData = {}, ...keys) =>
+  keys.some((key) => Boolean(subtypeData?.[key]));
+
+const getInventorySubtypeValue = (formDataLike = {}) =>
+  String(
+    formDataLike.inventoryType === "COMMERCIAL"
+      ? formDataLike.officeType
+      : formDataLike.residentialPropertyType,
+  ).trim().toUpperCase();
 
 const parseRangeInput = (value) => {
   const raw = String(value || "").trim();
@@ -314,12 +410,12 @@ const hasAmenity = (asset, amenityToken) => {
 };
 
 const formatPrice = (asset) => {
-  const value = Number(asset.price) || 0;
-
   if (asset.type === "Rent") {
+    const value = Number(asset.rent ?? asset.price) || 0;
     return `Rs ${value.toLocaleString("en-IN")}/mo`;
   }
 
+  const value = Number(asset.price) || 0;
   return `Rs ${value.toLocaleString("en-IN")}`;
 };
 
@@ -390,6 +486,7 @@ const REQUEST_FIELD_LABELS = {
   towerName: "Tower",
   unitNumber: "Unit",
   price: "Price",
+  rent: "Rent",
   type: "Transaction Type",
   category: "Category",
   furnishingStatus: "Furnishing",
@@ -406,7 +503,6 @@ const REQUEST_FIELD_LABELS = {
   totalArea: "Total Area",
   carpetArea: "Carpet Area",
   builtUpArea: "Built-up Area",
-  areaUnit: "Area Unit",
   maintenanceCharges: "Maintenance",
   deposit: "Deposit",
   commercialDetails: "Commercial Details",
@@ -467,7 +563,7 @@ const toSiteLocationPayload = ({ lat, lng }) => {
 };
 
 const formatRequestValue = (key, value) => {
-  if (key === "price" || key === "maintenanceCharges" || key === "deposit") {
+  if (key === "price" || key === "rent" || key === "maintenanceCharges" || key === "deposit") {
     return formatCurrency(value);
   }
   if (key === "siteLocation") {
@@ -552,6 +648,7 @@ const AssetVault = () => {
   const [success, setSuccess] = useState("");
 
   const [formData, setFormData] = useState(DEFAULT_FORM);
+  const [inventoryCustomNumberFields, setInventoryCustomNumberFields] = useState({});
   const [locationSuggestions, setLocationSuggestions] = useState([]);
   const [loadingLocationSuggestions, setLoadingLocationSuggestions] = useState(false);
   const [showLocationSuggestions, setShowLocationSuggestions] = useState(false);
@@ -577,6 +674,25 @@ const AssetVault = () => {
   const canRequestEdit = UPDATE_STATUS_REQUEST_ROLES.has(role);
   const canOpenEditModal = canManage || canRequestEdit;
   const canRequestStatusChange = UPDATE_STATUS_REQUEST_ROLES.has(role);
+  const inventorySubtype = getInventorySubtypeValue(formData);
+  const inventorySubtypeOptions = getPropertySubtypeOptions(formData.inventoryType);
+  const inventorySubtypeConfig = getPropertySubtypeConfig(formData.inventoryType, inventorySubtype);
+  const inventoryFurnishingOptions =
+    inventorySubtypeConfig?.showFurnishing === false
+      ? []
+      : FURNISHING_OPTIONS.filter((option) => option.value);
+  const updateInventorySubtypeData = useCallback((fieldKey, value) => {
+    setFormData((prev) => ({
+      ...prev,
+      inventorySubtypeData: {
+        ...(prev.inventorySubtypeData || {}),
+        [fieldKey]: value,
+      },
+    }));
+  }, []);
+  const setInventoryCustomNumberField = useCallback((fieldKey, isCustom) => {
+    setInventoryCustomNumberFields((prev) => ({ ...prev, [fieldKey]: isCustom }));
+  }, []);
   const reserveTargetAsset = useMemo(
     () => assets.find((asset) => String(asset?._id || "") === String(reserveAssetId || "")) || null,
     [assets, reserveAssetId],
@@ -589,6 +705,105 @@ const AssetVault = () => {
         String(a?.name || "").localeCompare(String(b?.name || ""), "en", { sensitivity: "base" })),
     [leadOptions],
   );
+
+  const renderInventorySubtypeField = useCallback((field) => {
+    const value = formData.inventorySubtypeData?.[field.key] ?? "";
+    const selectOptions = field.options || [];
+    const normalizedValue = String(value || "");
+    const isCustomNumberValue =
+      field.allowCustomNumber
+      && normalizedValue
+      && !selectOptions.includes(normalizedValue);
+    const isCustomNumberMode = Boolean(
+      inventoryCustomNumberFields[field.key] || isCustomNumberValue,
+    );
+    const selectValue = isCustomNumberMode ? CUSTOM_NUMBER_OPTION_VALUE : normalizedValue;
+
+    if (field.type === "checkbox") {
+      return (
+        <label
+          key={field.key}
+          className={INVENTORY_MODAL_CHECKBOX_CLASS}
+        >
+          <input
+            type="checkbox"
+            checked={Boolean(value)}
+            onChange={(event) => updateInventorySubtypeData(field.key, event.target.checked)}
+            className="h-3.5 w-3.5 rounded border-slate-300 text-emerald-600 focus:ring-emerald-500"
+          />
+          {field.label}
+        </label>
+      );
+    }
+
+    return (
+      <div key={field.key} className={field.fullWidth ? "sm:col-span-2" : ""}>
+        <label className={INVENTORY_MODAL_FIELD_TITLE_CLASS}>
+          {field.label}
+        </label>
+        {field.type === "select" ? (
+          <>
+            <InventoryModalSelect
+              value={selectValue}
+              onChange={(event) => {
+                if (event.target.value === CUSTOM_NUMBER_OPTION_VALUE) {
+                  setInventoryCustomNumberField(field.key, true);
+                  updateInventorySubtypeData(field.key, "");
+                  return;
+                }
+                setInventoryCustomNumberField(field.key, false);
+                updateInventorySubtypeData(field.key, event.target.value);
+              }}
+              className="mt-1"
+            >
+              <option value="">{field.label}</option>
+              {selectOptions.map((option) => (
+                <option key={option} value={option}>{option}</option>
+              ))}
+              {field.allowCustomNumber ? (
+                <option value={CUSTOM_NUMBER_OPTION_VALUE}>Custom Number</option>
+              ) : null}
+            </InventoryModalSelect>
+            {field.allowCustomNumber && isCustomNumberMode ? (
+              <input
+                type="number"
+                min="0"
+                step="1"
+                value={normalizedValue === CUSTOM_NUMBER_OPTION_VALUE ? "" : normalizedValue}
+                onChange={(event) => updateInventorySubtypeData(field.key, event.target.value)}
+                placeholder="Enter custom number"
+                className={`${INVENTORY_MODAL_INPUT_CLASS} mt-2`}
+              />
+            ) : null}
+          </>
+        ) : field.type === "textarea" ? (
+          <textarea
+            value={normalizedValue}
+            onChange={(event) => updateInventorySubtypeData(field.key, event.target.value)}
+            placeholder={field.placeholder || field.label}
+            rows={3}
+            className={`${INVENTORY_MODAL_INPUT_CLASS} mt-1 h-auto min-h-24 py-2`}
+          />
+        ) : (
+          <input
+            type={field.type === "date" ? "date" : field.type === "number" ? "number" : "text"}
+            min={field.min}
+            max={field.max}
+            step={field.step || (field.type === "number" ? "any" : undefined)}
+            value={normalizedValue}
+            onChange={(event) => updateInventorySubtypeData(field.key, event.target.value)}
+            placeholder={field.placeholder || field.label}
+            className={`${INVENTORY_MODAL_INPUT_CLASS} mt-1`}
+          />
+        )}
+      </div>
+    );
+  }, [
+    formData.inventorySubtypeData,
+    inventoryCustomNumberFields,
+    setInventoryCustomNumberField,
+    updateInventorySubtypeData,
+  ]);
 
   const closeReserveModal = useCallback(() => {
     setIsReserveModalOpen(false);
@@ -1368,6 +1583,7 @@ const AssetVault = () => {
     parsedSiteLocation,
   }) => {
     const inventoryType = String(formData.inventoryType || "COMMERCIAL").toUpperCase();
+    const subtypeData = formData.inventorySubtypeData || {};
 
     const payload = {
       title: formData.title.trim(),
@@ -1388,6 +1604,7 @@ const AssetVault = () => {
       builtUpArea: toNumberOrNull(formData.builtUpArea),
       areaUnit: String(formData.areaUnit || "SQ_FT").toUpperCase(),
       price: Number(formData.price),
+      rent: toNumberOrNull(formData.rent),
       maintenanceCharges: toNumberOrNull(formData.maintenanceCharges),
       deposit: toNumberOrNull(formData.deposit),
       type: formData.type,
@@ -1407,29 +1624,45 @@ const AssetVault = () => {
       payload.commercialDetails = {
         officeType: String(formData.officeType || "").toUpperCase(),
         officeLayout: {
-          totalCabins: toNumberOrNull(formData.commercialTotalCabins),
-          workstations: toNumberOrNull(formData.commercialWorkstations),
-          seats: toNumberOrNull(formData.commercialSeats),
-          conferenceRooms: toNumberOrNull(formData.commercialConferenceRooms),
-          meetingRooms: toNumberOrNull(formData.commercialMeetingRooms),
-          receptionArea: Boolean(formData.commercialReceptionArea),
-          waitingArea: Boolean(formData.commercialWaitingArea),
+          totalCabins:
+            toSubtypeDataNumber(subtypeData, "cabins", "privateCabins")
+            ?? toNumberOrNull(formData.commercialTotalCabins),
+          cabinSeats: toSubtypeDataNumber(subtypeData, "cabinSeats") ?? toNumberOrNull(formData.commercialCabinSeats),
+          workstations:
+            toSubtypeDataNumber(subtypeData, "workstations", "workstation")
+            ?? toNumberOrNull(formData.commercialWorkstations),
+          seats:
+            toSubtypeDataNumber(subtypeData, "seats", "requiredSeats")
+            ?? toNumberOrNull(formData.commercialSeats),
+          conferenceRooms:
+            toSubtypeDataNumber(subtypeData, "conferenceRooms")
+            ?? toNumberOrNull(formData.commercialConferenceRooms),
+          conferenceSeats:
+            toSubtypeDataNumber(subtypeData, "conferenceSeats")
+            ?? toNumberOrNull(formData.commercialConferenceSeats),
+          receptionArea: getSubtypeCheckbox(subtypeData, "receptionArea", "reception") || Boolean(formData.commercialReceptionArea),
+          waitingArea: getSubtypeCheckbox(subtypeData, "waitingArea") || Boolean(formData.commercialWaitingArea),
         },
+        subtypeData,
         amenities: {
-          pantry: Boolean(formData.commercialPantry),
+          pantry: getSubtypeCheckbox(subtypeData, "pantry") || Boolean(formData.commercialPantry),
           cafeteria: Boolean(formData.commercialCafeteria),
           washroomType: String(formData.commercialWashroomType || "").toUpperCase(),
           serverRoom: Boolean(formData.commercialServerRoom),
           storageRoom: Boolean(formData.commercialStorageRoom),
           breakoutArea: Boolean(formData.commercialBreakoutArea),
           liftAvailable: Boolean(formData.commercialLiftAvailable),
-          powerBackup: Boolean(formData.commercialPowerBackup),
+          powerBackup: getSubtypeCheckbox(subtypeData, "powerBackup") || Boolean(formData.commercialPowerBackup),
           centralAC: Boolean(formData.commercialCentralAC),
         },
         buildingDetails: {
           totalFloors: toNumberOrNull(formData.commercialBuildingTotalFloors),
-          parkingType: String(formData.commercialParkingType || "").toUpperCase(),
-          parkingSlots: toNumberOrNull(formData.commercialParkingSlots),
+          parkingType:
+            String(formData.commercialParkingType || "").toUpperCase()
+            || (getSubtypeCheckbox(subtypeData, "parking", "reservedParking") ? "COVERED" : ""),
+          parkingSlots:
+            toNumberOrNull(formData.commercialParkingSlots)
+            ?? (getSubtypeCheckbox(subtypeData, "parking", "reservedParking") ? 1 : null),
           securityType: String(formData.commercialSecurityType || "").toUpperCase(),
           fireSafety: Boolean(formData.commercialFireSafety),
         },
@@ -1443,7 +1676,8 @@ const AssetVault = () => {
 
     if (inventoryType === "RESIDENTIAL") {
       payload.residentialDetails = {
-        propertyType: String(formData.residentialPropertyType || "").toUpperCase(),
+        propertyType: normalizeInventoryResidentialPropertyType(formData.residentialPropertyType),
+        subtypeData,
         bhkType: String(formData.residentialBhkType || "").toUpperCase(),
         bedrooms: toNumberOrNull(formData.residentialBedrooms),
         bathrooms: toNumberOrNull(formData.residentialBathrooms),
@@ -1599,15 +1833,20 @@ const AssetVault = () => {
         asset.price === null || asset.price === undefined || Number.isNaN(Number(asset.price))
           ? ""
           : String(asset.price),
+      rent:
+        asset.rent === null || asset.rent === undefined || Number.isNaN(Number(asset.rent))
+          ? ""
+          : String(asset.rent),
       type: asset.type || "Sale",
-      category: asset.category || "Apartment",
+      category: normalizeInventoryCategory(asset.category, asset.inventoryType || "COMMERCIAL"),
       status: resolvedStatus,
       officeType: existingCommercial.officeType || "",
       commercialTotalCabins: existingCommercialLayout.totalCabins ?? "",
+      commercialCabinSeats: existingCommercialLayout.cabinSeats ?? "",
       commercialWorkstations: existingCommercialLayout.workstations ?? "",
       commercialSeats: existingCommercialLayout.seats ?? "",
       commercialConferenceRooms: existingCommercialLayout.conferenceRooms ?? "",
-      commercialMeetingRooms: existingCommercialLayout.meetingRooms ?? "",
+      commercialConferenceSeats: existingCommercialLayout.conferenceSeats ?? "",
       commercialReceptionArea: Boolean(existingCommercialLayout.receptionArea),
       commercialWaitingArea: Boolean(existingCommercialLayout.waitingArea),
       commercialPantry: Boolean(existingCommercialAmenities.pantry),
@@ -1629,7 +1868,11 @@ const AssetVault = () => {
       commercialAvailableFrom: existingCommercialAvailability.availableFrom
         ? new Date(existingCommercialAvailability.availableFrom).toISOString().slice(0, 10)
         : "",
-      residentialPropertyType: existingResidential.propertyType || "",
+      inventorySubtypeData:
+        String(asset.inventoryType || "COMMERCIAL").toUpperCase() === "COMMERCIAL"
+          ? { ...(existingCommercial.subtypeData || {}) }
+          : { ...(existingResidential.subtypeData || {}) },
+      residentialPropertyType: normalizeInventoryResidentialPropertyType(existingResidential.propertyType),
       residentialBhkType: existingResidential.bhkType || "",
       residentialBedrooms: existingResidential.bedrooms ?? "",
       residentialBathrooms: existingResidential.bathrooms ?? "",
@@ -2012,6 +2255,92 @@ const AssetVault = () => {
     }
   };
 
+  const inventoryRequirementSection = (
+    <div className={`${INVENTORY_MODAL_SECTION_CLASS} space-y-2 sm:col-span-2`}>
+      <div className={INVENTORY_MODAL_SECTION_HEADING_CLASS}>
+        Inventory Requirement (Lead Format)
+      </div>
+
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 sm:gap-4">
+        <div>
+          <label className={INVENTORY_MODAL_FIELD_TITLE_CLASS}>
+            {formData.inventoryType === "COMMERCIAL" ? "Commercial Property Type" : "Residential Property Type"}
+          </label>
+          <InventoryModalSelect
+            value={inventorySubtype}
+            onChange={(event) => {
+              const nextSubtype = event.target.value;
+              setInventoryCustomNumberFields({});
+              setFormData((prev) => ({
+                ...prev,
+                officeType: prev.inventoryType === "COMMERCIAL" ? nextSubtype : "",
+                residentialPropertyType:
+                  prev.inventoryType === "RESIDENTIAL"
+                    ? normalizeInventoryResidentialPropertyType(nextSubtype)
+                    : "",
+                inventorySubtypeData: {},
+                category:
+                  prev.inventoryType === "RESIDENTIAL"
+                    ? normalizeInventoryCategory(nextSubtype, "RESIDENTIAL")
+                    : nextSubtype
+                      ? titleCaseFromToken(nextSubtype)
+                      : prev.category,
+                furnishingStatus:
+                  getPropertySubtypeConfig(prev.inventoryType, nextSubtype)?.showFurnishing === false
+                    ? ""
+                    : prev.furnishingStatus,
+              }));
+            }}
+            className="mt-1 font-bold"
+          >
+            <option value="">Property Type</option>
+            {inventorySubtypeOptions.map((option) => (
+              <option key={option.value} value={option.value}>{option.label}</option>
+            ))}
+          </InventoryModalSelect>
+        </div>
+
+        {inventoryFurnishingOptions.length ? (
+          <div>
+            <label className={INVENTORY_MODAL_FIELD_TITLE_CLASS}>
+              Furnishing
+            </label>
+            <InventoryModalSelect
+              value={formData.furnishingStatus}
+              onChange={(event) => setFormData((prev) => ({ ...prev, furnishingStatus: event.target.value }))}
+              className="mt-1 font-bold"
+            >
+              <option value="">Select furnishing</option>
+              {inventoryFurnishingOptions.map((option) => (
+                <option key={option.value} value={option.value}>{option.label}</option>
+              ))}
+            </InventoryModalSelect>
+          </div>
+        ) : null}
+      </div>
+
+      {inventorySubtypeConfig ? (
+        <>
+          <div>
+            <div className={INVENTORY_MODAL_SECTION_HEADING_CLASS}>
+              {inventorySubtypeConfig.label} Preferences
+            </div>
+            <div className="grid grid-cols-1 gap-2 md:grid-cols-2">
+              {(inventorySubtypeConfig.fields || [])
+                .filter((field) => field.type !== "checkbox")
+                .map(renderInventorySubtypeField)}
+            </div>
+          </div>
+          <div className="flex flex-wrap gap-2">
+            {(inventorySubtypeConfig.fields || [])
+              .filter((field) => field.type === "checkbox")
+              .map(renderInventorySubtypeField)}
+          </div>
+        </>
+      ) : null}
+    </div>
+  );
+
   return (
     <div className="ui-page-shell asset-vault-page custom-scrollbar relative flex flex-col bg-slate-50/50">
       <AssetVaultToolbar
@@ -2141,10 +2470,10 @@ const AssetVault = () => {
               initial={{ scale: 0.95, y: 20 }}
               animate={{ scale: 1, y: 0 }}
               exit={{ scale: 0.95, y: 20 }}
-              className="mobile-fullscreen-panel flex h-dvh max-h-dvh w-full max-w-lg flex-col overflow-hidden bg-white shadow-2xl sm:h-auto sm:max-h-[90vh] sm:rounded-2xl"
+              className="mobile-fullscreen-panel ui-soft-panel flex h-dvh max-h-dvh w-full max-w-3xl flex-col overflow-hidden bg-white shadow-2xl sm:h-auto sm:max-h-[92vh] sm:rounded-2xl"
             >
-              <div className="flex shrink-0 items-center justify-between border-b border-slate-100 bg-slate-50/50 p-4 sm:p-6">
-                <h3 className="min-w-0 truncate font-display text-base text-slate-900 sm:text-lg">
+              <div className="flex shrink-0 items-center justify-between border-b border-slate-200 px-4 py-3 sm:px-5">
+                <h3 className="min-w-0 truncate text-lg font-bold text-slate-900">
                   {isEditModalOpen
                     ? canManage
                       ? "Edit Property"
@@ -2153,7 +2482,8 @@ const AssetVault = () => {
                 </h3>
                 <button
                   onClick={closeFormModal}
-                  className="ml-3 inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-full text-slate-400 hover:bg-slate-200"
+                  className="ml-3 inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-xl text-slate-600 hover:bg-slate-100"
+                  aria-label="Close inventory modal"
                 >
                   <X size={18} />
                 </button>
@@ -2161,9 +2491,10 @@ const AssetVault = () => {
 
               <ToastNotice message={formError} type="error" />
 
-              <div className="mobile-modal-scroll custom-scrollbar flex-1 space-y-4 p-3 sm:p-6">
-                <div>
-                  <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-2 block">
+              <div className="mobile-modal-scroll custom-scrollbar flex-1 space-y-3 px-3 py-3 sm:px-5">
+                <div className={INVENTORY_MODAL_SECTION_CLASS}>
+                  <div className={INVENTORY_MODAL_SECTION_HEADING_CLASS}>Inventory Media</div>
+                  <label className={`${INVENTORY_MODAL_FIELD_TITLE_CLASS} mb-2 block`}>
                     Property Images
                   </label>
 
@@ -2215,7 +2546,8 @@ const AssetVault = () => {
                   </div>
                 </div>
 
-                <div>
+                <div className={INVENTORY_MODAL_SECTION_CLASS}>
+                  <div className={INVENTORY_MODAL_SECTION_HEADING_CLASS}>Inventory Details</div>
                   <div className="mb-4 grid grid-cols-1 gap-3 sm:grid-cols-2 sm:gap-4">
                     <div>
                       <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">
@@ -2235,7 +2567,20 @@ const AssetVault = () => {
                       </label>
                       <select
                         value={formData.inventoryType}
-                        onChange={(e) => setFormData((prev) => ({ ...prev, inventoryType: e.target.value }))}
+                        onChange={(e) => {
+                          const nextInventoryType = e.target.value;
+                          setFormData((prev) => ({
+                            ...prev,
+                            inventoryType: nextInventoryType,
+                            category: nextInventoryType === "COMMERCIAL" ? "Office" : "Flat",
+                            inventorySubtypeData: {},
+                            officeType: nextInventoryType === "COMMERCIAL" ? prev.officeType : "",
+                            residentialPropertyType:
+                              nextInventoryType === "RESIDENTIAL"
+                                ? normalizeInventoryResidentialPropertyType(prev.residentialPropertyType)
+                                : "",
+                          }));
+                        }}
                         className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl text-sm font-bold text-slate-900 focus:outline-none focus:border-emerald-500 mt-1"
                       >
                         <option value="COMMERCIAL">Commercial</option>
@@ -2244,7 +2589,7 @@ const AssetVault = () => {
                     </div>
                   </div>
 
-                  <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">
+                  <label className={INVENTORY_MODAL_FIELD_TITLE_CLASS}>
                     Property / Project Name
                   </label>
                   <input
@@ -2256,7 +2601,12 @@ const AssetVault = () => {
                   />
                 </div>
 
-                <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 sm:gap-4">
+                {inventoryRequirementSection}
+
+                <div className={`${INVENTORY_MODAL_SECTION_CLASS} grid grid-cols-1 gap-3 sm:grid-cols-2 sm:gap-4`}>
+                  <div className="sm:col-span-2">
+                    <div className={INVENTORY_MODAL_SECTION_HEADING_CLASS}>Pricing & Location</div>
+                  </div>
                   <div>
                     <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">
                       Price (Rs)
@@ -2266,6 +2616,20 @@ const AssetVault = () => {
                       placeholder="12500000"
                       value={formData.price}
                       onChange={(e) => setFormData((prev) => ({ ...prev, price: e.target.value }))}
+                      className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl text-sm font-mono text-slate-900 focus:outline-none focus:border-emerald-500 mt-1"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">
+                      Rent (Rs)
+                    </label>
+                    <input
+                      type="number"
+                      min="0"
+                      placeholder="85000"
+                      value={formData.rent}
+                      onChange={(e) => setFormData((prev) => ({ ...prev, rent: e.target.value }))}
                       className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl text-sm font-mono text-slate-900 focus:outline-none focus:border-emerald-500 mt-1"
                     />
                   </div>
@@ -2553,7 +2917,7 @@ const AssetVault = () => {
                     </select>
                   </div>
 
-                  <div>
+                  <div className="hidden">
                     <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">
                       Category
                     </label>
@@ -2562,14 +2926,32 @@ const AssetVault = () => {
                       onChange={(e) => setFormData((prev) => ({ ...prev, category: e.target.value }))}
                       className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl text-sm font-bold text-slate-900 focus:outline-none focus:border-emerald-500 mt-1"
                     >
-                      <option value="Apartment">Apartment</option>
-                      <option value="Villa">Villa</option>
-                      <option value="Office">Office</option>
-                      <option value="Plot">Plot</option>
+                      {formData.inventoryType === "COMMERCIAL" ? (
+                        <>
+                          <option value="Office">Office</option>
+                          <option value="Coworking">Coworking</option>
+                          <option value="Managed Office">Managed Office</option>
+                          <option value="Shop">Shop</option>
+                          <option value="Showroom">Showroom</option>
+                          <option value="Cafe">Cafe</option>
+                          <option value="Rooftop">Rooftop</option>
+                          <option value="Warehouse">Warehouse</option>
+                          <option value="Industrial">Industrial</option>
+                          <option value="Other">Other</option>
+                        </>
+                      ) : (
+                        <>
+                          <option value="Flat">Flat</option>
+                          <option value="House">House</option>
+                          <option value="Plot">Plot</option>
+                          <option value="PG / Hostel">PG / Hostel</option>
+                          <option value="Other">Other</option>
+                        </>
+                      )}
                     </select>
                   </div>
 
-                  <div>
+                  <div className="hidden">
                     <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">
                       Furnishing Status
                     </label>
@@ -2586,20 +2968,6 @@ const AssetVault = () => {
                       <option value="WARM_SHELL">Warm Shell</option>
                       <option value="MANAGED_OFFICE">Managed Office</option>
                       <option value="COWORKING">Coworking</option>
-                    </select>
-                  </div>
-
-                  <div>
-                    <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">
-                      Area Unit
-                    </label>
-                    <select
-                      value={formData.areaUnit}
-                      onChange={(e) => setFormData((prev) => ({ ...prev, areaUnit: e.target.value }))}
-                      className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl text-sm font-bold text-slate-900 focus:outline-none focus:border-emerald-500 mt-1"
-                    >
-                      <option value="SQ_FT">Sq Ft</option>
-                      <option value="SQ_M">Sq M</option>
                     </select>
                   </div>
 
@@ -2620,7 +2988,7 @@ const AssetVault = () => {
                     </select>
                   </div>
 
-                  {formData.inventoryType === "COMMERCIAL" ? (
+                  {SHOW_LEGACY_INVENTORY_DETAIL_FIELDS && formData.inventoryType === "COMMERCIAL" ? (
                     <div className="space-y-4 rounded-xl border border-slate-200 bg-slate-50/80 p-3 sm:col-span-2 sm:p-4">
                       <p className="text-[10px] font-bold uppercase tracking-widest text-slate-500">
                         Commercial Office Details
@@ -2629,20 +2997,38 @@ const AssetVault = () => {
                       <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 sm:gap-4">
                         <div>
                           <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">
-                            Office Type
+                            Commercial Property Type
                           </label>
                           <select
                             value={formData.officeType}
-                            onChange={(e) => setFormData((prev) => ({ ...prev, officeType: e.target.value }))}
+                            onChange={(e) => {
+                              const nextOfficeType = e.target.value;
+                              setFormData((prev) => ({
+                                ...prev,
+                                officeType: nextOfficeType,
+                                inventorySubtypeData: {},
+                                category: nextOfficeType
+                                  ? nextOfficeType
+                                      .toLowerCase()
+                                      .split("_")
+                                      .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
+                                      .join(" ")
+                                  : prev.category,
+                              }));
+                            }}
                             className="w-full p-3 bg-white border border-slate-200 rounded-xl text-sm font-bold text-slate-900 focus:outline-none focus:border-emerald-500 mt-1"
                           >
-                            <option value="">Select office type</option>
-                            <option value="BARE_SHELL">Bare Shell</option>
-                            <option value="WARM_SHELL">Warm Shell</option>
-                            <option value="SEMI_FURNISHED">Semi Furnished</option>
-                            <option value="FULLY_FURNISHED">Fully Furnished</option>
-                            <option value="MANAGED_OFFICE">Managed Office</option>
+                            <option value="">Select property type</option>
+                            <option value="OFFICE">Office</option>
                             <option value="COWORKING">Coworking</option>
+                            <option value="MANAGED_OFFICE">Managed Office</option>
+                            <option value="SHOP">Shop</option>
+                            <option value="SHOWROOM">Showroom</option>
+                            <option value="CAFE">Cafe</option>
+                            <option value="ROOFTOP">Rooftop</option>
+                            <option value="WAREHOUSE">Warehouse</option>
+                            <option value="INDUSTRIAL">Industrial</option>
+                            <option value="OTHER">Other</option>
                           </select>
                         </div>
 
@@ -2668,7 +3054,7 @@ const AssetVault = () => {
                       <div className="grid grid-cols-1 gap-3 sm:grid-cols-3 sm:gap-4">
                         <div>
                           <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">
-                            Total Cabins
+                            Cabins
                           </label>
                           <input
                             type="number"
@@ -2676,6 +3062,20 @@ const AssetVault = () => {
                             value={formData.commercialTotalCabins}
                             onChange={(e) =>
                               setFormData((prev) => ({ ...prev, commercialTotalCabins: e.target.value }))
+                            }
+                            className="w-full p-3 bg-white border border-slate-200 rounded-xl text-sm text-slate-900 focus:outline-none focus:border-emerald-500 mt-1"
+                          />
+                        </div>
+                        <div>
+                          <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">
+                            Cabin Seats
+                          </label>
+                          <input
+                            type="number"
+                            min="0"
+                            value={formData.commercialCabinSeats}
+                            onChange={(e) =>
+                              setFormData((prev) => ({ ...prev, commercialCabinSeats: e.target.value }))
                             }
                             className="w-full p-3 bg-white border border-slate-200 rounded-xl text-sm text-slate-900 focus:outline-none focus:border-emerald-500 mt-1"
                           />
@@ -2722,14 +3122,14 @@ const AssetVault = () => {
                         </div>
                         <div>
                           <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">
-                            Meeting Rooms
+                            Conference Seats
                           </label>
                           <input
                             type="number"
                             min="0"
-                            value={formData.commercialMeetingRooms}
+                            value={formData.commercialConferenceSeats}
                             onChange={(e) =>
-                              setFormData((prev) => ({ ...prev, commercialMeetingRooms: e.target.value }))
+                              setFormData((prev) => ({ ...prev, commercialConferenceSeats: e.target.value }))
                             }
                             className="w-full p-3 bg-white border border-slate-200 rounded-xl text-sm text-slate-900 focus:outline-none focus:border-emerald-500 mt-1"
                           />
@@ -2753,7 +3153,7 @@ const AssetVault = () => {
                       <div className="grid grid-cols-1 gap-3 sm:grid-cols-3 sm:gap-4">
                         <div>
                           <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">
-                            Parking Type
+                            Reserved Parking Type
                           </label>
                           <select
                             value={formData.commercialParkingType}
@@ -2762,7 +3162,7 @@ const AssetVault = () => {
                             }
                             className="w-full p-3 bg-white border border-slate-200 rounded-xl text-sm text-slate-900 focus:outline-none focus:border-emerald-500 mt-1"
                           >
-                            <option value="">Select parking</option>
+                            <option value="">Select reserved parking</option>
                             <option value="COVERED">Covered</option>
                             <option value="OPEN">Open</option>
                             <option value="BOTH">Both</option>
@@ -2771,7 +3171,7 @@ const AssetVault = () => {
                         </div>
                         <div>
                           <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">
-                            Parking Slots
+                            Reserved Parking Slots
                           </label>
                           <input
                             type="number"
@@ -2852,7 +3252,7 @@ const AssetVault = () => {
                     </div>
                   ) : null}
 
-                  {formData.inventoryType === "RESIDENTIAL" ? (
+                  {SHOW_LEGACY_INVENTORY_DETAIL_FIELDS && formData.inventoryType === "RESIDENTIAL" ? (
                     <div className="space-y-4 rounded-xl border border-slate-200 bg-slate-50/80 p-3 sm:col-span-2 sm:p-4">
                       <p className="text-[10px] font-bold uppercase tracking-widest text-slate-500">
                         Residential Details
@@ -2866,15 +3266,31 @@ const AssetVault = () => {
                           <select
                             value={formData.residentialPropertyType}
                             onChange={(e) =>
-                              setFormData((prev) => ({ ...prev, residentialPropertyType: e.target.value }))
+                              setFormData((prev) => {
+                                const nextPropertyType = normalizeInventoryResidentialPropertyType(e.target.value);
+                                const nextCategory =
+                                  nextPropertyType === "PG_HOSTEL"
+                                    ? "PG / Hostel"
+                                    : nextPropertyType
+                                        .toLowerCase()
+                                        .split("_")
+                                        .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
+                                        .join(" ");
+                                return {
+                                  ...prev,
+                                  residentialPropertyType: nextPropertyType,
+                                  inventorySubtypeData: {},
+                                  category: nextPropertyType ? nextCategory : prev.category,
+                                };
+                              })
                             }
                             className="w-full p-3 bg-white border border-slate-200 rounded-xl text-sm text-slate-900 focus:outline-none focus:border-emerald-500 mt-1"
                           >
                             <option value="">Select property type</option>
                             <option value="FLAT">Flat</option>
-                            <option value="VILLA">Villa</option>
-                            <option value="BUILDER_FLOOR">Builder Floor</option>
+                            <option value="HOUSE">House</option>
                             <option value="PLOT">Plot</option>
+                            <option value="PG_HOSTEL">PG / Hostel</option>
                             <option value="OTHER">Other</option>
                           </select>
                         </div>
@@ -2901,7 +3317,7 @@ const AssetVault = () => {
                         </div>
                         <div>
                           <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">
-                            Parking Slots
+                            Reserved Parking Slots
                           </label>
                           <input
                             type="number"

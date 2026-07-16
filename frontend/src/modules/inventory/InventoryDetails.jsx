@@ -470,6 +470,7 @@ const InventoryDetails = () => {
           <FieldRow label="Property ID" value={inventory?.propertyId || asset?.propertyId} />
           <FieldRow label="Inventory Type" value={formatEnumLabel(inventoryType)} />
           <FieldRow label="Price" value={formatPrice(inventory?.price ?? asset?.price)} />
+          <FieldRow label="Rent" value={formatPrice(inventory?.rent ?? asset?.rent)} />
           <FieldRow label="Furnishing" value={formatEnumLabel(inventory?.furnishingStatus || asset?.furnishingStatus)} />
           <FieldRow label="Location" value={inventory?.location || asset?.location} />
           <FieldRow label="City" value={inventory?.city || asset?.city} />
@@ -519,12 +520,13 @@ const InventoryDetails = () => {
               <h2 className="text-sm font-bold uppercase tracking-widest text-slate-500 mb-2">
                 Commercial Office Details
               </h2>
-              <FieldRow label="Office Type" value={formatEnumLabel(commercialDetails?.officeType)} />
-              <FieldRow label="Total Cabins" value={commercialLayout?.totalCabins} />
+              <FieldRow label="Commercial Property Type" value={formatEnumLabel(commercialDetails?.officeType)} />
+              <FieldRow label="Cabins" value={commercialLayout?.totalCabins} />
+              <FieldRow label="Cabin Seats" value={commercialLayout?.cabinSeats} />
               <FieldRow label="Workstations" value={commercialLayout?.workstations} />
               <FieldRow label="Seats" value={commercialLayout?.seats} />
               <FieldRow label="Conference Rooms" value={commercialLayout?.conferenceRooms} />
-              <FieldRow label="Meeting Rooms" value={commercialLayout?.meetingRooms} />
+              <FieldRow label="Conference Seats" value={commercialLayout?.conferenceSeats} />
               <FieldRow label="Reception Area" value={formatYesNo(commercialLayout?.receptionArea)} />
               <FieldRow label="Waiting Area" value={formatYesNo(commercialLayout?.waitingArea)} />
               <FieldRow label="Pantry" value={formatYesNo(commercialAmenities?.pantry)} />
@@ -536,8 +538,8 @@ const InventoryDetails = () => {
               <FieldRow label="Lift Available" value={formatYesNo(commercialAmenities?.liftAvailable)} />
               <FieldRow label="Power Backup" value={formatYesNo(commercialAmenities?.powerBackup)} />
               <FieldRow label="Central AC" value={formatYesNo(commercialAmenities?.centralAC)} />
-              <FieldRow label="Parking Type" value={formatEnumLabel(commercialBuilding?.parkingType)} />
-              <FieldRow label="Parking Slots" value={commercialBuilding?.parkingSlots} />
+              <FieldRow label="Reserved Parking Type" value={formatEnumLabel(commercialBuilding?.parkingType)} />
+              <FieldRow label="Reserved Parking Slots" value={commercialBuilding?.parkingSlots} />
               <FieldRow label="Security" value={formatEnumLabel(commercialBuilding?.securityType)} />
               <FieldRow label="Fire Safety" value={formatYesNo(commercialBuilding?.fireSafety)} />
               <FieldRow label="Ready To Move" value={formatYesNo(commercialAvailability?.readyToMove)} />
@@ -561,7 +563,7 @@ const InventoryDetails = () => {
               <FieldRow label="Balcony" value={residentialDetails?.balcony} />
               <FieldRow label="Study Room" value={formatYesNo(residentialDetails?.studyRoom)} />
               <FieldRow label="Servant Room" value={formatYesNo(residentialDetails?.servantRoom)} />
-              <FieldRow label="Parking Slots" value={residentialDetails?.parking} />
+              <FieldRow label="Reserved Parking Slots" value={residentialDetails?.parking} />
               <FieldRow label="Modular Kitchen" value={formatYesNo(residentialAmenities?.modularKitchen)} />
               <FieldRow label="Lift" value={formatYesNo(residentialAmenities?.lift)} />
               <FieldRow label="Security" value={formatYesNo(residentialAmenities?.security)} />

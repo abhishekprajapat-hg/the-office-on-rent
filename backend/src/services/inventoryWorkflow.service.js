@@ -84,6 +84,14 @@ const COMMERCIAL_OFFICE_TYPES = Object.freeze([
   "FULLY_FURNISHED",
   "MANAGED_OFFICE",
   "COWORKING",
+  "OFFICE",
+  "SHOP",
+  "SHOWROOM",
+  "CAFE",
+  "ROOFTOP",
+  "WAREHOUSE",
+  "INDUSTRIAL",
+  "OTHER",
 ]);
 const COMMERCIAL_WASHROOM_TYPES = Object.freeze(["", "ATTACHED", "COMMON", "BOTH"]);
 const COMMERCIAL_PARKING_TYPES = Object.freeze(["", "NONE", "COVERED", "OPEN", "BOTH"]);
@@ -91,9 +99,9 @@ const COMMERCIAL_SECURITY_TYPES = Object.freeze(["", "NONE", "SECURITY_24X7", "C
 const RESIDENTIAL_PROPERTY_TYPES = Object.freeze([
   "",
   "FLAT",
-  "VILLA",
-  "BUILDER_FLOOR",
+  "HOUSE",
   "PLOT",
+  "PG_HOSTEL",
   "OTHER",
 ]);
 const RESIDENTIAL_BHK_TYPES = Object.freeze([
@@ -114,6 +122,14 @@ const RESIDENTIAL_WATER_SUPPLY_TYPES = Object.freeze([
   "BOTH",
   "OTHER",
 ]);
+
+const normalizeResidentialPropertyType = (value) => {
+  const normalized = toUpperSnake(value);
+  if (["INDEPENDENT_HOUSE", "VILLA", "BUILDER_FLOOR"].includes(normalized)) return "HOUSE";
+  if (normalized === "APARTMENT") return "FLAT";
+  if (["PG", "HOSTEL", "PG_HOSTEL"].includes(normalized)) return "PG_HOSTEL";
+  return normalized;
+};
 
 const createHttpError = (statusCode, message) => {
   const error = new Error(message);
@@ -136,6 +152,20 @@ const sanitizeString = (value) => {
 
 const sanitizeCappedString = (value, maxLength = 200) =>
   sanitizeString(value).slice(0, Math.max(1, maxLength));
+
+const sanitizeSubtypeData = (value) => {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return {};
+
+  return Object.fromEntries(
+    Object.entries(value)
+      .filter(([key]) => isSafeKey(key))
+      .map(([key, entryValue]) => {
+        if (typeof entryValue === "boolean") return [key, entryValue];
+        if (entryValue === null || entryValue === undefined) return [key, ""];
+        return [key, String(entryValue).trim().slice(0, 500)];
+      }),
+  );
+};
 
 const toBoolean = (value, fallback = false) => {
   if (typeof value === "boolean") return value;
@@ -387,20 +417,36 @@ const normalizeLegacyCategory = (category) => {
 
   const normalized = cleanCategory.toLowerCase();
   if (["apartment", "apartments", "flat", "flats"].includes(normalized)) {
-    return "Apartment";
+    return "Flat";
   }
 
-  if (["villa", "villas"].includes(normalized)) {
-    return "Villa";
+  if (["house", "houses", "villa", "villas", "builder floor", "builder_floor"].includes(normalized)) {
+    return "House";
   }
 
-  if (["office", "offices", "commercial"].includes(normalized)) {
-    return "Office";
+  if (["pg", "hostel", "pg / hostel", "pg_hostel"].includes(normalized)) {
+    return "PG / Hostel";
   }
 
   if (["plot", "plots", "land"].includes(normalized)) {
     return "Plot";
   }
+
+  const commercialCategoryMap = {
+    office: "Office",
+    offices: "Office",
+    commercial: "Office",
+    coworking: "Coworking",
+    "managed office": "Managed Office",
+    managed_office: "Managed Office",
+    shop: "Shop",
+    showroom: "Showroom",
+    cafe: "Cafe",
+    rooftop: "Rooftop",
+    warehouse: "Warehouse",
+    industrial: "Industrial",
+  };
+  if (commercialCategoryMap[normalized]) return commercialCategoryMap[normalized];
 
   return cleanCategory;
 };
@@ -408,7 +454,19 @@ const normalizeLegacyCategory = (category) => {
 const resolveInventoryTypeFromCategory = (category) => {
   const normalized = sanitizeString(category).toLowerCase();
   if (!normalized) return "COMMERCIAL";
-  if (["office", "commercial", "coworking", "managed office", "managed_office"].includes(normalized)) {
+  if ([
+    "office",
+    "commercial",
+    "coworking",
+    "managed office",
+    "managed_office",
+    "shop",
+    "showroom",
+    "cafe",
+    "rooftop",
+    "warehouse",
+    "industrial",
+  ].includes(normalized)) {
     return "COMMERCIAL";
   }
   return "RESIDENTIAL";
@@ -429,19 +487,26 @@ const sanitizeCommercialDetailsPayload = (value) => {
   const amenities = value.amenities || {};
   const buildingDetails = value.buildingDetails || {};
   const availability = value.availability || {};
+  const subtypeData = sanitizeSubtypeData(value.subtypeData);
 
   const workstations = sanitizeNonNegativeNumber(
-    officeLayout.workstations ?? officeLayout.seats,
+    officeLayout.workstations ?? subtypeData.workstations ?? subtypeData.workstation ?? officeLayout.seats,
     "commercialDetails.officeLayout.workstations",
   );
   const seats = sanitizeNonNegativeNumber(
-    officeLayout.seats ?? officeLayout.workstations,
+    officeLayout.seats ?? subtypeData.seats ?? subtypeData.requiredSeats ?? officeLayout.workstations,
     "commercialDetails.officeLayout.seats",
+  );
+  const totalCabins = sanitizeNonNegativeNumber(
+    officeLayout.totalCabins ?? subtypeData.cabins ?? subtypeData.privateCabins,
+    "commercialDetails.officeLayout.totalCabins",
   );
   const parkingSlots = sanitizeNonNegativeNumber(
     buildingDetails.parkingSlots ?? amenities.parkingSlots,
     "commercialDetails.buildingDetails.parkingSlots",
   );
+  const hasReservedParking =
+    toBoolean(subtypeData.parking, false) || toBoolean(subtypeData.reservedParking, false);
 
   const availableFromRaw = availability.availableFrom;
   const availableFromDate = availableFromRaw ? new Date(availableFromRaw) : null;
@@ -453,25 +518,27 @@ const sanitizeCommercialDetailsPayload = (value) => {
       "commercialDetails.officeType",
     ),
     officeLayout: {
-      totalCabins: sanitizeNonNegativeNumber(
-        officeLayout.totalCabins,
-        "commercialDetails.officeLayout.totalCabins",
+      totalCabins,
+      cabinSeats: sanitizeNonNegativeNumber(
+        officeLayout.cabinSeats ?? subtypeData.cabinSeats,
+        "commercialDetails.officeLayout.cabinSeats",
       ),
       workstations,
       seats,
       conferenceRooms: sanitizeNonNegativeNumber(
-        officeLayout.conferenceRooms,
+        officeLayout.conferenceRooms ?? subtypeData.conferenceRooms,
         "commercialDetails.officeLayout.conferenceRooms",
       ),
-      meetingRooms: sanitizeNonNegativeNumber(
-        officeLayout.meetingRooms,
-        "commercialDetails.officeLayout.meetingRooms",
+      conferenceSeats: sanitizeNonNegativeNumber(
+        officeLayout.conferenceSeats ?? subtypeData.conferenceSeats,
+        "commercialDetails.officeLayout.conferenceSeats",
       ),
-      receptionArea: toBoolean(officeLayout.receptionArea, false),
+      receptionArea: toBoolean(officeLayout.receptionArea ?? subtypeData.receptionArea ?? subtypeData.reception, false),
       waitingArea: toBoolean(officeLayout.waitingArea, false),
     },
+    subtypeData,
     amenities: {
-      pantry: toBoolean(amenities.pantry, false),
+      pantry: toBoolean(amenities.pantry ?? subtypeData.pantry, false),
       cafeteria: toBoolean(amenities.cafeteria, false),
       washroomType: sanitizeEnum(
         amenities.washroomType || "",
@@ -482,7 +549,7 @@ const sanitizeCommercialDetailsPayload = (value) => {
       storageRoom: toBoolean(amenities.storageRoom, false),
       breakoutArea: toBoolean(amenities.breakoutArea, false),
       liftAvailable: toBoolean(amenities.liftAvailable ?? amenities.lift, false),
-      powerBackup: toBoolean(amenities.powerBackup, false),
+      powerBackup: toBoolean(amenities.powerBackup ?? subtypeData.powerBackup, false),
       centralAC: toBoolean(amenities.centralAC, false),
     },
     buildingDetails: {
@@ -491,11 +558,11 @@ const sanitizeCommercialDetailsPayload = (value) => {
         "commercialDetails.buildingDetails.totalFloors",
       ),
       parkingType: sanitizeEnum(
-        buildingDetails.parkingType || "",
+        buildingDetails.parkingType || (hasReservedParking ? "COVERED" : ""),
         COMMERCIAL_PARKING_TYPES,
         "commercialDetails.buildingDetails.parkingType",
       ),
-      parkingSlots,
+      parkingSlots: parkingSlots ?? (hasReservedParking ? 1 : null),
       securityType: sanitizeEnum(
         buildingDetails.securityType || "",
         COMMERCIAL_SECURITY_TYPES,
@@ -519,13 +586,15 @@ const sanitizeResidentialDetailsPayload = (value) => {
 
   const amenities = value.amenities || {};
   const utilities = value.utilities || {};
+  const subtypeData = sanitizeSubtypeData(value.subtypeData);
 
   return {
     propertyType: sanitizeEnum(
-      value.propertyType || "",
+      normalizeResidentialPropertyType(value.propertyType || ""),
       RESIDENTIAL_PROPERTY_TYPES,
       "residentialDetails.propertyType",
     ),
+    subtypeData,
     bhkType: sanitizeEnum(value.bhkType || "", RESIDENTIAL_BHK_TYPES, "residentialDetails.bhkType"),
     bedrooms: sanitizeNonNegativeNumber(value.bedrooms, "residentialDetails.bedrooms"),
     bathrooms: sanitizeNonNegativeNumber(value.bathrooms, "residentialDetails.bathrooms"),
@@ -912,7 +981,7 @@ const sanitizeInventoryPayload = ({
       return;
     }
 
-    if (field === "deposit" && value === null) {
+    if ((field === "deposit" || field === "rent") && value === null) {
       safePayload[field] = null;
       return;
     }
@@ -944,6 +1013,11 @@ const sanitizeInventoryPayload = ({
         throw createHttpError(400, "price must be a valid positive number");
       }
       safePayload[field] = parsedPrice;
+      return;
+    }
+
+    if (field === "rent") {
+      safePayload[field] = sanitizeNonNegativeNumber(value, "rent");
       return;
     }
 
@@ -1786,7 +1860,7 @@ const createInventoryUpdateRequest = async ({
     companyId,
   })
     .select(
-      "_id projectName towerName unitNumber propertyId inventoryType price deposit type category furnishingStatus status reservationReason reservationLeadId saleDetails location city area pincode buildingName floorNumber totalFloors totalArea carpetArea builtUpArea areaUnit maintenanceCharges commercialDetails residentialDetails siteLocation images documents floorPlans videoTours",
+      "_id projectName towerName unitNumber propertyId inventoryType price rent deposit type category furnishingStatus status reservationReason reservationLeadId saleDetails location city area pincode buildingName floorNumber totalFloors totalArea carpetArea builtUpArea areaUnit maintenanceCharges commercialDetails residentialDetails siteLocation images documents floorPlans videoTours",
     )
     .lean();
 
@@ -1950,6 +2024,7 @@ const createInventoryDeleteRequest = async ({
       status: inventory.status,
       location: inventory.location,
       price: inventory.price,
+      rent: inventory.rent ?? null,
       type: inventory.type,
     },
     requestNote: cleanRequestNote,

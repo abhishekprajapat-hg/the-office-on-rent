@@ -92,6 +92,7 @@ const MANUAL_LEAD_TRANSFER_TARGET_ROLES = [...LEAD_OWNER_ROLES, "FIELD_EXECUTIVE
 const MANAGEMENT_ROLES = ["MANAGER"];
 const MANUAL_LEAD_TRANSFER_ACTOR_ROLES = ["ADMIN", ...MANAGEMENT_ROLES, ...LEAD_OWNER_ROLES];
 const SITE_VISIT_RADIUS_METERS = 200;
+const CUSTOM_NUMBER_OPTION_VALUE = "__CUSTOM_NUMBER__";
 const DEAL_PAYMENT_MODES = [
   { value: "UPI", label: "UPI" },
   { value: "CASH", label: "Cash" },
@@ -254,9 +255,9 @@ const mapLeadRequirementsToDraft = (requirements = {}) => {
     furnishingStatus: toRequirementDraftText(requirements?.furnishingStatus).toUpperCase(),
     budgetMin: toRequirementDraftText(requirements?.budgetMin),
     budgetMax: toRequirementDraftText(requirements?.budgetMax),
-    areaMin: toRequirementDraftText(requirements?.areaMin),
-    areaMax: toRequirementDraftText(requirements?.areaMax),
-    areaUnit: toRequirementAreaUnit(requirements?.areaUnit || base.areaUnit),
+    areaMin: "",
+    areaMax: "",
+    areaUnit: base.areaUnit,
     commercial: {
       seats: toRequirementDraftText(commercial?.seats),
       cabins: toRequirementDraftText(commercial?.cabins),
@@ -298,21 +299,26 @@ const mapLeadRequirementsToDraft = (requirements = {}) => {
   };
 };
 
+const sanitizeRequirementSubtypeData = (subtypeData = {}) => {
+  if (!subtypeData || typeof subtypeData !== "object") return {};
+  return Object.fromEntries(
+    Object.entries(subtypeData).filter(([, value]) => value !== CUSTOM_NUMBER_OPTION_VALUE),
+  );
+};
+
 const buildLeadRequirementsPayloadFromDraft = (draft = {}) => {
   const propertySubtype = String(draft?.propertySubtype || "").trim().toUpperCase();
   const payload = {
     inventoryType: String(draft?.inventoryType || "").trim().toUpperCase(),
     propertySubtype,
-    subtypeData: draft?.subtypeData && typeof draft.subtypeData === "object"
-      ? { ...draft.subtypeData }
-      : {},
+    subtypeData: sanitizeRequirementSubtypeData(draft?.subtypeData),
     transactionType: toRequirementTransactionType(draft?.transactionType),
     furnishingStatus: String(draft?.furnishingStatus || "").trim().toUpperCase(),
     budgetMin: toAmountNumber(draft?.budgetMin),
     budgetMax: toAmountNumber(draft?.budgetMax),
-    areaMin: toAmountNumber(draft?.areaMin),
-    areaMax: toAmountNumber(draft?.areaMax),
-    areaUnit: toRequirementAreaUnit(draft?.areaUnit),
+    areaMin: null,
+    areaMax: null,
+    areaUnit: null,
   };
 
   if (propertySubtype) return payload;
@@ -410,9 +416,6 @@ const getInventoryLeadSearchText = (inventoryLike = {}) => {
     .join(" ");
 };
 
-const toRequirementAreaUnit = (value) =>
-  String(value || "").trim().toUpperCase() === "SQ_M" ? "SQ_M" : "SQ_FT";
-
 const toRequirementTransactionType = (value) => {
   const normalized = String(value || "").trim().toUpperCase();
   if (normalized === "RENT") return "RENT";
@@ -426,20 +429,14 @@ const validateLeadRequirementDraft = ({
   propertySubtype,
   budgetMin,
   budgetMax,
-  areaMin,
-  areaMax,
   subtypeData,
 } = {}) => {
   const parsedBudgetMin = toAmountNumber(budgetMin);
   const parsedBudgetMax = toAmountNumber(budgetMax);
-  const parsedAreaMin = toAmountNumber(areaMin);
-  const parsedAreaMax = toAmountNumber(areaMax);
 
   const numericChecks = [
     ["Budget Min", parsedBudgetMin],
     ["Budget Max", parsedBudgetMax],
-    ["Area Min", parsedAreaMin],
-    ["Area Max", parsedAreaMax],
   ];
 
   for (const [label, value] of numericChecks) {
@@ -447,9 +444,6 @@ const validateLeadRequirementDraft = ({
   }
   if (parsedBudgetMin !== null && parsedBudgetMax !== null && parsedBudgetMin > parsedBudgetMax) {
     return "Budget Min cannot be greater than Budget Max";
-  }
-  if (parsedAreaMin !== null && parsedAreaMax !== null && parsedAreaMin > parsedAreaMax) {
-    return "Area Min cannot be greater than Area Max";
   }
 
   const subtypeConfig = getPropertySubtypeConfig(inventoryType, propertySubtype);
@@ -479,8 +473,6 @@ const hasLeadRequirements = (formData = {}) => {
     formData.requirementsFurnishingStatus,
     formData.requirementsBudgetMin,
     formData.requirementsBudgetMax,
-    formData.requirementsAreaMin,
-    formData.requirementsAreaMax,
     formData.requirementsCommercialSeats,
     formData.requirementsCommercialCabins,
     formData.requirementsCommercialConferenceRooms,
@@ -1872,8 +1864,6 @@ const LeadsMatrix = () => {
       const inventoryType = String(selectedInventory?.inventoryType || "").trim().toUpperCase();
       const transactionType = toRequirementTransactionType(selectedInventory?.type);
       const price = toAmountNumber(selectedInventory?.price);
-      const totalArea = toAmountNumber(selectedInventory?.totalArea);
-      const areaUnit = toRequirementAreaUnit(selectedInventory?.areaUnit);
       const commercialLayout = selectedInventory?.commercialDetails?.officeLayout || {};
       const commercialAmenities = selectedInventory?.commercialDetails?.amenities || {};
       const commercialBuilding = selectedInventory?.commercialDetails?.buildingDetails || {};
@@ -1915,11 +1905,9 @@ const LeadsMatrix = () => {
           price === null ? prev.requirementsBudgetMin : String(price),
         requirementsBudgetMax:
           price === null ? prev.requirementsBudgetMax : String(price),
-        requirementsAreaMin:
-          totalArea === null ? prev.requirementsAreaMin : String(totalArea),
-        requirementsAreaMax:
-          totalArea === null ? prev.requirementsAreaMax : String(totalArea),
-        requirementsAreaUnit: areaUnit,
+        requirementsAreaMin: "",
+        requirementsAreaMax: "",
+        requirementsAreaUnit: "SQ_FT",
         requirementsCommercialSeats:
           commercialSeats === null
             ? prev.requirementsCommercialSeats
@@ -1998,8 +1986,6 @@ const LeadsMatrix = () => {
       propertySubtype: formData.requirementsPropertySubtype,
       budgetMin: formData.requirementsBudgetMin,
       budgetMax: formData.requirementsBudgetMax,
-      areaMin: formData.requirementsAreaMin,
-      areaMax: formData.requirementsAreaMax,
       subtypeData: formData.requirementsSubtypeData,
     });
     if (requirementValidationError) {
@@ -2037,16 +2023,14 @@ const LeadsMatrix = () => {
         payload.requirements = {
           inventoryType: String(formData.requirementsInventoryType || "").trim().toUpperCase(),
           propertySubtype,
-          subtypeData: formData.requirementsSubtypeData && typeof formData.requirementsSubtypeData === "object"
-            ? { ...formData.requirementsSubtypeData }
-            : {},
+          subtypeData: sanitizeRequirementSubtypeData(formData.requirementsSubtypeData),
           transactionType: toRequirementTransactionType(formData.requirementsTransactionType),
           furnishingStatus: String(formData.requirementsFurnishingStatus || "").trim().toUpperCase(),
           budgetMin: toAmountNumber(formData.requirementsBudgetMin),
           budgetMax: toAmountNumber(formData.requirementsBudgetMax),
-          areaMin: toAmountNumber(formData.requirementsAreaMin),
-          areaMax: toAmountNumber(formData.requirementsAreaMax),
-          areaUnit: toRequirementAreaUnit(formData.requirementsAreaUnit),
+          areaMin: null,
+          areaMax: null,
+          areaUnit: null,
         };
 
         if (!propertySubtype) {

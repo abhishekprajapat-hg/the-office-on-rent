@@ -3,6 +3,8 @@ $ErrorActionPreference = "Stop"
 $backendRoot = Split-Path -Parent (Split-Path -Parent $MyInvocation.MyCommand.Path)
 $localMongoHost = "127.0.0.1"
 $localMongoPort = 27018
+$remoteMongoHost = "127.0.0.1"
+$remoteMongoPort = 27017
 $sshUser = "crm"
 $sshHost = "72.60.97.58"
 $sshPort = 2424
@@ -29,7 +31,7 @@ if (-not (Test-LocalMongoPort)) {
   Write-Host "Mongo tunnel not detected on $localMongoHost`:$localMongoPort."
   Write-Host "Launching SSH tunnel window. Enter VPS password there."
 
-  $sshCommand = "ssh -o ExitOnForwardFailure=yes -o ServerAliveInterval=30 -o ServerAliveCountMax=3 -N -L $localMongoPort`:$localMongoHost`:$localMongoPort -p $sshPort $sshUser@$sshHost"
+  $sshCommand = "ssh -o ExitOnForwardFailure=yes -o ServerAliveInterval=30 -o ServerAliveCountMax=3 -N -L $localMongoPort`:$remoteMongoHost`:$remoteMongoPort -p $sshPort $sshUser@$sshHost"
 
   Start-Process -FilePath powershell -ArgumentList @(
     "-NoProfile",

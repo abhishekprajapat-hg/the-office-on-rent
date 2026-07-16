@@ -36,6 +36,30 @@ import {
   getPropertySubtypeOptions,
 } from "../../../config/propertyRequirementConfig";
 
+const CUSTOM_NUMBER_OPTION_VALUE = "__CUSTOM_NUMBER__";
+
+const RequirementAdornedInput = ({
+  adornment,
+  adornmentPosition = "left",
+  inputClassName,
+  isDark,
+  ...inputProps
+}) => (
+  <div className="relative">
+    <input
+      {...inputProps}
+      className={`${inputClassName} ${adornmentPosition === "left" ? "pl-8" : "pr-10"}`}
+    />
+    <span
+      className={`pointer-events-none absolute top-1/2 -translate-y-1/2 text-xs font-bold ${
+        adornmentPosition === "left" ? "left-2.5" : "right-2.5"
+      } ${isDark ? "text-slate-400" : "text-slate-500"}`}
+    >
+      {adornment}
+    </span>
+  </div>
+);
+
 const approvalLabel = (status) => {
   if (status === "APPROVED") return "Approved";
   if (status === "REJECTED") return "Rejected";
@@ -657,6 +681,7 @@ const LeadDetailsRebuiltContent = ({
   );
   const [visibleDiaryCount, setVisibleDiaryCount] = React.useState(INITIAL_DIARY_RENDER_COUNT);
   const [visibleActivityCount, setVisibleActivityCount] = React.useState(INITIAL_ACTIVITY_RENDER_COUNT);
+  const [customNumberFields, setCustomNumberFields] = React.useState({});
   const proposalMessageTimerRef = React.useRef(null);
   const pdfImageSourceCacheRef = React.useRef(new Map());
   const normalizedRequirementInventoryType = String(
@@ -713,6 +738,9 @@ const LeadDetailsRebuiltContent = ({
         furnishingStatus: nextConfig?.showFurnishing === false
           ? ""
           : prev?.furnishingStatus || "",
+        areaMin: "",
+        areaMax: "",
+        areaUnit: "SQ_FT",
       }));
     },
     [normalizedRequirementInventoryType, setRequirementsDraft],
@@ -731,9 +759,20 @@ const LeadDetailsRebuiltContent = ({
     [setRequirementsDraft],
   );
 
+  const updateCustomNumberField = React.useCallback((fieldKey, isCustom) => {
+    setCustomNumberFields((prev) => ({ ...prev, [fieldKey]: isCustom }));
+  }, []);
+
   const renderSubtypeField = React.useCallback(
     (field) => {
       const value = requirementsDraft?.subtypeData?.[field.key] ?? "";
+      const selectOptions = field.options || [];
+      const normalizedValue = String(value || "");
+      const isCustomNumberValue = field.allowCustomNumber
+        && normalizedValue
+        && !selectOptions.includes(normalizedValue);
+      const isCustomNumberMode = Boolean(customNumberFields[field.key] || isCustomNumberValue);
+      const selectValue = isCustomNumberMode ? CUSTOM_NUMBER_OPTION_VALUE : normalizedValue;
       const labelClass = `text-[10px] font-bold uppercase tracking-wider ${isDark ? "text-slate-400" : "text-slate-500"}`;
       const inputClassName = `h-9 w-full rounded-lg border px-2.5 text-sm ${input}`;
 
@@ -754,16 +793,40 @@ const LeadDetailsRebuiltContent = ({
         <label key={field.key} className={`space-y-1 ${field.fullWidth ? "sm:col-span-2" : ""}`}>
           <span className={labelClass}>{field.label}</span>
           {field.type === "select" ? (
-            <select
-              value={value}
-              onChange={(event) => updateRequirementSubtypeField(field.key, event.target.value)}
-              className={inputClassName}
-            >
-              <option value="">{field.label}</option>
-              {(field.options || []).map((option) => (
-                <option key={option} value={option}>{option}</option>
-              ))}
-            </select>
+            <>
+              <select
+                value={selectValue}
+                onChange={(event) => {
+                  if (event.target.value === CUSTOM_NUMBER_OPTION_VALUE) {
+                    updateCustomNumberField(field.key, true);
+                    updateRequirementSubtypeField(field.key, "");
+                    return;
+                  }
+                  updateCustomNumberField(field.key, false);
+                  updateRequirementSubtypeField(field.key, event.target.value);
+                }}
+                className={inputClassName}
+              >
+                <option value="">{field.label}</option>
+                {selectOptions.map((option) => (
+                  <option key={option} value={option}>{option}</option>
+                ))}
+                {field.allowCustomNumber ? (
+                  <option value={CUSTOM_NUMBER_OPTION_VALUE}>Custom Number</option>
+                ) : null}
+              </select>
+              {field.allowCustomNumber && isCustomNumberMode ? (
+                <input
+                  type="number"
+                  min="0"
+                  step="1"
+                  value={normalizedValue === CUSTOM_NUMBER_OPTION_VALUE ? "" : normalizedValue}
+                  onChange={(event) => updateRequirementSubtypeField(field.key, event.target.value)}
+                  placeholder="Enter custom number"
+                  className={`${inputClassName} mt-2`}
+                />
+              ) : null}
+            </>
           ) : field.type === "textarea" ? (
             <textarea
               value={value}
@@ -787,7 +850,7 @@ const LeadDetailsRebuiltContent = ({
         </label>
       );
     },
-    [input, isDark, requirementsDraft?.subtypeData, updateRequirementSubtypeField],
+    [customNumberFields, input, isDark, requirementsDraft?.subtypeData, updateCustomNumberField, updateRequirementSubtypeField],
   );
 
   const relatedInventoryRows = React.useMemo(
@@ -2085,67 +2148,32 @@ const LeadDetailsRebuiltContent = ({
               ) : null}
               <label className="space-y-1">
                 <span className={`text-[10px] font-bold uppercase tracking-wider ${isDark ? "text-slate-400" : "text-slate-500"}`}>
-                  Area Unit
-                </span>
-                <select
-                  value={requirementsDraft?.areaUnit || "SQ_FT"}
-                  onChange={(event) => updateRequirementRootField("areaUnit", event.target.value)}
-                  className={`h-9 w-full rounded-lg border px-2.5 text-sm ${input}`}
-                >
-                  <option value="SQ_FT">sq ft</option>
-                  <option value="SQ_M">sq m</option>
-                </select>
-              </label>
-              <label className="space-y-1">
-                <span className={`text-[10px] font-bold uppercase tracking-wider ${isDark ? "text-slate-400" : "text-slate-500"}`}>
                   Budget Min
                 </span>
-                <input
+                <RequirementAdornedInput
                   type="number"
                   step="any"
+                  adornment="₹"
+                  inputClassName={`h-9 w-full rounded-lg border px-2.5 text-sm ${input}`}
+                  isDark={isDark}
                   value={requirementsDraft?.budgetMin || ""}
                   onChange={(event) => updateRequirementRootField("budgetMin", event.target.value)}
                   placeholder="Minimum budget"
-                  className={`h-9 w-full rounded-lg border px-2.5 text-sm ${input}`}
                 />
               </label>
               <label className="space-y-1">
                 <span className={`text-[10px] font-bold uppercase tracking-wider ${isDark ? "text-slate-400" : "text-slate-500"}`}>
                   Budget Max
                 </span>
-                <input
+                <RequirementAdornedInput
                   type="number"
                   step="any"
+                  adornment="₹"
+                  inputClassName={`h-9 w-full rounded-lg border px-2.5 text-sm ${input}`}
+                  isDark={isDark}
                   value={requirementsDraft?.budgetMax || ""}
                   onChange={(event) => updateRequirementRootField("budgetMax", event.target.value)}
                   placeholder="Maximum budget"
-                  className={`h-9 w-full rounded-lg border px-2.5 text-sm ${input}`}
-                />
-              </label>
-              <label className="space-y-1">
-                <span className={`text-[10px] font-bold uppercase tracking-wider ${isDark ? "text-slate-400" : "text-slate-500"}`}>
-                  Area Min
-                </span>
-                <input
-                  type="number"
-                  step="any"
-                  value={requirementsDraft?.areaMin || ""}
-                  onChange={(event) => updateRequirementRootField("areaMin", event.target.value)}
-                  placeholder="Minimum area"
-                  className={`h-9 w-full rounded-lg border px-2.5 text-sm ${input}`}
-                />
-              </label>
-              <label className="space-y-1">
-                <span className={`text-[10px] font-bold uppercase tracking-wider ${isDark ? "text-slate-400" : "text-slate-500"}`}>
-                  Area Max
-                </span>
-                <input
-                  type="number"
-                  step="any"
-                  value={requirementsDraft?.areaMax || ""}
-                  onChange={(event) => updateRequirementRootField("areaMax", event.target.value)}
-                  placeholder="Maximum area"
-                  className={`h-9 w-full rounded-lg border px-2.5 text-sm ${input}`}
                 />
               </label>
             </div>
