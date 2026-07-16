@@ -1,8 +1,8 @@
 module.exports = {
   apps: [
     {
-      name: "samvid-backend",
-      cwd: "/var/www/samvid-os/backend",
+      name: "the-office-on-rent-backend",
+      cwd: "/var/www/the-office-on-rent/backend",
       script: "src/server.js",
       instances: 1,
       exec_mode: "fork",

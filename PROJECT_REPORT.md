@@ -1,12 +1,12 @@
 ..
 .369id OS Project Report
 
-**Report Date:** 2026-03-02  
-**Repository Path:** `c:\Users\abhishe\OneDrive\Desktop\samvid-os` 
+**Report Date:** 2026-03-02
+**Repository Path:** `c:\Users\abhishe\OneDrive\Desktop\the-office-on-rent`
 
 ## 1. Executive Summary
 
-Samvid OS is a multi-client CRM/operations platform with a shared backend and two user-facing clients:
+The Office on Rent is a multi-client CRM/operations platform with a shared backend and two user-facing clients:
 - Web app (`frontend`) built with React + Vite.
 - Mobile app (`mobile`) built with Expo + React Native.
 - Backend (`backend`) built with Express + MongoDB + Socket.IO.
@@ -139,7 +139,7 @@ External integration:
 ## 7. Environment and Deployment
 
 Deployment assets indicate:
-- Backend process management through PM2 (`samvid-backend`, default port `5100` in deployment config).
+- Backend process management through PM2 (`the-office-on-rent-backend`, default port `5100` in deployment config).
 - Nginx reverse proxy for `/api` and `/socket.io` plus static frontend hosting.
 - `deploy.sh` supports pull/install/build/reload flow.
 
@@ -195,4 +195,4 @@ Frontend lint findings summary:
 
 ## 11. Conclusion
 
-Samvid OS has a solid multi-platform foundation and strong feature coverage for role-driven CRM operations, inventory workflows, and realtime collaboration. The most important next step is quality hardening: lint cleanup, test automation, and environment/documentation consistency. Once these are addressed, the codebase is well-positioned for stable scaling and faster release cadence.
+The Office on Rent has a solid multi-platform foundation and strong feature coverage for role-driven CRM operations, inventory workflows, and realtime collaboration. The most important next step is quality hardening: lint cleanup, test automation, and environment/documentation consistency. Once these are addressed, the codebase is well-positioned for stable scaling and faster release cadence.

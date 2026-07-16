@@ -16,7 +16,7 @@ import { LeadDetailsScreen } from "../modules/leads/LeadDetailsScreen";
 import { AssetVaultScreen } from "../modules/inventory/AssetVaultScreen";
 import { InventoryDetailsScreen } from "../modules/inventory/InventoryDetailsScreen";
 import { TeamChatScreen } from "../modules/chat/TeamChatScreen";
-import { SamvidBotScreen } from "../modules/chat/SamvidBotScreen";
+import { OfficeAssistantScreen } from "../modules/chat/OfficeAssistantScreen";
 import { ChatConversationScreen } from "../modules/chat/ChatConversationScreen";
 import { CallScreen } from "../modules/chat/CallScreen";
 import { IntelligenceReportsScreen } from "../modules/reports/IntelligenceReportsScreen";
@@ -250,9 +250,9 @@ export const RoleTabs = ({ role }: { role: UserRole }) => (
         options={{ headerShown: false }}
       />
       <Stack.Screen
-        name="Samvid Bot"
-        component={SamvidBotScreen}
-        options={{ title: "Samvid Bot" }}
+        name="Office Assistant"
+        component={OfficeAssistantScreen}
+        options={{ title: "Office Assistant" }}
       />
       <Stack.Screen
         name="CallScreen"

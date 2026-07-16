@@ -90,7 +90,7 @@ const SOLD_PAYMENT_TYPE_OPTIONS = [
 ];
 const GEOCODING_SEARCH_ENDPOINT = "https://nominatim.openstreetmap.org/search";
 const LOCATION_SUGGESTION_LIMIT = 6;
-const GOOGLE_MAPS_SCRIPT_ID = "samvid-google-maps-places-script";
+const GOOGLE_MAPS_SCRIPT_ID = "office-on-rent-google-maps-places-script";
 let googleMapsScriptPromise = null;
 
 const loadGoogleMapsPlacesScript = (apiKey) => {
@@ -891,7 +891,7 @@ const AssetVault = () => {
       for (const file of files) {
         const data = new FormData();
         data.append("file", file);
-        data.append("upload_preset", "samvid_upload");
+        data.append("upload_preset", "office_on_rent_upload");
         data.append("cloud_name", "djfiq8kiy");
 
         const res = await fetch("https://api.cloudinary.com/v1_1/djfiq8kiy/image/upload", {

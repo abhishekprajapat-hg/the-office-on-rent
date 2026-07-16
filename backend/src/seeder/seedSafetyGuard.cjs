@@ -40,7 +40,7 @@ const isLikelySharedDatabase = ({ target, destructive }) => {
   const explicitShared = parseBooleanEnv(process.env.SHARED_DB)
     || parseBooleanEnv(process.env.USE_SHARED_DB)
     || parseBooleanEnv(process.env.VPS_MONGO_SHARED);
-  const productionLikeName = ["samvid_os", "the_office_on_rent"].includes(
+  const productionLikeName = ["the_office_on_rent"].includes(
     String(target.dbName || "").toLowerCase(),
   );
 

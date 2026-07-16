@@ -1440,7 +1440,7 @@ export const LeadDetailsScreen = () => {
     const today = formatProposalDate(new Date());
     const validity = Number.parseInt(proposalValidityDays, 10);
     const lines = [
-      "SAMVID REALTY - PROPERTY PROPOSAL",
+      "THE OFFICE ON RENT - PROPERTY PROPOSAL",
       `Date: ${today}`,
       "",
       `Dear ${String(lead.name || "Client")},`,
@@ -1464,7 +1464,7 @@ export const LeadDetailsScreen = () => {
     if (proposalSpecialNote.trim()) {
       lines.push(`Special Note: ${proposalSpecialNote.trim()}`);
     }
-    lines.push("", "Regards,", "Samvid Realty");
+    lines.push("", "Regards,", "The Office on Rent");
 
     return lines.join("\n");
   }, [lead, proposalSpecialNote, proposalValidityDays, selectedProposalRows]);

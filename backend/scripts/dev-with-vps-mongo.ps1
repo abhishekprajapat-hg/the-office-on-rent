@@ -3,7 +3,7 @@ $ErrorActionPreference = "Stop"
 $backendRoot = Split-Path -Parent (Split-Path -Parent $MyInvocation.MyCommand.Path)
 $localMongoHost = "127.0.0.1"
 $localMongoPort = 27018
-$sshUser = "samvid"
+$sshUser = "crm"
 $sshHost = "72.60.97.58"
 $sshPort = 2424
 

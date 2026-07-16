@@ -7,7 +7,7 @@ const isMissingRouteError = (error: unknown) => {
 };
 
 const CLOUDINARY_CLOUD_NAME = String(process.env.EXPO_PUBLIC_CLOUDINARY_CLOUD_NAME || "djfiq8kiy").trim();
-const CLOUDINARY_UPLOAD_PRESET = String(process.env.EXPO_PUBLIC_CLOUDINARY_UPLOAD_PRESET || "samvid_upload").trim();
+const CLOUDINARY_UPLOAD_PRESET = String(process.env.EXPO_PUBLIC_CLOUDINARY_UPLOAD_PRESET || "office_on_rent_upload").trim();
 
 const toRole = (value: unknown) => String(value || "").toUpperCase();
 

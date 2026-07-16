@@ -15,7 +15,7 @@ Then set local `backend/.env`:
 ```env
 NODE_ENV=development
 PORT=5000
-MONGO_URI=mongodb://samvid_app:STRONG_PASSWORD@127.0.0.1:27018/samvid_os?authSource=samvid_os
+MONGO_URI=mongodb://office_app:STRONG_PASSWORD@127.0.0.1:27018/the_office_on_rent?authSource=the_office_on_rent
 JWT_SECRET=replace-with-a-long-random-secret
 CORS_ORIGIN=http://localhost:5173,http://127.0.0.1:5173
 TRUST_PROXY=false
@@ -36,7 +36,7 @@ Direct remote MongoDB access is not recommended because it usually requires expo
 Example shape only:
 
 ```env
-MONGO_URI=mongodb://samvid_app:STRONG_PASSWORD@PRIVATE_OR_RESTRICTED_HOST:27017/samvid_os?authSource=samvid_os
+MONGO_URI=mongodb://office_app:STRONG_PASSWORD@PRIVATE_OR_RESTRICTED_HOST:27017/the_office_on_rent?authSource=the_office_on_rent
 ```
 
 ## Production VPS Configuration
@@ -46,7 +46,7 @@ On the VPS, keep MongoDB listening on loopback:
 ```env
 NODE_ENV=production
 PORT=5100
-MONGO_URI=mongodb://samvid_app:STRONG_PASSWORD@127.0.0.1:27017/samvid_os?authSource=samvid_os
+MONGO_URI=mongodb://office_app:STRONG_PASSWORD@127.0.0.1:27017/the_office_on_rent?authSource=the_office_on_rent
 JWT_SECRET=replace-with-a-long-random-secret
 CORS_ORIGIN=https://crm.theofficeonrent.com
 TRUST_PROXY=1

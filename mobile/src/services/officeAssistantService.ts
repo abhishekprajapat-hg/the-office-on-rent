@@ -1,6 +1,6 @@
 import api from "./api";
 
-export type SamvidResponse = {
+export type OfficeAssistantResponse = {
   intent?: string;
   query?: string;
   answer?: string;
@@ -8,8 +8,8 @@ export type SamvidResponse = {
   suggestions?: string[];
 };
 
-export const askSamvid = async (query: string): Promise<SamvidResponse> => {
-  const res = await api.post("/samvid/ask", { query });
+export const askOfficeAssistant = async (query: string): Promise<OfficeAssistantResponse> => {
+  const res = await api.post("/assistant/ask", { query });
   return {
     intent: String(res.data?.intent || ""),
     query: String(res.data?.query || query || ""),

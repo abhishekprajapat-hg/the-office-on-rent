@@ -1,4 +1,4 @@
-﻿import fs from "node:fs";
+import fs from "node:fs";
 import path from "node:path";
 
 const rootDir = process.cwd();
@@ -466,7 +466,7 @@ const buildFrontendDoc = () => {
   const routes = fs.existsSync(appFile) ? parseWebRoutes(appFile) : [];
 
   const header = [
-    "# Samvid OS Web Frontend Documentation",
+    "# The Office on Rent Web Frontend Documentation",
     "",
     "Generated from source files in `frontend/src`.",
     "",
@@ -568,7 +568,7 @@ const buildMobileDoc = () => {
   const sortedOther = uniq(otherFiles).sort();
 
   const header = [
-    "# Samvid OS Mobile App Documentation",
+    "# The Office on Rent Mobile App Documentation",
     "",
     "Generated from source files in `mobile/App.tsx` and `mobile/src`.",
     "",
@@ -743,7 +743,7 @@ const buildBackendDoc = () => {
   });
 
   const header = [
-    "# Samvid OS Backend Functionality Documentation",
+    "# The Office on Rent Backend Functionality Documentation",
     "",
     "Generated from `backend/src` (Express app, routes, controllers, services).",
     "",
@@ -798,7 +798,7 @@ const buildDocsIndex = ({ frontendDocPath, mobileDocPath, backendDocPath }) => {
   ];
 
   return [
-    "# Samvid OS Full Project Documentation",
+    "# The Office on Rent Full Project Documentation",
     "",
     `Generated on: ${generatedAt}`,
     "",

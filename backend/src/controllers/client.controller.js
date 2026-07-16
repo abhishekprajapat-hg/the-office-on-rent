@@ -31,7 +31,7 @@ const toCapabilities = (role) => ({
 exports.health = (_req, res) => {
   res.json({
     ok: true,
-    service: "samvid-client-api",
+    service: "the-office-on-rent-client-api",
     channels: ["web", "mobile"],
     timestamp: new Date().toISOString(),
   });

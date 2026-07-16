@@ -130,6 +130,7 @@ const EMPTY_POLICY_FORM = {
   officeLongitude: "",
   officeRadiusMeters: 200,
 };
+const GEOLOCATION_RETRY_ACCURACY_METERS = 150;
 
 const toLocationPayload = (coords = {}) => ({
   latitude: coords.latitude,
@@ -137,33 +138,63 @@ const toLocationPayload = (coords = {}) => ({
   accuracy: coords.accuracy,
 });
 
-const requestAttendanceLocation = ({ required = false } = {}) =>
+const readCurrentPosition = (options) =>
   new Promise((resolve, reject) => {
-    if (typeof navigator === "undefined" || !navigator.geolocation) {
-      if (required) {
-        reject(new Error("Location is required but this browser does not support geolocation"));
-      } else {
-        resolve(null);
-      }
-      return;
-    }
-
     navigator.geolocation.getCurrentPosition(
       (position) => resolve(toLocationPayload(position.coords || {})),
-      () => {
-        if (required) {
-          reject(new Error("Please allow location access to mark attendance"));
-        } else {
-          resolve(null);
-        }
-      },
-      {
-        enableHighAccuracy: true,
-        timeout: 15000,
-        maximumAge: 0,
-      },
+      reject,
+      options,
     );
   });
+
+const hasGoodLocationAccuracy = (location) => {
+  const accuracy = Number(location?.accuracy);
+  return Number.isFinite(accuracy) && accuracy <= GEOLOCATION_RETRY_ACCURACY_METERS;
+};
+
+const pickBetterLocation = (first, second) => {
+  const firstAccuracy = Number(first?.accuracy);
+  const secondAccuracy = Number(second?.accuracy);
+  if (!first) return second || null;
+  if (!second) return first;
+  if (!Number.isFinite(firstAccuracy)) return second;
+  if (!Number.isFinite(secondAccuracy)) return first;
+  return secondAccuracy < firstAccuracy ? second : first;
+};
+
+const requestAttendanceLocation = async ({ required = false } = {}) => {
+  if (typeof navigator === "undefined" || !navigator.geolocation) {
+    if (required) {
+      throw new Error("Location is required but this browser does not support geolocation");
+    }
+    return null;
+  }
+
+  try {
+    const firstLocation = await readCurrentPosition({
+      enableHighAccuracy: true,
+      timeout: 15000,
+      maximumAge: 0,
+    });
+    if (hasGoodLocationAccuracy(firstLocation)) return firstLocation;
+
+    try {
+      const secondLocation = await readCurrentPosition({
+        enableHighAccuracy: true,
+        timeout: 20000,
+        maximumAge: 0,
+      });
+      return pickBetterLocation(firstLocation, secondLocation);
+    } catch {
+      return firstLocation;
+    }
+  } catch {
+    if (required) {
+      throw new Error("Please allow location access to mark attendance");
+    }
+    return null;
+  }
+};
 
 const formatDistance = (meters) => {
   const safeMeters = Number(meters);
@@ -401,7 +432,9 @@ const AttendanceHub = () => {
     try {
       setAttendanceAction("checkin");
       setMyError("");
-      const location = await requestAttendanceLocation();
+      const location = await requestAttendanceLocation({
+        required: Boolean(myData.policy?.geofenceEnabled),
+      });
       const result = await checkInAttendance({
         source: "WEB",
         ...(location ? { location } : {}),
@@ -436,7 +469,9 @@ const AttendanceHub = () => {
     try {
       setAttendanceAction("checkout");
       setMyError("");
-      const location = await requestAttendanceLocation();
+      const location = await requestAttendanceLocation({
+        required: Boolean(myData.policy?.geofenceEnabled),
+      });
       const result = await checkOutAttendance({
         source: "WEB",
         ...(location ? { location } : {}),

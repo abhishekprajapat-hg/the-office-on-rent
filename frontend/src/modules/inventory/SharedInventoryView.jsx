@@ -640,7 +640,7 @@ const SharedInventoryView = () => {
         <div className="text-center py-6 border-t border-slate-100">
           <p className="text-xs text-slate-400">
             This property listing was shared with you via{" "}
-            <span className="font-semibold text-slate-500">Samvid</span>.
+            <span className="font-semibold text-slate-500">The Office on Rent</span>.
           </p>
         </div>
       </div>

@@ -98,7 +98,7 @@ const formatCurrency = (value) => {
 };
 
 const CLOUDINARY_CLOUD_NAME = "djfiq8kiy";
-const CLOUDINARY_UPLOAD_PRESET = "samvid_upload";
+const CLOUDINARY_UPLOAD_PRESET = "office_on_rent_upload";
 const MAX_MEDIA_ATTACHMENTS = 8;
 const MAX_MEDIA_SIZE_BYTES = 25 * 1024 * 1024;
 const TYPING_IDLE_TIMEOUT_MS = 1200;

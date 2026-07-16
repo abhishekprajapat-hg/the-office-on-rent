@@ -77,7 +77,7 @@ app.use(express.urlencoded({ extended: false, limit: urlencodedBodyLimit }));
 app.use(resolveTenantContext);
 
 app.get("/api/health", (_req, res) => {
-  res.json({ ok: true, service: "samvid-backend", timestamp: new Date().toISOString() });
+  res.json({ ok: true, service: "the-office-on-rent-backend", timestamp: new Date().toISOString() });
 });
 
 app.get("/api/metrics", async (req, res) => {
@@ -116,7 +116,7 @@ app.use("/api/inventory", require("./routes/inventory.routes"));
 app.use("/api/inventory-request", require("./routes/inventoryRequest.routes"));
 app.use("/api/webhook", require("./routes/webhook.routes"));
 app.use("/api/chat", require("./routes/chat.routes"));
-app.use("/api/samvid", require("./routes/samvid.routes"));
+app.use("/api/assistant", require("./routes/officeAssistant.routes"));
 app.use("/api/tasks", require("./routes/task.routes"));
 
 app.use((req, res) => {

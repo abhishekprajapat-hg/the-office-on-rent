@@ -21,10 +21,10 @@ const parseDbNameFromUri = (uri, fallback) => {
 
 const sourceDbName =
   process.env.MONGO_VPS_DB_NAME ||
-  parseDbNameFromUri(SOURCE_URI || "", "samvid_db");
+  parseDbNameFromUri(SOURCE_URI || "", "the_office_on_rent");
 const targetDbName =
   process.env.MONGO_LOCAL_DB_NAME ||
-  parseDbNameFromUri(TARGET_URI || "", "samvid_db");
+  parseDbNameFromUri(TARGET_URI || "", "the_office_on_rent");
 
 const mapIndexDefinition = (indexDefinition) => {
   const {

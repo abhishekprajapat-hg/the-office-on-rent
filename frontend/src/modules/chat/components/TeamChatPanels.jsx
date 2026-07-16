@@ -53,7 +53,7 @@ export const TeamChatSidebar = ({
         <div>
           <p className={`inline-flex items-center gap-1.5 text-sm font-semibold ${isDark ? "text-slate-100" : "text-cyan-700"}`}>
             <MessageSquare size={14} />
-            Samvid Chat
+            Office Chat
           </p>
           <p className={`text-[11px] ${isDark ? "text-slate-400" : "text-cyan-700/80"}`}>
             {conversations.length} chats active

@@ -36,7 +36,7 @@ if (!browserPath) {
 
 const tempHtmlPath = path.join(
   os.tmpdir(),
-  `samvid-pdf-${Date.now()}-${Math.random().toString(36).slice(2, 8)}.html`,
+  `office-on-rent-pdf-${Date.now()}-${Math.random().toString(36).slice(2, 8)}.html`,
 );
 
 const title = path.basename(inputPath, path.extname(inputPath));
@@ -292,7 +292,7 @@ const html = `<!doctype html>
     <div class="page">
       <div class="sheet">
         <section class="hero">
-          <div class="meta">Samvid OS Documentation</div>
+          <div class="meta">The Office on Rent Documentation</div>
           <h1>${title.replace(/_/g, " ")}</h1>
           <p>Generated from markdown with browser rendering so workflow diagrams, structure, and formatting are preserved for sharing and presentation.</p>
         </section>

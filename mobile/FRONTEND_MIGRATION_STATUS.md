@@ -1,4 +1,4 @@
-# Samvid OS Frontend Migration Status (Web -> React Native)
+# The Office on Rent Frontend Migration Status (Web -> React Native)
 
 This file tracks parity progress using `frontend/src` as the reference.
 

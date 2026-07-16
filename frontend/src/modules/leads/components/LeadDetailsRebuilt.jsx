@@ -235,7 +235,7 @@ const INITIAL_DIARY_RENDER_COUNT = 20;
 const INITIAL_ACTIVITY_RENDER_COUNT = 20;
 const RENDER_STEP_COUNT = 20;
 const CLOUDINARY_CLOUD_NAME = "djfiq8kiy";
-const CLOUDINARY_UPLOAD_PRESET = "samvid_upload";
+const CLOUDINARY_UPLOAD_PRESET = "office_on_rent_upload";
 const MAX_CLOSURE_DOCUMENTS = 20;
 const MAX_CLOSURE_FILE_SIZE_BYTES = 25 * 1024 * 1024;
 const CLOSURE_DOCUMENT_ACCEPT = "image/*,application/pdf";
@@ -1182,7 +1182,7 @@ const LeadDetailsRebuiltContent = ({
     const clientName = String(selectedLead?.name || "Client").trim();
 
     const lines = [
-      "SAMVID REALTY - PROPERTY PROPOSAL",
+      "THE OFFICE ON RENT - PROPERTY PROPOSAL",
       `Date: ${proposalDate}`,
       "",
       `Dear ${clientName},`,
@@ -1208,11 +1208,11 @@ const LeadDetailsRebuiltContent = ({
     lines.push("");
     lines.push(`Validity: ${validityDays} day(s)`);
     if (proposalSpecialNote) lines.push(`Special Note: ${proposalSpecialNote}`);
-    lines.push("", "Regards,", "Samvid Realty");
+    lines.push("", "Regards,", "The Office on Rent");
 
     if (!selectedProposalProperties.length) {
       return [
-        "SAMVID REALTY - PROPERTY PROPOSAL",
+        "THE OFFICE ON RENT - PROPERTY PROPOSAL",
         "",
         "Select at least one linked property to generate the proposal.",
       ].join("\n");
@@ -1346,7 +1346,7 @@ const LeadDetailsRebuiltContent = ({
     doc.setFont("helvetica", "bold");
     doc.setFontSize(18);
     doc.setTextColor(255, 255, 255);
-    doc.text("SAMVID REALTY", 36, 45);
+    doc.text("THE OFFICE ON RENT", 36, 45);
 
     doc.setFont("helvetica", "normal");
     doc.setFontSize(11);
@@ -1542,7 +1542,7 @@ const LeadDetailsRebuiltContent = ({
     doc.text("Regards,", 36, cursorY);
     doc.setFont("helvetica", "bold");
     doc.setTextColor(15, 118, 110);
-    doc.text("Samvid Realty", 36, cursorY + 15);
+    doc.text("The Office on Rent", 36, cursorY + 15);
 
     // Apply Page Numbers on all pages
     const totalPages = doc.internal.getNumberOfPages();

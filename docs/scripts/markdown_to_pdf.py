@@ -1,4 +1,4 @@
-﻿from pathlib import Path
+from pathlib import Path
 from reportlab.lib.pagesizes import A4
 from reportlab.lib.styles import ParagraphStyle, getSampleStyleSheet
 from reportlab.lib.units import mm
@@ -17,7 +17,7 @@ source_files = [
     docs_dir / "BACKEND_FUNCTIONALITY_DOCUMENTATION.md",
 ]
 
-output_pdf = docs_dir / "SAMVID_OS_FULL_DOCUMENTATION.pdf"
+output_pdf = docs_dir / "THE_OFFICE_ON_RENT_FULL_DOCUMENTATION.pdf"
 
 font_candidates = [
     Path("C:/Windows/Fonts/arial.ttf"),
@@ -138,7 +138,7 @@ for file_index, source in enumerate(source_files):
 
         if stripped.startswith("- "):
             text = escape(stripped[2:])
-            story.append(Paragraph(f"• {text}", body))
+            story.append(Paragraph(f"� {text}", body))
             continue
 
         if stripped.startswith("| ") and stripped.endswith(" |"):
@@ -170,7 +170,7 @@ doc = SimpleDocTemplate(
     rightMargin=16 * mm,
     topMargin=16 * mm,
     bottomMargin=14 * mm,
-    title="Samvid OS Full Documentation",
+    title="The Office on Rent Full Documentation",
     author="Codex",
 )
 

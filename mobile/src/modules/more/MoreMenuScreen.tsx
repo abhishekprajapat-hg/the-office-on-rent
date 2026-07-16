@@ -46,7 +46,7 @@ export const MoreMenuScreen = ({ navigation }: any) => {
     <Screen title="More" subtitle="Quick Access">
       <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: 24 }}>
         <AppCard style={styles.card as object}>
-          <Row label="Samvid Bot" onPress={() => open("Samvid Bot")} />
+          <Row label="Office Assistant" onPress={() => open("Office Assistant")} />
           {isAdmin ? (
             <Row
               label="Chat"

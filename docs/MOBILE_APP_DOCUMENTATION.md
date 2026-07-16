@@ -1,4 +1,4 @@
-# Samvid OS Mobile App Documentation
+# The Office on Rent Mobile App Documentation
 
 Generated from source files in `mobile/App.tsx` and `mobile/src`.
 
@@ -47,7 +47,7 @@ Generated from source files in `mobile/App.tsx` and `mobile/src`.
 | `LeadDetails` | `LeadDetailsScreen` |
 | `InventoryDetails` | `InventoryDetailsScreen` |
 | `ChatConversation` | `ChatConversationScreen` |
-| `Samvid Bot` | `SamvidBotScreen` |
+| `Office Assistant` | `OfficeAssistantScreen` |
 | `CallScreen` | `CallScreen` |
 | `Notifications` | `NotificationsScreen` |
 | `Users` | `TeamManagerScreen` |
@@ -480,24 +480,24 @@ export const ChatConversationScreen = () => {
   const [error, setError] = useState("");
 ```
 
-### SamvidBotScreen
-- **Path:** `mobile/src/modules/chat/SamvidBotScreen.tsx`
+### OfficeAssistantScreen
+- **Path:** `mobile/src/modules/chat/OfficeAssistantScreen.tsx`
 - **Type:** Screen
-- **Exports:** SamvidBotScreen
-- **Key functions:** uid, SamvidBotScreen, sendQuery, toggleVoice
+- **Exports:** OfficeAssistantScreen
+- **Key functions:** uid, OfficeAssistantScreen, sendQuery, toggleVoice
 - **Hook usage:** useState=5, useEffect=1, useMemo=1, useCallback=0
-- **Service dependencies:** samvidService: askSamvid
+- **Service dependencies:** officeAssistantService: askOfficeAssistant
 - **Functional highlights:**
   - Maintains local component state for UI and interactions.
   - Runs lifecycle side effects for data load or runtime synchronization.
   - Uses memoized selectors/derived state for rendering efficiency.
   - Contains modal/overlay or multi-panel interaction patterns.
   - Applies role-aware access or action gating.
-  - Calls feature APIs/services: samvidService: askSamvid.
+  - Calls feature APIs/services: officeAssistantService: askOfficeAssistant.
 - **Code snippet:**
 
 ```tsx
-export const SamvidBotScreen = () => {
+export const OfficeAssistantScreen = () => {
   const [input, setInput] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
@@ -507,7 +507,7 @@ export const SamvidBotScreen = () => {
     {
       id: uid(),
       role: "bot",
-      text: "Namaste, main Samvid hoon. Aap inventory, lead, sold/interested status, ya best performance puch sakte hain.",
+      text: "Hello, I am Office Assistant. You can ask about inventory, leads, sold/interested status, or best performance.",
     },
   ]);
 
@@ -984,7 +984,7 @@ export const MoreMenuScreen = ({ navigation }: any) => {
   return (
     <Screen title="More" subtitle="Quick Access">
       <AppCard style={styles.card as object}>
-        <Row label="Samvid Bot" onPress={() => open("Samvid Bot")} />
+        <Row label="Office Assistant" onPress={() => open("Office Assistant")} />
         {isManagement ? <Row label="Notifications" onPress={() => open("Notifications")} /> : null}
         <Row label="Profile" onPress={() => open("Profile")} />
         {isManagement ? <Row label="Users" onPress={() => open("Users")} /> : null}

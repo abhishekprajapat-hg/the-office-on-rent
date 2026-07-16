@@ -43,6 +43,16 @@ const attendanceLocationSchema = new mongoose.Schema(
       min: 0,
       default: null,
     },
+    effectiveDistanceMeters: {
+      type: Number,
+      min: 0,
+      default: null,
+    },
+    accuracyBufferMeters: {
+      type: Number,
+      min: 0,
+      default: null,
+    },
   },
   { _id: false },
 );

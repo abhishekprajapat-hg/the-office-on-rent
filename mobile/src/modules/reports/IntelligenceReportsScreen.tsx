@@ -224,7 +224,7 @@ export const IntelligenceReportsScreen = () => {
     });
 
     await Share.share({
-      title: "Samvid Reports",
+      title: "Office Reports",
       message: lines.join("\n"),
     });
   };

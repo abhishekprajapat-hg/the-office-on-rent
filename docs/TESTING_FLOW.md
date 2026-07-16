@@ -1,4 +1,4 @@
-# Samvid OS Testing Flow (End-to-End)
+# The Office on Rent Testing Flow (End-to-End)
 
 Last updated: 2026-03-12
 

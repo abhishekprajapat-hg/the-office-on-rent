@@ -1,4 +1,4 @@
-# Samvid OS Web Frontend Documentation
+# The Office on Rent Web Frontend Documentation
 
 Generated from source files in `frontend/src`.
 

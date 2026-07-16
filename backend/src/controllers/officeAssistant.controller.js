@@ -17,7 +17,7 @@ const normalizeQuery = (value) =>
     .replace(/\s+/g, " ")
     .trim();
 
-const SAMVID_STOP_WORDS = new Set([
+const ASSISTANT_STOP_WORDS = new Set([
   "show",
   "me",
   "please",
@@ -54,7 +54,7 @@ const buildSearchRegex = (value) => {
   const tokens = cleaned
     .split(" ")
     .map((token) => token.trim())
-    .filter((token) => token.length >= 2 && !SAMVID_STOP_WORDS.has(token));
+    .filter((token) => token.length >= 2 && !ASSISTANT_STOP_WORDS.has(token));
   if (!tokens.length) return null;
   return new RegExp(tokens.map((token) => escapeRegex(token)).join("|"), "i");
 };
@@ -654,7 +654,7 @@ const queryOverview = async ({ user }) => {
   });
 
   return {
-    answer: "Hello, I am Samvid bot. Ask me anything about best performer, lead details, asset details, sold inventory, interested leads, or company overview.",
+    answer: "Hello, I am Office Assistant. Ask me anything about best performer, lead details, asset details, sold inventory, interested leads, or company overview.",
     data: {
       inventoryByStatus,
       leadByStatus,
@@ -662,7 +662,7 @@ const queryOverview = async ({ user }) => {
   };
 };
 
-exports.askSamvid = async (req, res) => {
+exports.askOfficeAssistant = async (req, res) => {
   try {
     const query = normalizeQuery(req.body?.query);
     if (!query || query.length < 2) {
@@ -714,7 +714,7 @@ exports.askSamvid = async (req, res) => {
     logger.error({
       requestId: req.requestId || null,
       error: error.message,
-      message: "askSamvid failed",
+      message: "askOfficeAssistant failed",
     });
     return res.status(500).json({ message: "Server error" });
   }

@@ -1,4 +1,4 @@
-﻿import React, { useMemo, useState } from "react";
+import React, { useMemo, useState } from "react";
 import {
   ArrowRight,
   BadgeCheck,
@@ -108,7 +108,7 @@ const ClientHome = () => {
               S
             </div>
             <div className="text-left">
-              <p className="font-display text-base tracking-wide text-slate-900">SAMVID</p>
+              <p className="font-display text-base tracking-wide text-slate-900">THE OFFICE ON RENT</p>
               <p className="text-[10px] uppercase tracking-[0.25em] text-cyan-700">Estates</p>
             </div>
           </button>
@@ -321,7 +321,7 @@ const ClientHome = () => {
         </section>
 
         <footer className="ui-soft-panel flex flex-col items-start justify-between gap-3 rounded-2xl px-4 py-4 text-xs text-slate-500 sm:flex-row sm:items-center sm:px-6">
-          <p>Samvid Legal Center</p>
+          <p>The Office on Rent Legal Center</p>
           <div className="flex items-center gap-4">
             <button
               onClick={() => navigate("/privacy-policy")}

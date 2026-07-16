@@ -4,7 +4,7 @@ import { Ionicons } from "@expo/vector-icons";
 import { ExpoSpeechRecognitionModule, useSpeechRecognitionEvent } from "expo-speech-recognition";
 import { Screen } from "../../components/common/Screen";
 import { AppButton, AppCard, AppInput } from "../../components/common/ui";
-import { askSamvid } from "../../services/samvidService";
+import { askOfficeAssistant } from "../../services/officeAssistantService";
 import { toErrorMessage } from "../../utils/errorMessage";
 
 type BotMessage = {
@@ -15,7 +15,7 @@ type BotMessage = {
 
 const uid = () => `${Date.now()}-${Math.random().toString(16).slice(2)}`;
 
-export const SamvidBotScreen = () => {
+export const OfficeAssistantScreen = () => {
   const [input, setInput] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
@@ -26,7 +26,7 @@ export const SamvidBotScreen = () => {
     {
       id: uid(),
       role: "bot",
-      text: "Hello, I am Samvid bot. How can I help you.",
+      text: "Hello, I am Office Assistant. How can I help you.",
     },
   ]);
 
@@ -110,7 +110,7 @@ export const SamvidBotScreen = () => {
     setError("");
 
     try {
-      const response = await askSamvid(query);
+      const response = await askOfficeAssistant(query);
       const answer = String(response.answer || "No response").trim() || "No response";
 
       setMessages((prev) => [
@@ -122,7 +122,7 @@ export const SamvidBotScreen = () => {
         },
       ]);
     } catch (e) {
-      const message = toErrorMessage(e, "Samvid bot failed to respond");
+      const message = toErrorMessage(e, "Office Assistant failed to respond");
       setError(message);
       setMessages((prev) => [
         ...prev,
@@ -170,7 +170,7 @@ export const SamvidBotScreen = () => {
   };
 
   return (
-    <Screen title="Samvid Bot" subtitle="Ask Inventory, Leads, Performance" error={error}>
+    <Screen title="Office Assistant" subtitle="Ask Inventory, Leads, Performance" error={error}>
       <AppCard style={styles.card as object}>
         <ScrollView
           ref={(instance) => {
@@ -197,7 +197,7 @@ export const SamvidBotScreen = () => {
               <AppInput
                 value={input}
                 onChangeText={setInput}
-                placeholder="Ask Samvid..."
+                placeholder="Ask Office Assistant..."
                 style={styles.chatInput as object}
               />
             </View>

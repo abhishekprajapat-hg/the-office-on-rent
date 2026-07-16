@@ -5,25 +5,25 @@ const register = new promClient.Registry();
 
 promClient.collectDefaultMetrics({
   register,
-  prefix: "samvid_",
+  prefix: "office_on_rent_",
 });
 
 const httpRequestsInFlight = new promClient.Gauge({
-  name: "samvid_http_requests_in_flight",
+  name: "office_on_rent_http_requests_in_flight",
   help: "Current number of in-flight HTTP requests",
   labelNames: ["method"],
   registers: [register],
 });
 
 const httpRequestsTotal = new promClient.Counter({
-  name: "samvid_http_requests_total",
+  name: "office_on_rent_http_requests_total",
   help: "Total number of HTTP requests",
   labelNames: ["method", "route", "status_code"],
   registers: [register],
 });
 
 const httpRequestDurationMs = new promClient.Histogram({
-  name: "samvid_http_request_duration_ms",
+  name: "office_on_rent_http_request_duration_ms",
   help: "HTTP request duration in milliseconds",
   labelNames: ["method", "route", "status_code"],
   buckets: [25, 50, 100, 200, 400, 800, 1200, 2000, 5000],

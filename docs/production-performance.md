@@ -1,4 +1,4 @@
-# Samvid OS Production Performance Checklist
+# The Office on Rent Production Performance Checklist
 
 ## Frontend Build
 
@@ -13,7 +13,7 @@
 - Cache Vite hashed assets under `/assets/` for one year with `immutable`.
 - Keep `index.html` uncached or revalidated so new deployments are picked up immediately.
 - Prefer Brotli at the CDN/proxy layer when available. Keep Express compression enabled for API JSON responses.
-- If Nginx has the Brotli module installed, enable Brotli for text, CSS, JavaScript, JSON, and SVG. Otherwise use gzip as configured in `deploy/nginx.samvid.conf`.
+- If Nginx has the Brotli module installed, enable Brotli for text, CSS, JavaScript, JSON, and SVG. Otherwise use gzip as configured in `deploy/nginx.the-office-on-rent.conf`.
 
 ## Backend Reverse Proxy
 

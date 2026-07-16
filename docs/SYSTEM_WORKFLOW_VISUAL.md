@@ -1,8 +1,8 @@
-# Samvid OS Visual Workflow
+# The Office on Rent Visual Workflow
 
 Last updated: 2026-03-20
 
-This document gives a visual view of how the major Samvid OS functions work across web, mobile, backend, realtime events, and tenant operations.
+This document gives a visual view of how the major The Office on Rent functions work across web, mobile, backend, realtime events, and tenant operations.
 
 It is intentionally business-flow focused. For file-by-file technical coverage, use:
 
@@ -392,7 +392,7 @@ flowchart TD
 - `backend/src/services/leadAssignment.service.js`
 - `backend/src/controllers/saas.controller.js`
 
-## 10. Targets, Reports, and Samvid Intelligence
+## 10. Targets, Reports, and The Office on Rent Intelligence
 
 ```mermaid
 flowchart LR
@@ -402,7 +402,7 @@ flowchart LR
   TARGETS[Target assignments]
   PERF[Performance and leaderboard]
   REPORTS[Intelligence reports]
-  SAMVID[Samvid ask endpoint]
+  THE OFFICE ON RENT[The Office on Rent ask endpoint]
 
   USERS --> TARGETS
   LEADS --> PERF
@@ -410,9 +410,9 @@ flowchart LR
   INV --> REPORTS
   USERS --> PERF
   TARGETS --> PERF
-  LEADS --> SAMVID
-  INV --> SAMVID
-  USERS --> SAMVID
+  LEADS --> THE OFFICE ON RENT
+  INV --> THE OFFICE ON RENT
+  USERS --> THE OFFICE ON RENT
 ```
 
 **Functional view**
@@ -420,18 +420,18 @@ flowchart LR
 - Targets are assigned through hierarchy-aware target APIs.
 - Performance screens compare target achievement with live lead activity.
 - Reports aggregate lead funnel, aging, inventory, and team output.
-- Samvid queries the same live business data and returns intent-based snapshots.
+- The Office on Rent queries the same live business data and returns intent-based snapshots.
 
 **Primary source anchors**
 
 - `backend/src/routes/target.routes.js`
 - `backend/src/controllers/target.controller.js`
-- `backend/src/routes/samvid.routes.js`
-- `backend/src/controllers/samvid.controller.js`
+- `backend/src/routes/officeAssistant.routes.js`
+- `backend/src/controllers/officeAssistant.controller.js`
 - `frontend/src/modules/reports/Performance.jsx`
 - `frontend/src/modules/reports/IntelligenceReports.jsx`
 - `mobile/src/modules/reports/PerformanceScreen.tsx`
-- `mobile/src/modules/chat/SamvidBotScreen.tsx`
+- `mobile/src/modules/chat/OfficeAssistantScreen.tsx`
 
 ## 11. SaaS and Tenant Administration Flow
 
@@ -477,16 +477,16 @@ flowchart LR
   DATA[Leads, inventory, chat, targets]
   APPROVAL[Admin approval paths]
   REALTIME[Realtime alerts and calls]
-  ANALYTICS[Reports and Samvid]
+  ANALYTICS[Reports and The Office on Rent]
 
   TENANT --> AUTH --> ROLE --> DATA --> APPROVAL --> REALTIME --> ANALYTICS
 ```
 
-Samvid OS is essentially a tenant-aware operating system for sales teams:
+The Office on Rent is essentially a tenant-aware operating system for sales teams:
 
 - tenant resolution decides data ownership
 - auth and role rules decide access
 - lead and inventory workflows drive daily operations
 - realtime events keep teams and admins synchronized
-- reports, targets, and Samvid turn operations into insight
+- reports, targets, and The Office on Rent turn operations into insight
 

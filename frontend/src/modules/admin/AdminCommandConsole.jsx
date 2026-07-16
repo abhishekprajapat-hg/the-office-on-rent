@@ -30,10 +30,10 @@ const MAX_STORED_MESSAGES = 120;
 const MAX_STORED_WORKFLOWS = 40;
 const MAX_STORED_SUBSCRIPTIONS = 80;
 const MAX_AUDIT_LOG_ROWS = 200;
-const ASSISTANT_HISTORY_STORAGE_PREFIX = "samvid.adminAssistant.history";
-const ASSISTANT_WORKFLOW_STORAGE_PREFIX = "samvid.adminAssistant.workflows";
-const ASSISTANT_SUBSCRIPTION_STORAGE_PREFIX = "samvid.adminAssistant.subscriptions";
-const ASSISTANT_AUDIT_STORAGE_PREFIX = "samvid.adminAssistant.audit";
+const ASSISTANT_HISTORY_STORAGE_PREFIX = "officeOnRent.adminAssistant.history";
+const ASSISTANT_WORKFLOW_STORAGE_PREFIX = "officeOnRent.adminAssistant.workflows";
+const ASSISTANT_SUBSCRIPTION_STORAGE_PREFIX = "officeOnRent.adminAssistant.subscriptions";
+const ASSISTANT_AUDIT_STORAGE_PREFIX = "officeOnRent.adminAssistant.audit";
 const COUNT_INTENT_TERMS = ["how many", "count", "number of", "total", "kitne", "kitni", "kitna"];
 const LEAD_INTENT_TERMS = [
   "lead",

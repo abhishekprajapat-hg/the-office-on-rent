@@ -48,8 +48,8 @@ npm run build
 
 echo "==> Reloading backend (PM2)"
 cd "$ROOT_DIR"
-if pm2 describe samvid-backend >/dev/null 2>&1; then
-  pm2 reload samvid-backend --update-env
+if pm2 describe the-office-on-rent-backend >/dev/null 2>&1; then
+  pm2 reload the-office-on-rent-backend --update-env
 else
   pm2 start deploy/ecosystem.config.cjs
 fi

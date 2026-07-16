@@ -42,6 +42,13 @@ const DEFAULT_OFFICE_RADIUS_METERS = Math.min(
   5000,
   Math.max(10, Number.parseInt(process.env.ATTENDANCE_OFFICE_RADIUS_METERS || "200", 10) || 200),
 );
+const MAX_GEOFENCE_ACCURACY_BUFFER_METERS = Math.min(
+  500,
+  Math.max(
+    0,
+    Number.parseInt(process.env.ATTENDANCE_MAX_ACCURACY_BUFFER_METERS || "150", 10) || 150,
+  ),
+);
 const DEFAULT_GEOFENCE_ENABLED =
   String(process.env.ATTENDANCE_GEOFENCE_ENABLED || "").trim().toLowerCase() === "true";
 const LIVE_ATTENDANCE_STATUS = Object.freeze({
@@ -195,12 +202,19 @@ const validateAttendanceGeofence = ({ policy, location, actionLabel }) => {
     location,
   );
   const radiusMeters = Number(policy.officeRadiusMeters || DEFAULT_OFFICE_RADIUS_METERS);
+  const accuracyBufferMeters = Math.min(
+    MAX_GEOFENCE_ACCURACY_BUFFER_METERS,
+    Math.max(0, Number(location.accuracy || 0)),
+  );
+  const effectiveDistanceMeters = Math.max(0, distanceMeters - accuracyBufferMeters);
 
-  if (distanceMeters > radiusMeters) {
+  if (effectiveDistanceMeters > radiusMeters) {
     return {
       status: 403,
       message: `You are outside the office geofence. Allowed range is ${radiusMeters} m.`,
       distanceMeters,
+      effectiveDistanceMeters,
+      accuracyMeters: location.accuracy,
     };
   }
 
@@ -208,6 +222,8 @@ const validateAttendanceGeofence = ({ policy, location, actionLabel }) => {
     location: {
       ...location,
       distanceMeters,
+      effectiveDistanceMeters,
+      accuracyBufferMeters,
     },
   };
 };
@@ -962,6 +978,8 @@ exports.checkIn = async (req, res) => {
       return res.status(geofenceResult.status).json({
         message: geofenceResult.message,
         distanceMeters: geofenceResult.distanceMeters,
+        effectiveDistanceMeters: geofenceResult.effectiveDistanceMeters,
+        accuracyMeters: geofenceResult.accuracyMeters,
       });
     }
     const userAgent = toTrimmedString(req.headers["user-agent"]).slice(0, 400);
@@ -1203,6 +1221,8 @@ exports.checkOut = async (req, res) => {
       return res.status(geofenceResult.status).json({
         message: geofenceResult.message,
         distanceMeters: geofenceResult.distanceMeters,
+        effectiveDistanceMeters: geofenceResult.effectiveDistanceMeters,
+        accuracyMeters: geofenceResult.accuracyMeters,
       });
     }
 

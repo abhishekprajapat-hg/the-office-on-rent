@@ -81,7 +81,7 @@ $sourceEndpoint = Parse-MongoHostPort -MongoUri $vpsUri
 $localMongoHost = $sourceEndpoint.Host
 $localMongoPort = $sourceEndpoint.Port
 
-$sshUser = if ($env:MONGO_VPS_SSH_USER) { $env:MONGO_VPS_SSH_USER } else { "samvid" }
+$sshUser = if ($env:MONGO_VPS_SSH_USER) { $env:MONGO_VPS_SSH_USER } else { "crm" }
 $sshHost = if ($env:MONGO_VPS_SSH_HOST) { $env:MONGO_VPS_SSH_HOST } else { "72.60.97.58" }
 $sshPort = if ($env:MONGO_VPS_SSH_PORT) { [int]$env:MONGO_VPS_SSH_PORT } else { 2424 }
 $startedTunnelProcess = $null

@@ -1,4 +1,4 @@
-# Samvid OS Backend Functionality Documentation
+# The Office on Rent Backend Functionality Documentation
 
 Generated from `backend/src` (Express app, routes, controllers, services).
 
@@ -20,7 +20,7 @@ Generated from `backend/src` (Express app, routes, controllers, services).
 | `/api/inventory-request` | `./routes/inventoryRequest.routes` |
 | `/api/webhook` | `./routes/webhook.routes` |
 | `/api/chat` | `./routes/chat.routes` |
-| `/api/samvid` | `./routes/samvid.routes` |
+| `/api/assistant` | `./routes/officeAssistant.routes` |
 
 ## Route Files and Endpoints
 
@@ -272,26 +272,26 @@ router.get(
   "/",
 ```
 
-### samvid.routes.js
-- **Path:** `backend/src/routes/samvid.routes.js`
-- **Mounted under:** `/api/samvid`
+### officeAssistant.routes.js
+- **Path:** `backend/src/routes/officeAssistant.routes.js`
+- **Mounted under:** `/api/assistant`
 - **Endpoint count:** 1
 - **Middleware profile:** Authenticated route surface (`authMiddleware.protect`). Rate-limited write/message endpoints.
 - **Endpoints:**
-  - `POST /api/samvid/ask`
+  - `POST /api/assistant/ask`
 - **Code snippet:**
 
 ```js
 const express = require("express");
 
 const router = express.Router();
-const samvidController = require("../controllers/samvid.controller");
+const officeAssistantController = require("../controllers/officeAssistant.controller");
 const authMiddleware = require("../middleware/auth.middleware");
 const { chatMessageLimiter } = require("../middleware/rateLimit.middleware");
 
 router.use(authMiddleware.protect);
 
-router.post("/ask", chatMessageLimiter, samvidController.askSamvid);
+router.post("/ask", chatMessageLimiter, officeAssistantController.askOfficeAssistant);
 
 module.exports = router;
 ```
@@ -652,9 +652,9 @@ const buildLeadRelatedInventoryRefs = (lead = {}) => {
     if (!id || seen.has(id)) return;
 ```
 
-### samvid.controller.js
-- **Path:** `backend/src/controllers/samvid.controller.js`
-- **Exported handlers:** askSamvid
+### officeAssistant.controller.js
+- **Path:** `backend/src/controllers/officeAssistant.controller.js`
+- **Exported handlers:** askOfficeAssistant
 - **Top-level functions:** escapeRegex, normalizeQuery, formatMoney, formatInventoryLabel, getCompanyUserIds, getInventoryScopeForUser, getLeadScopeForUser, detectIntent, queryInventory, queryLeads, queryBestPerformer, querySalesInterestedSnapshot, queryOverview
 - **Code snippet:**
 
