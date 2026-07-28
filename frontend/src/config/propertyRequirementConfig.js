@@ -13,6 +13,64 @@ export const FURNISHING_OPTIONS = [
   { value: "WARM_SHELL", label: "Warm Shell" },
 ];
 
+export const PLOT_LOCATION_OPTIONS = [
+  "Within the city",
+  "Super Corridor",
+  "Bypass Road",
+  "Nipania",
+  "Rau",
+  "AB Road",
+  "Vijay Nagar",
+  "MR 10",
+  "Ring Road",
+  "Ujjain Road",
+  "Airport Road",
+  "Kanadia Road",
+];
+
+export const PLOT_OCCUPANCY_OPTIONS = [
+  "Vacant",
+  "Owner Occupied",
+  "Tenant Occupied",
+];
+
+export const PLOT_PURPOSE_OPTIONS = [
+  "Self",
+  "Investment",
+];
+
+export const PLOT_PROJECT_STATUS_OPTIONS = [
+  "Pre-launching",
+  "T&C",
+  "Pre-approved",
+  "Resale",
+];
+
+export const PLOT_TYPE_OPTIONS = [
+  "Commercial Plots",
+  "EWS",
+  "LIG",
+  "Normal",
+];
+
+export const BATHROOM_OPTIONS = [
+  "1 Bathroom",
+  "2 Bathrooms",
+  "3 Bathrooms",
+  "4 Bathrooms",
+  "5+ Bathrooms",
+];
+
+export const HOUSE_FLOOR_OPTIONS = [
+  "G",
+  "G+1",
+  "G+2",
+  "G+3",
+  "G+4",
+  "G+5",
+  "G+6",
+];
+
 const COWORKING_SEAT_OPTIONS = [
   "1",
   "2",
@@ -248,12 +306,14 @@ export const PROPERTY_REQUIREMENT_CONFIG = {
         showFurnishing: true,
         fields: [
           { key: "bhkType", label: "BHK Type", type: "select", options: ["1 BHK", "2 BHK", "3 BHK", "4 BHK", "5 BHK", "Other"] },
+          { key: "area", label: "Area", type: "number", min: 0 },
+          { key: "superBuiltUpArea", label: "Super Built-up Area", type: "number", min: 0 },
+          { key: "carpetArea", label: "Carpet Area", type: "number", min: 0 },
+          { key: "purpose", label: "Purpose", type: "select", options: ["Self", "Investment"] },
+          { key: "bathrooms", label: "Bathrooms", type: "select", options: BATHROOM_OPTIONS },
           { key: "preferredFloor", label: "Preferred Floor", type: "text" },
-          { key: "totalFloors", label: "Total Floors", type: "number", min: 0 },
-          { key: "bathrooms", label: "Bathrooms", type: "number", min: 0 },
           { key: "balconies", label: "Balconies", type: "number", min: 0 },
           { key: "facing", label: "Facing", type: "text" },
-          { key: "propertyAge", label: "Property Age", type: "text" },
           { key: "gatedSociety", label: "Gated Society", type: "checkbox" },
           { key: "lift", label: "Lift", type: "checkbox" },
           { key: "security", label: "Security", type: "checkbox" },
@@ -270,10 +330,12 @@ export const PROPERTY_REQUIREMENT_CONFIG = {
       },
       INDEPENDENT_HOUSE: { label: "House", showFurnishing: true, fields: [
         { key: "bhkType", label: "BHK Type", type: "select", options: ["1 BHK", "2 BHK", "3 BHK", "4 BHK", "5 BHK", "Other"] },
-        { key: "numberOfFloors", label: "Number of Floors", type: "number", min: 0 },
-        { key: "plotArea", label: "Plot Area", type: "number", min: 0 },
-        { key: "builtUpArea", label: "Built-up Area", type: "number", min: 0 },
-        { key: "bathrooms", label: "Bathrooms", type: "number", min: 0 },
+        { key: "area", label: "Area", type: "number", min: 0 },
+        { key: "superBuiltUpArea", label: "Super Built-up Area", type: "number", min: 0 },
+        { key: "carpetArea", label: "Carpet Area", type: "number", min: 0 },
+        { key: "purpose", label: "Purpose", type: "select", options: ["Self", "Investment"] },
+        { key: "bathrooms", label: "Bathrooms", type: "select", options: BATHROOM_OPTIONS },
+        { key: "numberOfFloors", label: "Number of Floors", type: "select", options: HOUSE_FLOOR_OPTIONS },
         { key: "balconies", label: "Balconies", type: "number", min: 0 },
         { key: "facing", label: "Facing", type: "text" },
         { key: "cornerProperty", label: "Corner Property", type: "checkbox" },
@@ -287,18 +349,22 @@ export const PROPERTY_REQUIREMENT_CONFIG = {
         { key: "separateEntry", label: "Separate Entry", type: "checkbox" },
       ] },
       PLOT: { label: "Plot", showFurnishing: false, fields: [
-        { key: "plotArea", label: "Plot Area", type: "number", min: 0 },
-        { key: "plotLength", label: "Plot Length", type: "number", min: 0 },
-        { key: "plotWidth", label: "Plot Width", type: "number", min: 0 },
-        { key: "roadWidth", label: "Road Width", type: "number", min: 0 },
+        { key: "plotLocation", label: "Location", type: "select", options: PLOT_LOCATION_OPTIONS },
+        { key: "plotOccupancy", label: "Occupancy", type: "select", options: PLOT_OCCUPANCY_OPTIONS },
+        { key: "plotPurpose", label: "Purpose", type: "select", options: PLOT_PURPOSE_OPTIONS },
+        { key: "projectStatus", label: "Project Status", type: "select", options: PLOT_PROJECT_STATUS_OPTIONS },
+        { key: "plotType", label: "Plot Type", type: "select", options: PLOT_TYPE_OPTIONS },
+        { key: "plotLength", label: "Plot Length", type: "number", min: 0, unit: "ft" },
+        { key: "plotWidth", label: "Plot Width", type: "number", min: 0, unit: "ft" },
+        { key: "plotArea", label: "Plot Area", type: "number", min: 0, unit: "sq ft" },
         { key: "facing", label: "Facing", type: "text" },
+        { key: "loanRequired", label: "Loan Required", type: "checkbox" },
+        { key: "semiCommercialPlot", label: "Semi-commercial Plot", type: "checkbox" },
+        { key: "commercialPlot", label: "Commercial Plot", type: "checkbox" },
+        { key: "gardenFacing", label: "Garden Facing", type: "checkbox" },
         { key: "cornerPlot", label: "Corner Plot", type: "checkbox" },
         { key: "gatedColony", label: "Gated Colony", type: "checkbox" },
         { key: "approvedColony", label: "Approved Colony", type: "checkbox" },
-        { key: "boundaryWall", label: "Boundary Wall", type: "checkbox" },
-        { key: "constructionAllowed", label: "Construction Allowed", type: "checkbox" },
-        { key: "ownershipType", label: "Ownership Type", type: "text" },
-        { key: "suitableFor", label: "Suitable For", type: "select", options: ["Residential House", "Villa", "Investment"] },
       ] },
       PG_HOSTEL: { label: "PG / Hostel", showFurnishing: true, fields: [
         { key: "occupancyType", label: "Occupancy Type", type: "select", options: ["Male", "Female", "Co-living"] },

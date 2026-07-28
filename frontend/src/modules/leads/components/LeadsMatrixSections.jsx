@@ -34,6 +34,9 @@ import ToastNotice from "../../../components/ui/ToastNotice";
 import {
   FURNISHING_OPTIONS,
   INVENTORY_TYPE_OPTIONS,
+  PLOT_LOCATION_OPTIONS,
+  PLOT_OCCUPANCY_OPTIONS,
+  PLOT_PURPOSE_OPTIONS,
   getPropertySubtypeConfig,
   getPropertySubtypeOptions,
 } from "../../../config/propertyRequirementConfig";
@@ -75,6 +78,19 @@ const AddLeadSelectControl = ({ value, onChange, inputClass, isDark, children })
   </div>
 );
 
+const BULK_LEAD_SHEET_FORMATS = {
+  RESIDENTIAL: {
+    label: "Residantial",
+    columns:
+      "NAME, CONTACT/NUMBER, COMMENT, BUDGET, LOCATION, VISIT, HANDLE, SOURCE, BHK, FLOOR, AMENITIES, LIFT, SECURITY, GYM, SWIMMING POOL, CLUBHOUSE, POWER BACKUP, PARKING",
+  },
+  COMMERCIAL: {
+    label: "Commercial",
+    columns:
+      "NAME, CONTACT/NUMBER, COMMENT, COMPANY, REQUIREMENT, BUDGET, LOCATION, VISIT, HANDLE, SOURCE, SEATS, CABINS, CONFERENCE ROOMS, CONFERENCE SEATS, PANTRY, RECEPTION, PARKING, CENTRAL AC",
+  },
+};
+
 const AddLeadAdornedInput = ({
   adornment,
   adornmentPosition = "left",
@@ -85,7 +101,7 @@ const AddLeadAdornedInput = ({
   <div className="relative">
     <input
       {...inputProps}
-      className={`${inputClass} ${adornmentPosition === "left" ? "pl-9" : "pr-12"}`}
+      className={`${inputClass} ${adornmentPosition === "left" ? "pl-9" : "pr-14"}`}
     />
     <span
       className={`pointer-events-none absolute top-1/2 -translate-y-1/2 text-xs font-bold ${
@@ -96,6 +112,54 @@ const AddLeadAdornedInput = ({
     </span>
   </div>
 );
+
+const CUSTOM_BUDGET_RANGE_VALUE = "__CUSTOM_BUDGET__";
+
+const SALE_BUDGET_RANGE_OPTIONS = [
+  { value: "", label: "Budget Range", min: "", max: "" },
+  { value: "0-2500000", label: "Under 25 Lakh", min: "0", max: "2500000" },
+  { value: "2500000-5000000", label: "25 Lakh - 50 Lakh", min: "2500000", max: "5000000" },
+  { value: "5000000-7500000", label: "50 Lakh - 75 Lakh", min: "5000000", max: "7500000" },
+  { value: "7500000-10000000", label: "75 Lakh - 1 Cr", min: "7500000", max: "10000000" },
+  { value: "10000000-20000000", label: "1 Cr - 2 Cr", min: "10000000", max: "20000000" },
+  { value: "20000000-50000000", label: "2 Cr - 5 Cr", min: "20000000", max: "50000000" },
+  { value: "50000000-", label: "5 Cr+", min: "50000000", max: "" },
+  { value: CUSTOM_BUDGET_RANGE_VALUE, label: "Custom", min: "", max: "" },
+];
+
+const RENT_LEASE_BUDGET_RANGE_OPTIONS = [
+  { value: "", label: "Budget Range", min: "", max: "" },
+  { value: "0-25000", label: "Under 25,000", min: "0", max: "25000" },
+  { value: "25000-50000", label: "25,000 - 50,000", min: "25000", max: "50000" },
+  { value: "50000-100000", label: "50,000 - 1 Lakh", min: "50000", max: "100000" },
+  { value: "100000-200000", label: "1 Lakh - 2 Lakh", min: "100000", max: "200000" },
+  { value: "200000-500000", label: "2 Lakh - 5 Lakh", min: "200000", max: "500000" },
+  { value: "500000-", label: "5 Lakh+", min: "500000", max: "" },
+  { value: CUSTOM_BUDGET_RANGE_VALUE, label: "Custom", min: "", max: "" },
+];
+
+const getBudgetRangeOptions = (transactionType) =>
+  ["RENT", "LEASE"].includes(String(transactionType || "").trim().toUpperCase())
+    ? RENT_LEASE_BUDGET_RANGE_OPTIONS
+    : SALE_BUDGET_RANGE_OPTIONS;
+
+const getBudgetRangeOptionValue = (min, max, options = SALE_BUDGET_RANGE_OPTIONS) => {
+  const minText = String(min || "").trim();
+  const maxText = String(max || "").trim();
+  if (!minText && !maxText) return "";
+  const value = `${minText}-${maxText}`;
+  return options.some((option) => option.value === value) ? value : CUSTOM_BUDGET_RANGE_VALUE;
+};
+
+const toPositivePlotMeasure = (value) => {
+  const parsed = Number(value);
+  return Number.isFinite(parsed) && parsed >= 0 ? parsed : null;
+};
+
+const formatCalculatedPlotArea = (area) =>
+  Number.isInteger(area) ? String(area) : String(Number(area.toFixed(2)));
+
+const PLOT_INLINE_FIELD_KEYS = new Set(["plotLocation", "plotOccupancy", "plotPurpose"]);
 
 const CUSTOM_NUMBER_OPTION_VALUE = "__CUSTOM_NUMBER__";
 
@@ -333,26 +397,32 @@ export const LeadsMatrixToolbar = ({
               <button
                 type="button"
                 onClick={onRefresh}
-                className={`inline-flex h-10 min-w-0 items-center justify-center gap-1.5 rounded-2xl border px-2 text-[10px] font-bold uppercase tracking-[0.08em] transition-colors sm:rounded-xl sm:text-xs sm:tracking-[0.12em] ${
+                className={`inline-flex min-h-16 min-w-0 flex-col items-center justify-center gap-1 rounded-2xl border px-1 py-2 text-center text-[10px] font-bold uppercase leading-[1.05] tracking-[0.03em] transition-colors sm:rounded-xl ${
                   isDark
                     ? "border-slate-600 bg-slate-900 text-slate-100 hover:border-emerald-300/60 hover:text-emerald-100"
                     : "border-slate-300 bg-white text-slate-700 hover:border-emerald-400 hover:text-emerald-700"
                 }`}
               >
                 {refreshing ? <Loader size={14} className="animate-spin" /> : <RefreshCw size={14} />}
-                Refresh Feed
+                <span className="block max-w-full">
+                  <span className="block whitespace-nowrap">Refresh</span>
+                  <span className="block whitespace-nowrap">Feed</span>
+                </span>
               </button>
 
               {canAddLead && (
                 <button
                   type="button"
                   onClick={onOpenAddModal}
-                  className={`inline-flex h-10 min-w-0 items-center justify-center gap-1.5 rounded-2xl px-2 text-[10px] font-bold uppercase tracking-[0.08em] text-white transition-colors sm:rounded-xl sm:text-xs sm:tracking-[0.12em] ${
+                  className={`inline-flex min-h-16 min-w-0 flex-col items-center justify-center gap-1 rounded-2xl px-1 py-2 text-center text-[10px] font-bold uppercase leading-[1.05] tracking-[0.03em] text-white transition-colors sm:rounded-xl ${
                     isDark ? "bg-emerald-600 hover:bg-emerald-500" : "bg-slate-900 hover:bg-emerald-600"
                   }`}
                 >
                   <Plus size={15} />
-                  Add New Lead
+                  <span className="block max-w-full">
+                    <span className="block whitespace-nowrap">New</span>
+                    <span className="block whitespace-nowrap">Lead</span>
+                  </span>
                 </button>
               )}
 
@@ -360,14 +430,17 @@ export const LeadsMatrixToolbar = ({
                 <button
                   type="button"
                   onClick={onOpenBulkUploadModal}
-                  className={`inline-flex h-10 min-w-0 items-center justify-center gap-1.5 rounded-2xl border px-2 text-[10px] font-bold uppercase tracking-[0.08em] transition-colors sm:rounded-xl sm:text-xs sm:tracking-[0.12em] ${
+                  className={`inline-flex min-h-16 min-w-0 flex-col items-center justify-center gap-1 rounded-2xl border px-1 py-2 text-center text-[10px] font-bold uppercase leading-[1.05] tracking-[0.03em] transition-colors sm:rounded-xl ${
                     isDark
                       ? "border-cyan-300/50 bg-cyan-500/10 text-cyan-100 hover:bg-cyan-500/20"
                       : "border-cyan-300 bg-cyan-50 text-cyan-700 hover:bg-cyan-100"
                   }`}
                 >
                   <UploadCloud size={14} />
-                  Bulk Upload
+                  <span className="block max-w-full">
+                    <span className="block whitespace-nowrap">Bulk</span>
+                    <span className="block whitespace-nowrap">Upload</span>
+                  </span>
                 </button>
               )}
             </div>
@@ -1387,6 +1460,9 @@ export const LeadsMatrixTable = ({
 
 export const AddLeadModal = ({
   isDark,
+  title = "Add New Lead",
+  saveLabel = "Save Lead",
+  savingLabel = "Saving...",
   formData,
   setFormData,
   inventoryOptions,
@@ -1397,6 +1473,8 @@ export const AddLeadModal = ({
   savingLead,
 }) => {
   const [customNumberFields, setCustomNumberFields] = React.useState({});
+  const [isManualBudgetRange, setIsManualBudgetRange] = React.useState(false);
+  const [inventorySearchText, setInventorySearchText] = React.useState("");
   const inputClass = `h-11 w-full rounded-lg border px-3 text-sm md:h-10 ${
     isDark ? "border-slate-700 bg-slate-950 text-slate-200" : "border-slate-300 bg-white text-slate-700"
   }`;
@@ -1418,13 +1496,84 @@ export const AddLeadModal = ({
   const propertySubtypeOptions = getPropertySubtypeOptions(requirementInventoryType);
   const propertySubtypeConfig = getPropertySubtypeConfig(requirementInventoryType, requirementPropertySubtype);
   const showFurnishing = !propertySubtypeConfig || propertySubtypeConfig.showFurnishing !== false;
+  const isPlotRequirement = requirementPropertySubtype === "PLOT";
+  const isFlatRequirement = requirementPropertySubtype === "APARTMENT";
   const furnishingOptions = showFurnishing ? FURNISHING_OPTIONS : [];
   const furnishingValue = furnishingOptions.some((option) => option.value === formData.requirementsFurnishingStatus)
     ? formData.requirementsFurnishingStatus
     : "";
+  const budgetRangeOptions = getBudgetRangeOptions(formData.requirementsTransactionType);
+  const budgetRangeValue = getBudgetRangeOptionValue(
+    formData.requirementsBudgetMin,
+    formData.requirementsBudgetMax,
+    budgetRangeOptions,
+  );
+  const isCustomBudgetRange = isManualBudgetRange || budgetRangeValue === CUSTOM_BUDGET_RANGE_VALUE;
+  const selectedBudgetRangeValue = isCustomBudgetRange ? CUSTOM_BUDGET_RANGE_VALUE : budgetRangeValue;
+  const plotLocationValue = String(formData.requirementsSubtypeData?.plotLocation || "");
+  const plotOccupancyValue = String(formData.requirementsSubtypeData?.plotOccupancy || "");
+  const plotPurposeValue = String(formData.requirementsSubtypeData?.plotPurpose || "");
+  const selectedInventoryIds = new Set(
+    [
+      formData.inventoryId,
+      ...(Array.isArray(formData.relatedInventoryIds) ? formData.relatedInventoryIds : []),
+    ]
+      .map((value) => String(value || "").trim())
+      .filter(Boolean),
+  );
+  const normalizedInventorySearchText = inventorySearchText.trim().toLowerCase();
+  const filteredInventoryOptions = inventoryOptions.filter((inventory) => {
+    if (!normalizedInventorySearchText) return true;
+    const inventoryLabel = getInventoryLeadLabel(inventory) || "Inventory Unit";
+    const inventoryLocation = getInventoryLocationLabel(inventory);
+    const inventoryQuickInfo = getInventoryQuickInfo(inventory);
+    return [
+      inventoryLabel,
+      inventoryLocation,
+      inventoryQuickInfo,
+      inventory?.propertyId,
+      inventory?.projectName,
+      inventory?.unitNumber,
+    ]
+      .filter(Boolean)
+      .join(" ")
+      .toLowerCase()
+      .includes(normalizedInventorySearchText);
+  });
 
   const updateField = (field, value) => {
     setFormData((prev) => ({ ...prev, [field]: value }));
+  };
+
+  const updateBudgetRange = (value) => {
+    if (value === CUSTOM_BUDGET_RANGE_VALUE) {
+      setIsManualBudgetRange(true);
+      setFormData((prev) => ({
+        ...prev,
+        requirementsBudgetMin: "",
+        requirementsBudgetMax: "",
+      }));
+      return;
+    }
+
+    const selectedRange = budgetRangeOptions.find((option) => option.value === value)
+      || budgetRangeOptions[0];
+    setIsManualBudgetRange(false);
+    setFormData((prev) => ({
+      ...prev,
+      requirementsBudgetMin: selectedRange.min,
+      requirementsBudgetMax: selectedRange.max,
+    }));
+  };
+
+  const updateTransactionType = (value) => {
+    setIsManualBudgetRange(false);
+    setFormData((prev) => ({
+      ...prev,
+      requirementsTransactionType: value,
+      requirementsBudgetMin: "",
+      requirementsBudgetMax: "",
+    }));
   };
 
   const updateRequirementInventoryType = (value) => {
@@ -1461,13 +1610,25 @@ export const AddLeadModal = ({
   };
 
   const updateSubtypeField = (fieldKey, value) => {
-    setFormData((prev) => ({
-      ...prev,
-      requirementsSubtypeData: {
+    setFormData((prev) => {
+      const nextSubtypeData = {
         ...(prev.requirementsSubtypeData || {}),
         [fieldKey]: value,
-      },
-    }));
+      };
+
+      if (["plotLength", "plotWidth"].includes(fieldKey)) {
+        const length = toPositivePlotMeasure(nextSubtypeData.plotLength);
+        const width = toPositivePlotMeasure(nextSubtypeData.plotWidth);
+        if (length !== null && width !== null) {
+          nextSubtypeData.plotArea = formatCalculatedPlotArea(length * width);
+        }
+      }
+
+      return {
+        ...prev,
+        requirementsSubtypeData: nextSubtypeData,
+      };
+    });
   };
 
   const updateCustomNumberField = (fieldKey, isCustom) => {
@@ -1547,6 +1708,20 @@ export const AddLeadModal = ({
             rows={3}
             className={`${inputClass} h-auto min-h-24 py-2`}
           />
+        ) : field.unit ? (
+          <AddLeadAdornedInput
+            {...commonInputProps}
+            type={field.type === "date" ? "date" : field.type === "number" ? "number" : "text"}
+            min={field.min}
+            max={field.max}
+            step={field.step || (field.type === "number" ? "any" : undefined)}
+            value={value}
+            onChange={(event) => updateSubtypeField(field.key, event.target.value)}
+            adornment={field.unit}
+            adornmentPosition="right"
+            inputClass={inputClass}
+            isDark={isDark}
+          />
         ) : (
           <input
             {...commonInputProps}
@@ -1580,11 +1755,11 @@ export const AddLeadModal = ({
         }`}
       >
         <div className="flex shrink-0 items-center justify-between border-b border-slate-200 px-4 py-3 dark:border-slate-700 sm:px-5">
-          <h3 className={`text-lg font-bold ${isDark ? "text-slate-100" : "text-slate-900"}`}>Add New Lead</h3>
+          <h3 className={`text-lg font-bold ${isDark ? "text-slate-100" : "text-slate-900"}`}>{title}</h3>
           <button
             onClick={onClose}
             className={`inline-flex h-10 w-10 items-center justify-center rounded-xl ${isDark ? "text-slate-300 hover:bg-slate-800" : "text-slate-600 hover:bg-slate-100"}`}
-            aria-label="Close add lead modal"
+            aria-label={`Close ${title} modal`}
           >
             <X size={16} />
           </button>
@@ -1645,11 +1820,11 @@ export const AddLeadModal = ({
                 </AddLeadFieldShell>
               ) : null}
               <AddLeadFieldShell fieldTitleClass={fieldTitleClass} title="Deal Type">
-                <AddLeadSelectControl inputClass={inputClass} isDark={isDark} value={formData.requirementsTransactionType} onChange={(event) => updateField("requirementsTransactionType", event.target.value)}>
+                <AddLeadSelectControl inputClass={inputClass} isDark={isDark} value={formData.requirementsTransactionType} onChange={(event) => updateTransactionType(event.target.value)}>
                   <option value="">Deal Type (Any)</option>
                   <option value="SALE">Purchase</option>
+                  {isFlatRequirement ? <option value="RENT">Rent</option> : null}
                   <option value="LEASE">Lease</option>
-                  <option value="RENT">Rent</option>
                 </AddLeadSelectControl>
               </AddLeadFieldShell>
               {showFurnishing ? (
@@ -1663,26 +1838,162 @@ export const AddLeadModal = ({
               ) : null}
             </div>
 
-            <div className="mt-2 grid grid-cols-1 gap-2 md:grid-cols-2">
-              <AddLeadFieldShell fieldTitleClass={fieldTitleClass} title="Budget Min">
-                <AddLeadAdornedInput type="number" step="any" adornment="₹" inputClass={inputClass} isDark={isDark} placeholder="Budget Min" value={formData.requirementsBudgetMin} onChange={(event) => updateField("requirementsBudgetMin", event.target.value)} />
-              </AddLeadFieldShell>
-              <AddLeadFieldShell fieldTitleClass={fieldTitleClass} title="Budget Max">
-                <AddLeadAdornedInput type="number" step="any" adornment="₹" inputClass={inputClass} isDark={isDark} placeholder="Budget Max" value={formData.requirementsBudgetMax} onChange={(event) => updateField("requirementsBudgetMax", event.target.value)} />
-              </AddLeadFieldShell>
-            </div>
+            {isPlotRequirement ? (
+              <div className="mt-2 grid grid-cols-1 gap-2 md:grid-cols-2">
+                <AddLeadFieldShell fieldTitleClass={fieldTitleClass} title="Project Interested">
+                  <input
+                    placeholder="Project Interested"
+                    value={formData.projectInterested}
+                    onChange={(event) => updateField("projectInterested", event.target.value)}
+                    className={inputClass}
+                  />
+                </AddLeadFieldShell>
+                <AddLeadFieldShell fieldTitleClass={fieldTitleClass} title="Client's Profession">
+                  <input
+                    placeholder="Client's Profession"
+                    value={formData.clientProfession}
+                    onChange={(event) => updateField("clientProfession", event.target.value)}
+                    className={inputClass}
+                  />
+                </AddLeadFieldShell>
+                <AddLeadFieldShell fieldTitleClass={fieldTitleClass} title="Budget Range">
+                  <AddLeadSelectControl
+                    inputClass={inputClass}
+                    isDark={isDark}
+                    value={selectedBudgetRangeValue}
+                    onChange={(event) => updateBudgetRange(event.target.value)}
+                  >
+                    {budgetRangeOptions.map((option) => (
+                      <option key={option.value || "any-plot-budget"} value={option.value}>
+                        {option.label}
+                      </option>
+                    ))}
+                  </AddLeadSelectControl>
+                </AddLeadFieldShell>
+                {isCustomBudgetRange ? (
+                  <>
+                    <AddLeadFieldShell fieldTitleClass={fieldTitleClass} title="Budget Min">
+                      <input
+                        type="number"
+                        step="any"
+                        placeholder="Budget Min"
+                        value={formData.requirementsBudgetMin}
+                        onChange={(event) => updateField("requirementsBudgetMin", event.target.value)}
+                        className={inputClass}
+                      />
+                    </AddLeadFieldShell>
+                    <AddLeadFieldShell fieldTitleClass={fieldTitleClass} title="Budget Max">
+                      <input
+                        type="number"
+                        step="any"
+                        placeholder="Budget Max"
+                        value={formData.requirementsBudgetMax}
+                        onChange={(event) => updateField("requirementsBudgetMax", event.target.value)}
+                        className={inputClass}
+                      />
+                    </AddLeadFieldShell>
+                  </>
+                ) : null}
+                <AddLeadFieldShell fieldTitleClass={fieldTitleClass} title="Location">
+                  <AddLeadSelectControl
+                    inputClass={inputClass}
+                    isDark={isDark}
+                    value={plotLocationValue}
+                    onChange={(event) => updateSubtypeField("plotLocation", event.target.value)}
+                  >
+                    <option value="">Location</option>
+                    {PLOT_LOCATION_OPTIONS.map((location) => (
+                      <option key={location} value={location}>
+                        {location}
+                      </option>
+                    ))}
+                  </AddLeadSelectControl>
+                </AddLeadFieldShell>
+                <AddLeadFieldShell fieldTitleClass={fieldTitleClass} title="Occupancy">
+                  <AddLeadSelectControl
+                    inputClass={inputClass}
+                    isDark={isDark}
+                    value={plotOccupancyValue}
+                    onChange={(event) => updateSubtypeField("plotOccupancy", event.target.value)}
+                  >
+                    <option value="">Occupancy</option>
+                    {PLOT_OCCUPANCY_OPTIONS.map((occupancy) => (
+                      <option key={occupancy} value={occupancy}>
+                        {occupancy}
+                      </option>
+                    ))}
+                  </AddLeadSelectControl>
+                </AddLeadFieldShell>
+                <AddLeadFieldShell fieldTitleClass={fieldTitleClass} title="Purpose">
+                  <AddLeadSelectControl
+                    inputClass={inputClass}
+                    isDark={isDark}
+                    value={plotPurposeValue}
+                    onChange={(event) => updateSubtypeField("plotPurpose", event.target.value)}
+                  >
+                    <option value="">Purpose</option>
+                    {PLOT_PURPOSE_OPTIONS.map((purpose) => (
+                      <option key={purpose} value={purpose}>
+                        {purpose}
+                      </option>
+                    ))}
+                  </AddLeadSelectControl>
+                </AddLeadFieldShell>
+              </div>
+            ) : (
+              <div className="mt-2 grid grid-cols-1 gap-2 md:grid-cols-2">
+                <AddLeadFieldShell fieldTitleClass={fieldTitleClass} title="Budget Range">
+                  <AddLeadSelectControl
+                    inputClass={inputClass}
+                    isDark={isDark}
+                    value={selectedBudgetRangeValue}
+                    onChange={(event) => updateBudgetRange(event.target.value)}
+                  >
+                    {budgetRangeOptions.map((option) => (
+                      <option key={option.value || "any-budget"} value={option.value}>
+                        {option.label}
+                      </option>
+                    ))}
+                  </AddLeadSelectControl>
+                </AddLeadFieldShell>
+                {isCustomBudgetRange ? (
+                  <>
+                    <AddLeadFieldShell fieldTitleClass={fieldTitleClass} title="Budget Min">
+                      <input
+                        type="number"
+                        step="any"
+                        placeholder="Budget Min"
+                        value={formData.requirementsBudgetMin}
+                        onChange={(event) => updateField("requirementsBudgetMin", event.target.value)}
+                        className={inputClass}
+                      />
+                    </AddLeadFieldShell>
+                    <AddLeadFieldShell fieldTitleClass={fieldTitleClass} title="Budget Max">
+                      <input
+                        type="number"
+                        step="any"
+                        placeholder="Budget Max"
+                        value={formData.requirementsBudgetMax}
+                        onChange={(event) => updateField("requirementsBudgetMax", event.target.value)}
+                        className={inputClass}
+                      />
+                    </AddLeadFieldShell>
+                  </>
+                ) : null}
+              </div>
+            )}
 
             {propertySubtypeConfig ? (
               <div className="mt-2">
                 <div className={sectionHeadingClass}>{propertySubtypeConfig.label} Preferences</div>
                 <div className="grid grid-cols-1 gap-2 md:grid-cols-2">
                   {(propertySubtypeConfig.fields || [])
-                    .filter((field) => field.type !== "checkbox")
+                    .filter((field) => field.type !== "checkbox" && !PLOT_INLINE_FIELD_KEYS.has(field.key))
                     .map(renderDynamicField)}
                 </div>
                 <div className="mt-2 flex flex-wrap gap-2">
                   {(propertySubtypeConfig.fields || [])
-                    .filter((field) => field.type === "checkbox")
+                    .filter((field) => field.type === "checkbox" && !PLOT_INLINE_FIELD_KEYS.has(field.key))
                     .map(renderDynamicField)}
                 </div>
               </div>
@@ -1690,14 +2001,17 @@ export const AddLeadModal = ({
           </div>
 
           <AddLeadFieldShell fieldTitleClass={fieldTitleClass} title="Select Inventory">
-            <AddLeadSelectControl
-              inputClass={inputClass}
-              isDark={isDark}
-              value={formData.inventoryId}
-              onChange={(event) => onInventorySelection(event.target.value)}
-            >
-              <option value="">Select Inventory (optional)</option>
-              {inventoryOptions.map((inventory) => {
+            <input
+              type="search"
+              value={inventorySearchText}
+              onChange={(event) => setInventorySearchText(event.target.value)}
+              placeholder="Search inventory"
+              className={inputClass}
+            />
+            <div className={`mt-2 max-h-44 overflow-auto rounded-lg border ${
+              isDark ? "border-slate-700 bg-slate-950" : "border-slate-200 bg-white"
+            }`}>
+              {filteredInventoryOptions.length ? filteredInventoryOptions.map((inventory) => {
                 const inventoryLabel = getInventoryLeadLabel(inventory) || "Inventory Unit";
                 const inventoryLocation = getInventoryLocationLabel(inventory);
                 const inventoryQuickInfo = getInventoryQuickInfo(inventory);
@@ -1708,13 +2022,37 @@ export const AddLeadModal = ({
                 ]
                   .filter(Boolean)
                   .join(" | ");
+                const inventoryId = String(inventory?._id || "");
+                const checked = selectedInventoryIds.has(inventoryId);
                 return (
-                  <option key={inventory._id} value={inventory._id}>
-                    {optionText || inventoryLabel}
-                  </option>
+                  <label
+                    key={inventoryId}
+                    className={`flex cursor-pointer items-start gap-2 border-b px-3 py-2 text-sm last:border-b-0 ${
+                      isDark ? "border-slate-800 text-slate-200 hover:bg-slate-900" : "border-slate-100 text-slate-700 hover:bg-slate-50"
+                    }`}
+                  >
+                    <input
+                      type="checkbox"
+                      className="mt-1 h-4 w-4"
+                      checked={checked}
+                      onChange={(event) => onInventorySelection(inventoryId, event.target.checked)}
+                    />
+                    <span className="min-w-0 flex-1">
+                      <span className="block truncate font-semibold">{inventoryLabel}</span>
+                      {optionText ? (
+                        <span className={`block truncate text-xs ${isDark ? "text-slate-400" : "text-slate-500"}`}>
+                          {optionText}
+                        </span>
+                      ) : null}
+                    </span>
+                  </label>
                 );
-              })}
-            </AddLeadSelectControl>
+              }) : (
+                <div className={`px-3 py-3 text-sm ${isDark ? "text-slate-400" : "text-slate-500"}`}>
+                  No inventory found
+                </div>
+              )}
+            </div>
           </AddLeadFieldShell>
         </div>
 
@@ -1736,7 +2074,7 @@ export const AddLeadModal = ({
               isDark ? "bg-emerald-600 hover:bg-emerald-500" : "bg-slate-900 hover:bg-emerald-600"
             }`}
           >
-            {savingLead ? "Saving..." : "Save Lead"}
+            {savingLead ? savingLabel : saveLabel}
           </button>
         </div>
       </Motion.div>
@@ -1747,13 +2085,18 @@ export const AddLeadModal = ({
 export const BulkLeadUploadModal = ({
   isDark,
   csvText,
+  sheetType,
+  onSheetTypeChange,
   onCsvTextChange,
   selectedFileName,
   onFileSelect,
   onClose,
   onUpload,
   uploading,
-}) => (
+}) => {
+  const activeFormat = BULK_LEAD_SHEET_FORMATS[sheetType] || BULK_LEAD_SHEET_FORMATS.COMMERCIAL;
+
+  return (
   <Motion.div
     initial={{ opacity: 0 }}
     animate={{ opacity: 1 }}
@@ -1783,6 +2126,34 @@ export const BulkLeadUploadModal = ({
       </div>
 
       <div className="mobile-modal-scroll flex-1 space-y-3">
+        <div>
+          <p className={`mb-1 text-[11px] font-semibold uppercase tracking-[0.12em] ${
+            isDark ? "text-slate-400" : "text-slate-500"
+          }`}>
+            Lead Sheet Type
+          </p>
+          <div className="relative">
+            <select
+              value={sheetType}
+              onChange={(event) => onSheetTypeChange(event.target.value)}
+              className={`h-10 w-full appearance-none rounded-lg border px-3 pr-10 text-sm font-semibold ${
+                isDark
+                  ? "border-slate-700 bg-slate-950 text-slate-200"
+                  : "border-slate-300 bg-white text-slate-700"
+              }`}
+            >
+              <option value="RESIDENTIAL">Residantial</option>
+              <option value="COMMERCIAL">Commercial</option>
+            </select>
+            <ChevronDown
+              size={16}
+              className={`pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 ${
+                isDark ? "text-slate-400" : "text-slate-500"
+              }`}
+            />
+          </div>
+        </div>
+
         <label className={`flex cursor-pointer items-center justify-center gap-2 rounded-xl border border-dashed px-4 py-5 text-sm ${
           isDark
             ? "border-slate-600 bg-slate-950 text-slate-300 hover:border-cyan-400/45"
@@ -1792,6 +2163,7 @@ export const BulkLeadUploadModal = ({
           <UploadCloud size={16} />
           <span>{selectedFileName ? `Selected: ${selectedFileName}` : "Choose Excel / CSV File"}</span>
           <input
+            key={`${sheetType}-${selectedFileName || "empty"}`}
             type="file"
             accept=".xlsx,.xls,.csv,text/csv,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/vnd.ms-excel"
             className="hidden"
@@ -1808,14 +2180,14 @@ export const BulkLeadUploadModal = ({
           <p className={`rounded-lg border px-3 py-2 text-xs font-mono ${
             isDark ? "border-slate-700 bg-slate-950 text-slate-300" : "border-slate-200 bg-slate-50 text-slate-600"
           }`}>
-            NAME, CONTACT/NUMBER, COMMENT, COMPANY, REQUIREMENT, BUDGET, LOCATION, VISIT, HANDLE, SOURCE
+            {activeFormat.columns}
           </p>
         </div>
 
         <textarea
           value={csvText}
           onChange={(event) => onCsvTextChange(event.target.value)}
-          placeholder="Paste CSV content here, or choose the PRE - SALES - LEADS Excel workbook"
+          placeholder={`Paste ${activeFormat.label} CSV content here, or choose the Excel workbook`}
           rows={10}
           className={`w-full resize-y rounded-xl border px-3 py-2 text-sm ${
             isDark
@@ -1846,7 +2218,8 @@ export const BulkLeadUploadModal = ({
       </div>
     </Motion.div>
   </Motion.div>
-);
+  );
+};
 
 export const LeadDetailsDrawer = ({
   layoutMode = "drawer",

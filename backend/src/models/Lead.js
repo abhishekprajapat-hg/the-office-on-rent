@@ -11,6 +11,7 @@ const leadSchema = new mongoose.Schema(
       default: [],
     },
     projectInterested: String,
+    clientProfession: String,
     companyId: {
       type: mongoose.Schema.Types.ObjectId,
       ref: "Company",

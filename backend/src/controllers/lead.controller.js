@@ -118,6 +118,7 @@ const LEAD_SELECTABLE_FIELDS = [
   "city",
   "preferredLocations",
   "projectInterested",
+  "clientProfession",
   "inventoryId",
   "relatedInventoryIds",
   "siteLocation",
@@ -1845,7 +1846,9 @@ exports.createLead = async (req, res) => {
       city,
       preferredLocations,
       projectInterested,
+      clientProfession,
       inventoryId: rawInventoryId,
+      relatedInventoryIds: rawRelatedInventoryIds,
       siteLocation: rawSiteLocation,
       requirements: rawRequirements,
     } = req.body;
@@ -1866,25 +1869,43 @@ exports.createLead = async (req, res) => {
     }
 
     const inventoryId = String(rawInventoryId || "").trim();
+    const requestedInventoryIds = [
+      ...new Set(
+        [
+          inventoryId,
+          ...(Array.isArray(rawRelatedInventoryIds) ? rawRelatedInventoryIds : []),
+        ]
+          .map((value) => String(value || "").trim())
+          .filter(Boolean),
+      ),
+    ];
+    const invalidInventoryId = requestedInventoryIds.find((value) => !/^[a-fA-F0-9]{24}$/.test(value));
+    if (invalidInventoryId) {
+      return res.status(400).json({ message: "Invalid inventory id" });
+    }
+
     let inventory = null;
+    let relatedInventories = [];
 
-    if (inventoryId) {
-      if (!/^[a-fA-F0-9]{24}$/.test(inventoryId)) {
-        return res.status(400).json({ message: "Invalid inventory id" });
-      }
+    if (requestedInventoryIds.length) {
+      const inventoryQuery = { _id: { $in: requestedInventoryIds } };
+      if (req.user?.companyId) inventoryQuery.companyId = req.user.companyId;
 
-      const inventoryQuery = { _id: inventoryId };
-      if (req.user?.companyId) {
-        inventoryQuery.companyId = req.user.companyId;
-      }
-
-      inventory = await Inventory.findOne(inventoryQuery)
+      relatedInventories = await Inventory.find(inventoryQuery)
         .select(LEAD_INVENTORY_SELECT_FIELDS)
         .lean();
 
-      if (!inventory) {
+      if (relatedInventories.length !== requestedInventoryIds.length) {
         return res.status(404).json({ message: "Inventory not found" });
       }
+
+      const inventoryById = new Map(
+        relatedInventories.map((row) => [String(row?._id || ""), row]),
+      );
+      inventory = inventoryById.get(requestedInventoryIds[0]) || null;
+      relatedInventories = requestedInventoryIds
+        .map((id) => inventoryById.get(id))
+        .filter(Boolean);
     }
 
     const resolvedProjectInterested =
@@ -1902,6 +1923,7 @@ exports.createLead = async (req, res) => {
       city: resolvedCity,
       preferredLocations: normalizePreferredLocations(preferredLocations),
       projectInterested: resolvedProjectInterested,
+      clientProfession: String(clientProfession || "").trim(),
       requirements: normalizeLeadRequirements({
         rawRequirements,
         inventory,
@@ -1913,7 +1935,7 @@ exports.createLead = async (req, res) => {
 
     if (inventory) {
       createPayload.inventoryId = inventory._id;
-      createPayload.relatedInventoryIds = [inventory._id];
+      createPayload.relatedInventoryIds = relatedInventories.map((row) => row._id);
     }
 
     if (parsedSiteLocation.provided) {
@@ -3203,6 +3225,7 @@ exports.updateLeadBasics = async (req, res) => {
     const nextCity = String(req.body?.city || "").trim();
     const nextPreferredLocations = normalizePreferredLocations(req.body?.preferredLocations);
     const nextProjectInterested = String(req.body?.projectInterested || "").trim();
+    const nextClientProfession = String(req.body?.clientProfession || "").trim();
     const nextSource = String(req.body?.source || "").trim();
 
     if (nextName && nextName.length < 2) {
@@ -3244,6 +3267,10 @@ exports.updateLeadBasics = async (req, res) => {
     if (req.body?.projectInterested !== undefined && nextProjectInterested !== String(lead.projectInterested || "")) {
       lead.projectInterested = nextProjectInterested;
       updates.push("projectInterested");
+    }
+    if (req.body?.clientProfession !== undefined && nextClientProfession !== String(lead.clientProfession || "")) {
+      lead.clientProfession = nextClientProfession;
+      updates.push("clientProfession");
     }
     if (req.body?.source !== undefined && nextSource !== String(lead.source || "")) {
       lead.source = nextSource;
@@ -3289,6 +3316,7 @@ exports.updateLeadStatus = async (req, res) => {
       city,
       preferredLocations,
       projectInterested,
+      clientProfession,
       status: rawStatus,
       nextFollowUp,
       siteLocation: rawSiteLocation,
@@ -3308,6 +3336,7 @@ exports.updateLeadStatus = async (req, res) => {
     const hasCityField = Object.prototype.hasOwnProperty.call(req.body || {}, "city");
     const hasPreferredLocationsField = Object.prototype.hasOwnProperty.call(req.body || {}, "preferredLocations");
     const hasProjectInterestedField = Object.prototype.hasOwnProperty.call(req.body || {}, "projectInterested");
+    const hasClientProfessionField = Object.prototype.hasOwnProperty.call(req.body || {}, "clientProfession");
     const hasRequirementsField = Object.prototype.hasOwnProperty.call(req.body || {}, "requirements");
     const normalizedName = hasNameField ? String(name || "").trim() : "";
     const normalizedPhone = hasPhoneField ? String(phone || "").trim() : "";
@@ -3318,6 +3347,9 @@ exports.updateLeadStatus = async (req, res) => {
       : [];
     const normalizedProjectInterested = hasProjectInterestedField
       ? String(projectInterested || "").trim()
+      : "";
+    const normalizedClientProfession = hasClientProfessionField
+      ? String(clientProfession || "").trim()
       : "";
 
     if (!LEAD_STATUS_VALUES.includes(requestedStatus)) {
@@ -3427,6 +3459,14 @@ exports.updateLeadStatus = async (req, res) => {
       if (normalizedProjectInterested !== existingProjectInterested) {
         lead.projectInterested = normalizedProjectInterested;
         updatedProfileFields.push("projectInterested");
+      }
+    }
+
+    if (hasClientProfessionField) {
+      const existingClientProfession = String(lead?.clientProfession || "").trim();
+      if (normalizedClientProfession !== existingClientProfession) {
+        lead.clientProfession = normalizedClientProfession;
+        updatedProfileFields.push("clientProfession");
       }
     }
 

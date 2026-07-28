@@ -75,6 +75,7 @@ const LEAD_LIST_FIELDS = [
   "city",
   "preferredLocations",
   "projectInterested",
+  "clientProfession",
   "requirements",
   "source",
   "status",
@@ -112,12 +113,14 @@ const MAX_CLOSURE_DOCUMENTS = 20;
 
 const defaultFormData = {
   inventoryId: "",
+  relatedInventoryIds: [],
   name: "",
   phone: "",
   email: "",
   city: "",
   preferredLocations: "",
   projectInterested: "",
+  clientProfession: "",
   siteLat: "",
   siteLng: "",
   requirementsInventoryType: "",
@@ -433,17 +436,20 @@ const validateLeadRequirementDraft = ({
 } = {}) => {
   const parsedBudgetMin = toAmountNumber(budgetMin);
   const parsedBudgetMax = toAmountNumber(budgetMax);
+  const isPlotRequirement = String(propertySubtype || "").trim().toUpperCase() === "PLOT";
 
   const numericChecks = [
-    ["Budget Min", parsedBudgetMin],
-    ["Budget Max", parsedBudgetMax],
+    [isPlotRequirement ? "Budget Range minimum" : "Budget Min", parsedBudgetMin],
+    [isPlotRequirement ? "Budget Range maximum" : "Budget Max", parsedBudgetMax],
   ];
 
   for (const [label, value] of numericChecks) {
     if (value !== null && value < 0) return `${label} cannot be negative`;
   }
   if (parsedBudgetMin !== null && parsedBudgetMax !== null && parsedBudgetMin > parsedBudgetMax) {
-    return "Budget Min cannot be greater than Budget Max";
+    return isPlotRequirement
+      ? "Budget Range minimum cannot be greater than maximum"
+      : "Budget Min cannot be greater than Budget Max";
   }
 
   const subtypeConfig = getPropertySubtypeConfig(inventoryType, propertySubtype);
@@ -521,6 +527,82 @@ const toObjectIdString = (value) => {
   if (typeof value === "string") return value;
   if (typeof value === "object" && value._id) return String(value._id);
   return String(value);
+};
+
+const mapLeadToFormData = (lead = {}) => {
+  const requirements = mapLeadRequirementsToDraft(lead?.requirements || {});
+  const primaryInventoryId = toObjectIdString(lead?.inventoryId);
+  const relatedInventoryIds = [
+    ...new Set(
+      [
+        primaryInventoryId,
+        ...(Array.isArray(lead?.relatedInventoryIds) ? lead.relatedInventoryIds : []),
+      ]
+        .map(toObjectIdString)
+        .filter(Boolean),
+    ),
+  ];
+  const siteLat = toCoordinateNumber(lead?.siteLocation?.lat);
+  const siteLng = toCoordinateNumber(lead?.siteLocation?.lng);
+
+  return {
+    ...defaultFormData,
+    inventoryId: primaryInventoryId,
+    relatedInventoryIds,
+    name: String(lead?.name || ""),
+    phone: String(lead?.phone || ""),
+    email: String(lead?.email || ""),
+    city: String(lead?.city || ""),
+    preferredLocations: Array.isArray(lead?.preferredLocations)
+      ? lead.preferredLocations.join(", ")
+      : "",
+    projectInterested: String(lead?.projectInterested || ""),
+    clientProfession: String(lead?.clientProfession || ""),
+    siteLat: siteLat === null ? "" : String(siteLat),
+    siteLng: siteLng === null ? "" : String(siteLng),
+    requirementsInventoryType: requirements.inventoryType,
+    requirementsPropertySubtype: requirements.propertySubtype,
+    requirementsSubtypeData: requirements.subtypeData || {},
+    requirementsTransactionType: requirements.transactionType,
+    requirementsFurnishingStatus: requirements.furnishingStatus,
+    requirementsBudgetMin: requirements.budgetMin,
+    requirementsBudgetMax: requirements.budgetMax,
+    requirementsAreaMin: requirements.areaMin,
+    requirementsAreaMax: requirements.areaMax,
+    requirementsAreaUnit: requirements.areaUnit || "SQ_FT",
+    requirementsCommercialSeats: requirements.commercial?.seats || "",
+    requirementsCommercialCabins: requirements.commercial?.cabins || "",
+    requirementsCommercialConferenceRooms: requirements.commercial?.conferenceRooms || "",
+    requirementsCommercialConferenceSeats: requirements.commercial?.conferenceSeats || "",
+    requirementsCommercialParkingAvailable: Boolean(requirements.commercial?.parkingAvailable),
+    requirementsCommercialPantry: Boolean(requirements.commercial?.pantry),
+    requirementsCommercialReceptionArea: Boolean(requirements.commercial?.receptionArea),
+    requirementsCommercialWaitingArea: Boolean(requirements.commercial?.waitingArea),
+    requirementsCommercialCafeteria: Boolean(requirements.commercial?.cafeteria),
+    requirementsCommercialServerRoom: Boolean(requirements.commercial?.serverRoom),
+    requirementsCommercialStorageRoom: Boolean(requirements.commercial?.storageRoom),
+    requirementsCommercialBreakoutArea: Boolean(requirements.commercial?.breakoutArea),
+    requirementsCommercialLiftAvailable: Boolean(requirements.commercial?.liftAvailable),
+    requirementsCommercialPowerBackup: Boolean(requirements.commercial?.powerBackup),
+    requirementsCommercialCentralAC: Boolean(requirements.commercial?.centralAC),
+    requirementsCommercialFireSafety: Boolean(requirements.commercial?.fireSafety),
+    requirementsCommercialReadyToMove: Boolean(requirements.commercial?.readyToMove),
+    requirementsCommercialUnderConstruction: Boolean(requirements.commercial?.underConstruction),
+    requirementsResidentialBhkType: requirements.residential?.bhkType || "",
+    requirementsResidentialFloor: requirements.residential?.floor || "",
+    requirementsResidentialAmenityLift: Boolean(requirements.residential?.amenities?.lift),
+    requirementsResidentialAmenitySecurity: Boolean(requirements.residential?.amenities?.security),
+    requirementsResidentialAmenityGym: Boolean(requirements.residential?.amenities?.gym),
+    requirementsResidentialAmenitySwimmingPool: Boolean(requirements.residential?.amenities?.swimmingPool),
+    requirementsResidentialAmenityClubhouse: Boolean(requirements.residential?.amenities?.clubhouse),
+    requirementsResidentialAmenityPowerBackup: Boolean(requirements.residential?.amenities?.powerBackup),
+    requirementsResidentialAmenityParking: Boolean(requirements.residential?.amenities?.parking),
+    requirementsResidentialAmenityStudyRoom: Boolean(requirements.residential?.amenities?.studyRoom),
+    requirementsResidentialAmenityServantRoom: Boolean(requirements.residential?.amenities?.servantRoom),
+    requirementsResidentialAmenityModularKitchen: Boolean(requirements.residential?.amenities?.modularKitchen),
+    requirementsResidentialAmenityElectricityBackup: Boolean(requirements.residential?.amenities?.electricityBackup),
+    requirementsResidentialAmenityGasPipeline: Boolean(requirements.residential?.amenities?.gasPipeline),
+  };
 };
 
 const sanitizeClosureDocument = (value = {}) => {
@@ -677,6 +759,93 @@ const toAmountNumber = (value) => {
   return Number.isFinite(parsed) ? parsed : null;
 };
 
+const buildLeadFormPayload = (formData = {}) => {
+  const payload = {
+    name: String(formData.name || "").trim(),
+    phone: String(formData.phone || "").trim(),
+    email: String(formData.email || "").trim(),
+    city: String(formData.city || "").trim(),
+    preferredLocations: toPreferredLocationsList(formData.preferredLocations),
+    projectInterested: String(formData.projectInterested || "").trim(),
+    clientProfession: String(formData.clientProfession || "").trim(),
+  };
+
+  const parsedSiteLat = toCoordinateNumber(formData.siteLat);
+  const parsedSiteLng = toCoordinateNumber(formData.siteLng);
+  const hasAnySiteCoordinate = parsedSiteLat !== null || parsedSiteLng !== null;
+  if (hasAnySiteCoordinate) {
+    payload.siteLocation = {
+      lat: parsedSiteLat,
+      lng: parsedSiteLng,
+      radiusMeters: SITE_VISIT_RADIUS_METERS,
+    };
+  }
+
+  if (hasLeadRequirements(formData)) {
+    const propertySubtype = String(formData.requirementsPropertySubtype || "").trim().toUpperCase();
+    payload.requirements = {
+      inventoryType: String(formData.requirementsInventoryType || "").trim().toUpperCase(),
+      propertySubtype,
+      subtypeData: sanitizeRequirementSubtypeData(formData.requirementsSubtypeData),
+      transactionType: toRequirementTransactionType(formData.requirementsTransactionType),
+      furnishingStatus: String(formData.requirementsFurnishingStatus || "").trim().toUpperCase(),
+      budgetMin: toAmountNumber(formData.requirementsBudgetMin),
+      budgetMax: toAmountNumber(formData.requirementsBudgetMax),
+      areaMin: null,
+      areaMax: null,
+      areaUnit: null,
+    };
+
+    if (!propertySubtype) {
+      payload.requirements.commercial = {
+        seats: toAmountNumber(formData.requirementsCommercialSeats),
+        cabins: toAmountNumber(formData.requirementsCommercialCabins),
+        conferenceRooms: toAmountNumber(formData.requirementsCommercialConferenceRooms),
+        conferenceSeats: toAmountNumber(formData.requirementsCommercialConferenceSeats),
+        parkingAvailable: Boolean(formData.requirementsCommercialParkingAvailable),
+        pantry: Boolean(formData.requirementsCommercialPantry),
+        receptionArea: Boolean(formData.requirementsCommercialReceptionArea),
+        waitingArea: Boolean(formData.requirementsCommercialWaitingArea),
+        cafeteria: Boolean(formData.requirementsCommercialCafeteria),
+        serverRoom: Boolean(formData.requirementsCommercialServerRoom),
+        storageRoom: Boolean(formData.requirementsCommercialStorageRoom),
+        breakoutArea: Boolean(formData.requirementsCommercialBreakoutArea),
+        liftAvailable: Boolean(formData.requirementsCommercialLiftAvailable),
+        powerBackup: Boolean(formData.requirementsCommercialPowerBackup),
+        centralAC: Boolean(formData.requirementsCommercialCentralAC),
+        fireSafety: Boolean(formData.requirementsCommercialFireSafety),
+        readyToMove: Boolean(formData.requirementsCommercialReadyToMove),
+        underConstruction: Boolean(formData.requirementsCommercialUnderConstruction),
+      };
+      payload.requirements.residential = {
+        bhkType: String(formData.requirementsResidentialBhkType || "").trim().toUpperCase(),
+        floor: toAmountNumber(formData.requirementsResidentialFloor),
+        amenities: {
+          lift: Boolean(formData.requirementsResidentialAmenityLift),
+          security: Boolean(formData.requirementsResidentialAmenitySecurity),
+          gym: Boolean(formData.requirementsResidentialAmenityGym),
+          swimmingPool: Boolean(formData.requirementsResidentialAmenitySwimmingPool),
+          clubhouse: Boolean(formData.requirementsResidentialAmenityClubhouse),
+          powerBackup: Boolean(formData.requirementsResidentialAmenityPowerBackup),
+          parking: Boolean(formData.requirementsResidentialAmenityParking),
+          studyRoom: Boolean(formData.requirementsResidentialAmenityStudyRoom),
+          servantRoom: Boolean(formData.requirementsResidentialAmenityServantRoom),
+          modularKitchen: Boolean(formData.requirementsResidentialAmenityModularKitchen),
+          electricityBackup: Boolean(formData.requirementsResidentialAmenityElectricityBackup),
+          gasPipeline: Boolean(formData.requirementsResidentialAmenityGasPipeline),
+        },
+      };
+    }
+  }
+
+  return {
+    payload,
+    parsedSiteLat,
+    parsedSiteLng,
+    hasAnySiteCoordinate,
+  };
+};
+
 const toInventoryApiStatus = (value) => {
   const normalized = String(value || "").trim();
   if (!normalized) return "Available";
@@ -724,6 +893,13 @@ const normalizeCsvHeader = (value) =>
     .toLowerCase()
     .replace(/[\s_/-]+/g, "");
 
+const BULK_LEAD_SHEET_TYPES = {
+  COMMERCIAL: "COMMERCIAL",
+  RESIDENTIAL: "RESIDENTIAL",
+};
+
+const DEFAULT_BULK_LEAD_SHEET_TYPE = BULK_LEAD_SHEET_TYPES.COMMERCIAL;
+
 const normalizeBulkCellText = (value) => {
   if (value === null || value === undefined) return "";
   if (value instanceof Date && !Number.isNaN(value.getTime())) {
@@ -749,6 +925,19 @@ const normalizeBulkAmount = (value) => {
   if (/\blac\b|\blakh\b|\bl\b/.test(lower)) return Math.round(numeric * 100000);
   if (/\bk\b/.test(lower)) return Math.round(numeric * 1000);
   return Math.round(numeric);
+};
+
+const normalizeBulkNumber = (value) => {
+  const raw = normalizeBulkCellText(value);
+  if (!raw) return null;
+  const numeric = Number.parseFloat(raw.replace(/,/g, "").replace(/[^\d.]/g, ""));
+  return Number.isFinite(numeric) ? numeric : null;
+};
+
+const normalizeBulkBoolean = (value) => {
+  const raw = normalizeBulkCellText(value).toLowerCase();
+  if (!raw) return false;
+  return ["yes", "y", "true", "1", "available", "required", "required hai", "hai"].includes(raw);
 };
 
 const normalizeBulkDate = (value) => {
@@ -808,6 +997,35 @@ const resolveLeadCsvHeaderKey = (rawHeader) => {
   if (["followup", "followup2", "followupdate", "followupdate2"].includes(normalized)) return "followUp";
   if (["callupdate", "callstatus"].includes(normalized)) return "callUpdate";
   if (["propertytype", "type"].includes(normalized)) return "propertyType";
+  if (["bhk", "bhktype", "bedroom", "bedrooms", "configuration"].includes(normalized)) return "bhkType";
+  if (["floor", "floornumber"].includes(normalized)) return "floor";
+  if (["amenities", "amenity"].includes(normalized)) return "amenities";
+  if (["lift", "elevator"].includes(normalized)) return "lift";
+  if (["security"].includes(normalized)) return "security";
+  if (["gym"].includes(normalized)) return "gym";
+  if (["swimmingpool", "pool"].includes(normalized)) return "swimmingPool";
+  if (["clubhouse", "club"].includes(normalized)) return "clubhouse";
+  if (["powerbackup", "electricitybackup", "backup"].includes(normalized)) return "powerBackup";
+  if (["parking", "carparking"].includes(normalized)) return "parking";
+  if (["studyroom", "study"].includes(normalized)) return "studyRoom";
+  if (["servantroom", "servant"].includes(normalized)) return "servantRoom";
+  if (["modularkitchen", "kitchen"].includes(normalized)) return "modularKitchen";
+  if (["gaspipeline", "gas"].includes(normalized)) return "gasPipeline";
+  if (["seats", "seat", "workstations", "workstation"].includes(normalized)) return "seats";
+  if (["cabins", "cabin", "privatecabins"].includes(normalized)) return "cabins";
+  if (["conferencerooms", "meetingrooms", "meetingroom"].includes(normalized)) return "conferenceRooms";
+  if (["conferenceseats", "meetingseats"].includes(normalized)) return "conferenceSeats";
+  if (["pantry"].includes(normalized)) return "pantry";
+  if (["reception", "receptionarea"].includes(normalized)) return "receptionArea";
+  if (["waiting", "waitingarea"].includes(normalized)) return "waitingArea";
+  if (["cafeteria", "cafe"].includes(normalized)) return "cafeteria";
+  if (["serverroom", "server"].includes(normalized)) return "serverRoom";
+  if (["storageroom", "storage"].includes(normalized)) return "storageRoom";
+  if (["breakoutarea", "breakout"].includes(normalized)) return "breakoutArea";
+  if (["centralac", "ac"].includes(normalized)) return "centralAC";
+  if (["firesafety", "fire"].includes(normalized)) return "fireSafety";
+  if (["readytomove", "ready"].includes(normalized)) return "readyToMove";
+  if (["underconstruction", "construction"].includes(normalized)) return "underConstruction";
   if (["budget"].includes(normalized)) return "budget";
   if (["visit", "visitupdate"].includes(normalized)) return "visit";
   if (["handle", "handledby", "owner"].includes(normalized)) return "handle";
@@ -879,7 +1097,7 @@ const buildBulkLeadProjectSummary = (row) => {
   return parts.join(" | ").slice(0, 500);
 };
 
-const buildBulkLeadRequirements = (row) => {
+const buildBulkLeadRequirements = (row, sheetType = DEFAULT_BULK_LEAD_SHEET_TYPE) => {
   const budget = normalizeBulkAmount(row.budget);
   const requirementText = [
     row.projectInterested,
@@ -894,26 +1112,94 @@ const buildBulkLeadRequirements = (row) => {
     requirements.budgetMax = budget;
   }
 
+  const selectedSheetType = Object.values(BULK_LEAD_SHEET_TYPES).includes(sheetType)
+    ? sheetType
+    : DEFAULT_BULK_LEAD_SHEET_TYPE;
+
   if (["COMMERCIAL", "RESIDENTIAL"].includes(propertyType)) {
     requirements.inventoryType = propertyType;
+  } else {
+    requirements.inventoryType = selectedSheetType;
   }
   if (transactionType) {
     requirements.transactionType = transactionType;
+  } else {
+    requirements.transactionType = selectedSheetType === BULK_LEAD_SHEET_TYPES.COMMERCIAL ? "RENT" : "";
   }
 
   const seatsMatch = requirementText.match(/(\d+)\s*(?:seat|seater|seats)\b/i);
   const cabinMatch = requirementText.match(/(\d+)\s*(?:cabin|cabins)\b/i);
   const conferenceSeatsMatch = requirementText.match(/(\d+)\s*(?:conference\s*seat|conference\s*seater|conference\s*seats)\b/i);
   const areaMatch = requirementText.match(/(\d+(?:\.\d+)?)\s*(?:sq\s*ft|sqft|sqfit|sft)\b/i);
-  if (seatsMatch || cabinMatch || conferenceSeatsMatch) {
+  if (selectedSheetType === BULK_LEAD_SHEET_TYPES.COMMERCIAL || seatsMatch || cabinMatch || conferenceSeatsMatch) {
     requirements.inventoryType = "COMMERCIAL";
     requirements.transactionType = transactionType || "RENT";
     requirements.commercial = {};
-    if (seatsMatch) requirements.commercial.seats = Number.parseInt(seatsMatch[1], 10);
-    if (cabinMatch) requirements.commercial.cabins = Number.parseInt(cabinMatch[1], 10);
+    const seats = normalizeBulkNumber(row.seats);
+    const cabins = normalizeBulkNumber(row.cabins);
+    const conferenceRooms = normalizeBulkNumber(row.conferenceRooms);
+    const conferenceSeats = normalizeBulkNumber(row.conferenceSeats);
+    if (seats !== null) requirements.commercial.seats = Math.round(seats);
+    if (cabins !== null) requirements.commercial.cabins = Math.round(cabins);
+    if (conferenceRooms !== null) requirements.commercial.conferenceRooms = Math.round(conferenceRooms);
+    if (conferenceSeats !== null) requirements.commercial.conferenceSeats = Math.round(conferenceSeats);
+    if (seatsMatch && requirements.commercial.seats === undefined) {
+      requirements.commercial.seats = Number.parseInt(seatsMatch[1], 10);
+    }
+    if (cabinMatch && requirements.commercial.cabins === undefined) {
+      requirements.commercial.cabins = Number.parseInt(cabinMatch[1], 10);
+    }
     if (conferenceSeatsMatch) {
       requirements.commercial.conferenceSeats = Number.parseInt(conferenceSeatsMatch[1], 10);
     }
+    [
+      "parking",
+      "pantry",
+      "receptionArea",
+      "waitingArea",
+      "cafeteria",
+      "serverRoom",
+      "storageRoom",
+      "breakoutArea",
+      "lift",
+      "powerBackup",
+      "centralAC",
+      "fireSafety",
+      "readyToMove",
+      "underConstruction",
+    ].forEach((key) => {
+      if (!row[key]) return;
+      const targetKey = key === "parking" ? "parkingAvailable" : key === "lift" ? "liftAvailable" : key;
+      requirements.commercial[targetKey] = normalizeBulkBoolean(row[key]);
+    });
+  }
+
+  if (selectedSheetType === BULK_LEAD_SHEET_TYPES.RESIDENTIAL) {
+    requirements.inventoryType = "RESIDENTIAL";
+    const floor = normalizeBulkNumber(row.floor);
+    const amenitiesText = normalizeBulkCellText(row.amenities).toLowerCase();
+    const hasAmenity = (key, aliases = []) =>
+      normalizeBulkBoolean(row[key])
+      || aliases.some((alias) => amenitiesText.includes(alias));
+
+    requirements.residential = {
+      bhkType: normalizeBulkCellText(row.bhkType).toUpperCase(),
+      floor: floor === null ? null : Math.round(floor),
+      amenities: {
+        lift: hasAmenity("lift", ["lift", "elevator"]),
+        security: hasAmenity("security", ["security"]),
+        gym: hasAmenity("gym", ["gym"]),
+        swimmingPool: hasAmenity("swimmingPool", ["pool", "swimming"]),
+        clubhouse: hasAmenity("clubhouse", ["club"]),
+        powerBackup: hasAmenity("powerBackup", ["power backup", "electricity backup", "backup"]),
+        parking: hasAmenity("parking", ["parking"]),
+        studyRoom: hasAmenity("studyRoom", ["study"]),
+        servantRoom: hasAmenity("servantRoom", ["servant"]),
+        modularKitchen: hasAmenity("modularKitchen", ["modular kitchen"]),
+        electricityBackup: hasAmenity("powerBackup", ["electricity backup"]),
+        gasPipeline: hasAmenity("gasPipeline", ["gas"]),
+      },
+    };
   }
   if (areaMatch) {
     const area = Number.parseFloat(areaMatch[1]);
@@ -927,7 +1213,7 @@ const buildBulkLeadRequirements = (row) => {
   return Object.keys(requirements).length ? requirements : undefined;
 };
 
-const normalizeBulkLeadRow = ({ rawRow, mappedHeaders, sheetName = "" }) => {
+const normalizeBulkLeadRow = ({ rawRow, mappedHeaders, sheetName = "", sheetType = DEFAULT_BULK_LEAD_SHEET_TYPE }) => {
   const row = {};
   const allCellValues = [];
 
@@ -947,7 +1233,7 @@ const normalizeBulkLeadRow = ({ rawRow, mappedHeaders, sheetName = "" }) => {
   const safeName = name && !normalizeBulkPhone(name) ? name : `Lead ${phone}`;
   const sourceText = normalizeBulkCellText(row.source).toUpperCase();
   const projectInterested = buildBulkLeadProjectSummary(row);
-  const requirements = buildBulkLeadRequirements(row);
+  const requirements = buildBulkLeadRequirements(row, sheetType);
   const nextFollowUp = normalizeBulkDate(row.followUp);
   const lastContactedAt = normalizeBulkDate(row.date);
 
@@ -965,7 +1251,7 @@ const normalizeBulkLeadRow = ({ rawRow, mappedHeaders, sheetName = "" }) => {
   };
 };
 
-const parseBulkLeadRowsFromMatrix = ({ matrix, sheetName = "" }) => {
+const parseBulkLeadRowsFromMatrix = ({ matrix, sheetName = "", sheetType = DEFAULT_BULK_LEAD_SHEET_TYPE }) => {
   const headerIndex = matrix.findIndex((rawRow) => {
     const mappedHeaders = rawRow.map((cell) => resolveLeadCsvHeaderKey(cell));
     const mappedCount = mappedHeaders.filter(Boolean).length;
@@ -983,6 +1269,7 @@ const parseBulkLeadRowsFromMatrix = ({ matrix, sheetName = "" }) => {
       rawRow: matrix[rowIndex],
       mappedHeaders,
       sheetName,
+      sheetType,
     });
     if (!row) continue;
     if (!hasName && !row.name) continue;
@@ -1023,7 +1310,7 @@ const parseCsvLine = (line) => {
   return values;
 };
 
-const parseBulkLeadCsvRows = (csvText) => {
+const parseBulkLeadCsvRows = (csvText, sheetType = DEFAULT_BULK_LEAD_SHEET_TYPE) => {
   const normalizedText = String(csvText || "")
     .replace(/^\uFEFF/, "")
     .trim();
@@ -1049,6 +1336,7 @@ const parseBulkLeadCsvRows = (csvText) => {
   const rows = parseBulkLeadRowsFromMatrix({
     matrix: lines.map(parseCsvLine),
     sheetName: "CSV",
+    sheetType,
   });
 
   if (!rows.length) {
@@ -1058,7 +1346,7 @@ const parseBulkLeadCsvRows = (csvText) => {
   return rows;
 };
 
-const parseBulkLeadWorkbookRows = async (file) => {
+const parseBulkLeadWorkbookRows = async (file, sheetType = DEFAULT_BULK_LEAD_SHEET_TYPE) => {
   const XLSX = await import("xlsx");
   const buffer = await file.arrayBuffer();
   const workbook = XLSX.read(buffer, {
@@ -1082,7 +1370,7 @@ const parseBulkLeadWorkbookRows = async (file) => {
       blankrows: false,
       raw: false,
     });
-    rows.push(...parseBulkLeadRowsFromMatrix({ matrix, sheetName }));
+    rows.push(...parseBulkLeadRowsFromMatrix({ matrix, sheetName, sheetType }));
   });
 
   if (!rows.length) {
@@ -1122,6 +1410,7 @@ const LeadsMatrix = () => {
   );
 
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
+  const [isEditLeadModalOpen, setIsEditLeadModalOpen] = useState(false);
   const [savingLead, setSavingLead] = useState(false);
   const [formData, setFormData] = useState(defaultFormData);
   const [inventoryOptions, setInventoryOptions] = useState([]);
@@ -1129,6 +1418,7 @@ const LeadsMatrix = () => {
   const [bulkUploadText, setBulkUploadText] = useState("");
   const [bulkUploadParsedRows, setBulkUploadParsedRows] = useState(null);
   const [bulkUploadFileName, setBulkUploadFileName] = useState("");
+  const [bulkUploadSheetType, setBulkUploadSheetType] = useState(DEFAULT_BULK_LEAD_SHEET_TYPE);
   const [bulkUploading, setBulkUploading] = useState(false);
 
   const [query, setQuery] = useState("");
@@ -1161,6 +1451,7 @@ const LeadsMatrix = () => {
   const [emailDraft, setEmailDraft] = useState("");
   const [cityDraft, setCityDraft] = useState("");
   const [projectInterestedDraft, setProjectInterestedDraft] = useState("");
+  const [clientProfessionDraft, setClientProfessionDraft] = useState("");
   const [statusDraft, setStatusDraft] = useState("NEW");
   const [followUpDraft, setFollowUpDraft] = useState("");
   const [executiveDraft, setExecutiveDraft] = useState("");
@@ -1207,6 +1498,18 @@ const LeadsMatrix = () => {
   const canConfigureSiteLocation =
     userRole === "ADMIN" || MANAGEMENT_ROLES.includes(userRole);
   const canReviewDealPayment = userRole === "ADMIN";
+
+  useEffect(() => {
+    if (!error) return undefined;
+    const timer = window.setTimeout(() => setError(""), 6000);
+    return () => window.clearTimeout(timer);
+  }, [error]);
+
+  useEffect(() => {
+    if (!success) return undefined;
+    const timer = window.setTimeout(() => setSuccess(""), 4500);
+    return () => window.clearTimeout(timer);
+  }, [success]);
 
   const fetchLeads = useCallback(async (asRefresh = false, options = {}) => {
     const page = Number(options.page || 1);
@@ -1597,6 +1900,7 @@ const LeadsMatrix = () => {
     setEmailDraft(String(detailLead?.email || ""));
     setCityDraft(String(detailLead?.city || ""));
     setProjectInterestedDraft(String(detailLead?.projectInterested || ""));
+    setClientProfessionDraft(String(detailLead?.clientProfession || ""));
     setStatusDraft(detailLead.status || "NEW");
     setFollowUpDraft(toDateTimeInput(detailLead.nextFollowUp));
     setSiteLatDraft(leadSiteLat === null ? "" : String(leadSiteLat));
@@ -1677,6 +1981,7 @@ const LeadsMatrix = () => {
     setEmailDraft("");
     setCityDraft("");
     setProjectInterestedDraft("");
+    setClientProfessionDraft("");
     setSiteLatDraft("");
     setSiteLngDraft("");
     setRelatedInventoryDraft("");
@@ -1749,6 +2054,7 @@ const LeadsMatrix = () => {
     setEmailDraft(String(updatedLead?.email || ""));
     setCityDraft(String(updatedLead?.city || ""));
     setProjectInterestedDraft(String(updatedLead?.projectInterested || ""));
+    setClientProfessionDraft(String(updatedLead?.clientProfession || ""));
     setStatusDraft(String(updatedLead.status || "NEW"));
     setFollowUpDraft(toDateTimeInput(updatedLead?.nextFollowUp));
 
@@ -1848,13 +2154,47 @@ const LeadsMatrix = () => {
     }
   };
 
-  const handleInventorySelection = (inventoryId) => {
+  const handleInventorySelection = (inventoryId, checked = true) => {
     setFormData((prev) => {
-      const selectedInventory = inventoryOptions.find((item) => item._id === inventoryId);
+      const normalizedInventoryId = String(inventoryId || "").trim();
+      const currentRelatedInventoryIds = [
+        ...new Set(
+          [
+            ...(Array.isArray(prev.relatedInventoryIds) ? prev.relatedInventoryIds : []),
+            prev.inventoryId,
+          ]
+            .map((value) => String(value || "").trim())
+            .filter(Boolean),
+        ),
+      ];
+      const nextRelatedInventoryIds = checked
+        ? [...new Set([...currentRelatedInventoryIds, normalizedInventoryId].filter(Boolean))]
+        : currentRelatedInventoryIds.filter((value) => value !== normalizedInventoryId);
+      const nextPrimaryInventoryId = checked
+        ? (prev.inventoryId || normalizedInventoryId)
+        : (prev.inventoryId === normalizedInventoryId ? (nextRelatedInventoryIds[0] || "") : prev.inventoryId);
+
+      if (!checked) {
+        return {
+          ...prev,
+          inventoryId: nextPrimaryInventoryId,
+          relatedInventoryIds: nextRelatedInventoryIds,
+        };
+      }
+
+      const selectedInventory = inventoryOptions.find((item) => item._id === normalizedInventoryId);
       if (!selectedInventory) {
         return {
           ...prev,
-          inventoryId,
+          inventoryId: nextPrimaryInventoryId,
+          relatedInventoryIds: nextRelatedInventoryIds,
+        };
+      }
+
+      if (prev.inventoryId && prev.inventoryId !== normalizedInventoryId) {
+        return {
+          ...prev,
+          relatedInventoryIds: nextRelatedInventoryIds,
         };
       }
 
@@ -1883,7 +2223,8 @@ const LeadsMatrix = () => {
 
       return {
         ...prev,
-        inventoryId,
+        inventoryId: normalizedInventoryId,
+        relatedInventoryIds: nextRelatedInventoryIds,
         projectInterested: inventoryProjectLabel || prev.projectInterested,
         city: getInventoryLeadCity(selectedInventory) || prev.city,
         siteLat: inventorySiteLat === null ? "" : String(inventorySiteLat),
@@ -2004,10 +2345,25 @@ const LeadsMatrix = () => {
         city: formData.city.trim(),
         preferredLocations: toPreferredLocationsList(formData.preferredLocations),
         projectInterested: formData.projectInterested.trim(),
+        clientProfession: formData.clientProfession.trim(),
       };
+
+      const relatedInventoryIds = [
+        ...new Set(
+          [
+            formData.inventoryId,
+            ...(Array.isArray(formData.relatedInventoryIds) ? formData.relatedInventoryIds : []),
+          ]
+            .map((value) => String(value || "").trim())
+            .filter(Boolean),
+        ),
+      ];
 
       if (formData.inventoryId) {
         payload.inventoryId = formData.inventoryId;
+      }
+      if (relatedInventoryIds.length) {
+        payload.relatedInventoryIds = relatedInventoryIds;
       }
 
       if (hasAnySiteCoordinate) {
@@ -2095,13 +2451,87 @@ const LeadsMatrix = () => {
     }
   };
 
+  const handleOpenEditLeadForm = () => {
+    if (!selectedLead) return;
+    setFormData(mapLeadToFormData(selectedLead));
+    setIsEditLeadModalOpen(true);
+  };
+
+  const handleSaveEditedLead = async () => {
+    if (!selectedLead) return;
+
+    if (!formData.name.trim() || !formData.phone.trim()) {
+      setError("Name and phone are required");
+      return;
+    }
+
+    if (!/^\d{8,15}$/.test(String(formData.phone || "").trim())) {
+      setError("Phone should be 8 to 15 digits");
+      return;
+    }
+
+    const { payload, parsedSiteLat, parsedSiteLng, hasAnySiteCoordinate } =
+      buildLeadFormPayload(formData);
+
+    if (
+      canConfigureSiteLocation
+      && hasAnySiteCoordinate
+      && (parsedSiteLat === null || parsedSiteLng === null)
+    ) {
+      setError("Enter valid site latitude and longitude");
+      return;
+    }
+
+    const requirementValidationError = validateLeadRequirementDraft({
+      inventoryType: formData.requirementsInventoryType,
+      propertySubtype: formData.requirementsPropertySubtype,
+      budgetMin: formData.requirementsBudgetMin,
+      budgetMax: formData.requirementsBudgetMax,
+      subtypeData: formData.requirementsSubtypeData,
+    });
+    if (requirementValidationError) {
+      setError(requirementValidationError);
+      return;
+    }
+
+    payload.status = statusDraft || selectedLead?.status || "NEW";
+    if (!canConfigureSiteLocation) {
+      delete payload.siteLocation;
+    }
+    if (String(followUpDraft || "").trim()) {
+      payload.nextFollowUp = String(followUpDraft || "").trim();
+    }
+
+    try {
+      setSavingUpdates(true);
+      setError("");
+      const updatedLead = await updateLeadStatus(selectedLead._id, payload);
+
+      if (updatedLead) {
+        applyUpdatedLeadState(updatedLead);
+      } else {
+        await fetchLeads(true);
+      }
+
+      setIsEditLeadModalOpen(false);
+      setFormData(defaultFormData);
+      setSuccess("Lead updated");
+    } catch (updateError) {
+      const message = toErrorMessage(updateError, "Failed to update lead");
+      console.error(`Edit lead form save failed: ${message}`);
+      setError(message);
+    } finally {
+      setSavingUpdates(false);
+    }
+  };
+
   const handleBulkUploadFileSelect = async (file) => {
     if (!file) return;
 
     try {
       const extension = String(file.name || "").split(".").pop()?.toLowerCase();
       if (["xlsx", "xls"].includes(extension)) {
-        const rows = await parseBulkLeadWorkbookRows(file);
+        const rows = await parseBulkLeadWorkbookRows(file, bulkUploadSheetType);
         setBulkUploadParsedRows(rows);
         setBulkUploadText(`Parsed ${rows.length} lead rows from ${file.name}`);
       } else {
@@ -2126,7 +2556,7 @@ const LeadsMatrix = () => {
 
       const rows = Array.isArray(bulkUploadParsedRows)
         ? bulkUploadParsedRows
-        : parseBulkLeadCsvRows(bulkUploadText);
+        : parseBulkLeadCsvRows(bulkUploadText, bulkUploadSheetType);
       const result = await bulkUploadLeads(rows);
       await fetchLeads(true);
 
@@ -2153,6 +2583,7 @@ const LeadsMatrix = () => {
         setBulkUploadText("");
         setBulkUploadParsedRows(null);
         setBulkUploadFileName("");
+        setBulkUploadSheetType(DEFAULT_BULK_LEAD_SHEET_TYPE);
       }
     } catch (uploadError) {
       const message = toErrorMessage(uploadError, "Failed to bulk upload leads");
@@ -2182,6 +2613,7 @@ const LeadsMatrix = () => {
       const normalizedEmailDraft = String(emailDraft || "").trim();
       const normalizedCityDraft = String(cityDraft || "").trim();
       const normalizedProjectInterestedDraft = String(projectInterestedDraft || "").trim();
+      const normalizedClientProfessionDraft = String(clientProfessionDraft || "").trim();
       const normalizedFollowUpDraft = String(followUpDraft || "").trim();
       const hasFollowUpDraft = normalizedFollowUpDraft.length > 0;
       const parsedFollowUpDate = hasFollowUpDraft ? new Date(normalizedFollowUpDraft) : null;
@@ -2350,6 +2782,7 @@ const LeadsMatrix = () => {
         email: normalizedEmailDraft,
         city: normalizedCityDraft,
         projectInterested: normalizedProjectInterestedDraft,
+        clientProfession: normalizedClientProfessionDraft,
         status: statusDraft,
         requirements: buildLeadRequirementsPayloadFromDraft(requirementsDraft),
       };
@@ -2825,10 +3258,41 @@ const LeadsMatrix = () => {
       </AnimatePresence>
 
       <AnimatePresence>
+        {isEditLeadModalOpen && selectedLead && (
+          <AddLeadModal
+            isDark={isDark}
+            title="Edit Lead"
+            saveLabel="Update Lead"
+            savingLabel="Updating..."
+            formData={formData}
+            setFormData={setFormData}
+            inventoryOptions={inventoryOptions}
+            getInventoryLeadLabel={getInventoryLeadLabel}
+            onInventorySelection={handleInventorySelection}
+            onClose={() => {
+              setIsEditLeadModalOpen(false);
+              setFormData(defaultFormData);
+            }}
+            onSave={handleSaveEditedLead}
+            savingLead={savingUpdates}
+          />
+        )}
+      </AnimatePresence>
+
+      <AnimatePresence>
         {isBulkUploadModalOpen && canBulkUploadLeads && (
           <BulkLeadUploadModal
             isDark={isDark}
             csvText={bulkUploadText}
+            sheetType={bulkUploadSheetType}
+            onSheetTypeChange={(value) => {
+              setBulkUploadSheetType(value);
+              setBulkUploadParsedRows(null);
+              if (bulkUploadFileName) {
+                setBulkUploadText("");
+                setBulkUploadFileName("");
+              }
+            }}
             onCsvTextChange={(value) => {
               setBulkUploadParsedRows(null);
               setBulkUploadText(value);
@@ -2873,6 +3337,7 @@ const LeadsMatrix = () => {
             setRelatedInventoryDraft={setRelatedInventoryDraft}
             linkingProperty={linkingProperty}
             onLinkPropertyToLead={handleLinkPropertyToLead}
+            onOpenEditLeadForm={handleOpenEditLeadForm}
             leadStatuses={LEAD_STATUSES}
             nameDraft={nameDraft}
             setNameDraft={setNameDraft}
@@ -2884,6 +3349,8 @@ const LeadsMatrix = () => {
             setCityDraft={setCityDraft}
             projectInterestedDraft={projectInterestedDraft}
             setProjectInterestedDraft={setProjectInterestedDraft}
+            clientProfessionDraft={clientProfessionDraft}
+            setClientProfessionDraft={setClientProfessionDraft}
             statusDraft={statusDraft}
             setStatusDraft={setStatusDraft}
             requirementsDraft={requirementsDraft}
