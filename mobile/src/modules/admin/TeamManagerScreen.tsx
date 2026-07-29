@@ -52,12 +52,16 @@ const ROLE_OPTIONS = [
   { label: "Manager", value: "MANAGER" },
   { label: "Executive", value: "EXECUTIVE" },
   { label: "Field Executive", value: "FIELD_EXECUTIVE" },
+  { label: "Production Executive", value: "PRODUCTION_EXECUTIVE" },
+  { label: "Community Manager", value: "COMMUNITY_MANAGER" },
   { label: "Channel Partner", value: "CHANNEL_PARTNER" },
 ];
 const EDIT_ROLE_OPTIONS = [
   { label: "Manager", value: "MANAGER" },
   { label: "Executive", value: "EXECUTIVE" },
   { label: "Field Executive", value: "FIELD_EXECUTIVE" },
+  { label: "Production Executive", value: "PRODUCTION_EXECUTIVE" },
+  { label: "Community Manager", value: "COMMUNITY_MANAGER" },
   { label: "Channel Partner", value: "CHANNEL_PARTNER" },
 ];
 
@@ -67,6 +71,8 @@ const REPORTING_PARENT_ROLES: Record<string, string[]> = {
   MANAGER: ["ADMIN"],
   EXECUTIVE: ["MANAGER"],
   FIELD_EXECUTIVE: ["MANAGER"],
+  PRODUCTION_EXECUTIVE: ["MANAGER"],
+  COMMUNITY_MANAGER: ["MANAGER"],
   CHANNEL_PARTNER: ["MANAGER"],
 };
 const getRefId = (value: { _id?: string } | string | null | undefined) => {

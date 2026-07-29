@@ -4,6 +4,8 @@ import api from "./services/api";
 import ErrorBoundary from "./components/ErrorBoundary";
 import { ChatNotificationProvider } from "./context/chatNotificationProvider";
 import { updateMyLiveLocation } from "./services/userService";
+import BackToTopButton from "./components/layout/BackToTopButton";
+import Loader from "./components/layout/Loader";
 import RouteLoadingSkeleton from "./components/layout/RouteLoadingSkeleton";
 import {
   applySystemSettingsToDocument,
@@ -68,15 +70,19 @@ const FORCE_LIGHT_ROUTE_PREFIXES = [
   "/shared",
 ];
 const MANAGEMENT_ROLES = ["MANAGER"];
-const CHAT_REFRESH_FALLBACK_ROLES = ["EXECUTIVE", "FIELD_EXECUTIVE", "PRODUCTION_EXECUTIVE"];
+const PRODUCTION_ROLES = ["PRODUCTION_EXECUTIVE", "COMMUNITY_MANAGER"];
+const CHAT_REFRESH_FALLBACK_ROLES = ["EXECUTIVE", "FIELD_EXECUTIVE", ...PRODUCTION_ROLES];
 const ROLE_LABELS = {
   ADMIN: "Admin",
   MANAGER: "Manager",
   EXECUTIVE: "Executive",
   FIELD_EXECUTIVE: "Field Executive",
   PRODUCTION_EXECUTIVE: "Production Executive",
+  COMMUNITY_MANAGER: "Community Manager",
   CHANNEL_PARTNER: "Channel Partner",
 };
+
+const isProductionRole = (role) => PRODUCTION_ROLES.includes(role);
 
 const resolveHomeHeader = (userRole) => {
   switch (userRole) {
@@ -109,6 +115,12 @@ const resolveHomeHeader = (userRole) => {
         title: "Production Command Center",
         subtitle: "Tasks, deadlines, attendance and internal collaboration",
         scopeLabel: "Production Desk",
+      };
+    case "COMMUNITY_MANAGER":
+      return {
+        title: "Community Command Center",
+        subtitle: "Tasks, attendance, communication and community operations",
+        scopeLabel: "Community Desk",
       };
     default:
       return {
@@ -226,7 +238,7 @@ const resolvePageHeader = (pathname, userRole) => {
   }
 
   if (pathname.startsWith("/targets")) {
-    if (userRole === "PRODUCTION_EXECUTIVE") {
+    if (isProductionRole(userRole)) {
       return {
         title: "Performance Command Center",
         subtitle: "Task completion, pending work and productivity signals",
@@ -571,6 +583,7 @@ export default function App() {
       case "FIELD_EXECUTIVE":
         return <FieldDashboard />;
       case "PRODUCTION_EXECUTIVE":
+      case "COMMUNITY_MANAGER":
         return <ProductionExecutiveDashboard />;
       case "CHANNEL_PARTNER":
         return <Navigate to="/leads" />;
@@ -679,14 +692,14 @@ export default function App() {
       <Route
         path="/tasks"
         element={
-          canAccess(["ADMIN", ...MANAGEMENT_ROLES, "EXECUTIVE", "FIELD_EXECUTIVE", "PRODUCTION_EXECUTIVE"])
+          canAccess(["ADMIN", ...MANAGEMENT_ROLES, "EXECUTIVE", "FIELD_EXECUTIVE", ...PRODUCTION_ROLES])
             ? <TaskManager theme={theme} />
             : <Navigate to="/" />
         }
       />
       <Route
         path="/attendance"
-        element={canAccess(["ADMIN", ...MANAGEMENT_ROLES, "EXECUTIVE", "FIELD_EXECUTIVE", "PRODUCTION_EXECUTIVE", "CHANNEL_PARTNER"]) ? <AttendanceHub /> : <Navigate to="/" />}
+        element={canAccess(["ADMIN", ...MANAGEMENT_ROLES, "EXECUTIVE", "FIELD_EXECUTIVE", ...PRODUCTION_ROLES, "CHANNEL_PARTNER"]) ? <AttendanceHub /> : <Navigate to="/" />}
       />
       <Route
         path="/admin/notifications"
@@ -715,7 +728,7 @@ export default function App() {
       <Route
         path="/targets"
         element={
-          userRole === "PRODUCTION_EXECUTIVE"
+          isProductionRole(userRole)
             ? <ProductionExecutiveDashboard mode="performance" />
             : canAccess(["ADMIN", ...MANAGEMENT_ROLES, "EXECUTIVE", "FIELD_EXECUTIVE"])
               ? <Performance />
@@ -725,7 +738,7 @@ export default function App() {
       <Route
         path="/chat"
         element={
-          canAccess(["ADMIN", ...MANAGEMENT_ROLES, "EXECUTIVE", "FIELD_EXECUTIVE", "PRODUCTION_EXECUTIVE"])
+          canAccess(["ADMIN", ...MANAGEMENT_ROLES, "EXECUTIVE", "FIELD_EXECUTIVE", ...PRODUCTION_ROLES])
             ? <TeamChat theme={theme} />
             : <Navigate to="/" />
         }
@@ -738,7 +751,7 @@ export default function App() {
             ...MANAGEMENT_ROLES,
             "EXECUTIVE",
             "FIELD_EXECUTIVE",
-            "PRODUCTION_EXECUTIVE",
+            ...PRODUCTION_ROLES,
             "CHANNEL_PARTNER",
           ])
             ? <UserProfile />
@@ -762,8 +775,11 @@ export default function App() {
 
   if (!sessionReady && !isPublicPage) {
     return (
-      <div className="flex min-h-screen items-center justify-center bg-void text-slate-400 text-sm">
-        Restoring session...
+      <div className="flex min-h-screen items-center justify-center bg-void text-slate-400 text-sm" aria-busy="true" aria-live="polite">
+        <div className="flex items-center gap-3 rounded-full border border-slate-200 bg-white px-4 py-3 text-slate-900 shadow-sm">
+          <Loader />
+          <span>Restoring session...</span>
+        </div>
       </div>
     );
   }
@@ -786,7 +802,7 @@ export default function App() {
             path="/login"
             element={
               !sessionReady
-                ? <div className="p-8 text-slate-400">Loading...</div>
+                ? <RouteLoadingSkeleton compact />
                 : isLoggedIn
                 ? <Navigate to="/" />
                 : <Login portal="GENERAL" onLogin={(role) => {
@@ -800,7 +816,7 @@ export default function App() {
             path="/login/admin"
             element={
               !sessionReady
-                ? <div className="p-8 text-slate-400">Loading...</div>
+                ? <RouteLoadingSkeleton compact />
                 : isLoggedIn
                 ? <Navigate to="/" />
                 : <Login portal="ADMIN" onLogin={(role) => {
@@ -853,6 +869,7 @@ export default function App() {
             </Routes>
           </Suspense>
         </ErrorBoundary>
+        <BackToTopButton />
       </ChatNotificationProvider>
     </div>
   );

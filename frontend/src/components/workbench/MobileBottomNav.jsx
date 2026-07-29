@@ -10,6 +10,7 @@ const getSectionTarget = (sectionId, userRole, user) => {
 
 const DEFAULT_PRIORITY_SECTIONS = ["leads", "inventory", "chat", "calendar"];
 const PRODUCTION_PRIORITY_SECTIONS = ["dashboard", "reports", "chat", "settings"];
+const PRODUCTION_ROLES = ["PRODUCTION_EXECUTIVE", "COMMUNITY_MANAGER"];
 
 const MobileBottomNav = ({
   userRole,
@@ -21,7 +22,7 @@ const MobileBottomNav = ({
   const sections = getVisibleSections(userRole, user);
   const activeSectionId = getActiveSectionId(location.pathname, userRole, user);
   const prioritySectionIds =
-    userRole === "PRODUCTION_EXECUTIVE"
+    PRODUCTION_ROLES.includes(userRole)
       ? PRODUCTION_PRIORITY_SECTIONS
       : DEFAULT_PRIORITY_SECTIONS;
   const priority = prioritySectionIds

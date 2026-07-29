@@ -1,6 +1,6 @@
 import { memo, useCallback, useMemo } from "react";
 import { NavLink, useLocation } from "react-router-dom";
-import { ChevronLeft, ChevronRight, LogOut, Moon, Sun, X } from "lucide-react";
+import { ChevronLeft, ChevronRight, LogOut, X } from "lucide-react";
 import { IconButton, cn } from "../ui";
 import {
   getActiveSectionId,
@@ -11,8 +11,6 @@ import {
 const PrimarySidebar = ({
   userRole,
   user,
-  theme,
-  onToggleTheme,
   onLogout,
   collapsed,
   onToggleCollapsed,
@@ -83,7 +81,7 @@ const PrimarySidebar = ({
         </div>
       ))}
     </nav>
-  ), [onMobileClose]);
+  ), [onMobileClose, unreadChats]);
 
   const sidebar = useCallback((groups, { mobile = false } = {}) => (
     <aside
@@ -103,13 +101,6 @@ const PrimarySidebar = ({
           </p>
         </div>
         <div className="flex shrink-0 items-center gap-1">
-          <IconButton
-            icon={theme === "dark" ? Sun : Moon}
-            label={theme === "dark" ? "Switch to light mode" : "Switch to dark mode"}
-            size="sm"
-            onClick={onToggleTheme}
-            className={mobile ? "" : "md:hidden"}
-          />
           {!mobile ? (
             <IconButton
               icon={collapsed ? ChevronRight : ChevronLeft}
@@ -148,7 +139,7 @@ const PrimarySidebar = ({
         </button>
       </div>
     </aside>
-  ), [collapsed, onLogout, onMobileClose, onToggleCollapsed, onToggleTheme, renderNavGroups, theme]);
+  ), [collapsed, onLogout, onMobileClose, onToggleCollapsed, renderNavGroups]);
 
   return (
     <>

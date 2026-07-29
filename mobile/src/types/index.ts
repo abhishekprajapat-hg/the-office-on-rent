@@ -3,6 +3,8 @@ export type UserRole =
   | "MANAGER"
   | "EXECUTIVE"
   | "FIELD_EXECUTIVE"
+  | "PRODUCTION_EXECUTIVE"
+  | "COMMUNITY_MANAGER"
   | "CHANNEL_PARTNER";
 
 export interface User {

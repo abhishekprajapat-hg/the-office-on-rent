@@ -37,6 +37,7 @@ const MAX_LEAVE_SPAN_DAYS = Number.parseInt(
 const DAY_MS = 24 * 60 * 60 * 1000;
 const HALF_DAY_PRODUCTIVE_MINUTES = 4 * 60;
 const FULL_DAY_PRODUCTIVE_MINUTES = (7 * 60) + 30;
+const AUTO_CHECKOUT_WORKED_MINUTES = 10 * 60;
 const LATE_CHECK_IN_CUTOFF_MINUTES = 11 * 60;
 const DEFAULT_OFFICE_RADIUS_METERS = Math.min(
   5000,
@@ -690,6 +691,123 @@ const toAttendanceView = (row, policy = DEFAULT_POLICY) => {
   };
 };
 
+const addMinutes = (date, minutes) =>
+  new Date(date.getTime() + (Math.max(0, Number(minutes || 0)) * 60 * 1000));
+
+const resolveAutoCheckoutAt = (
+  attendance,
+  referenceTime = new Date(),
+  targetWorkedMinutes = AUTO_CHECKOUT_WORKED_MINUTES,
+) => {
+  const checkInAt = toSafeDate(attendance?.checkInAt);
+  const reference = toSafeDate(referenceTime) || new Date();
+  if (!checkInAt || attendance?.checkOutAt || reference <= checkInAt) return null;
+
+  const normalizedBreaks = normalizeBreakSessions(attendance?.breakSessions).sessions
+    .filter((session) => toSafeDate(session.startAt) && toSafeDate(session.startAt) > checkInAt)
+    .sort((left, right) => toSafeDate(left.startAt) - toSafeDate(right.startAt));
+
+  let workedMinutes = 0;
+  let workCursor = checkInAt;
+
+  for (const session of normalizedBreaks) {
+    const breakStart = toSafeDate(session.startAt);
+    if (breakStart > reference) break;
+
+    const workWindowEnd = breakStart > workCursor ? breakStart : workCursor;
+    const workWindowMinutes = toMinutesBetween(workCursor, workWindowEnd);
+    if (workedMinutes + workWindowMinutes >= targetWorkedMinutes) {
+      return addMinutes(workCursor, targetWorkedMinutes - workedMinutes);
+    }
+    workedMinutes += workWindowMinutes;
+
+    const breakEnd = toSafeDate(session.endAt);
+    if (!breakEnd || breakEnd > reference) return null;
+    if (breakEnd > workCursor) {
+      workCursor = breakEnd;
+    }
+  }
+
+  const finalWorkMinutes = toMinutesBetween(workCursor, reference);
+  if (workedMinutes + finalWorkMinutes >= targetWorkedMinutes) {
+    return addMinutes(workCursor, targetWorkedMinutes - workedMinutes);
+  }
+
+  return null;
+};
+
+const applyAutoCheckoutIfDue = async (
+  attendance,
+  policy = DEFAULT_POLICY,
+  referenceTime = new Date(),
+) => {
+  if (!attendance?.checkInAt || attendance.checkOutAt) return false;
+
+  const autoCheckoutAt = resolveAutoCheckoutAt(attendance, referenceTime);
+  if (!autoCheckoutAt) {
+    applyWorkingSnapshot(attendance, { referenceTime });
+    return false;
+  }
+
+  attendance.checkOutAt = autoCheckoutAt;
+  applyWorkingSnapshot(attendance, {
+    referenceTime: autoCheckoutAt,
+    closeOpenBreakAt: autoCheckoutAt,
+  });
+  attendance.workedMinutes = AUTO_CHECKOUT_WORKED_MINUTES;
+  attendance.status = resolveAttendanceStatus({
+    attendanceDate: attendance.attendanceDate,
+    checkInAt: attendance.checkInAt,
+    workedMinutes: attendance.workedMinutes,
+    policy,
+  });
+  attendance.checkOutNote = attendance.checkOutNote || "Auto checked out after 10 working hours";
+  attendance.metadata = {
+    ...(attendance.metadata || {}),
+    autoCheckOutAt: referenceTime,
+    autoCheckOutReason: "10_WORKING_HOURS_EXCLUDING_BREAK",
+  };
+
+  await attendance.save();
+  return true;
+};
+
+const autoCheckoutDueAttendanceRows = async ({
+  companyId,
+  userIds = [],
+  attendanceDate = null,
+  fromDate = null,
+  toDate = null,
+  policy = DEFAULT_POLICY,
+  referenceTime = new Date(),
+}) => {
+  if (!companyId) return 0;
+
+  const query = {
+    companyId,
+    checkInAt: { $ne: null },
+    checkOutAt: null,
+  };
+
+  if (userIds.length) {
+    query.userId = { $in: userIds };
+  }
+  if (attendanceDate) {
+    query.attendanceDate = attendanceDate;
+  } else if (fromDate && toDate) {
+    query.attendanceDate = { $gte: fromDate, $lte: toDate };
+  }
+
+  const rows = await Attendance.find(query);
+  let updatedCount = 0;
+  for (const attendance of rows) {
+    // eslint-disable-next-line no-await-in-loop
+    const updated = await applyAutoCheckoutIfDue(attendance, policy, referenceTime);
+    if (updated) updatedCount += 1;
+  }
+  return updatedCount;
+};
+
 const toUserView = (user) => ({
   _id: user._id,
   name: user.name || "",
@@ -847,6 +965,26 @@ const ensureUserInScope = async ({ actor, targetUserId }) => {
     || String(actor._id) === String(targetUserId);
 };
 
+exports.runAutoCheckoutSweep = async (referenceTime = new Date()) => {
+  const companyIds = await Attendance.distinct("companyId", {
+    checkInAt: { $ne: null },
+    checkOutAt: null,
+  });
+
+  let updatedCount = 0;
+  for (const companyId of companyIds) {
+    // eslint-disable-next-line no-await-in-loop
+    const policy = await resolvePolicyForCompany(companyId);
+    // eslint-disable-next-line no-await-in-loop
+    updatedCount += await autoCheckoutDueAttendanceRows({
+      companyId,
+      policy,
+      referenceTime,
+    });
+  }
+  return updatedCount;
+};
+
 exports.getAttendancePolicy = async (req, res) => {
   try {
     if (!req.user?.companyId) {
@@ -994,6 +1132,13 @@ exports.checkIn = async (req, res) => {
     });
 
     if (attendance?.checkInAt) {
+      const autoCheckedOut = await applyAutoCheckoutIfDue(attendance, policy, now);
+      if (autoCheckedOut) {
+        return res.status(409).json({
+          message: "You were auto checked out after 10 working hours. You cannot check in again today.",
+          attendance: toAttendanceView(attendance, policy),
+        });
+      }
       return res.status(409).json({
         message: "Already checked in for today",
         attendance: toAttendanceView(attendance, policy),
@@ -1068,6 +1213,12 @@ exports.startBreak = async (req, res) => {
     if (!attendance || !attendance.checkInAt) {
       return res.status(400).json({ message: "Check-in is required before starting break" });
     }
+    if (await applyAutoCheckoutIfDue(attendance, policy, now)) {
+      return res.status(400).json({
+        message: "You were auto checked out after 10 working hours",
+        attendance: toAttendanceView(attendance, policy),
+      });
+    }
     if (attendance.checkOutAt) {
       return res.status(400).json({ message: "Cannot start break after check-out" });
     }
@@ -1134,6 +1285,12 @@ exports.endBreak = async (req, res) => {
     if (!attendance || !attendance.checkInAt) {
       return res.status(400).json({ message: "Check-in is required before ending break" });
     }
+    if (await applyAutoCheckoutIfDue(attendance, policy, now)) {
+      return res.status(400).json({
+        message: "You were auto checked out after 10 working hours",
+        attendance: toAttendanceView(attendance, policy),
+      });
+    }
     if (attendance.checkOutAt) {
       return res.status(400).json({ message: "Cannot end break after check-out" });
     }
@@ -1194,6 +1351,13 @@ exports.checkOut = async (req, res) => {
 
     if (!attendance || !attendance.checkInAt) {
       return res.status(400).json({ message: "Check-in is required before check-out" });
+    }
+    if (await applyAutoCheckoutIfDue(attendance, policy, now)) {
+      return res.json({
+        message: "Auto checked out after 10 working hours",
+        attendance: toAttendanceView(attendance, policy),
+        timezone: policy.timezone,
+      });
     }
     if (attendance.checkOutAt) {
       return res.status(409).json({
@@ -1827,6 +1991,14 @@ exports.getMyAttendance = async (req, res) => {
       attendanceDate: { $gte: range.from, $lte: range.to },
     };
 
+    await autoCheckoutDueAttendanceRows({
+      companyId: req.user.companyId,
+      userIds: [req.user._id],
+      fromDate: range.from,
+      toDate: range.to,
+      policy,
+    });
+
     const rowsQuery = Attendance.find(query)
       .sort({ attendanceDate: -1, checkInAt: -1, createdAt: -1 });
     if (pagination.enabled) {
@@ -1983,6 +2155,14 @@ exports.getUserAttendanceForAdmin = async (req, res) => {
       userId: targetUser._id,
       attendanceDate: { $gte: range.from, $lte: range.to },
     };
+
+    await autoCheckoutDueAttendanceRows({
+      companyId: req.user.companyId,
+      userIds: [targetUser._id],
+      fromDate: range.from,
+      toDate: range.to,
+      policy,
+    });
 
     const [rows, leaveMap] = await Promise.all([
       Attendance.find(query)
@@ -2221,6 +2401,13 @@ exports.getDailyAttendanceForAdmin = async (req, res) => {
     }
 
     const userIds = scopedUsers.map((user) => user._id);
+    await autoCheckoutDueAttendanceRows({
+      companyId: req.user.companyId,
+      userIds,
+      attendanceDate: requestedDate,
+      policy,
+    });
+
     const [attendanceRows, leaveMap] = await Promise.all([
       Attendance.find({
         companyId: req.user.companyId,

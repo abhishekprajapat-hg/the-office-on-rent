@@ -4,6 +4,7 @@ const { Server } = require("socket.io");
 const app = require("./app");
 const connectDB = require("./config/db");
 const { registerChatSocketHandlers } = require("./socket/chat.socket");
+const { runAutoCheckoutSweep } = require("./controllers/attendance.controller");
 const logger = require("./config/logger");
 
 const PORT = process.env.PORT || 5000;
@@ -73,8 +74,46 @@ const io = new Server(httpServer, {
 app.set("io", io);
 registerChatSocketHandlers(io);
 
+const startAttendanceAutoCheckoutSweep = () => {
+  if (String(process.env.ATTENDANCE_AUTO_CHECKOUT_SWEEP_ENABLED || "true").toLowerCase() === "false") {
+    return;
+  }
+
+  const intervalMs = Math.max(
+    60 * 1000,
+    toPositiveInt(process.env.ATTENDANCE_AUTO_CHECKOUT_SWEEP_INTERVAL_MS, 5 * 60 * 1000),
+  );
+  let isRunning = false;
+
+  const runSweep = async () => {
+    if (isRunning) return;
+    isRunning = true;
+    try {
+      const updatedCount = await runAutoCheckoutSweep();
+      if (updatedCount > 0) {
+        logger.info({
+          updatedCount,
+          message: "Attendance auto checkout sweep completed",
+        });
+      }
+    } catch (error) {
+      logger.error({
+        error: error.message,
+        message: "Attendance auto checkout sweep failed",
+      });
+    } finally {
+      isRunning = false;
+    }
+  };
+
+  const timer = setInterval(runSweep, intervalMs);
+  if (typeof timer.unref === "function") timer.unref();
+  runSweep();
+};
+
 const bootstrap = async () => {
   await connectDB();
+  startAttendanceAutoCheckoutSweep();
   httpServer.listen(PORT, () => {
     logger.info({ port: PORT, message: "Server started" });
   });

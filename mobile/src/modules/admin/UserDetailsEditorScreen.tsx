@@ -11,6 +11,8 @@ const ROLE_OPTIONS = [
   { label: "Manager", value: "MANAGER" },
   { label: "Executive", value: "EXECUTIVE" },
   { label: "Field Executive", value: "FIELD_EXECUTIVE" },
+  { label: "Production Executive", value: "PRODUCTION_EXECUTIVE" },
+  { label: "Community Manager", value: "COMMUNITY_MANAGER" },
   { label: "Channel Partner", value: "CHANNEL_PARTNER" },
 ];
 
@@ -18,6 +20,8 @@ const REPORTING_PARENT_ROLES: Record<string, string[]> = {
   MANAGER: ["ADMIN"],
   EXECUTIVE: ["MANAGER"],
   FIELD_EXECUTIVE: ["MANAGER"],
+  PRODUCTION_EXECUTIVE: ["MANAGER"],
+  COMMUNITY_MANAGER: ["MANAGER"],
   CHANNEL_PARTNER: ["MANAGER"],
 };
 
@@ -26,6 +30,8 @@ const ROLE_LABELS: Record<string, string> = {
   MANAGER: "Manager",
   EXECUTIVE: "Executive",
   FIELD_EXECUTIVE: "Field Executive",
+  PRODUCTION_EXECUTIVE: "Production Executive",
+  COMMUNITY_MANAGER: "Community Manager",
   CHANNEL_PARTNER: "Channel Partner",
 };
 

@@ -2,9 +2,9 @@ const mongoose = require("mongoose");
 const Task = require("../models/Task");
 const User = require("../models/User");
 const Lead = require("../models/Lead");
-const { USER_ROLES } = require("../constants/role.constants");
+const { USER_ROLES, PRODUCTION_ROLES } = require("../constants/role.constants");
 
-const isProductionExecutive = (user) => user?.role === USER_ROLES.PRODUCTION_EXECUTIVE;
+const isProductionTaskRole = (user) => PRODUCTION_ROLES.includes(user?.role);
 
 // Helper to check access permissions
 const checkTaskAccess = (task, user) => {
@@ -30,8 +30,8 @@ exports.createTask = async (req, res) => {
       return res.status(400).json({ message: "Task title is required" });
     }
 
-    if (isProductionExecutive(req.user) && leadId) {
-      return res.status(403).json({ message: "Production Executive tasks cannot be linked to leads" });
+    if (isProductionTaskRole(req.user) && leadId) {
+      return res.status(403).json({ message: "Production role tasks cannot be linked to leads" });
     }
 
     // Validation: Assigned User must be in the same company
@@ -115,7 +115,7 @@ exports.getTasks = async (req, res) => {
     // Apply filters
     if (status) query.status = status;
     if (priority) query.priority = priority;
-    if (leadId && !isProductionExecutive(req.user)) query.leadId = leadId;
+    if (leadId && !isProductionTaskRole(req.user)) query.leadId = leadId;
     if (assignedTo) query.assignedTo = assignedTo;
     if (tag) query.tags = tag;
     
@@ -188,8 +188,8 @@ exports.updateTask = async (req, res) => {
       return res.status(400).json({ message: "Invalid task ID" });
     }
 
-    if (isProductionExecutive(req.user) && leadId) {
-      return res.status(403).json({ message: "Production Executive tasks cannot be linked to leads" });
+    if (isProductionTaskRole(req.user) && leadId) {
+      return res.status(403).json({ message: "Production role tasks cannot be linked to leads" });
     }
 
     const task = await Task.findById(taskId);

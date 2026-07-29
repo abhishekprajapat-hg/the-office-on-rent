@@ -34,6 +34,7 @@ const ROLE_LABELS = {
   EXECUTIVE: "Executive",
   FIELD_EXECUTIVE: "Field Executive",
   PRODUCTION_EXECUTIVE: "Production Executive",
+  COMMUNITY_MANAGER: "Community Manager",
   CHANNEL_PARTNER: "Channel Partner",
 };
 const MANAGEMENT_ROLES = ["MANAGER"];

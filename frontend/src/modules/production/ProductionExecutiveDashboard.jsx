@@ -70,6 +70,10 @@ const ActionCard = ({ to, icon: Icon, title, subtitle }) => (
 );
 
 const ProductionExecutiveDashboard = ({ mode = "home" }) => {
+  const currentRole = String(localStorage.getItem("role") || "").trim().toUpperCase();
+  const isCommunityManager = currentRole === "COMMUNITY_MANAGER";
+  const workspaceLabel = isCommunityManager ? "Community Workspace" : "Production Workspace";
+  const dashboardLabel = isCommunityManager ? "Community Manager Dashboard" : "Production Executive Dashboard";
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [stats, setStats] = useState(null);
@@ -94,7 +98,7 @@ const ProductionExecutiveDashboard = ({ mode = "home" }) => {
         setTasks(Array.isArray(taskRows) ? taskRows : []);
         setAttendance(attendanceData?.today || null);
       } catch (err) {
-        if (alive) setError(toErrorMessage(err, "Failed to load production dashboard"));
+        if (alive) setError(toErrorMessage(err, "Failed to load workspace dashboard"));
       } finally {
         if (alive) setLoading(false);
       }
@@ -123,13 +127,12 @@ const ProductionExecutiveDashboard = ({ mode = "home" }) => {
   }, [tasks]);
 
   const completionRate = pct(stats?.COMPLETED, stats?.total);
-  const heading =
-    mode === "performance" ? "Performance Dashboard" : "Production Executive Dashboard";
+  const heading = mode === "performance" ? "Performance Dashboard" : dashboardLabel;
 
   if (loading) {
     return (
       <div className="flex min-h-[60vh] items-center justify-center text-sm font-semibold text-slate-500">
-        Loading production workspace...
+        Loading {isCommunityManager ? "community" : "production"} workspace...
       </div>
     );
   }
@@ -141,7 +144,7 @@ const ProductionExecutiveDashboard = ({ mode = "home" }) => {
           <div className="flex flex-col gap-4 md:flex-row md:items-end md:justify-between">
             <div>
               <p className="text-xs font-semibold uppercase tracking-[0.16em] text-cyan-700">
-                Production Workspace
+                {workspaceLabel}
               </p>
               <h1 className="mt-2 text-2xl font-semibold text-slate-950 sm:text-3xl">
                 {heading}

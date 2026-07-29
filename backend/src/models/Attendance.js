@@ -197,6 +197,16 @@ const attendanceSchema = new mongoose.Schema(
         maxlength: 240,
         default: "",
       },
+      autoCheckOutAt: {
+        type: Date,
+        default: null,
+      },
+      autoCheckOutReason: {
+        type: String,
+        trim: true,
+        maxlength: 120,
+        default: "",
+      },
     },
   },
   { timestamps: true },

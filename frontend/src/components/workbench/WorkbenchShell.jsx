@@ -36,8 +36,6 @@ const WorkbenchShell = ({
       <ActivityBar
         userRole={userRole}
         user={userForNav}
-        theme={theme}
-        onToggleTheme={onToggleTheme}
         onLogout={onLogout}
         unreadAlerts={adminRequestUnread}
         unreadChats={unreadTotal}
@@ -46,8 +44,6 @@ const WorkbenchShell = ({
       <PrimarySidebar
         userRole={userRole}
         user={userForNav}
-        theme={theme}
-        onToggleTheme={onToggleTheme}
         onLogout={onLogout}
         collapsed={sidebarCollapsed}
         onToggleCollapsed={handleToggleSidebar}
@@ -68,6 +64,8 @@ const WorkbenchShell = ({
           <AppTopCommandBar
             pageHeader={pageHeader}
             roleLabel={roleLabel}
+            theme={theme}
+            onToggleTheme={onToggleTheme}
           />
         ) : null}
         <div

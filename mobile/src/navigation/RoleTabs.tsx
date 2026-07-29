@@ -188,6 +188,28 @@ const RoleMainTabs = ({ role }: { role: UserRole }) => {
     );
   }
 
+  if (role === "PRODUCTION_EXECUTIVE" || role === "COMMUNITY_MANAGER") {
+    return (
+      <Tab.Navigator
+        screenOptions={({ route }) => ({
+          ...sharedOptions,
+          tabBarIcon: ({ focused, color, size }) => (
+            <Ionicons
+              name={getTabIconName(route.name, focused)}
+              size={size}
+              color={color}
+            />
+          ),
+        })}
+      >
+        <Tab.Screen name="Dashboard" component={TaskManagerScreen} />
+        <Tab.Screen name="Attendance" component={AttendanceScreen} />
+        <Tab.Screen name="Chat" component={TeamChatScreen} options={{ tabBarBadge: chatBadge }} />
+        <Tab.Screen name="More" component={MoreMenuScreen} />
+      </Tab.Navigator>
+    );
+  }
+
   // Default fallback for CHANNEL_PARTNER or unknown roles
   return (
     <Tab.Navigator

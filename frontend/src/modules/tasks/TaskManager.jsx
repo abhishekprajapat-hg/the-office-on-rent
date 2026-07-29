@@ -48,7 +48,7 @@ const PRIORITIES = [
 export default function TaskManager({ theme = "light" }) {
   const isDark = theme === "dark";
   const currentRole = String(localStorage.getItem("role") || "").trim().toUpperCase();
-  const isProductionExecutive = currentRole === "PRODUCTION_EXECUTIVE";
+  const isProductionExecutive = ["PRODUCTION_EXECUTIVE", "COMMUNITY_MANAGER"].includes(currentRole);
 
   // State
   const [tasks, setTasks] = useState([]);

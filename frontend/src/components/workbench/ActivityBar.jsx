@@ -1,6 +1,6 @@
 import { memo, useMemo } from "react";
 import { Link, useLocation } from "react-router-dom";
-import { LogOut, Moon, Sun, UserCircle2 } from "lucide-react";
+import { LogOut, UserCircle2 } from "lucide-react";
 import { IconButton, Tooltip, cn } from "../ui";
 import BrandLogo from "../common/BrandLogo";
 import { getActiveSectionId, getVisibleMenuGroups, getVisibleSections } from "./workbenchNavigation";
@@ -13,8 +13,6 @@ const getSectionTarget = (sectionId, userRole, user) => {
 const ActivityBar = ({
   userRole,
   user,
-  theme,
-  onToggleTheme,
   onLogout,
   unreadAlerts = 0,
   unreadChats = 0,
@@ -77,15 +75,6 @@ const ActivityBar = ({
           >
             <UserCircle2 aria-hidden="true" size={19} />
           </Link>
-        </Tooltip>
-        <Tooltip label={theme === "dark" ? "Light mode" : "Dark mode"} side="right">
-          <IconButton
-            icon={theme === "dark" ? Sun : Moon}
-            label={theme === "dark" ? "Switch to light mode" : "Switch to dark mode"}
-            size="sm"
-            onClick={onToggleTheme}
-            className="border-transparent bg-transparent text-slate-400 hover:border-transparent hover:bg-white/10 hover:text-white"
-          />
         </Tooltip>
         <Tooltip label="Logout" side="right">
           <IconButton
