@@ -1,4 +1,5 @@
 import { memo } from "react";
+import { Breadcrumbs } from "../crm";
 import ThemeSwitch from "./ThemeSwitch";
 
 const normalizeHeaderTitle = (pageHeader = {}) => {
@@ -39,6 +40,9 @@ const AppTopCommandBar = ({
     <header className="shrink-0 bg-slate-50/50 px-3 py-1.5 sm:px-4 sm:py-3 lg:px-6">
       <div className="flex min-w-0 items-center justify-between gap-4">
         <div className="min-w-0">
+          {pageHeader?.breadcrumbs?.length ? (
+            <Breadcrumbs items={pageHeader.breadcrumbs} className="mb-1" />
+          ) : null}
           <h1
             className="font-display max-w-full truncate text-xl font-semibold leading-tight tracking-normal text-slate-800 sm:text-4xl sm:tracking-widest"
             title={title}

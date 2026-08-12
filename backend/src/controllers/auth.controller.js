@@ -216,6 +216,9 @@ exports.login = async (req, res) => {
       userAgent: req.headers["user-agent"] || "",
     });
 
+    user.lastLoginAt = new Date();
+    await user.save({ validateBeforeSave: false });
+
     return res.json(toAuthResponse({ user, tokenBundle, tenant: resolvedTenant }));
   } catch (error) {
     logger.error({

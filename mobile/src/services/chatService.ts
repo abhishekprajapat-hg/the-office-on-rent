@@ -6,9 +6,6 @@ const isMissingRouteError = (error: unknown) => {
   return status === 404;
 };
 
-const CLOUDINARY_CLOUD_NAME = String(process.env.EXPO_PUBLIC_CLOUDINARY_CLOUD_NAME || "djfiq8kiy").trim();
-const CLOUDINARY_UPLOAD_PRESET = String(process.env.EXPO_PUBLIC_CLOUDINARY_UPLOAD_PRESET || "office_on_rent_upload").trim();
-
 const toRole = (value: unknown) => String(value || "").toUpperCase();
 
 const pickUrlString = (value: unknown): string => {
@@ -182,74 +179,6 @@ const toFormFileValue = async ({
   } as any;
 };
 
-const uploadToCloudinary = async ({
-  uri,
-  name,
-  mimeType,
-  file,
-}: {
-  uri: string;
-  name: string;
-  mimeType?: string;
-  file?: any;
-}) => {
-  const resolvedMimeType = String(mimeType || inferMimeTypeFromName(name) || "application/octet-stream");
-  const lower = resolvedMimeType.toLowerCase();
-
-  const endpointPriority = lower.startsWith("image/")
-    ? ["image", "auto", "raw"]
-    : lower.startsWith("video/")
-      ? ["video", "auto", "raw"]
-      : ["raw", "auto", "image"];
-
-  let lastError = "Upload failed";
-
-  for (const resourceType of endpointPriority) {
-    const formData = new FormData();
-    const fileValue = await toFormFileValue({
-      uri,
-      name,
-      mimeType: resolvedMimeType,
-      file,
-    });
-    formData.append("file", fileValue as any);
-    formData.append("upload_preset", CLOUDINARY_UPLOAD_PRESET);
-
-    const url = `https://api.cloudinary.com/v1_1/${CLOUDINARY_CLOUD_NAME}/${resourceType}/upload`;
-    const response = await fetch(url, {
-      method: "POST",
-      headers: { Accept: "application/json" },
-      body: formData as any,
-    }).catch((error) => {
-      lastError = String((error as Error)?.message || "Network error while uploading");
-      return null;
-    });
-
-    if (!response) continue;
-    const data = await response.json().catch(() => ({}));
-    if (!response.ok) {
-      lastError = String(data?.error?.message || data?.message || "File upload failed");
-      continue;
-    }
-
-    const secureUrl = String(data?.secure_url || data?.url || "");
-    if (!secureUrl) {
-      lastError = "Upload completed but URL missing";
-      continue;
-    }
-
-    return {
-      fileName: String(data?.original_filename || name || "attachment"),
-      fileUrl: secureUrl,
-      mimeType: resolvedMimeType,
-      size: Number(data?.bytes || 0) || 0,
-      storagePath: String(data?.public_id || ""),
-    };
-  }
-
-  throw new Error(lastError);
-};
-
 const createLocalCallLog = ({
   conversationId,
   recipientId,
@@ -387,25 +316,24 @@ export const uploadChatFile = async ({
   mimeType?: string;
   file?: any;
 }) => {
+  const resolvedMimeType = String(mimeType || inferMimeTypeFromName(name) || "application/octet-stream");
   const formData = new FormData();
   const fileValue = await toFormFileValue({
     uri,
     name,
-    mimeType: mimeType || "application/octet-stream",
+    mimeType: resolvedMimeType,
     file,
   });
   formData.append("file", fileValue as any);
 
-  try {
-    const res = await api.post("/chat/uploads", formData);
-    return toLegacyAttachment(res.data?.attachment || null);
-  } catch (error: any) {
-    if (!isMissingRouteError(error)) {
-      const isNetworkError = String(error?.message || "").toLowerCase().includes("network");
-      if (!isNetworkError) throw error;
-    }
-    return uploadToCloudinary({ uri, name, mimeType, file });
-  }
+  const res = await api.post("/uploads", formData, { params: { category: "chat" } });
+  return {
+    fileName: String(res.data?.fileName || name || "attachment"),
+    fileUrl: String(res.data?.url || ""),
+    mimeType: String(res.data?.mimeType || resolvedMimeType),
+    size: Number(res.data?.size || 0) || 0,
+    storagePath: "",
+  };
 };
 
 export const getCallLogs = async ({

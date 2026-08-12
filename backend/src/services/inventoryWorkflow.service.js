@@ -1,5 +1,6 @@
 const mongoose = require("mongoose");
 const Inventory = require("../models/Inventory");
+const InventoryIdCounter = require("../models/InventoryIdCounter");
 const InventoryRequest = require("../models/InventoryRequest");
 const InventoryActivity = require("../models/InventoryActivity");
 const Lead = require("../models/Lead");
@@ -17,6 +18,8 @@ const {
   INVENTORY_TYPES,
   INVENTORY_SALE_PAYMENT_MODES,
   INVENTORY_SALE_PAYMENT_TYPES,
+  INVENTORY_DEAL_TYPES,
+  INVENTORY_OWNER_TYPES,
   INVENTORY_ALLOWED_FIELDS,
   INVENTORY_REQUIRED_CREATE_FIELDS,
   INVENTORY_ACTIVITY_ACTIONS,
@@ -122,6 +125,13 @@ const RESIDENTIAL_WATER_SUPPLY_TYPES = Object.freeze([
   "BOTH",
   "OTHER",
 ]);
+const DEAL_TYPE_OPTIONS = Object.freeze(["", ...INVENTORY_DEAL_TYPES]);
+const OWNER_TYPE_OPTIONS = Object.freeze(["", ...INVENTORY_OWNER_TYPES]);
+const PROPERTY_ID_PREFIX = Object.freeze({
+  COMMERCIAL: "COM",
+  RESIDENTIAL: "RES",
+});
+const PHONE_NUMBER_PATTERN = /^[0-9+\-\s()]{7,20}$/;
 
 const normalizeResidentialPropertyType = (value) => {
   const normalized = toUpperSnake(value);
@@ -152,6 +162,33 @@ const sanitizeString = (value) => {
 
 const sanitizeCappedString = (value, maxLength = 200) =>
   sanitizeString(value).slice(0, Math.max(1, maxLength));
+
+// All free-text inventory fields are stored uppercase so data stays consistent
+// regardless of what casing the client (web/mobile) submits.
+const sanitizeUppercaseString = (value) => sanitizeString(value).toUpperCase();
+
+const sanitizeUppercaseCappedString = (value, maxLength = 200) =>
+  sanitizeCappedString(value, maxLength).toUpperCase();
+
+const sanitizePhoneNumber = (value, label) => {
+  const cleanValue = sanitizeCappedString(value, 20);
+  if (!cleanValue) return "";
+  if (!PHONE_NUMBER_PATTERN.test(cleanValue)) {
+    throw createHttpError(400, `${label} must be a valid phone number`);
+  }
+  return cleanValue;
+};
+
+const generatePropertyId = async ({ companyId, inventoryType }) => {
+  const category = PROPERTY_ID_PREFIX[inventoryType] ? inventoryType : "COMMERCIAL";
+  const counter = await InventoryIdCounter.findOneAndUpdate(
+    { companyId, category },
+    { $inc: { seq: 1 } },
+    { new: true, upsert: true },
+  );
+  const prefix = PROPERTY_ID_PREFIX[category];
+  return `${prefix}-${String(counter.seq).padStart(4, "0")}`;
+};
 
 const sanitizeSubtypeData = (value) => {
   if (!value || typeof value !== "object" || Array.isArray(value)) return {};
@@ -579,6 +616,18 @@ const sanitizeCommercialDetailsPayload = (value) => {
   };
 };
 
+const sanitizeDocumentsAvailablePayload = (value) => {
+  const source = value && typeof value === "object" && !Array.isArray(value) ? value : {};
+  return {
+    registry: toBoolean(source.registry, false),
+    searchReport: toBoolean(source.searchReport, false),
+    electricityNoc: toBoolean(source.electricityNoc, false),
+    maintenanceNoc: toBoolean(source.maintenanceNoc, false),
+    taxReceipt: toBoolean(source.taxReceipt, false),
+    loanNoc: toBoolean(source.loanNoc, false),
+  };
+};
+
 const sanitizeResidentialDetailsPayload = (value) => {
   if (!value || typeof value !== "object" || Array.isArray(value)) {
     throw createHttpError(400, "residentialDetails must be an object");
@@ -708,11 +757,6 @@ const normalizeLegacyInventoryPayload = (payload = {}) => {
     normalized.inventoryType = resolveInventoryTypeFromCategory(normalized.category);
   } else {
     normalized.inventoryType = toUpperSnake(normalized.inventoryType);
-  }
-
-  if (!Object.prototype.hasOwnProperty.call(normalized, "propertyId")) {
-    const fallbackPropertyId = normalized.unitNumber || normalized.code || normalized.id || "";
-    normalized.propertyId = sanitizeString(fallbackPropertyId);
   }
 
   if (Object.prototype.hasOwnProperty.call(normalized, "furnishingStatus")) {
@@ -988,17 +1032,12 @@ const sanitizeInventoryPayload = ({
 
     if (value === undefined || value === null) return;
 
-    if (field === "projectName" || field === "towerName" || field === "unitNumber" || field === "location") {
-      const cleanValue = sanitizeString(value);
+    if (field === "projectName" || field === "towerName" || field === "location") {
+      const cleanValue = sanitizeUppercaseString(value);
       if (!cleanValue) {
         throw createHttpError(400, `${field} must be a non-empty string`);
       }
       safePayload[field] = cleanValue;
-      return;
-    }
-
-    if (field === "propertyId") {
-      safePayload[field] = sanitizeCappedString(value, 80);
       return;
     }
 
@@ -1085,12 +1124,73 @@ const sanitizeInventoryPayload = ({
     }
 
     if (field === "city" || field === "area" || field === "buildingName") {
-      safePayload[field] = sanitizeCappedString(value, 120);
+      safePayload[field] = sanitizeUppercaseCappedString(value, 120);
       return;
     }
 
     if (field === "pincode") {
       safePayload[field] = sanitizeCappedString(value, 20);
+      return;
+    }
+
+    if (field === "officeNumber") {
+      safePayload[field] = sanitizeUppercaseCappedString(value, 40);
+      return;
+    }
+
+    if (field === "ownerName" || field === "keyManagerName") {
+      safePayload[field] = sanitizeUppercaseCappedString(value, 120);
+      return;
+    }
+
+    if (field === "ownerNumber") {
+      safePayload[field] = sanitizePhoneNumber(value, "ownerNumber");
+      return;
+    }
+
+    if (field === "ownerWhatsappNumber") {
+      safePayload[field] = sanitizePhoneNumber(value, "ownerWhatsappNumber");
+      return;
+    }
+
+    if (field === "keyManagerNumber") {
+      safePayload[field] = sanitizePhoneNumber(value, "keyManagerNumber");
+      return;
+    }
+
+    if (field === "dealType") {
+      const cleanDealType = toUpperSnake(value);
+      if (!DEAL_TYPE_OPTIONS.includes(cleanDealType)) {
+        throw createHttpError(400, "dealType is invalid");
+      }
+      safePayload[field] = cleanDealType;
+      return;
+    }
+
+    if (field === "ownerType") {
+      const cleanOwnerType = toUpperSnake(value);
+      if (!OWNER_TYPE_OPTIONS.includes(cleanOwnerType)) {
+        throw createHttpError(400, "ownerType is invalid");
+      }
+      safePayload[field] = cleanOwnerType;
+      return;
+    }
+
+    if (field === "propertyDate") {
+      if (value === "" || value === null) {
+        safePayload[field] = null;
+        return;
+      }
+      const parsedDate = new Date(value);
+      if (Number.isNaN(parsedDate.getTime())) {
+        throw createHttpError(400, "propertyDate must be a valid date");
+      }
+      safePayload[field] = parsedDate;
+      return;
+    }
+
+    if (field === "gstApplicable") {
+      safePayload[field] = toBoolean(value, false);
       return;
     }
 
@@ -1104,8 +1204,15 @@ const sanitizeInventoryPayload = ({
       || field === "totalArea"
       || field === "carpetArea"
       || field === "builtUpArea"
+      || field === "superBuiltUpArea"
+      || field === "length"
+      || field === "width"
+      || field === "height"
       || field === "maintenanceCharges"
       || field === "deposit"
+      || field === "depositMonths"
+      || field === "agreementYears"
+      || field === "lockInYears"
     ) {
       safePayload[field] = sanitizeNonNegativeNumber(value, field);
       return;
@@ -1123,6 +1230,11 @@ const sanitizeInventoryPayload = ({
 
     if (field === "residentialDetails") {
       safePayload[field] = sanitizeResidentialDetailsPayload(value);
+      return;
+    }
+
+    if (field === "documentsAvailable") {
+      safePayload[field] = sanitizeDocumentsAvailablePayload(value);
       return;
     }
 
@@ -1151,9 +1263,9 @@ const sanitizeInventoryPayload = ({
       ? (hasTypePatch ? safePayload.type : normalizeLegacyType(payload.type))
       : (hasTypePatch ? safePayload.type : normalizeLegacyType(currentType));
 
-  if (hasDepositPatch && effectiveTransactionType !== "Rent") {
+  if (hasDepositPatch && !["Rent", "Both"].includes(effectiveTransactionType)) {
     safePayload.deposit = null;
-  } else if (!hasDepositPatch && hasTypePatch && safePayload.type !== "Rent") {
+  } else if (!hasDepositPatch && hasTypePatch && !["Rent", "Both"].includes(safePayload.type)) {
     safePayload.deposit = null;
   }
 
@@ -1163,6 +1275,13 @@ const sanitizeInventoryPayload = ({
         throw createHttpError(400, `${field} is required`);
       }
     });
+
+    if (effectiveTransactionType !== "Rent" && safePayload.price == null) {
+      throw createHttpError(400, "price is required");
+    }
+    if (["Rent", "Both"].includes(effectiveTransactionType) && safePayload.rent == null) {
+      throw createHttpError(400, "rent is required");
+    }
 
     if (!safePayload.status) {
       safePayload.status = "Available";
@@ -1593,6 +1712,15 @@ const createInventoryDirect = async ({ user, payload }) => {
     companyId,
   });
 
+  // propertyId is always server-generated and doubles as the unitNumber; the
+  // client cannot set or edit either (see INVENTORY_ALLOWED_FIELDS).
+  const propertyId = await generatePropertyId({
+    companyId,
+    inventoryType: proposed.inventoryType,
+  });
+  proposed.propertyId = propertyId;
+  proposed.unitNumber = propertyId;
+
   const created = await Inventory.create({
     ...proposed,
     companyId,
@@ -1763,6 +1891,13 @@ const bulkCreateInventoryDirect = async ({ user, payload = [] }) => {
         validatedTeamIds.add(teamIdKey);
       }
 
+      const propertyId = await generatePropertyId({
+        companyId,
+        inventoryType: proposed.inventoryType,
+      });
+      proposed.propertyId = propertyId;
+      proposed.unitNumber = propertyId;
+
       const created = await Inventory.create({
         ...proposed,
         companyId,
@@ -1860,7 +1995,7 @@ const createInventoryUpdateRequest = async ({
     companyId,
   })
     .select(
-      "_id projectName towerName unitNumber propertyId inventoryType price rent deposit type category furnishingStatus status reservationReason reservationLeadId saleDetails location city area pincode buildingName floorNumber totalFloors totalArea carpetArea builtUpArea areaUnit maintenanceCharges commercialDetails residentialDetails siteLocation images documents floorPlans videoTours",
+      "_id projectName towerName unitNumber propertyId inventoryType price rent deposit depositMonths agreementYears lockInYears type category furnishingStatus status reservationReason reservationLeadId saleDetails location city area pincode buildingName floorNumber totalFloors totalArea carpetArea builtUpArea superBuiltUpArea length width height areaUnit maintenanceCharges commercialDetails residentialDetails documentsAvailable siteLocation images documents floorPlans videoTours officeNumber ownerName ownerNumber ownerWhatsappNumber ownerType keyManagerName keyManagerNumber dealType propertyDate gstApplicable",
     )
     .lean();
 
@@ -2120,6 +2255,13 @@ const approveRequest = async ({ user, requestId, io }) => {
     });
     await ensureSaleDetailsLeadExists(proposed.saleDetails);
     await ensureReservationLeadExists(proposed.reservationLeadId);
+
+    const propertyId = await generatePropertyId({
+      companyId,
+      inventoryType: proposed.inventoryType,
+    });
+    proposed.propertyId = propertyId;
+    proposed.unitNumber = propertyId;
 
     inventory = await Inventory.create({
       ...proposed,

@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useCallback, useMemo } from "react";
+import { useNavigate } from "react-router-dom";
 import { motion as Motion, AnimatePresence } from "framer-motion";
 import {
   Plus,
@@ -19,14 +20,21 @@ import {
   ArrowRight,
   ChevronRight,
   KanbanSquare,
-  List
+  List,
+  ArrowLeft,
+  Users,
+  Flag,
+  Tag,
+  AlignLeft
 } from "lucide-react";
 import {
   getTasks,
+  getTaskById,
   createTask,
   updateTask,
   deleteTask,
-  getTaskStats
+  getTaskStats,
+  getTaskStatsByUser
 } from "../../services/taskService";
 import { getUsers } from "../../services/userService";
 import { getAllLeads } from "../../services/leadService";
@@ -39,6 +47,17 @@ const STATUS_COLUMNS = [
   { id: "COMPLETED", label: "Completed", color: "text-emerald-400 border-emerald-400 bg-emerald-400/5" }
 ];
 
+const AVATAR_COLORS = [
+  "bg-sky-500/15 text-sky-500",
+  "bg-emerald-500/15 text-emerald-500",
+  "bg-amber-500/15 text-amber-500",
+  "bg-rose-500/15 text-rose-500",
+  "bg-violet-500/15 text-violet-500",
+  "bg-cyan-500/15 text-cyan-500",
+  "bg-fuchsia-500/15 text-fuchsia-500",
+  "bg-orange-500/15 text-orange-500",
+];
+
 const PRIORITIES = [
   { value: "LOW", label: "Low", color: "bg-blue-500/10 text-blue-400 border-blue-500/20" },
   { value: "MEDIUM", label: "Medium", color: "bg-amber-500/10 text-amber-400 border-amber-500/20" },
@@ -47,8 +66,18 @@ const PRIORITIES = [
 
 export default function TaskManager({ theme = "light" }) {
   const isDark = theme === "dark";
+  const navigate = useNavigate();
   const currentRole = String(localStorage.getItem("role") || "").trim().toUpperCase();
   const isProductionExecutive = ["PRODUCTION_EXECUTIVE", "COMMUNITY_MANAGER"].includes(currentRole);
+  const canViewProfiles = ["ADMIN", "MANAGER"].includes(currentRole);
+  const canViewRoster = ["ADMIN", "MANAGER"].includes(currentRole);
+
+  const handleOpenAssigneeProfile = (e, assignee) => {
+    e.stopPropagation();
+    const assigneeId = assignee?._id || assignee;
+    if (!assigneeId || !canViewProfiles) return;
+    navigate(`/admin/users/${assigneeId}`);
+  };
 
   // State
   const [tasks, setTasks] = useState([]);
@@ -58,7 +87,7 @@ export default function TaskManager({ theme = "light" }) {
   });
   const [teamUsers, setTeamUsers] = useState([]);
   const [leads, setLeads] = useState([]);
-  const [viewMode, setViewMode] = useState("kanban"); // kanban or list
+  const [viewMode, setViewMode] = useState("list"); // kanban or list
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [success, setSuccess] = useState("");
@@ -91,6 +120,11 @@ export default function TaskManager({ theme = "light" }) {
   });
   const [submitting, setSubmitting] = useState(false);
 
+  // Task Details View Modal
+  const [isDetailsOpen, setIsDetailsOpen] = useState(false);
+  const [detailsTask, setDetailsTask] = useState(null);
+  const [detailsLoading, setDetailsLoading] = useState(false);
+
   // Subtask & Tag inputs inside form
   const [newSubtaskTitle, setNewSubtaskTitle] = useState("");
   const [newTagInput, setNewTagInput] = useState("");
@@ -98,6 +132,20 @@ export default function TaskManager({ theme = "light" }) {
   // Drag states
   const [draggedTaskId, setDraggedTaskId] = useState(null);
   const [activeDragCol, setActiveDragCol] = useState(null);
+
+  // Roster (team) view - Admins/Managers land here first, then drill into a user's board
+  const [viewLevel, setViewLevel] = useState(canViewRoster ? "roster" : "board");
+  const [selectedUserObj, setSelectedUserObj] = useState(null);
+  const [userStatsMap, setUserStatsMap] = useState({});
+  const [rosterLoading, setRosterLoading] = useState(false);
+
+  // Google Tasks-style flat list: quick add, inline expand, collapsible completed section
+  const [expandedTaskId, setExpandedTaskId] = useState(null);
+  const [quickAddTitle, setQuickAddTitle] = useState("");
+  const [quickAddSubmitting, setQuickAddSubmitting] = useState(false);
+  const [showCompleted, setShowCompleted] = useState(false);
+  const [showFilters, setShowFilters] = useState(false);
+  const [inlineSubtaskInput, setInlineSubtaskInput] = useState("");
 
   // Fetch initial data
   const fetchData = useCallback(async () => {
@@ -135,6 +183,45 @@ export default function TaskManager({ theme = "light" }) {
     fetchData();
   }, [fetchData]);
 
+  // Roster data: team members + per-user task counts, refetched whenever the roster is shown
+  useEffect(() => {
+    if (viewLevel !== "roster" || !canViewRoster) return;
+    let cancelled = false;
+    (async () => {
+      setRosterLoading(true);
+      try {
+        const [usersData, statsByUser] = await Promise.all([getUsers(), getTaskStatsByUser()]);
+        if (cancelled) return;
+        if (usersData?.users) setTeamUsers(usersData.users.filter(u => u.isActive));
+        setUserStatsMap(statsByUser || {});
+      } catch (err) {
+        console.error(err);
+        if (!cancelled) setError("Failed to load team roster");
+      } finally {
+        if (!cancelled) setRosterLoading(false);
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [viewLevel, canViewRoster]);
+
+  const handleSelectRosterUser = (user) => {
+    setSelectedUserObj(user);
+    setAssigneeFilter(user._id);
+    setViewLevel("board");
+  };
+
+  const handleViewAllTasks = () => {
+    setSelectedUserObj(null);
+    setAssigneeFilter("");
+    setViewLevel("board");
+  };
+
+  const handleBackToRoster = () => {
+    setViewLevel("roster");
+    setSelectedUserObj(null);
+    setAssigneeFilter("");
+  };
+
   // Flash Alerts auto-dismiss
   useEffect(() => {
     if (success) {
@@ -159,7 +246,7 @@ export default function TaskManager({ theme = "light" }) {
       status: "TODO",
       priority: "MEDIUM",
       dueDate: "",
-      assignedTo: "",
+      assignedTo: selectedUserObj?._id || "",
       leadId: "",
       subtasks: [],
       tags: []
@@ -185,6 +272,25 @@ export default function TaskManager({ theme = "light" }) {
     setNewSubtaskTitle("");
     setNewTagInput("");
     setIsModalOpen(true);
+  };
+
+  const handleOpenDetails = async (task) => {
+    setIsDetailsOpen(true);
+    setDetailsTask(task);
+    setDetailsLoading(true);
+    try {
+      const fullTask = await getTaskById(task._id);
+      if (fullTask) setDetailsTask(fullTask);
+    } catch (err) {
+      console.error(err);
+    } finally {
+      setDetailsLoading(false);
+    }
+  };
+
+  const handleCloseDetails = () => {
+    setIsDetailsOpen(false);
+    setDetailsTask(null);
   };
 
   const handleSubmit = async (e) => {
@@ -257,6 +363,71 @@ export default function TaskManager({ theme = "light" }) {
       console.error(err);
       setError("Failed to update status");
     }
+  };
+
+  // Google Tasks-style quick add: single-line title, sensible defaults, no modal
+  const handleQuickAddTask = async (e) => {
+    e.preventDefault();
+    const title = quickAddTitle.trim();
+    if (!title) return;
+
+    setQuickAddSubmitting(true);
+    try {
+      const created = await createTask({
+        title,
+        status: "TODO",
+        priority: "MEDIUM",
+        assignedTo: selectedUserObj?._id || null,
+        leadId: null
+      });
+      if (created) {
+        setQuickAddTitle("");
+        fetchData();
+      }
+    } catch (err) {
+      console.error(err);
+      setError(err.response?.data?.message || "Failed to add task");
+    } finally {
+      setQuickAddSubmitting(false);
+    }
+  };
+
+  const handleToggleComplete = async (task) => {
+    const nextStatus = task.status === "COMPLETED" ? "TODO" : "COMPLETED";
+    try {
+      await updateTask(task._id, { status: nextStatus });
+      fetchData();
+    } catch (err) {
+      console.error(err);
+      setError("Failed to update task");
+    }
+  };
+
+  const handleInlineUpdate = async (taskId, patch) => {
+    try {
+      await updateTask(taskId, patch);
+      fetchData();
+    } catch (err) {
+      console.error(err);
+      setError("Failed to update task");
+    }
+  };
+
+  const handleToggleRowExpand = (taskId) => {
+    setExpandedTaskId((prev) => (prev === taskId ? null : taskId));
+    setInlineSubtaskInput("");
+  };
+
+  const handleInlineAddSubtask = (task) => {
+    const title = inlineSubtaskInput.trim();
+    if (!title) return;
+    handleInlineUpdate(task._id, { subtasks: [...(task.subtasks || []), { title, isCompleted: false }] });
+    setInlineSubtaskInput("");
+  };
+
+  const handleInlineToggleSubtask = (task, index) => {
+    const updatedSubtasks = (task.subtasks || []).map((s, i) => (i === index ? { ...s, isCompleted: !s.isCompleted } : s));
+    handleInlineUpdate(task._id, { subtasks: updatedSubtasks });
   };
 
   // Drag and Drop (Native HTML5)
@@ -489,6 +660,175 @@ export default function TaskManager({ theme = "light" }) {
     return new Date(task.dueDate) < new Date().setHours(0,0,0,0);
   };
 
+  // Google Tasks-style row: checkbox + title + meta line, expands in place for full details
+  const renderTaskRow = (task) => {
+    const priority = PRIORITIES.find(p => p.value === task.priority) || PRIORITIES[1];
+    const expired = isOverdue(task);
+    const progress = getSubtasksProgress(task);
+    const isExpanded = expandedTaskId === task._id;
+    const isDone = task.status === "COMPLETED";
+    const priorityDot = priority.value === "HIGH" ? "bg-rose-500" : priority.value === "MEDIUM" ? "bg-amber-500" : "bg-blue-500";
+
+    return (
+      <div key={task._id} className={isExpanded ? (isDark ? "bg-slate-900/40" : "bg-slate-50") : ""}>
+        <div className="group flex items-start gap-3 p-3">
+          <button
+            type="button"
+            onClick={(e) => { e.stopPropagation(); handleToggleComplete(task); }}
+            title={isDone ? "Mark as not done" : "Mark as done"}
+            className={`mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-full border-2 transition-colors ${
+              isDone
+                ? "border-emerald-500 bg-emerald-500 text-white"
+                : isDark ? "border-slate-600 hover:border-sky-400" : "border-slate-300 hover:border-sky-500"
+            }`}
+          >
+            {isDone && <Check size={12} strokeWidth={3} />}
+          </button>
+
+          <div className="min-w-0 flex-1 cursor-pointer" onClick={() => handleToggleRowExpand(task._id)}>
+            <div className="flex items-center gap-2">
+              <p className={`truncate text-sm font-semibold ${isDone ? `line-through ${styles.label}` : styles.title}`}>
+                {task.title}
+              </p>
+              {!isDone && <span className={`h-1.5 w-1.5 shrink-0 rounded-full ${priorityDot}`} title={`${priority.label} priority`} />}
+            </div>
+            {(task.dueDate || (task.assignedTo && !selectedUserObj) || progress || (task.tags && task.tags.length > 0)) && (
+              <div className="mt-0.5 flex flex-wrap items-center gap-x-3 gap-y-1 text-[11px]">
+                {task.dueDate && (
+                  <span className={`flex items-center gap-1 ${expired && !isDone ? "font-bold text-rose-500" : styles.label}`}>
+                    <Calendar size={10} /> {formatDate(task.dueDate)}
+                  </span>
+                )}
+                {task.assignedTo && !selectedUserObj && (
+                  <span className={`flex items-center gap-1 ${styles.label}`}>
+                    <User size={10} /> {task.assignedTo.name}
+                  </span>
+                )}
+                {progress && (
+                  <span className={`flex items-center gap-1 ${styles.label}`}>
+                    <CheckSquare size={10} /> {progress.completed}/{progress.total}
+                  </span>
+                )}
+                {task.tags?.slice(0, 2).map((t) => (
+                  <span key={t} className={`rounded px-1.5 py-0.5 text-[9px] font-bold border ${TAG_COLORS[t] || "bg-sky-500/10 text-sky-400 border-sky-500/20"}`}>
+                    {t}
+                  </span>
+                ))}
+              </div>
+            )}
+          </div>
+
+          <ChevronRight
+            size={16}
+            onClick={() => handleToggleRowExpand(task._id)}
+            className={`mt-1 shrink-0 cursor-pointer transition-transform ${styles.label} ${isExpanded ? "rotate-90" : ""}`}
+          />
+        </div>
+
+        {isExpanded && (
+          <div className={`space-y-3 border-t px-4 pb-4 pt-3 ${isDark ? "border-white/5" : "border-slate-100"}`}>
+            {task.description && <p className={`text-xs ${styles.label}`}>{task.description}</p>}
+
+            <div className="flex flex-wrap items-center gap-2">
+              <input
+                type="date"
+                value={task.dueDate ? new Date(task.dueDate).toISOString().split("T")[0] : ""}
+                onChange={(e) => handleInlineUpdate(task._id, { dueDate: e.target.value || null })}
+                className={`h-8 rounded-lg border px-2 text-xs ${styles.input}`}
+              />
+              <select
+                value={task.priority}
+                onChange={(e) => handleInlineUpdate(task._id, { priority: e.target.value })}
+                className={`h-8 rounded-lg border px-2 text-xs font-semibold ${styles.input}`}
+              >
+                {PRIORITIES.map(p => <option key={p.value} value={p.value}>{p.label}</option>)}
+              </select>
+              <select
+                value={task.status}
+                onChange={(e) => handleUpdateStatus(task._id, e.target.value)}
+                className={`h-8 rounded-lg border px-2 text-xs font-semibold ${styles.input}`}
+              >
+                {STATUS_COLUMNS.map(c => <option key={c.id} value={c.id}>{c.label}</option>)}
+              </select>
+            </div>
+
+            {task.leadId && !isProductionExecutive && (
+              <div className={`flex items-center gap-1 text-xs ${styles.label}`}>
+                <LinkIcon size={11} /> Linked lead: {task.leadId.name}
+              </div>
+            )}
+
+            {selectedUserObj && task.assignedTo && (
+              <div className={`flex items-center gap-1 text-xs ${styles.label}`}>
+                <User size={11} /> Assigned to {task.assignedTo.name}
+              </div>
+            )}
+
+            {/* Subtasks checklist */}
+            <div className="space-y-1.5">
+              {(task.subtasks || []).map((s, i) => (
+                <label key={i} className="flex items-center gap-2 text-xs">
+                  <input
+                    type="checkbox"
+                    checked={s.isCompleted}
+                    onChange={() => handleInlineToggleSubtask(task, i)}
+                    className="h-3.5 w-3.5 rounded"
+                  />
+                  <span className={s.isCompleted ? `line-through ${styles.label}` : styles.title}>{s.title}</span>
+                </label>
+              ))}
+              <div className="flex items-center gap-2">
+                <input
+                  type="text"
+                  value={inlineSubtaskInput}
+                  onChange={(e) => setInlineSubtaskInput(e.target.value)}
+                  onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); handleInlineAddSubtask(task); } }}
+                  placeholder="Add a subtask..."
+                  className={`h-8 flex-1 rounded-lg border px-2 text-xs ${styles.input}`}
+                />
+                <button
+                  type="button"
+                  onClick={() => handleInlineAddSubtask(task)}
+                  className={`h-8 rounded-lg border px-2.5 text-xs font-bold ${styles.button}`}
+                >
+                  Add
+                </button>
+              </div>
+            </div>
+
+            {task.tags && task.tags.length > 0 && (
+              <div className="flex flex-wrap gap-1">
+                {task.tags.map((t) => (
+                  <span key={t} className={`rounded px-1.5 py-0.5 text-[9px] font-bold border ${TAG_COLORS[t] || "bg-sky-500/10 text-sky-400 border-sky-500/20"}`}>
+                    {t}
+                  </span>
+                ))}
+              </div>
+            )}
+
+            <div className="flex items-center justify-between pt-1">
+              <span className={`text-[10px] ${styles.label}`}>Created by {task.createdBy?.name || "System"}</span>
+              <div className="flex items-center gap-1.5">
+                <button
+                  onClick={() => handleOpenEditModal(task)}
+                  className={`flex h-8 items-center gap-1 rounded-lg border px-2.5 text-xs font-semibold ${styles.button}`}
+                >
+                  <Edit2 size={12} /> Edit
+                </button>
+                <button
+                  onClick={() => handleDeleteTask(task._id)}
+                  className="flex h-8 items-center gap-1 rounded-lg border border-rose-500/20 px-2.5 text-xs font-semibold text-rose-500 hover:bg-rose-500/10"
+                >
+                  <Trash2 size={12} /> Delete
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+      </div>
+    );
+  };
+
   // Styles mapping
   const styles = useMemo(() => {
     const isDark = theme === "dark";
@@ -523,49 +863,138 @@ export default function TaskManager({ theme = "light" }) {
       <ToastNotice message={error} type="error" />
 
       {/* Main Container */}
-      <div className="mx-auto flex min-h-0 w-full max-w-7xl flex-1 flex-col space-y-3 p-3 sm:space-y-4 sm:p-4 lg:p-6">
-        
-        {/* Header Summary Stats */}
-        <div className="grid grid-cols-2 gap-2 sm:gap-3 lg:grid-cols-4">
-          <div className={`flex items-center justify-between rounded-2xl p-3 sm:p-4 ${styles.card}`}>
-            <div>
-              <p className={`text-xs font-bold uppercase tracking-wider ${styles.label}`}>Total Tasks</p>
-              <h3 className={`mt-1 text-xl font-black sm:text-2xl ${styles.title}`}>{stats.total}</h3>
+      <div className="mx-auto flex min-h-0 w-full flex-1 flex-col space-y-3 p-3 sm:space-y-4 sm:p-4 lg:p-6">
+        {viewLevel === "roster" && canViewRoster ? (
+          <div className="flex min-h-0 flex-1 flex-col space-y-4 overflow-y-auto">
+            <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+              <div className="flex items-center gap-3">
+                <div className={`flex h-10 w-10 items-center justify-center rounded-xl ${isDark ? "bg-slate-800 text-slate-300" : "bg-slate-100 text-slate-700"}`}>
+                  <Users size={20} />
+                </div>
+                <div>
+                  <h2 className={`text-lg font-black sm:text-xl ${styles.title}`}>Team Tasks</h2>
+                  <p className={`text-xs ${styles.label}`}>Pick a team member to view and manage their tasks</p>
+                </div>
+              </div>
+              <button
+                onClick={handleViewAllTasks}
+                className={`flex h-9 w-fit items-center gap-1.5 rounded-xl border px-4 text-xs font-bold uppercase tracking-wider ${styles.button}`}
+              >
+                <ListTodo size={14} />
+                View All Tasks
+              </button>
             </div>
-            <div className={`p-2.5 rounded-xl ${isDark ? "bg-slate-800 text-slate-300" : "bg-slate-100 text-slate-700"}`}>
-              <ListTodo size={20} />
-            </div>
+
+            {rosterLoading ? (
+              <div className={`flex items-center justify-center rounded-2xl p-10 ${styles.card}`}>
+                <p className={`text-sm ${styles.label}`}>Loading team...</p>
+              </div>
+            ) : (
+              <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+                {teamUsers.map((u) => {
+                  const s = userStatsMap[u._id] || { total: 0, COMPLETED: 0, overdue: 0 };
+                  const hasOverdue = (s.overdue || 0) > 0;
+                  const completionPct = s.total > 0 ? Math.round(((s.COMPLETED || 0) / s.total) * 100) : 0;
+                  const avatarColor = AVATAR_COLORS[(u.name || "?").charCodeAt(0) % AVATAR_COLORS.length];
+                  return (
+                    <button
+                      key={u._id}
+                      onClick={() => handleSelectRosterUser(u)}
+                      className={`flex flex-col gap-3 rounded-2xl p-4 text-left transition-all hover:-translate-y-0.5 hover:shadow-lg ${styles.card} ${
+                        hasOverdue ? (isDark ? "ring-1 ring-rose-500/30" : "ring-1 ring-rose-200") : ""
+                      }`}
+                    >
+                      <div className="flex items-center gap-3">
+                        <div className="relative shrink-0">
+                          {u.profileImageUrl ? (
+                            <img
+                              src={u.profileImageUrl}
+                              alt={u.name}
+                              className={`h-14 w-14 rounded-full object-cover ring-2 ${isDark ? "ring-slate-800" : "ring-white"} shadow-sm`}
+                            />
+                          ) : (
+                            <div className={`flex h-14 w-14 items-center justify-center rounded-full text-lg font-black uppercase ring-2 shadow-sm ${avatarColor} ${isDark ? "ring-slate-800" : "ring-white"}`}>
+                              {(u.name || "?").slice(0, 2)}
+                            </div>
+                          )}
+                          {hasOverdue && (
+                            <span className="absolute -right-0.5 -top-0.5 flex h-4 w-4 items-center justify-center rounded-full border-2 border-white bg-rose-500 text-[8px] font-black text-white dark:border-slate-900">
+                              {s.overdue > 9 ? "9+" : s.overdue}
+                            </span>
+                          )}
+                        </div>
+                        <div className="min-w-0 flex-1">
+                          <p className={`truncate text-sm font-bold ${styles.title}`}>{u.name}</p>
+                          <p className={`truncate text-[10px] font-semibold uppercase tracking-wider ${styles.label}`}>{u.role}</p>
+                        </div>
+                        <ChevronRight size={16} className={styles.label} />
+                      </div>
+
+                      {s.total > 0 && (
+                        <div className={`h-1.5 w-full overflow-hidden rounded-full ${isDark ? "bg-slate-800" : "bg-slate-100"}`}>
+                          <div
+                            className={`h-full rounded-full transition-all ${isDark ? "bg-emerald-500" : "bg-emerald-500"}`}
+                            style={{ width: `${completionPct}%` }}
+                          />
+                        </div>
+                      )}
+
+                      <div className={`grid grid-cols-3 gap-2 border-t pt-3 ${isDark ? "border-white/5" : "border-slate-100"}`}>
+                        <div>
+                          <p className={`text-base font-black ${styles.title}`}>{s.total || 0}</p>
+                          <p className={`text-[9px] font-bold uppercase tracking-wider ${styles.label}`}>Total</p>
+                        </div>
+                        <div>
+                          <p className={`text-base font-black ${isDark ? "text-emerald-400" : "text-emerald-600"}`}>{s.COMPLETED || 0}</p>
+                          <p className={`text-[9px] font-bold uppercase tracking-wider ${styles.label}`}>Done</p>
+                        </div>
+                        <div>
+                          <p className={`text-base font-black ${hasOverdue ? (isDark ? "text-rose-400" : "text-rose-600") : styles.title}`}>{s.overdue || 0}</p>
+                          <p className={`text-[9px] font-bold uppercase tracking-wider ${styles.label}`}>Overdue</p>
+                        </div>
+                      </div>
+                    </button>
+                  );
+                })}
+                {teamUsers.length === 0 && (
+                  <div className={`col-span-full flex items-center justify-center rounded-2xl p-10 ${styles.card}`}>
+                    <p className={`text-sm ${styles.label}`}>No team members found</p>
+                  </div>
+                )}
+              </div>
+            )}
           </div>
-          <div className={`flex items-center justify-between rounded-2xl p-3 sm:p-4 ${styles.card}`}>
-            <div>
-              <p className={`text-xs font-bold uppercase tracking-wider ${styles.label}`}>Pending</p>
-              <h3 className={`mt-1 text-xl font-black sm:text-2xl ${isDark ? "text-amber-400" : "text-amber-600"}`}>{stats.pending}</h3>
-            </div>
-            <div className={`p-2.5 rounded-xl ${isDark ? "bg-amber-500/10 text-amber-400" : "bg-amber-50 text-amber-600"}`}>
-              <Clock size={20} />
-            </div>
+        ) : (
+        <>
+        {/* Header: breadcrumb + compact summary */}
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <div className="flex items-center gap-2">
+            {canViewRoster ? (
+              <button
+                onClick={handleBackToRoster}
+                className={`flex items-center gap-1.5 rounded-lg border px-3 py-1.5 text-xs font-bold ${styles.button}`}
+              >
+                <ArrowLeft size={14} />
+                {selectedUserObj ? `${selectedUserObj.name}'s Tasks` : "All Tasks"}
+              </button>
+            ) : (
+              <h2 className={`text-lg font-black ${styles.title}`}>My Tasks</h2>
+            )}
           </div>
-          <div className={`flex items-center justify-between rounded-2xl p-3 sm:p-4 ${styles.card}`}>
-            <div>
-              <p className={`text-xs font-bold uppercase tracking-wider ${styles.label}`}>Completed</p>
-              <h3 className={`mt-1 text-xl font-black sm:text-2xl ${isDark ? "text-emerald-400" : "text-emerald-600"}`}>{stats.COMPLETED}</h3>
-            </div>
-            <div className={`p-2.5 rounded-xl ${isDark ? "bg-emerald-500/10 text-emerald-400" : "bg-emerald-50 text-emerald-600"}`}>
-              <CheckSquare size={20} />
-            </div>
-          </div>
-          <div className={`flex items-center justify-between rounded-2xl p-3 sm:p-4 ${styles.card}`}>
-            <div>
-              <p className={`text-xs font-bold uppercase tracking-wider ${styles.label}`}>Overdue</p>
-              <h3 className={`mt-1 text-xl font-black sm:text-2xl ${isDark ? "text-rose-400" : "text-rose-600"}`}>{stats.overdue}</h3>
-            </div>
-            <div className={`p-2.5 rounded-xl ${isDark ? "bg-rose-500/10 text-rose-400" : "bg-rose-50 text-rose-600"}`}>
-              <AlertCircle size={20} />
-            </div>
+          <div className={`flex items-center gap-3 text-xs font-semibold ${styles.label}`}>
+            <span>{stats.total} total</span>
+            <span>&middot;</span>
+            <span>{stats.pending} pending</span>
+            {stats.overdue > 0 && (
+              <>
+                <span>&middot;</span>
+                <span className={isDark ? "text-rose-400" : "text-rose-600"}>{stats.overdue} overdue</span>
+              </>
+            )}
           </div>
         </div>
 
-        {/* Toolbar & Filters */}
+        {/* Toolbar */}
         <div className={`space-y-3 rounded-2xl p-3 sm:p-4 ${styles.card}`}>
           <div className="flex flex-col md:flex-row gap-3 items-stretch md:items-center justify-between">
             {/* Search */}
@@ -582,18 +1011,20 @@ export default function TaskManager({ theme = "light" }) {
 
             {/* Toggle View + Create button */}
             <div className="grid grid-cols-1 gap-2 sm:flex sm:items-center">
-              {/* Group By & Sort By */}
+              {/* Group By (Board view only) & Sort By */}
               <div className="grid grid-cols-2 gap-1.5 sm:mr-2 sm:flex sm:items-center">
-                <select
-                  value={groupBy}
-                  onChange={(e) => setGroupBy(e.target.value)}
-                  className={`h-10 rounded-xl border px-2 text-xs font-semibold sm:h-9 ${styles.input}`}
-                  title="Group By"
-                >
-                  <option value="status">Group: Status</option>
-                  <option value="priority">Group: Priority</option>
-                  <option value="assignee">Group: Assignee</option>
-                </select>
+                {viewMode === "kanban" && (
+                  <select
+                    value={groupBy}
+                    onChange={(e) => setGroupBy(e.target.value)}
+                    className={`h-10 rounded-xl border px-2 text-xs font-semibold sm:h-9 ${styles.input}`}
+                    title="Group By"
+                  >
+                    <option value="status">Group: Status</option>
+                    <option value="priority">Group: Priority</option>
+                    <option value="assignee">Group: Assignee</option>
+                  </select>
+                )}
 
                 <select
                   value={sortBy}
@@ -636,22 +1067,31 @@ export default function TaskManager({ theme = "light" }) {
               </div>
 
               <button
+                onClick={() => setShowFilters((v) => !v)}
+                className={`flex h-10 items-center justify-center gap-1.5 rounded-xl border px-3 text-xs font-bold sm:h-9 ${
+                  showFilters || statusFilter || priorityFilter || assigneeFilter || leadFilter || tagFilter
+                    ? isDark ? "border-sky-500/40 bg-sky-500/10 text-sky-400" : "border-sky-300 bg-sky-50 text-sky-700"
+                    : styles.button
+                }`}
+                title="Filters"
+              >
+                <SlidersHorizontal size={14} />
+                <span className="hidden sm:inline">Filters</span>
+              </button>
+
+              <button
                 onClick={handleOpenCreateModal}
                 className={`flex h-10 items-center justify-center gap-1.5 rounded-xl px-4 text-xs font-bold uppercase tracking-wider sm:h-9 ${styles.primaryButton}`}
               >
                 <Plus size={14} />
-                Create Task
+                New Task
               </button>
             </div>
           </div>
 
-          {/* Filters Row */}
-          <div className="grid grid-cols-2 gap-2 border-t border-slate-800/10 pt-1 dark:border-white/5 sm:flex sm:flex-wrap sm:items-center">
-            <div className={`flex items-center gap-1.5 text-[10px] uppercase font-bold tracking-wider ${styles.label}`}>
-              <SlidersHorizontal size={12} />
-              Filters:
-            </div>
-            
+          {/* Filters Row (collapsible) */}
+          {showFilters && (
+          <div className="grid grid-cols-2 gap-2 border-t border-slate-800/10 pt-3 dark:border-white/5 sm:flex sm:flex-wrap sm:items-center">
             <select
               value={statusFilter}
               onChange={(e) => setStatusFilter(e.target.value)}
@@ -727,6 +1167,7 @@ export default function TaskManager({ theme = "light" }) {
               </button>
             )}
           </div>
+          )}
         </div>
 
         {/* Content Body */}
@@ -796,7 +1237,8 @@ export default function TaskManager({ theme = "light" }) {
                             layoutId={task._id}
                             draggable
                             onDragStart={(e) => handleDragStart(e, task._id)}
-                            className={`rounded-xl p-3 border group/card relative cursor-grab active:cursor-grabbing hover:shadow-md transition-all ${
+                            onClick={() => handleOpenDetails(task)}
+                            className={`rounded-xl p-3 border group/card relative cursor-pointer active:cursor-grabbing hover:shadow-md transition-all ${
                               isDark 
                                 ? "bg-slate-900/90 border-slate-800/80 hover:border-slate-700/80" 
                                 : "bg-white border-slate-200 hover:border-slate-300"
@@ -814,14 +1256,14 @@ export default function TaskManager({ theme = "light" }) {
                               
                               <div className="opacity-0 group-hover/card:opacity-100 flex items-center gap-1 transition-opacity">
                                 <button
-                                  onClick={() => handleOpenEditModal(task)}
+                                  onClick={(e) => { e.stopPropagation(); handleOpenEditModal(task); }}
                                   className={`p-1 rounded hover:bg-slate-800/50 ${isDark ? "text-slate-400 hover:text-white" : "text-slate-500 hover:text-slate-800"}`}
                                   title="Edit Task"
                                 >
                                   <Edit2 size={11} />
                                 </button>
                                 <button
-                                  onClick={() => handleDeleteTask(task._id)}
+                                  onClick={(e) => { e.stopPropagation(); handleDeleteTask(task._id); }}
                                   className="p-1 rounded hover:bg-rose-950/20 text-rose-500 hover:text-rose-400"
                                   title="Delete Task"
                                 >
@@ -905,9 +1347,10 @@ export default function TaskManager({ theme = "light" }) {
                                 By {task.createdBy?.name || "System"}
                               </span>
                               {task.assignedTo ? (
-                                <div 
-                                  className="h-5 w-5 rounded-full bg-sky-500 flex items-center justify-center text-[10px] text-white font-bold tracking-tight shadow-sm shrink-0 border border-slate-800 dark:border-slate-900"
-                                  title={`Assigned to ${task.assignedTo.name}`}
+                                <div
+                                  onClick={(e) => handleOpenAssigneeProfile(e, task.assignedTo)}
+                                  className={`h-5 w-5 rounded-full bg-sky-500 flex items-center justify-center text-[10px] text-white font-bold tracking-tight shadow-sm shrink-0 border border-slate-800 dark:border-slate-900 ${canViewProfiles ? "cursor-pointer hover:ring-2 hover:ring-sky-400" : ""}`}
+                                  title={canViewProfiles ? `View ${task.assignedTo.name}'s profile` : `Assigned to ${task.assignedTo.name}`}
                                 >
                                   {task.assignedTo.name.split(" ").map(n => n[0]).join("").slice(0, 2).toUpperCase()}
                                 </div>
@@ -926,7 +1369,7 @@ export default function TaskManager({ theme = "light" }) {
                               <div className="mt-2.5 pt-1.5 border-t border-slate-850 flex items-center justify-end gap-1.5 opacity-0 group-hover/card:opacity-100 transition-opacity">
                                 {col.id !== "BACKLOG" && (
                                   <button
-                                    onClick={() => handleUpdateStatus(task._id, STATUS_COLUMNS[STATUS_COLUMNS.findIndex(c => c.id === col.id) - 1].id)}
+                                    onClick={(e) => { e.stopPropagation(); handleUpdateStatus(task._id, STATUS_COLUMNS[STATUS_COLUMNS.findIndex(c => c.id === col.id) - 1].id); }}
                                     className={`p-1 rounded text-[9px] font-semibold flex items-center gap-0.5 border ${styles.button}`}
                                   >
                                     Move Left
@@ -934,7 +1377,7 @@ export default function TaskManager({ theme = "light" }) {
                                 )}
                                 {col.id !== "COMPLETED" && (
                                   <button
-                                    onClick={() => handleUpdateStatus(task._id, STATUS_COLUMNS[STATUS_COLUMNS.findIndex(c => c.id === col.id) + 1].id)}
+                                    onClick={(e) => { e.stopPropagation(); handleUpdateStatus(task._id, STATUS_COLUMNS[STATUS_COLUMNS.findIndex(c => c.id === col.id) + 1].id); }}
                                     className={`p-1 rounded text-[9px] font-semibold flex items-center gap-0.5 border ${styles.button}`}
                                   >
                                     Move Right
@@ -953,208 +1396,254 @@ export default function TaskManager({ theme = "light" }) {
           </div>
         ) : (
           /* ========================================================
-             LIST / TABLE VIEW
+             GOOGLE TASKS-STYLE FLAT LIST VIEW
              ======================================================== */
-          <div className={`flex-1 rounded-2xl border ${styles.card}`}>
-            <div className="space-y-2 p-2 sm:hidden">
-              {sortedTasks.map((task) => {
-                const priority = PRIORITIES.find(p => p.value === task.priority) || PRIORITIES[1];
-                const expired = isOverdue(task);
+          <div className={`flex min-h-0 flex-1 flex-col overflow-y-auto rounded-2xl border ${styles.card}`}>
+            {/* Quick Add */}
+            <form onSubmit={handleQuickAddTask} className={`flex items-center gap-2 border-b p-3 ${isDark ? "border-white/5" : "border-slate-100"}`}>
+              <Plus size={16} className={isDark ? "text-sky-400" : "text-sky-600"} />
+              <input
+                type="text"
+                value={quickAddTitle}
+                onChange={(e) => setQuickAddTitle(e.target.value)}
+                placeholder={selectedUserObj ? `Add a task for ${selectedUserObj.name}...` : "Add a task..."}
+                disabled={quickAddSubmitting}
+                className={`h-9 flex-1 bg-transparent text-sm focus:outline-none ${styles.title}`}
+              />
+              {quickAddTitle.trim() && (
+                <button
+                  type="submit"
+                  disabled={quickAddSubmitting}
+                  className={`h-8 shrink-0 rounded-lg px-3 text-xs font-bold uppercase tracking-wider disabled:opacity-60 ${styles.primaryButton}`}
+                >
+                  Add
+                </button>
+              )}
+            </form>
 
-                return (
-                  <div
-                    key={task._id}
-                    className={`rounded-xl border p-3 ${isDark ? "border-slate-800 bg-slate-900/80" : "border-slate-200 bg-white"}`}
-                  >
-                    <div className="flex items-start justify-between gap-2">
-                      <div className="min-w-0">
-                        <h4 className={`truncate text-sm font-bold ${styles.title}`}>{task.title}</h4>
-                        {task.description && (
-                          <p className={`mt-1 line-clamp-2 text-xs ${styles.label}`}>{task.description}</p>
-                        )}
-                      </div>
-                      <span className={`shrink-0 rounded-full border px-2 py-1 text-[10px] font-bold uppercase ${priority.color}`}>
-                        {priority.label}
-                      </span>
-                    </div>
+            {/* Active Tasks */}
+            {sortedTasks.filter(t => t.status !== "COMPLETED").length === 0 ? (
+              <div className="flex flex-1 flex-col items-center justify-center gap-2 p-10 text-center">
+                <CheckSquare size={32} className={isDark ? "text-slate-700" : "text-slate-300"} />
+                <p className={`text-sm font-semibold ${styles.label}`}>No active tasks. You're all caught up.</p>
+              </div>
+            ) : (
+              <div className={`divide-y ${isDark ? "divide-white/5" : "divide-slate-100"}`}>
+                {sortedTasks.filter(t => t.status !== "COMPLETED").map(renderTaskRow)}
+              </div>
+            )}
 
-                    <div className="mt-3 grid grid-cols-2 gap-2 text-[11px]">
-                      <div className={styles.label}>Status</div>
-                      <select
-                        value={task.status}
-                        onChange={(e) => handleUpdateStatus(task._id, e.target.value)}
-                        className={`h-9 rounded-lg border px-2 text-xs font-semibold ${styles.input}`}
-                      >
-                        {STATUS_COLUMNS.map(colOpt => (
-                          <option key={colOpt.id} value={colOpt.id}>{colOpt.label}</option>
-                        ))}
-                      </select>
-                      <div className={styles.label}>Due</div>
-                      <div className={`font-semibold ${expired ? "text-rose-500" : styles.title}`}>
-                        {task.dueDate ? formatDate(task.dueDate) : "-"}
-                      </div>
-                      {!isProductionExecutive && (
-                        <>
-                          <div className={styles.label}>Lead</div>
-                          <div className={`truncate font-semibold ${styles.title}`}>
-                            {task.leadId?.name || "-"}
-                          </div>
-                        </>
-                      )}
-                      <div className={styles.label}>Assignee</div>
-                      <div className={`truncate font-semibold ${styles.title}`}>
-                        {task.assignedTo?.name || "-"}
-                      </div>
-                    </div>
-
-                    <div className="mt-3 flex items-center justify-end gap-2">
-                      <button
-                        onClick={() => handleOpenEditModal(task)}
-                        className={`inline-flex h-10 w-10 items-center justify-center rounded-xl border ${styles.button}`}
-                        title="Edit"
-                      >
-                        <Edit2 size={14} />
-                      </button>
-                      <button
-                        onClick={() => handleDeleteTask(task._id)}
-                        className="inline-flex h-10 w-10 items-center justify-center rounded-xl border border-rose-500/20 text-rose-500 hover:bg-rose-500/10"
-                        title="Delete"
-                      >
-                        <Trash2 size={14} />
-                      </button>
-                    </div>
+            {/* Completed (collapsible) */}
+            {sortedTasks.some(t => t.status === "COMPLETED") && (
+              <div className={`border-t ${isDark ? "border-white/5" : "border-slate-100"}`}>
+                <button
+                  onClick={() => setShowCompleted((v) => !v)}
+                  className={`flex w-full items-center gap-2 px-4 py-3 text-xs font-bold uppercase tracking-wider ${styles.label}`}
+                >
+                  <ChevronRight size={14} className={`transition-transform ${showCompleted ? "rotate-90" : ""}`} />
+                  Completed ({sortedTasks.filter(t => t.status === "COMPLETED").length})
+                </button>
+                {showCompleted && (
+                  <div className={`divide-y ${isDark ? "divide-white/5" : "divide-slate-100"}`}>
+                    {sortedTasks.filter(t => t.status === "COMPLETED").map(renderTaskRow)}
                   </div>
-                );
-              })}
-            </div>
-
-            <div className="custom-scrollbar hidden h-full overflow-y-auto sm:block">
-              <table className="w-full text-left border-collapse">
-                <thead>
-                  <tr className={`border-b border-slate-800/10 dark:border-white/5 text-xs font-bold uppercase tracking-wider ${
-                    isDark ? "bg-slate-900/50 text-slate-400" : "bg-slate-50 text-slate-600"
-                  }`}>
-                    <th className="p-4">Title</th>
-                    <th className="p-4">Status</th>
-                    <th className="p-4">Priority</th>
-                    <th className="p-4">Due Date</th>
-                    {!isProductionExecutive && <th className="p-4">Linked Lead</th>}
-                    <th className="p-4">Assignee</th>
-                    <th className="p-4 text-right">Actions</th>
-                  </tr>
-                </thead>
-                <tbody className={`divide-y ${isDark ? "divide-white/5" : "divide-slate-200"}`}>
-                  {sortedTasks.map((task) => {
-                    const priority = PRIORITIES.find(p => p.value === task.priority) || PRIORITIES[1];
-                    const expired = isOverdue(task);
-                    const progress = getSubtasksProgress(task);
-
-                    return (
-                      <tr 
-                        key={task._id} 
-                        className={`text-xs hover:bg-slate-500/5 transition-colors ${
-                          isDark ? "text-slate-300" : "text-slate-700"
-                        }`}
-                      >
-                        <td className="p-4">
-                          <div className="flex items-center gap-2">
-                            <span className="font-semibold">{task.title}</span>
-                            {progress && (
-                              <span className="text-[10px] bg-slate-500/10 text-slate-400 border border-slate-500/20 px-1 rounded flex items-center gap-0.5" title={`${progress.completed}/${progress.total} Subtasks`}>
-                                <CheckSquare size={9} />
-                                {progress.completed}/{progress.total}
-                              </span>
-                            )}
-                          </div>
-                          {task.tags && task.tags.length > 0 && (
-                            <div className="flex flex-wrap gap-1 mt-1">
-                              {task.tags.map(t => {
-                                const colorClass = TAG_COLORS[t] || "bg-sky-500/10 text-sky-400 border-sky-500/20 dark:bg-sky-500/10 dark:text-sky-400 dark:border-sky-500/20";
-                                return (
-                                  <span key={t} className={`text-[9px] font-bold px-1.5 py-0.5 rounded border ${colorClass}`}>
-                                    {t}
-                                  </span>
-                                );
-                              })}
-                            </div>
-                          )}
-                          {task.description && (
-                            <div className="text-[10px] text-slate-500 mt-0.5 line-clamp-1 max-w-sm">{task.description}</div>
-                          )}
-                        </td>
-                        <td className="p-4">
-                          <select
-                            value={task.status}
-                            onChange={(e) => handleUpdateStatus(task._id, e.target.value)}
-                            className={`h-7 rounded-md border text-[11px] font-semibold py-0.5 px-2 bg-transparent ${
-                              isDark ? "border-slate-800 text-slate-300 bg-slate-950" : "border-slate-200 text-slate-700 bg-white"
-                            }`}
-                          >
-                            {STATUS_COLUMNS.map(colOpt => (
-                              <option key={colOpt.id} value={colOpt.id}>{colOpt.label}</option>
-                            ))}
-                          </select>
-                        </td>
-                        <td className="p-4">
-                          <span className={`text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded border ${priority.color}`}>
-                            {priority.label}
-                          </span>
-                        </td>
-                        <td className={`p-4 ${expired ? "text-rose-500 font-bold" : ""}`}>
-                          {task.dueDate ? formatDate(task.dueDate) : "-"}
-                          {expired && <span className="text-[9px] uppercase font-bold tracking-wider ml-1 bg-rose-500/10 border border-rose-500/20 px-1 py-0.5 rounded">Overdue</span>}
-                        </td>
-                        {!isProductionExecutive && (
-                          <td className="p-4">
-                            {task.leadId ? (
-                              <div className="flex items-center gap-1">
-                                <LinkIcon size={10} className="text-slate-500" />
-                                <span className="font-medium">{task.leadId.name}</span>
-                              </div>
-                            ) : (
-                              <span className="text-slate-550 italic">-</span>
-                            )}
-                          </td>
-                        )}
-                        <td className="p-4">
-                          {task.assignedTo ? (
-                            <div className="flex items-center gap-1.5">
-                              <div className="h-5 w-5 rounded-full bg-sky-500 flex items-center justify-center text-[9px] text-white font-bold shadow-sm">
-                                {task.assignedTo.name.split(" ").map(n => n[0]).join("").slice(0, 2).toUpperCase()}
-                              </div>
-                              <span className="font-medium">{task.assignedTo.name}</span>
-                            </div>
-                          ) : (
-                            <span className="text-slate-550 italic">-</span>
-                          )}
-                        </td>
-                        <td className="p-4 text-right">
-                          <div className="flex items-center justify-end gap-1.5">
-                            <button
-                              onClick={() => handleOpenEditModal(task)}
-                              className={`p-1.5 rounded-lg border ${styles.button}`}
-                              title="Edit"
-                            >
-                              <Edit2 size={12} />
-                            </button>
-                            <button
-                              onClick={() => handleDeleteTask(task._id)}
-                              className={`p-1.5 rounded-lg border border-rose-500/20 text-rose-500 hover:bg-rose-500/10`}
-                              title="Delete"
-                            >
-                              <Trash2 size={12} />
-                            </button>
-                          </div>
-                        </td>
-                      </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
-            </div>
+                )}
+              </div>
+            )}
           </div>
         )}
+        </>
+        )}
       </div>
+
+      {/* Task Details View Modal */}
+      <AnimatePresence>
+        {isDetailsOpen && detailsTask && (
+          <div className="mobile-bottom-sheet fixed inset-0 z-[70] flex items-center justify-center p-0 sm:p-4">
+            <Motion.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              onClick={handleCloseDetails}
+              className="absolute inset-0 bg-slate-950/60 backdrop-blur-sm"
+            />
+
+            <Motion.div
+              initial={{ opacity: 0, scale: 0.95, y: 10 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.95, y: 10 }}
+              className={`mobile-fullscreen-panel relative z-10 flex w-full max-w-lg flex-col overflow-hidden rounded-[22px] border p-4 sm:p-6 ${
+                isDark ? "border-slate-800 bg-slate-900" : "border-slate-200 bg-white"
+              }`}
+            >
+              {/* Header */}
+              <div className="flex items-center justify-between mb-4">
+                <h3 className={`text-base font-black uppercase tracking-wider ${styles.title}`}>
+                  Task Details
+                </h3>
+                <button
+                  onClick={handleCloseDetails}
+                  className={`p-1 rounded-lg border ${styles.button}`}
+                >
+                  <X size={14} />
+                </button>
+              </div>
+
+              {detailsLoading ? (
+                <div className="flex flex-1 items-center justify-center py-12">
+                  <div className="h-8 w-8 animate-spin rounded-full border-2 border-sky-500 border-t-transparent" />
+                </div>
+              ) : (
+                <div className="mobile-modal-scroll flex-1 space-y-4">
+                  {/* Title & Priority */}
+                  <div className="flex items-start justify-between gap-2">
+                    <h4 className={`text-lg font-bold leading-snug break-words ${styles.title}`}>
+                      {detailsTask.title}
+                    </h4>
+                    {(() => {
+                      const priority = PRIORITIES.find(p => p.value === detailsTask.priority) || PRIORITIES[1];
+                      return (
+                        <span className={`shrink-0 text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded border ${priority.color}`}>
+                          {priority.label}
+                        </span>
+                      );
+                    })()}
+                  </div>
+
+                  {/* Status */}
+                  <div className="flex items-center gap-2">
+                    <span className={`text-[10px] font-bold uppercase tracking-wider ${styles.label}`}>Status:</span>
+                    <select
+                      value={detailsTask.status}
+                      onChange={(e) => {
+                        handleUpdateStatus(detailsTask._id, e.target.value);
+                        setDetailsTask(prev => ({ ...prev, status: e.target.value }));
+                      }}
+                      className={`h-8 rounded-lg border px-2 text-xs font-semibold ${styles.input}`}
+                    >
+                      {STATUS_COLUMNS.map(colOpt => (
+                        <option key={colOpt.id} value={colOpt.id}>{colOpt.label}</option>
+                      ))}
+                    </select>
+                    {isOverdue(detailsTask) && (
+                      <span className="text-[9px] font-bold uppercase tracking-wider text-rose-500 bg-rose-500/10 border border-rose-500/20 px-1.5 py-0.5 rounded">
+                        Overdue
+                      </span>
+                    )}
+                  </div>
+
+                  {/* Description */}
+                  {detailsTask.description && (
+                    <div className="space-y-1">
+                      <span className={`text-[10px] font-bold uppercase tracking-wider ${styles.label}`}>Description</span>
+                      <p className={`text-sm whitespace-pre-wrap break-words ${styles.text}`}>{detailsTask.description}</p>
+                    </div>
+                  )}
+
+                  {/* Tags */}
+                  {detailsTask.tags && detailsTask.tags.length > 0 && (
+                    <div className="flex flex-wrap gap-1.5">
+                      {detailsTask.tags.map((t) => {
+                        const colorClass = TAG_COLORS[t] || "bg-sky-500/10 text-sky-400 border-sky-500/20";
+                        return (
+                          <span key={t} className={`text-[10px] font-bold px-2 py-0.5 rounded-md border ${colorClass}`}>
+                            {t}
+                          </span>
+                        );
+                      })}
+                    </div>
+                  )}
+
+                  {/* Meta grid */}
+                  <div className={`grid grid-cols-2 gap-3 rounded-xl border p-3 text-xs ${isDark ? "border-slate-800 bg-slate-950/40" : "border-slate-150 bg-slate-50/60"}`}>
+                    <div>
+                      <div className={`text-[10px] font-bold uppercase tracking-wider ${styles.label}`}>Due Date</div>
+                      <div className={`mt-0.5 font-semibold ${isOverdue(detailsTask) ? "text-rose-500" : styles.title}`}>
+                        {detailsTask.dueDate ? formatDate(detailsTask.dueDate) : "-"}
+                      </div>
+                    </div>
+                    <div>
+                      <div className={`text-[10px] font-bold uppercase tracking-wider ${styles.label}`}>Assignee</div>
+                      <div
+                        onClick={(e) => detailsTask.assignedTo && handleOpenAssigneeProfile(e, detailsTask.assignedTo)}
+                        className={`mt-0.5 font-semibold ${styles.title} ${detailsTask.assignedTo && canViewProfiles ? "cursor-pointer underline decoration-dotted hover:text-sky-500 w-fit" : ""}`}
+                        title={detailsTask.assignedTo && canViewProfiles ? `View ${detailsTask.assignedTo.name}'s profile` : undefined}
+                      >
+                        {detailsTask.assignedTo?.name || "Unassigned"}
+                      </div>
+                    </div>
+                    {!isProductionExecutive && (
+                      <div className="col-span-2">
+                        <div className={`text-[10px] font-bold uppercase tracking-wider ${styles.label}`}>Linked Lead</div>
+                        <div className={`mt-0.5 font-semibold ${styles.title}`}>
+                          {detailsTask.leadId?.name || "-"}
+                        </div>
+                      </div>
+                    )}
+                    <div>
+                      <div className={`text-[10px] font-bold uppercase tracking-wider ${styles.label}`}>Created By</div>
+                      <div className={`mt-0.5 font-semibold ${styles.title}`}>
+                        {detailsTask.createdBy?.name || "System"}
+                      </div>
+                    </div>
+                    <div>
+                      <div className={`text-[10px] font-bold uppercase tracking-wider ${styles.label}`}>Created On</div>
+                      <div className={`mt-0.5 font-semibold ${styles.title}`}>
+                        {detailsTask.createdAt ? formatDate(detailsTask.createdAt) : "-"}
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Subtasks */}
+                  {detailsTask.subtasks && detailsTask.subtasks.length > 0 && (
+                    <div className="space-y-2">
+                      <span className={`text-[10px] font-bold uppercase tracking-wider ${styles.label}`}>
+                        Subtasks ({detailsTask.subtasks.filter(s => s.isCompleted).length}/{detailsTask.subtasks.length})
+                      </span>
+                      <div className={`rounded-xl border p-2 space-y-1.5 ${isDark ? "border-slate-850 bg-slate-950/40" : "border-slate-150 bg-slate-50/50"}`}>
+                        {detailsTask.subtasks.map((st, idx) => (
+                          <div key={idx} className="flex items-center gap-2 text-xs py-0.5">
+                            {st.isCompleted ? (
+                              <CheckSquare size={13} className="text-emerald-500 shrink-0" />
+                            ) : (
+                              <div className="h-3.5 w-3.5 rounded border border-slate-500 shrink-0" />
+                            )}
+                            <span className={`truncate ${st.isCompleted ? "line-through text-slate-500" : styles.text}`}>
+                              {st.title}
+                            </span>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Actions */}
+                  <div className="mobile-safe-footer -mx-4 flex items-center justify-end gap-2 border-t border-slate-200 bg-inherit px-4 pt-3 sm:mx-0 sm:border-t-0 sm:px-0 sm:pt-2">
+                    <button
+                      onClick={() => {
+                        handleCloseDetails();
+                        handleDeleteTask(detailsTask._id);
+                      }}
+                      className="h-10 px-4 rounded-xl border border-rose-500/20 text-rose-500 hover:bg-rose-500/10 text-sm font-semibold"
+                    >
+                      Delete
+                    </button>
+                    <button
+                      onClick={() => {
+                        handleCloseDetails();
+                        handleOpenEditModal(detailsTask);
+                      }}
+                      className={`h-10 px-5 rounded-xl text-sm font-semibold ${styles.primaryButton}`}
+                    >
+                      Edit Task
+                    </button>
+                  </div>
+                </div>
+              )}
+            </Motion.div>
+          </div>
+        )}
+      </AnimatePresence>
 
       {/* Task Creation / Edit Modal */}
       <AnimatePresence>
@@ -1174,18 +1663,29 @@ export default function TaskManager({ theme = "light" }) {
               initial={{ opacity: 0, scale: 0.95, y: 10 }}
               animate={{ opacity: 1, scale: 1, y: 0 }}
               exit={{ opacity: 0, scale: 0.95, y: 10 }}
-              className={`mobile-fullscreen-panel relative z-10 flex w-full max-w-lg flex-col overflow-hidden rounded-[22px] border p-4 sm:p-6 ${
+              className={`mobile-fullscreen-panel relative z-10 flex w-full max-w-2xl flex-col overflow-hidden rounded-[22px] border p-4 sm:p-6 ${
                 isDark ? "border-slate-800 bg-slate-900" : "border-slate-200 bg-white"
               }`}
             >
               {/* Header */}
-              <div className="flex items-center justify-between mb-4">
-                <h3 className={`text-base font-black uppercase tracking-wider ${styles.title}`}>
-                  {editingTask ? "Edit Task Details" : "Create New Task"}
-                </h3>
-                <button 
+              <div className="mb-4 flex items-center justify-between">
+                <div className="flex items-center gap-3">
+                  <div className={`flex h-9 w-9 items-center justify-center rounded-xl ${isDark ? "bg-sky-500/10 text-sky-400" : "bg-sky-50 text-sky-600"}`}>
+                    <ListTodo size={18} />
+                  </div>
+                  <div>
+                    <h3 className={`text-sm font-black ${styles.title}`}>
+                      {editingTask ? "Edit Task" : "New Task"}
+                    </h3>
+                    <p className={`text-[11px] ${styles.label}`}>
+                      {editingTask ? "Update details, assignment, or checklist" : "Fill in what matters — the rest can wait"}
+                    </p>
+                  </div>
+                </div>
+                <button
+                  type="button"
                   onClick={() => setIsModalOpen(false)}
-                  className={`p-1 rounded-lg border ${styles.button}`}
+                  className={`rounded-lg border p-1.5 ${styles.button}`}
                 >
                   <X size={14} />
                 </button>
@@ -1193,122 +1693,125 @@ export default function TaskManager({ theme = "light" }) {
 
               {/* Form */}
               <form onSubmit={handleSubmit} className="mobile-modal-scroll flex-1 space-y-4">
-                {/* Title */}
-                <div className="space-y-1">
-                  <label className={`text-[10px] font-bold uppercase tracking-wider ${styles.label}`}>
-                    Task Title *
-                  </label>
+                {/* Title - the focal point: bigger and bolder than every other field, not boxless */}
+                <div>
                   <input
                     type="text"
                     required
-                    placeholder="E.g. Call client for site feedback..."
+                    autoFocus
+                    placeholder="What needs to be done?"
                     value={formData.title}
                     onChange={(e) => setFormData(prev => ({ ...prev, title: e.target.value }))}
-                    className={`w-full h-10 px-3 rounded-xl border text-sm ${styles.input}`}
+                    className={`h-12 w-full rounded-xl border px-3.5 text-base font-bold ${styles.input}`}
                   />
                 </div>
 
                 {/* Description */}
-                <div className="space-y-1">
-                  <label className={`text-[10px] font-bold uppercase tracking-wider ${styles.label}`}>
-                    Description
+                <div className="space-y-1.5">
+                  <label className={`flex items-center gap-1.5 text-xs font-semibold ${styles.label}`}>
+                    <AlignLeft size={14} /> Description
                   </label>
                   <textarea
-                    placeholder="Add detailed task notes, instructions, or goals..."
+                    placeholder="Add notes, instructions, or goals..."
                     value={formData.description}
                     onChange={(e) => setFormData(prev => ({ ...prev, description: e.target.value }))}
-                    className={`w-full h-20 px-3 py-2 rounded-xl border text-sm resize-none ${styles.input}`}
+                    className={`h-16 w-full resize-none rounded-xl border px-3 py-2 text-sm ${styles.input}`}
                   />
                 </div>
 
-                {/* Status & Priority */}
-                <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-                  <div className="space-y-1">
-                    <label className={`text-[10px] font-bold uppercase tracking-wider ${styles.label}`}>
-                      Status
-                    </label>
-                    <select
-                      value={formData.status}
-                      onChange={(e) => setFormData(prev => ({ ...prev, status: e.target.value }))}
-                      className={`w-full h-10 px-3 rounded-xl border text-sm ${styles.input}`}
-                    >
-                      {STATUS_COLUMNS.map(col => (
-                        <option key={col.id} value={col.id}>{col.label}</option>
-                      ))}
-                    </select>
-                  </div>
-
-                  <div className="space-y-1">
-                    <label className={`text-[10px] font-bold uppercase tracking-wider ${styles.label}`}>
-                      Priority
-                    </label>
-                    <select
-                      value={formData.priority}
-                      onChange={(e) => setFormData(prev => ({ ...prev, priority: e.target.value }))}
-                      className={`w-full h-10 px-3 rounded-xl border text-sm ${styles.input}`}
-                    >
+                {/* Details card: priority, status, due date, assignee, lead — icon rows */}
+                <div className={`divide-y overflow-hidden rounded-xl border ${isDark ? "divide-white/5 border-slate-800" : "divide-slate-100 border-slate-200"}`}>
+                  {/* Priority */}
+                  <div className="flex flex-wrap items-center gap-2 p-2.5">
+                    <div className={`flex w-28 shrink-0 items-center gap-2 text-xs font-semibold ${styles.label}`}>
+                      <Flag size={14} /> Priority
+                    </div>
+                    <div className="flex flex-1 gap-1.5">
                       {PRIORITIES.map(p => (
-                        <option key={p.value} value={p.value}>{p.label}</option>
+                        <button
+                          type="button"
+                          key={p.value}
+                          onClick={() => setFormData(prev => ({ ...prev, priority: p.value }))}
+                          className={`h-8 flex-1 rounded-lg border text-xs font-bold transition-all ${
+                            formData.priority === p.value ? `${p.color} ring-1 ring-inset ring-current` : styles.button
+                          }`}
+                        >
+                          {p.label}
+                        </button>
                       ))}
-                    </select>
+                    </div>
                   </div>
-                </div>
 
-                {/* Due Date & Assignee */}
-                <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-                  <div className="space-y-1">
-                    <label className={`text-[10px] font-bold uppercase tracking-wider ${styles.label}`}>
-                      Due Date
-                    </label>
+                  {/* Status */}
+                  <div className="flex flex-wrap items-center gap-2 p-2.5">
+                    <div className={`flex w-28 shrink-0 items-center gap-2 text-xs font-semibold ${styles.label}`}>
+                      <ListTodo size={14} /> Status
+                    </div>
+                    <div className="flex flex-1 flex-wrap gap-1.5">
+                      {STATUS_COLUMNS.map(col => (
+                        <button
+                          type="button"
+                          key={col.id}
+                          onClick={() => setFormData(prev => ({ ...prev, status: col.id }))}
+                          className={`h-8 flex-1 rounded-lg border px-2 text-xs font-bold transition-all ${
+                            formData.status === col.id ? `${col.color} ring-1 ring-inset ring-current` : styles.button
+                          }`}
+                        >
+                          {col.label}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+
+                  {/* Due Date */}
+                  <div className="flex items-center gap-2 p-2.5">
+                    <div className={`flex w-28 shrink-0 items-center gap-2 text-xs font-semibold ${styles.label}`}>
+                      <Calendar size={14} /> Due date
+                    </div>
                     <input
                       type="date"
                       value={formData.dueDate}
                       onChange={(e) => setFormData(prev => ({ ...prev, dueDate: e.target.value }))}
-                      className={`w-full h-10 px-3 rounded-xl border text-sm ${styles.input}`}
+                      className={`h-8 flex-1 rounded-lg border px-2 text-xs ${styles.input}`}
                     />
+                    {formData.dueDate && (
+                      <button
+                        type="button"
+                        onClick={() => setFormData(prev => ({ ...prev, dueDate: "" }))}
+                        className={`rounded-lg p-1.5 ${styles.label} hover:text-rose-500`}
+                        title="Clear date"
+                      >
+                        <X size={12} />
+                      </button>
+                    )}
                   </div>
 
-                  <div className="space-y-1">
-                    <label className={`text-[10px] font-bold uppercase tracking-wider ${styles.label}`}>
-                      Assignee
-                    </label>
-                    <select
-                      value={formData.assignedTo}
-                      onChange={(e) => setFormData(prev => ({ ...prev, assignedTo: e.target.value }))}
-                      className={`w-full h-10 px-3 rounded-xl border text-sm ${styles.input}`}
-                    >
-                      <option value="">Select teammate</option>
-                      {teamUsers.map(u => (
-                        <option key={u._id} value={u._id}>{u.name} ({u.role})</option>
-                      ))}
-                    </select>
-                  </div>
+                  {/* Linked Lead */}
+                  {!isProductionExecutive && (
+                    <div className="flex items-center gap-2 p-2.5">
+                      <div className={`flex w-28 shrink-0 items-center gap-2 text-xs font-semibold ${styles.label}`}>
+                        <LinkIcon size={14} /> Lead
+                      </div>
+                      <select
+                        value={formData.leadId}
+                        onChange={(e) => setFormData(prev => ({ ...prev, leadId: e.target.value }))}
+                        className={`h-8 flex-1 rounded-lg border px-2 text-xs ${styles.input}`}
+                      >
+                        <option value="">No linked lead</option>
+                        {leads.map(l => (
+                          <option key={l._id} value={l._id}>{l.name} ({l.phone})</option>
+                        ))}
+                      </select>
+                    </div>
+                  )}
                 </div>
-
-                {!isProductionExecutive && (
-                  <div className="space-y-1">
-                    <label className={`text-[10px] font-bold uppercase tracking-wider ${styles.label}`}>
-                      Link to Lead (Optional)
-                    </label>
-                    <select
-                      value={formData.leadId}
-                      onChange={(e) => setFormData(prev => ({ ...prev, leadId: e.target.value }))}
-                      className={`w-full h-10 px-3 rounded-xl border text-sm ${styles.input}`}
-                    >
-                      <option value="">No linked lead</option>
-                      {leads.map(l => (
-                        <option key={l._id} value={l._id}>{l.name} ({l.phone})</option>
-                      ))}
-                    </select>
-                  </div>
-                )}
 
                 {/* Subtasks Section */}
                 <div className="space-y-2">
-                  <label className={`text-[10px] font-bold uppercase tracking-wider ${styles.label}`}>
-                    Subtasks / Checklist
+                  <label className={`flex items-center gap-1.5 text-xs font-semibold ${styles.label}`}>
+                    <CheckSquare size={14} /> Subtasks / Checklist
                   </label>
-                  
+
                   <div className="flex gap-2">
                     <input
                       type="text"
@@ -1359,10 +1862,10 @@ export default function TaskManager({ theme = "light" }) {
 
                 {/* Tags Section */}
                 <div className="space-y-2">
-                  <label className={`text-[10px] font-bold uppercase tracking-wider ${styles.label}`}>
-                    Category Tags
+                  <label className={`flex items-center gap-1.5 text-xs font-semibold ${styles.label}`}>
+                    <Tag size={14} /> Category Tags
                   </label>
-                  
+
                   <div className="flex flex-wrap gap-1.5">
                     {["Call", "Meeting", "Document", "Site Visit", "Urgent", "Follow-up"].map((t) => {
                       const isSelected = formData.tags && formData.tags.includes(t);
@@ -1430,7 +1933,7 @@ export default function TaskManager({ theme = "light" }) {
                 </div>
 
                 {/* Actions */}
-                <div className="mobile-safe-footer -mx-4 flex items-center justify-end gap-2 border-t border-slate-200 bg-inherit px-4 pt-3 sm:mx-0 sm:border-t-0 sm:px-0 sm:pt-2">
+                <div className="mobile-safe-footer -mx-4 flex items-center justify-end gap-2 border-t border-slate-200 bg-inherit px-4 pt-3 dark:border-white/5 sm:mx-0 sm:border-t-0 sm:px-0 sm:pt-2">
                   <button
                     type="button"
                     onClick={() => setIsModalOpen(false)}
@@ -1440,9 +1943,14 @@ export default function TaskManager({ theme = "light" }) {
                   </button>
                   <button
                     type="submit"
-                    disabled={submitting}
-                    className={`h-10 px-5 rounded-xl text-sm font-semibold disabled:opacity-60 ${styles.primaryButton}`}
+                    disabled={submitting || !formData.title.trim()}
+                    className={`flex h-10 items-center gap-1.5 rounded-xl px-5 text-sm font-semibold disabled:opacity-50 ${styles.primaryButton}`}
                   >
+                    {submitting ? (
+                      <span className="h-3.5 w-3.5 animate-spin rounded-full border-2 border-white/40 border-t-white" />
+                    ) : (
+                      <Check size={15} />
+                    )}
                     {submitting ? "Saving..." : editingTask ? "Save Changes" : "Create Task"}
                   </button>
                 </div>

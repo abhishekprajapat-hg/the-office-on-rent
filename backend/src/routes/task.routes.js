@@ -9,6 +9,7 @@ router.use(authMiddleware.protect);
 
 router.get("/", taskController.getTasks);
 router.get("/stats", taskController.getTaskStats);
+router.get("/stats/by-user", taskController.getTaskStatsByUser);
 router.get("/:taskId", taskController.getTaskById);
 
 router.post("/", writeLimiter, taskController.createTask);

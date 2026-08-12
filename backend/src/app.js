@@ -7,6 +7,7 @@ const { httpLogger } = require("./middleware/httpLogger.middleware");
 const { apiLimiter } = require("./middleware/rateLimit.middleware");
 const { httpMetricsMiddleware, metricsHandler } = require("./observability/metrics");
 const { resolveTenantContext } = require("./middleware/tenant.middleware");
+const { uploadsRootDir } = require("./config/uploadStorage");
 
 const app = express();
 app.disable("x-powered-by");
@@ -105,6 +106,14 @@ app.get("/api/metrics", async (req, res) => {
 });
 
 app.use("/api/public", require("./routes/publicInventory.routes"));
+app.use(
+  "/api/uploads/files",
+  (req, res, next) => {
+    res.setHeader("Cross-Origin-Resource-Policy", "cross-origin");
+    next();
+  },
+  express.static(uploadsRootDir, { maxAge: "30d", immutable: true }),
+);
 app.use("/api", apiLimiter);
 app.use("/api/client", require("./routes/client.routes"));
 app.use("/api/leads", require("./routes/lead.routes"));
@@ -114,10 +123,15 @@ app.use("/api/attendance", require("./routes/attendance.routes"));
 app.use("/api/targets", require("./routes/target.routes"));
 app.use("/api/inventory", require("./routes/inventory.routes"));
 app.use("/api/inventory-request", require("./routes/inventoryRequest.routes"));
+app.use("/api/projects", require("./routes/project.routes"));
+app.use("/api/uploads", require("./routes/upload.routes"));
 app.use("/api/webhook", require("./routes/webhook.routes"));
 app.use("/api/chat", require("./routes/chat.routes"));
 app.use("/api/assistant", require("./routes/officeAssistant.routes"));
 app.use("/api/tasks", require("./routes/task.routes"));
+app.use("/api/coworking", require("./routes/coworkingAccess.routes"));
+app.use("/api/portal/auth", require("./routes/clientPortalAuth.routes"));
+app.use("/api/portal", require("./routes/clientPortalData.routes"));
 
 app.use((req, res) => {
   res.status(404).json({

@@ -44,6 +44,7 @@ const ROLE_LABELS: Record<string, string> = {
   PRODUCTION_EXECUTIVE: "Production Executive",
   COMMUNITY_MANAGER: "Community Manager",
   CHANNEL_PARTNER: "Channel Partner",
+  COWORKING_ADMIN: "Coworking admin",
 };
 
 const ROLE_PATTERNS = [
@@ -51,6 +52,7 @@ const ROLE_PATTERNS = [
   { role: "PRODUCTION_EXECUTIVE", aliases: ["production executive", "production_exec", "pe"] },
   { role: "FIELD_EXECUTIVE", aliases: ["field executive", "field agent", "field_exec", "fe"] },
   { role: "CHANNEL_PARTNER", aliases: ["channel partner", "partner"] },
+  { role: "COWORKING_ADMIN", aliases: ["coworking admin", "coworking_admin"] },
   { role: "EXECUTIVE", aliases: ["executive"] },
   { role: "MANAGER", aliases: ["manager"] },
   { role: "ADMIN", aliases: ["admin"] },

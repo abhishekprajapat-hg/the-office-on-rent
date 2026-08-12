@@ -357,7 +357,7 @@ const SharedInventoryView = () => {
                   <Ruler size={16} className="text-emerald-200" />
                   <div>
                     <p className="text-[10px] font-bold uppercase tracking-widest text-emerald-100/70">
-                      Total Area
+                      Carpet Area
                     </p>
                     <p className="text-sm font-bold">
                       {formatArea(inventory?.totalArea, inventory?.areaUnit)}
@@ -462,16 +462,16 @@ const SharedInventoryView = () => {
             <InfoRow label="Floor" value={inventory?.floorNumber} />
             <InfoRow label="Total Floors" value={inventory?.totalFloors} />
             <InfoRow
-              label="Total Area"
-              value={formatArea(inventory?.totalArea, inventory?.areaUnit)}
-            />
-            <InfoRow
               label="Carpet Area"
-              value={formatArea(inventory?.carpetArea, inventory?.areaUnit)}
+              value={formatArea(inventory?.totalArea, inventory?.areaUnit)}
             />
             <InfoRow
               label="Built-up Area"
               value={formatArea(inventory?.builtUpArea, inventory?.areaUnit)}
+            />
+            <InfoRow
+              label="Super Built-up Area"
+              value={formatArea(inventory?.superBuiltUpArea, inventory?.areaUnit)}
             />
             <InfoRow
               label="Maintenance"
@@ -489,7 +489,6 @@ const SharedInventoryView = () => {
               <InfoRow label="Cabins" value={commercialDetails?.officeLayout?.totalCabins} />
               <InfoRow label="Cabin Seats" value={commercialDetails?.officeLayout?.cabinSeats} />
               <InfoRow label="Workstations" value={commercialDetails?.officeLayout?.workstations} />
-              <InfoRow label="Seats" value={commercialDetails?.officeLayout?.seats} />
               <InfoRow label="Conference Rooms" value={commercialDetails?.officeLayout?.conferenceRooms} />
               <InfoRow label="Conference Seats" value={commercialDetails?.officeLayout?.conferenceSeats} />
               <InfoRow label="Reserved Parking Type" value={formatEnumLabel(commercialDetails?.buildingDetails?.parkingType)} />

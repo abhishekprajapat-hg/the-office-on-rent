@@ -16,9 +16,12 @@ router.use("/attendance", require("./attendance.routes"));
 router.use("/targets", require("./target.routes"));
 router.use("/inventory", require("./inventory.routes"));
 router.use("/inventory-request", require("./inventoryRequest.routes"));
+router.use("/projects", require("./project.routes"));
+router.use("/uploads", require("./upload.routes"));
 router.use("/webhook", require("./webhook.routes"));
 router.use("/chat", require("./chat.routes"));
 router.use("/saas", require("./saas.routes"));
 router.use("/tasks", require("./task.routes"));
+router.use("/coworking", require("./coworkingAccess.routes"));
 
 module.exports = router;

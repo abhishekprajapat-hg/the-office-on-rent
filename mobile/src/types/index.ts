@@ -5,7 +5,8 @@ export type UserRole =
   | "FIELD_EXECUTIVE"
   | "PRODUCTION_EXECUTIVE"
   | "COMMUNITY_MANAGER"
-  | "CHANNEL_PARTNER";
+  | "CHANNEL_PARTNER"
+  | "COWORKING_ADMIN";
 
 export interface User {
   _id?: string;
@@ -105,6 +106,14 @@ export interface InventoryAsset {
   images?: string[];
   documents?: string[];
   description?: string;
+  officeNumber?: string;
+  ownerName?: string;
+  ownerNumber?: string;
+  keyManagerName?: string;
+  keyManagerNumber?: string;
+  dealType?: string;
+  propertyDate?: string;
+  gstApplicable?: boolean;
   createdAt?: string;
   updatedAt?: string;
 }

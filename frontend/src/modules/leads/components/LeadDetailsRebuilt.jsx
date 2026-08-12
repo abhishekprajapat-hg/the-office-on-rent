@@ -1,6 +1,7 @@
 import React from "react";
 import { motion as Motion } from "framer-motion";
 import { createInventoryShareLink } from "../../../services/inventoryService";
+import { uploadFile } from "../../../services/uploadService";
 import {
   ArrowLeft,
   Building2,
@@ -310,8 +311,6 @@ const INITIAL_PROPOSAL_OPTIONS_RENDER_COUNT = 24;
 const INITIAL_DIARY_RENDER_COUNT = 20;
 const INITIAL_ACTIVITY_RENDER_COUNT = 20;
 const RENDER_STEP_COUNT = 20;
-const CLOUDINARY_CLOUD_NAME = "djfiq8kiy";
-const CLOUDINARY_UPLOAD_PRESET = "office_on_rent_upload";
 const MAX_CLOSURE_DOCUMENTS = 20;
 const MAX_CLOSURE_FILE_SIZE_BYTES = 25 * 1024 * 1024;
 const CLOSURE_DOCUMENT_ACCEPT = "image/*,application/pdf";
@@ -1095,26 +1094,10 @@ const LeadDetailsRebuiltContent = ({
   }, []);
 
   const uploadClosureDocumentFile = React.useCallback(async (file) => {
-    const data = new FormData();
-    data.append("file", file);
-    data.append("upload_preset", CLOUDINARY_UPLOAD_PRESET);
-    data.append("cloud_name", CLOUDINARY_CLOUD_NAME);
-
-    const response = await fetch(
-      `https://api.cloudinary.com/v1_1/${CLOUDINARY_CLOUD_NAME}/auto/upload`,
-      {
-        method: "POST",
-        body: data,
-      },
-    );
-
-    const payload = await response.json();
-    if (!response.ok || !payload?.secure_url) {
-      throw new Error(payload?.error?.message || "Failed to upload document");
-    }
+    const payload = await uploadFile(file, "lead-documents");
 
     const uploaded = sanitizeClosureDocument({
-      url: payload.secure_url,
+      url: payload.url,
       mimeType: file.type,
       name: file.name,
       size: file.size,

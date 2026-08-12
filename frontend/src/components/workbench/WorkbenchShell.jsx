@@ -1,5 +1,6 @@
 import { memo, useCallback, useMemo, useState } from "react";
 import { useChatNotifications } from "../../context/useChatNotifications";
+import { usePermissions } from "../../context/usePermissions";
 import { cn } from "../ui";
 import ActivityBar from "./ActivityBar";
 import AppTopCommandBar from "./AppTopCommandBar";
@@ -21,7 +22,11 @@ const WorkbenchShell = ({
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const { adminRequestUnread, unreadTotal } = useChatNotifications();
-  const userForNav = useMemo(() => user || {}, [user]);
+  const { permissions, loading: permissionsLoading } = usePermissions();
+  const userForNav = useMemo(
+    () => ({ ...(user || {}), permissions: permissionsLoading ? null : permissions }),
+    [user, permissions, permissionsLoading],
+  );
   const handleOpenMobileMenu = useCallback(() => setMobileMenuOpen(true), []);
   const handleCloseMobileMenu = useCallback(() => setMobileMenuOpen(false), []);
   const handleToggleSidebar = useCallback(() => setSidebarCollapsed((prev) => !prev), []);

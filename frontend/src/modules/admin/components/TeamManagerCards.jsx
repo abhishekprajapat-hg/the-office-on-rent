@@ -67,6 +67,11 @@ const roleBadgeTone = (role, isDarkTheme) => {
       ? "border-amber-400/40 bg-amber-500/15 text-amber-100"
       : "border-amber-200 bg-amber-50 text-amber-700";
   }
+  if (role === "COWORKING_ADMIN") {
+    return isDarkTheme
+      ? "border-blue-400/40 bg-blue-500/15 text-blue-100"
+      : "border-blue-200 bg-blue-50 text-blue-700";
+  }
   if (role === "PRODUCTION_EXECUTIVE" || role === "COMMUNITY_MANAGER") {
     return isDarkTheme
       ? "border-violet-400/40 bg-violet-500/15 text-violet-100"
@@ -142,6 +147,7 @@ export const TeamLeadOverviewCards = ({
     { key: "PRODUCTION_EXECUTIVE", label: "Production Executives" },
     { key: "COMMUNITY_MANAGER", label: "Community Managers" },
     { key: "CHANNEL_PARTNER", label: "Channel Partners" },
+    { key: "COWORKING_ADMIN", label: "Coworking admins" },
   ];
 
   return (

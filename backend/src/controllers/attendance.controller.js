@@ -1503,6 +1503,91 @@ exports.getMyLeaveBalance = async (req, res) => {
   }
 };
 
+exports.getLeaveBalanceForAdmin = async (req, res) => {
+  try {
+    if (!req.user?.companyId) {
+      return res.status(403).json({ message: "Company context is required" });
+    }
+    if (!ensureManageAttendanceRole(req, res)) return null;
+
+    const targetUserId = toTrimmedString(req.params?.userId);
+    if (!targetUserId) {
+      return res.status(400).json({ message: "userId is required" });
+    }
+
+    const inScope = await ensureUserInScope({
+      actor: req.user,
+      targetUserId,
+    });
+    if (!inScope) {
+      return res.status(403).json({ message: "User is outside your attendance scope" });
+    }
+
+    const policy = await resolvePolicyForCompany(req.user.companyId);
+    const requestedMonth = toTrimmedString(req.query.month) || toMonthKeyFromDate(new Date(), policy.timezone);
+    if (!MONTH_KEY_PATTERN.test(requestedMonth)) {
+      return res.status(400).json({ message: "month must be in YYYY-MM format" });
+    }
+
+    const user = await User.findOne({
+      _id: targetUserId,
+      companyId: req.user.companyId,
+    })
+      .select("_id createdAt role")
+      .lean();
+
+    if (!user) {
+      return res.status(404).json({ message: "User not found" });
+    }
+    if (user.role === USER_ROLES.ADMIN) {
+      return res.status(403).json({ message: "Admin users do not have employee leave balance" });
+    }
+
+    const startMonth = toMonthKeyFromDate(user.createdAt || new Date(), policy.timezone);
+    const monthsAccrued = getMonthSpanInclusive(startMonth, requestedMonth);
+    const accrued = monthsAccrued;
+    const requestedMonthRange = resolveMonthRange(requestedMonth);
+
+    const leaveRows = await LeaveRequest.find({
+      companyId: req.user.companyId,
+      userId: user._id,
+      status: { $in: ["PENDING", "APPROVED"] },
+      leaveType: { $ne: "UNPAID" },
+      fromDate: { $lte: requestedMonthRange.to },
+    })
+      .select("_id fromDate toDate totalDays leaveType status")
+      .lean();
+
+    const used = leaveRows
+      .filter((row) => row.status === "APPROVED")
+      .reduce((sum, row) => sum + Number(row.totalDays || 0), 0);
+    const pending = leaveRows
+      .filter((row) => row.status === "PENDING")
+      .reduce((sum, row) => sum + Number(row.totalDays || 0), 0);
+    const available = Math.max(0, accrued - used);
+
+    return res.json({
+      month: requestedMonth,
+      timezone: policy.timezone,
+      monthlyAccrual: 1,
+      accrualStartMonth: startMonth,
+      monthsAccrued,
+      accrued,
+      used,
+      pending,
+      available,
+      carryForward: available,
+    });
+  } catch (error) {
+    logger.error({
+      requestId: req.requestId || null,
+      error: error.message,
+      message: "getLeaveBalanceForAdmin failed",
+    });
+    return res.status(500).json({ message: "Server error" });
+  }
+};
+
 exports.createLeaveRequest = async (req, res) => {
   try {
     if (!req.user?.companyId) {
@@ -1613,12 +1698,20 @@ exports.getAdminLeaveRequests = async (req, res) => {
     const scopedUsers = await getScopedUsersForAttendanceViewer(req.user);
     const userIds = scopedUsers.map((row) => row._id);
     const status = toTrimmedString(req.query.status).toUpperCase();
+    const requestedUserId = toTrimmedString(req.query.userId);
     const query = {
       companyId: req.user.companyId,
       userId: { $in: userIds },
     };
     if (LEAVE_STATUS.includes(status)) {
       query.status = status;
+    }
+    if (requestedUserId) {
+      const inScope = userIds.some((id) => String(id) === requestedUserId);
+      if (!inScope) {
+        return res.status(403).json({ message: "User is outside your attendance scope" });
+      }
+      query.userId = requestedUserId;
     }
 
     const rows = await LeaveRequest.find(query)

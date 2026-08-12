@@ -276,8 +276,9 @@ const buildProfilePerformanceSummary = async (userDoc) => {
   todayStart.setHours(0, 0, 0, 0);
   const todayEnd = new Date();
   todayEnd.setHours(23, 59, 59, 999);
+  const monthStart = new Date(todayStart.getFullYear(), todayStart.getMonth(), 1);
 
-  const [leadSummaryRows, recentLeads, activitiesPerformed, diaryEntriesCreated, directReports] = await Promise.all([
+  const [leadSummaryRows, recentLeads, activitiesPerformed, diaryEntriesCreated, directReports, achievedTarget] = await Promise.all([
     Lead.aggregate([
       { $match: leadQuery },
       {
@@ -350,6 +351,11 @@ const buildProfilePerformanceSummary = async (userDoc) => {
       parentId: userDoc._id,
       isActive: true,
     }),
+    Lead.countDocuments({
+      ...leadQuery,
+      status: "CLOSED",
+      updatedAt: { $gte: monthStart },
+    }),
   ]);
 
   const leadSummary = leadSummaryRows?.[0] || {};
@@ -378,6 +384,7 @@ const buildProfilePerformanceSummary = async (userDoc) => {
     diaryEntriesCreated,
     statusBreakdown,
     recentLeads,
+    achievedTarget: Number(achievedTarget || 0),
   };
 };
 
@@ -623,8 +630,12 @@ const buildLeadPerformanceRowsByOwnerIds = async ({
   );
 };
 
+const toEmployeeCode = (userId) =>
+  `EMP-${String(userId || "").slice(-6).toUpperCase()}`;
+
 const toProfileView = (user) => ({
   _id: user._id,
+  employeeCode: toEmployeeCode(user._id),
   name: user.name,
   email: user.email,
   phone: user.phone || "",
@@ -636,6 +647,11 @@ const toProfileView = (user) => ({
   canViewInventory: Boolean(user.canViewInventory),
   brokerageConfig: toBrokerageConfigView(user.brokerageConfig),
   isActive: Boolean(user.isActive),
+  department: user.department || "",
+  branch: user.branch || "",
+  shiftTiming: user.shiftTiming || "",
+  monthlyTarget: Number.isFinite(user.monthlyTarget) ? user.monthlyTarget : 10,
+  lastLoginAt: user.lastLoginAt || null,
   lastAssignedAt: user.lastAssignedAt || null,
   liveLocation: user.liveLocation || null,
   createdAt: user.createdAt || null,
@@ -1418,6 +1434,10 @@ exports.updateUserByAdmin = async (req, res) => {
       "canViewInventory",
       "brokerageConfig",
       "password",
+      "department",
+      "branch",
+      "shiftTiming",
+      "monthlyTarget",
     ].some((key) => Object.prototype.hasOwnProperty.call(req.body || {}, key));
 
     if (!hasAnyEditableField) {
@@ -1521,6 +1541,26 @@ exports.updateUserByAdmin = async (req, res) => {
         return res.status(400).json({ message: parsedBrokerageConfig.error });
       }
       patch.brokerageConfig = parsedBrokerageConfig.value;
+    }
+
+    if (Object.prototype.hasOwnProperty.call(req.body || {}, "department")) {
+      patch.department = String(req.body.department || "").trim().slice(0, 80);
+    }
+
+    if (Object.prototype.hasOwnProperty.call(req.body || {}, "branch")) {
+      patch.branch = String(req.body.branch || "").trim().slice(0, 80);
+    }
+
+    if (Object.prototype.hasOwnProperty.call(req.body || {}, "shiftTiming")) {
+      patch.shiftTiming = String(req.body.shiftTiming || "").trim().slice(0, 60);
+    }
+
+    if (Object.prototype.hasOwnProperty.call(req.body || {}, "monthlyTarget")) {
+      const monthlyTarget = Number(req.body.monthlyTarget);
+      if (!Number.isFinite(monthlyTarget) || monthlyTarget < 0) {
+        return res.status(400).json({ message: "monthlyTarget must be 0 or more" });
+      }
+      patch.monthlyTarget = monthlyTarget;
     }
 
     if (EXECUTIVE_ROLES.includes(previousRole) && !EXECUTIVE_ROLES.includes(nextRole)) {

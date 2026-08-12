@@ -418,3 +418,62 @@ exports.getTaskStats = async (req, res) => {
     res.status(500).json({ message: "Failed to compile task statistics", error: error.message });
   }
 };
+
+// Get task stats grouped by assignee (roster view) - Admin/Manager only
+exports.getTaskStatsByUser = async (req, res) => {
+  try {
+    if (req.user.role !== USER_ROLES.ADMIN && req.user.role !== USER_ROLES.MANAGER) {
+      return res.status(403).json({ message: "Access denied" });
+    }
+
+    const companyId = req.user.companyId;
+    const now = new Date();
+
+    const rows = await Task.aggregate([
+      { $match: { companyId, assignedTo: { $ne: null } } },
+      {
+        $group: {
+          _id: "$assignedTo",
+          total: { $sum: 1 },
+          TODO: { $sum: { $cond: [{ $eq: ["$status", "TODO"] }, 1, 0] } },
+          IN_PROGRESS: { $sum: { $cond: [{ $eq: ["$status", "IN_PROGRESS"] }, 1, 0] } },
+          COMPLETED: { $sum: { $cond: [{ $eq: ["$status", "COMPLETED"] }, 1, 0] } },
+          BACKLOG: { $sum: { $cond: [{ $eq: ["$status", "BACKLOG"] }, 1, 0] } },
+          overdue: {
+            $sum: {
+              $cond: [
+                {
+                  $and: [
+                    { $ne: ["$status", "COMPLETED"] },
+                    { $ne: ["$dueDate", null] },
+                    { $lt: ["$dueDate", now] }
+                  ]
+                },
+                1,
+                0
+              ]
+            }
+          }
+        }
+      }
+    ]);
+
+    const byUser = {};
+    rows.forEach((row) => {
+      byUser[String(row._id)] = {
+        total: row.total,
+        TODO: row.TODO,
+        IN_PROGRESS: row.IN_PROGRESS,
+        COMPLETED: row.COMPLETED,
+        BACKLOG: row.BACKLOG,
+        pending: row.total - row.COMPLETED,
+        overdue: row.overdue
+      };
+    });
+
+    res.status(200).json(byUser);
+  } catch (error) {
+    req.log?.error(error);
+    res.status(500).json({ message: "Failed to compile per-user task statistics", error: error.message });
+  }
+};

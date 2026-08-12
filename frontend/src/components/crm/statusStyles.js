@@ -51,6 +51,114 @@ export const STATUS_STYLES = {
     label: "Rejected",
     tone: "rose",
   },
+  RESERVED: {
+    label: "Reserved",
+    tone: "amber",
+  },
+  PARTIALLY_OCCUPIED: {
+    label: "Partially Occupied",
+    tone: "amber",
+  },
+  FULLY_OCCUPIED: {
+    label: "Fully Occupied",
+    tone: "rose",
+  },
+  OCCUPIED: {
+    label: "Occupied",
+    tone: "rose",
+  },
+  MAINTENANCE: {
+    label: "Maintenance",
+    tone: "violet",
+  },
+  INACTIVE: {
+    label: "Inactive",
+    tone: "slate",
+  },
+  ACTIVE: {
+    label: "Active",
+    tone: "emerald",
+  },
+  DRAFT: {
+    label: "Draft",
+    tone: "slate",
+  },
+  EXPIRED: {
+    label: "Expired",
+    tone: "rose",
+  },
+  CANCELLED: {
+    label: "Cancelled",
+    tone: "rose",
+  },
+  CONFIRMED: {
+    label: "Confirmed",
+    tone: "emerald",
+  },
+  PAID: {
+    label: "Paid",
+    tone: "emerald",
+  },
+  PARTIALLY_PAID: {
+    label: "Partially Paid",
+    tone: "amber",
+  },
+  UNPAID: {
+    label: "Unpaid",
+    tone: "rose",
+  },
+  OVERDUE: {
+    label: "Overdue",
+    tone: "rose",
+  },
+  OPEN: {
+    label: "Open",
+    tone: "blue",
+  },
+  IN_PROGRESS: {
+    label: "In Progress",
+    tone: "amber",
+  },
+  RESOLVED: {
+    label: "Resolved",
+    tone: "emerald",
+  },
+  CHECKED_IN: {
+    label: "Checked In",
+    tone: "emerald",
+  },
+  CHECKED_OUT: {
+    label: "Checked Out",
+    tone: "slate",
+  },
+  LEAD: {
+    label: "Lead",
+    tone: "slate",
+  },
+  PROSPECT: {
+    label: "Prospect",
+    tone: "cyan",
+  },
+  SUSPENDED: {
+    label: "Suspended",
+    tone: "rose",
+  },
+  SUBMITTED: {
+    label: "Submitted",
+    tone: "amber",
+  },
+  VERIFIED: {
+    label: "Verified",
+    tone: "emerald",
+  },
+  COMPLETED: {
+    label: "Completed",
+    tone: "slate",
+  },
+  NO_SHOW: {
+    label: "No Show",
+    tone: "rose",
+  },
 };
 
 export const normalizeStatusKey = (status) =>

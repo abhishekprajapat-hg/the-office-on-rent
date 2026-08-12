@@ -100,6 +100,38 @@ const userSchema = new mongoose.Schema(
       default: true,
     },
 
+    department: {
+      type: String,
+      trim: true,
+      default: "",
+      maxlength: 80,
+    },
+
+    branch: {
+      type: String,
+      trim: true,
+      default: "",
+      maxlength: 80,
+    },
+
+    shiftTiming: {
+      type: String,
+      trim: true,
+      default: "",
+      maxlength: 60,
+    },
+
+    monthlyTarget: {
+      type: Number,
+      min: 0,
+      default: 10,
+    },
+
+    lastLoginAt: {
+      type: Date,
+      default: null,
+    },
+
     lastAssignedIndex: {
       type: Number,
       default: 0,

@@ -8,6 +8,7 @@ import {
   Loader,
   UploadCloud,
   Trash2,
+  ImageOff,
 } from "lucide-react";
 import {
   getInventoryAssetsWithMeta,
@@ -23,6 +24,7 @@ import {
   rejectInventoryRequest,
 } from "../../services/inventoryService";
 import { getAllLeads } from "../../services/leadService";
+import { uploadFile } from "../../services/uploadService";
 import { toErrorMessage } from "../../utils/errorMessage";
 import { useDebouncedValue } from "../../hooks/useDebouncedValue";
 import ToastNotice from "../../components/ui/ToastNotice";
@@ -38,13 +40,91 @@ import {
 import { buildInventoryMetrics } from "./components/propertyWorkspaceUtils";
 import {
   FURNISHING_OPTIONS,
-  getPropertySubtypeConfig,
-  getPropertySubtypeOptions,
+  getInventorySubtypeConfig,
+  getInventorySubtypeOptions,
 } from "../../config/propertyRequirementConfig";
 
 const STATUS_OPTIONS = ["Available", "Blocked", "Sold"];
 const CUSTOM_NUMBER_OPTION_VALUE = "__CUSTOM_NUMBER__";
 const SHOW_LEGACY_INVENTORY_DETAIL_FIELDS = false;
+const UNFURNISHED_LIKE_STATUSES = ["UNFURNISHED", "BARE_SHELL", "WARM_SHELL"];
+const OFFICE_UNFURNISHED_VISIBLE_FIELD_KEYS = new Set(["washroom"]);
+
+const uploadFileToServer = async (file, category) => {
+  const result = await uploadFile(file, category);
+  return result.url;
+};
+
+const toPositivePlotMeasure = (value) => {
+  const parsed = Number(value);
+  return Number.isFinite(parsed) && parsed >= 0 ? parsed : null;
+};
+
+const IMAGE_EXTENSION_PATTERN = /\.(png|jpe?g|gif|webp|svg)$/i;
+const PDF_EXTENSION_PATTERN = /\.pdf$/i;
+
+const FileThumbnail = ({ url, fallbackLabel }) => {
+  const [pdfThumbnailFailed, setPdfThumbnailFailed] = useState(false);
+
+  if (IMAGE_EXTENSION_PATTERN.test(url)) {
+    return <img src={url} className="w-full h-full object-cover" alt={fallbackLabel} />;
+  }
+
+  if (PDF_EXTENSION_PATTERN.test(url) && !pdfThumbnailFailed) {
+    return (
+      <a href={url} target="_blank" rel="noreferrer" className="block h-full w-full">
+        <img
+          src={url.replace(PDF_EXTENSION_PATTERN, ".jpg")}
+          className="w-full h-full object-cover"
+          alt={fallbackLabel}
+          onError={() => setPdfThumbnailFailed(true)}
+        />
+      </a>
+    );
+  }
+
+  return (
+    <a
+      href={url}
+      target="_blank"
+      rel="noreferrer"
+      className="flex h-full w-full flex-col items-center justify-center text-[9px] font-bold text-slate-400"
+    >
+      {fallbackLabel}
+    </a>
+  );
+};
+
+const ImageThumbnail = ({ url, alt }) => {
+  const [imageFailed, setImageFailed] = useState(false);
+
+  if (imageFailed) {
+    return (
+      <a
+        href={url}
+        target="_blank"
+        rel="noreferrer"
+        className="flex h-full w-full flex-col items-center justify-center gap-0.5 bg-slate-100 text-[8px] font-bold text-slate-400 text-center px-1"
+        title="Image failed to load — click to open the raw URL"
+      >
+        <ImageOff size={16} />
+        Unavailable
+      </a>
+    );
+  }
+
+  return (
+    <img
+      src={url}
+      className="w-full h-full object-cover"
+      alt={alt}
+      onError={() => setImageFailed(true)}
+    />
+  );
+};
+
+const formatCalculatedPlotArea = (area) =>
+  Number.isInteger(area) ? String(area) : String(Number(area.toFixed(2)));
 const INVENTORY_MODAL_INPUT_CLASS =
   "h-11 w-full rounded-lg border border-slate-300 bg-white px-3 text-sm text-slate-700 focus:outline-none focus:border-blue-500 md:h-10";
 const INVENTORY_MODAL_FIELD_TITLE_CLASS =
@@ -110,6 +190,14 @@ const INVENTORY_LIST_FIELDS = [
   "residentialDetails",
   "siteLocation",
   "images",
+  "officeNumber",
+  "ownerName",
+  "ownerNumber",
+  "keyManagerName",
+  "keyManagerNumber",
+  "dealType",
+  "propertyDate",
+  "gstApplicable",
   "createdAt",
   "updatedAt",
 ].join(",");
@@ -209,9 +297,34 @@ const DEFAULT_FORM = {
   totalArea: "",
   carpetArea: "",
   builtUpArea: "",
+  superBuiltUpArea: "",
+  length: "",
+  width: "",
+  height: "",
   areaUnit: "SQ_FT",
   maintenanceCharges: "",
   deposit: "",
+  depositMonths: "",
+  agreementYears: "",
+  lockInYears: "",
+  officeNumber: "",
+  documentsAvailable: {
+    registry: false,
+    searchReport: false,
+    electricityNoc: false,
+    maintenanceNoc: false,
+    taxReceipt: false,
+    loanNoc: false,
+  },
+  ownerName: "",
+  ownerNumber: "",
+  ownerWhatsappNumber: "",
+  ownerType: "",
+  keyManagerName: "",
+  keyManagerNumber: "",
+  dealType: "",
+  propertyDate: "",
+  gstApplicable: false,
   furnishingStatus: "",
   locationLat: "",
   locationLng: "",
@@ -275,8 +388,12 @@ const DEFAULT_FORM = {
   saleNote: "",
   images: [],
   floorPlans: [],
+  documents: [],
   videoTours: [],
 };
+
+const isInventoryPriceRequired = (type) => String(type || "").trim() !== "Rent";
+const isInventoryRentRequired = (type) => ["Rent", "Both"].includes(String(type || "").trim());
 
 const toNumberOrNull = (value) => {
   if (value === null || value === undefined) return null;
@@ -292,7 +409,7 @@ const normalizeInventoryResidentialPropertyType = (value) => {
   }
   if (normalized === "APARTMENT") return "FLAT";
   if (normalized === "PG" || normalized === "HOSTEL" || normalized === "PG / HOSTEL") return "PG_HOSTEL";
-  if (["FLAT", "HOUSE", "PLOT", "PG_HOSTEL", "OTHER"].includes(normalized)) return normalized;
+  if (["FLAT", "HOUSE", "PLOT", "PG_HOSTEL", "BUNGALOW", "FARM_HOUSE", "OTHER"].includes(normalized)) return normalized;
   return "";
 };
 
@@ -305,6 +422,8 @@ const normalizeInventoryCategory = (value, inventoryType = "COMMERCIAL") => {
     }
     if (["pg", "hostel", "pg / hostel", "pg_hostel"].includes(normalized)) return "PG / Hostel";
     if (["plot", "plots", "land"].includes(normalized)) return "Plot";
+    if (["bungalow", "bungalows"].includes(normalized)) return "Bungalow";
+    if (["farm_house", "farmhouse", "farm house"].includes(normalized)) return "Farm House";
     if (normalized === "other") return "Other";
     return "Flat";
   }
@@ -503,8 +622,25 @@ const REQUEST_FIELD_LABELS = {
   totalArea: "Total Area",
   carpetArea: "Carpet Area",
   builtUpArea: "Built-up Area",
+  superBuiltUpArea: "Super Built-up Area",
+  length: "Length",
+  width: "Width",
+  height: "Height",
   maintenanceCharges: "Maintenance",
   deposit: "Deposit",
+  depositMonths: "Security Deposit (Months)",
+  agreementYears: "Agreement (Years)",
+  lockInYears: "Lock-in (Years)",
+  officeNumber: "Office Number",
+  ownerName: "Owner Name",
+  ownerNumber: "Owner Number",
+  ownerWhatsappNumber: "Owner WhatsApp Number",
+  ownerType: "Ownership",
+  keyManagerName: "Key Manager Name",
+  keyManagerNumber: "Key Manager Number",
+  dealType: "Deal Type",
+  propertyDate: "Property Date",
+  gstApplicable: "GST Applicable",
   commercialDetails: "Commercial Details",
   residentialDetails: "Residential Details",
   siteLocation: "Coordinates",
@@ -608,6 +744,8 @@ const AssetVault = () => {
   const [viewMode, setViewMode] = useState("cards");
   const [advancedFiltersOpen, setAdvancedFiltersOpen] = useState(false);
   const [uploading, setUploading] = useState(false);
+  const [uploadingFloorPlans, setUploadingFloorPlans] = useState(false);
+  const [uploadingDocuments, setUploadingDocuments] = useState(false);
   const [saving, setSaving] = useState(false);
   const [resolvingLocation, setResolvingLocation] = useState(false);
   const [deletingId, setDeletingId] = useState("");
@@ -675,23 +813,54 @@ const AssetVault = () => {
   const canOpenEditModal = canManage || canRequestEdit;
   const canRequestStatusChange = UPDATE_STATUS_REQUEST_ROLES.has(role);
   const inventorySubtype = getInventorySubtypeValue(formData);
-  const inventorySubtypeOptions = getPropertySubtypeOptions(formData.inventoryType);
-  const inventorySubtypeConfig = getPropertySubtypeConfig(formData.inventoryType, inventorySubtype);
+  const inventorySubtypeOptions = getInventorySubtypeOptions(formData.inventoryType);
+  const inventorySubtypeConfig = getInventorySubtypeConfig(formData.inventoryType, inventorySubtype);
+  const isLandOnlyPropertyType = ["PLOT", "FARM_HOUSE"].includes(inventorySubtype);
+  const isUnfurnishedLikeOffice =
+    inventorySubtype === "OFFICE"
+    && UNFURNISHED_LIKE_STATUSES.includes(String(formData.furnishingStatus || "").toUpperCase());
   const inventoryFurnishingOptions =
     inventorySubtypeConfig?.showFurnishing === false
       ? []
       : FURNISHING_OPTIONS.filter((option) => option.value);
   const updateInventorySubtypeData = useCallback((fieldKey, value) => {
-    setFormData((prev) => ({
-      ...prev,
-      inventorySubtypeData: {
+    setFormData((prev) => {
+      const nextSubtypeData = {
         ...(prev.inventorySubtypeData || {}),
         [fieldKey]: value,
-      },
-    }));
+      };
+
+      if (["plotLength", "plotWidth"].includes(fieldKey)) {
+        const length = toPositivePlotMeasure(nextSubtypeData.plotLength);
+        const width = toPositivePlotMeasure(nextSubtypeData.plotWidth);
+        if (length !== null && width !== null) {
+          nextSubtypeData.plotArea = formatCalculatedPlotArea(length * width);
+        }
+      }
+
+      return {
+        ...prev,
+        inventorySubtypeData: nextSubtypeData,
+      };
+    });
   }, []);
   const setInventoryCustomNumberField = useCallback((fieldKey, isCustom) => {
     setInventoryCustomNumberFields((prev) => ({ ...prev, [fieldKey]: isCustom }));
+  }, []);
+  const updateInventoryDimensionField = useCallback((fieldKey, value) => {
+    setFormData((prev) => {
+      const next = { ...prev, [fieldKey]: value };
+
+      if (["length", "width"].includes(fieldKey)) {
+        const length = toPositivePlotMeasure(next.length);
+        const width = toPositivePlotMeasure(next.width);
+        if (length !== null && width !== null) {
+          next.totalArea = formatCalculatedPlotArea(length * width);
+        }
+      }
+
+      return next;
+    });
   }, []);
   const reserveTargetAsset = useMemo(
     () => assets.find((asset) => String(asset?._id || "") === String(reserveAssetId || "")) || null,
@@ -707,6 +876,41 @@ const AssetVault = () => {
   );
 
   const renderInventorySubtypeField = useCallback((field) => {
+    if (field.key === "plotWidth") return null;
+
+    if (field.key === "plotLength") {
+      const plotLengthValue = String(formData.inventorySubtypeData?.plotLength ?? "");
+      const plotWidthValue = String(formData.inventorySubtypeData?.plotWidth ?? "");
+      return (
+        <div key="plotDimension">
+          <label className={INVENTORY_MODAL_FIELD_TITLE_CLASS}>
+            Plot Dimension (L x W, ft)
+          </label>
+          <div className="mt-1 flex items-center gap-1.5">
+            <input
+              type="number"
+              min="0"
+              step="any"
+              value={plotLengthValue}
+              onChange={(event) => updateInventorySubtypeData("plotLength", event.target.value)}
+              placeholder="Length"
+              className={INVENTORY_MODAL_INPUT_CLASS}
+            />
+            <span className="text-slate-400">×</span>
+            <input
+              type="number"
+              min="0"
+              step="any"
+              value={plotWidthValue}
+              onChange={(event) => updateInventorySubtypeData("plotWidth", event.target.value)}
+              placeholder="Width"
+              className={INVENTORY_MODAL_INPUT_CLASS}
+            />
+          </div>
+        </div>
+      );
+    }
+
     const value = formData.inventorySubtypeData?.[field.key] ?? "";
     const selectOptions = field.options || [];
     const normalizedValue = String(value || "");
@@ -793,7 +997,8 @@ const AssetVault = () => {
             value={normalizedValue}
             onChange={(event) => updateInventorySubtypeData(field.key, event.target.value)}
             placeholder={field.placeholder || field.label}
-            className={`${INVENTORY_MODAL_INPUT_CLASS} mt-1`}
+            readOnly={field.readOnly}
+            className={`${INVENTORY_MODAL_INPUT_CLASS} mt-1 ${field.readOnly ? "cursor-not-allowed opacity-70" : ""}`}
           />
         )}
       </div>
@@ -979,7 +1184,9 @@ const AssetVault = () => {
       .filter(Boolean);
 
     return assets.filter((asset) => {
-      const typeMatch = modeType === "sale" ? asset.type === "Sale" : asset.type === "Rent";
+      const typeMatch = modeType === "sale"
+        ? asset.type === "Sale" || asset.type === "Both"
+        : asset.type === "Rent" || asset.type === "Both";
       const statusMatch =
         statusFilter === "all"
           ? true
@@ -1101,42 +1308,111 @@ const AssetVault = () => {
 
     setUploading(true);
     const newImageUrls = [];
+    const failedFiles = [];
 
-    try {
-      for (const file of files) {
-        const data = new FormData();
-        data.append("file", file);
-        data.append("upload_preset", "office_on_rent_upload");
-        data.append("cloud_name", "djfiq8kiy");
-
-        const res = await fetch("https://api.cloudinary.com/v1_1/djfiq8kiy/image/upload", {
-          method: "POST",
-          body: data,
-        });
-
-        const cloudData = await res.json();
-        if (cloudData.secure_url) {
-          newImageUrls.push(cloudData.secure_url);
-        }
+    for (const file of files) {
+      try {
+        newImageUrls.push(await uploadFileToServer(file, "inventory-images"));
+      } catch (uploadError) {
+        console.error(`Upload Error: ${toErrorMessage(uploadError, "Unknown error")}`);
+        failedFiles.push(`${file.name}: ${toErrorMessage(uploadError, "unknown error")}`);
       }
+    }
 
+    if (newImageUrls.length) {
       setFormData((prev) => ({
         ...prev,
         images: [...prev.images, ...newImageUrls],
       }));
-    } catch (uploadError) {
-      console.error(`Upload Error: ${toErrorMessage(uploadError, "Unknown error")}`);
-      setError("Error uploading one or more images");
-    } finally {
-      setUploading(false);
-      e.target.value = null;
     }
+    if (failedFiles.length) {
+      setError(`Failed to upload: ${failedFiles.join(", ")}`);
+    }
+
+    setUploading(false);
+    e.target.value = null;
   };
 
   const removeImage = (urlToRemove) => {
     setFormData((prev) => ({
       ...prev,
       images: prev.images.filter((url) => url !== urlToRemove),
+    }));
+  };
+
+  const handleFloorPlanUpload = async (e) => {
+    const files = Array.from(e.target.files || []);
+    if (!files.length) return;
+
+    setUploadingFloorPlans(true);
+    const newFloorPlanUrls = [];
+    const failedFiles = [];
+
+    for (const file of files) {
+      try {
+        newFloorPlanUrls.push(await uploadFileToServer(file, "inventory-floorplans"));
+      } catch (uploadError) {
+        console.error(`Upload Error: ${toErrorMessage(uploadError, "Unknown error")}`);
+        failedFiles.push(`${file.name}: ${toErrorMessage(uploadError, "unknown error")}`);
+      }
+    }
+
+    if (newFloorPlanUrls.length) {
+      setFormData((prev) => ({
+        ...prev,
+        floorPlans: [...prev.floorPlans, ...newFloorPlanUrls],
+      }));
+    }
+    if (failedFiles.length) {
+      setError(`Failed to upload: ${failedFiles.join(", ")}`);
+    }
+
+    setUploadingFloorPlans(false);
+    e.target.value = null;
+  };
+
+  const removeFloorPlan = (urlToRemove) => {
+    setFormData((prev) => ({
+      ...prev,
+      floorPlans: prev.floorPlans.filter((url) => url !== urlToRemove),
+    }));
+  };
+
+  const handleDocumentUpload = async (e) => {
+    const files = Array.from(e.target.files || []);
+    if (!files.length) return;
+
+    setUploadingDocuments(true);
+    const newDocumentUrls = [];
+    const failedFiles = [];
+
+    for (const file of files) {
+      try {
+        newDocumentUrls.push(await uploadFileToServer(file, "inventory-documents"));
+      } catch (uploadError) {
+        console.error(`Upload Error: ${toErrorMessage(uploadError, "Unknown error")}`);
+        failedFiles.push(`${file.name}: ${toErrorMessage(uploadError, "unknown error")}`);
+      }
+    }
+
+    if (newDocumentUrls.length) {
+      setFormData((prev) => ({
+        ...prev,
+        documents: [...prev.documents, ...newDocumentUrls],
+      }));
+    }
+    if (failedFiles.length) {
+      setError(`Failed to upload: ${failedFiles.join(", ")}`);
+    }
+
+    setUploadingDocuments(false);
+    e.target.value = null;
+  };
+
+  const removeDocument = (urlToRemove) => {
+    setFormData((prev) => ({
+      ...prev,
+      documents: prev.documents.filter((url) => url !== urlToRemove),
     }));
   };
 
@@ -1602,11 +1878,36 @@ const AssetVault = () => {
       totalArea: toNumberOrNull(formData.totalArea),
       carpetArea: toNumberOrNull(formData.carpetArea),
       builtUpArea: toNumberOrNull(formData.builtUpArea),
+      superBuiltUpArea: toNumberOrNull(formData.superBuiltUpArea),
+      length: toNumberOrNull(formData.length),
+      width: toNumberOrNull(formData.width),
+      height: toNumberOrNull(formData.height),
       areaUnit: String(formData.areaUnit || "SQ_FT").toUpperCase(),
-      price: Number(formData.price),
+      price: isInventoryPriceRequired(formData.type) ? Number(formData.price) : toNumberOrNull(formData.price),
       rent: toNumberOrNull(formData.rent),
       maintenanceCharges: toNumberOrNull(formData.maintenanceCharges),
       deposit: toNumberOrNull(formData.deposit),
+      depositMonths: toNumberOrNull(formData.depositMonths),
+      agreementYears: toNumberOrNull(formData.agreementYears),
+      lockInYears: toNumberOrNull(formData.lockInYears),
+      officeNumber: String(formData.officeNumber || "").trim(),
+      documentsAvailable: {
+        registry: Boolean(formData.documentsAvailable?.registry),
+        searchReport: Boolean(formData.documentsAvailable?.searchReport),
+        electricityNoc: Boolean(formData.documentsAvailable?.electricityNoc),
+        maintenanceNoc: Boolean(formData.documentsAvailable?.maintenanceNoc),
+        taxReceipt: Boolean(formData.documentsAvailable?.taxReceipt),
+        loanNoc: Boolean(formData.documentsAvailable?.loanNoc),
+      },
+      ownerName: String(formData.ownerName || "").trim(),
+      ownerNumber: String(formData.ownerNumber || "").trim(),
+      ownerWhatsappNumber: String(formData.ownerWhatsappNumber || "").trim(),
+      ownerType: String(formData.ownerType || "").toUpperCase(),
+      keyManagerName: String(formData.keyManagerName || "").trim(),
+      keyManagerNumber: String(formData.keyManagerNumber || "").trim(),
+      dealType: String(formData.dealType || "").toUpperCase(),
+      propertyDate: formData.propertyDate || null,
+      gstApplicable: Boolean(formData.gstApplicable),
       type: formData.type,
       category: formData.category,
       furnishingStatus: String(formData.furnishingStatus || "").toUpperCase(),
@@ -1617,6 +1918,7 @@ const AssetVault = () => {
       saleDetails: saleDetails,
       images: Array.isArray(formData.images) ? formData.images : [],
       floorPlans: Array.isArray(formData.floorPlans) ? formData.floorPlans : [],
+      documents: Array.isArray(formData.documents) ? formData.documents : [],
       videoTours: Array.isArray(formData.videoTours) ? formData.videoTours : [],
     };
 
@@ -1718,8 +2020,18 @@ const AssetVault = () => {
       .join(", ");
     const finalLocation = String(formData.location || "").trim() || derivedLocation;
 
-    if (!formData.propertyId.trim() || !formData.title.trim() || formData.price === "" || !finalLocation) {
-      setFormError("Property ID, property name, location and price are required");
+    if (!formData.title.trim() || !finalLocation) {
+      setFormError("Property name and location are required");
+      return;
+    }
+
+    if (isInventoryPriceRequired(formData.type) && formData.price === "") {
+      setFormError("Price is required for Sale listings");
+      return;
+    }
+
+    if (isInventoryRentRequired(formData.type) && formData.rent === "") {
+      setFormError("Rent is required for Rent listings");
       return;
     }
 
@@ -1823,9 +2135,34 @@ const AssetVault = () => {
       totalArea: asset.totalArea ?? "",
       carpetArea: asset.carpetArea ?? "",
       builtUpArea: asset.builtUpArea ?? "",
+      superBuiltUpArea: asset.superBuiltUpArea ?? "",
+      length: asset.length ?? "",
+      width: asset.width ?? "",
+      height: asset.height ?? "",
       areaUnit: asset.areaUnit || "SQ_FT",
       maintenanceCharges: asset.maintenanceCharges ?? "",
       deposit: asset.deposit ?? "",
+      depositMonths: asset.depositMonths ?? "",
+      agreementYears: asset.agreementYears ?? "",
+      lockInYears: asset.lockInYears ?? "",
+      officeNumber: asset.officeNumber || "",
+      documentsAvailable: {
+        registry: Boolean(asset.documentsAvailable?.registry),
+        searchReport: Boolean(asset.documentsAvailable?.searchReport),
+        electricityNoc: Boolean(asset.documentsAvailable?.electricityNoc),
+        maintenanceNoc: Boolean(asset.documentsAvailable?.maintenanceNoc),
+        taxReceipt: Boolean(asset.documentsAvailable?.taxReceipt),
+        loanNoc: Boolean(asset.documentsAvailable?.loanNoc),
+      },
+      ownerName: asset.ownerName || "",
+      ownerNumber: asset.ownerNumber || "",
+      ownerWhatsappNumber: asset.ownerWhatsappNumber || "",
+      ownerType: asset.ownerType || "",
+      keyManagerName: asset.keyManagerName || "",
+      keyManagerNumber: asset.keyManagerNumber || "",
+      dealType: asset.dealType || "",
+      propertyDate: asset.propertyDate ? String(asset.propertyDate).slice(0, 10) : "",
+      gstApplicable: Boolean(asset.gstApplicable),
       furnishingStatus: asset.furnishingStatus || "",
       locationLat: existingSiteLat === null ? "" : String(existingSiteLat),
       locationLng: existingSiteLng === null ? "" : String(existingSiteLng),
@@ -1910,6 +2247,7 @@ const AssetVault = () => {
       saleNote: String(existingSaleDetails?.note || "").trim(),
       images: Array.isArray(asset.images) ? asset.images : [],
       floorPlans: Array.isArray(asset.floorPlans) ? asset.floorPlans : [],
+      documents: Array.isArray(asset.documents) ? asset.documents : [],
       videoTours: Array.isArray(asset.videoTours) ? asset.videoTours : [],
     });
     setLocationBaseline({
@@ -1929,8 +2267,18 @@ const AssetVault = () => {
       .join(", ");
     const finalLocation = String(formData.location || "").trim() || derivedLocation;
 
-    if (!formData.propertyId.trim() || !formData.title.trim() || formData.price === "" || !finalLocation) {
-      setFormError("Property ID, property name, location and price are required");
+    if (!formData.title.trim() || !finalLocation) {
+      setFormError("Property name and location are required");
+      return;
+    }
+
+    if (isInventoryPriceRequired(formData.type) && formData.price === "") {
+      setFormError("Price is required for Sale listings");
+      return;
+    }
+
+    if (isInventoryRentRequired(formData.type) && formData.rent === "") {
+      setFormError("Rent is required for Rent listings");
       return;
     }
 
@@ -2286,7 +2634,7 @@ const AssetVault = () => {
                       ? titleCaseFromToken(nextSubtype)
                       : prev.category,
                 furnishingStatus:
-                  getPropertySubtypeConfig(prev.inventoryType, nextSubtype)?.showFurnishing === false
+                  getInventorySubtypeConfig(prev.inventoryType, nextSubtype)?.showFurnishing === false
                     ? ""
                     : prev.furnishingStatus,
               }));
@@ -2317,6 +2665,147 @@ const AssetVault = () => {
             </InventoryModalSelect>
           </div>
         ) : null}
+
+        {inventorySubtype === "OFFICE" ? (
+          <div>
+            <label className={INVENTORY_MODAL_FIELD_TITLE_CLASS}>
+              Office Number
+            </label>
+            <input
+              type="text"
+              value={formData.officeNumber}
+              onChange={(e) => setFormData((prev) => ({ ...prev, officeNumber: e.target.value }))}
+              placeholder="e.g. 302-A"
+              className={`${INVENTORY_MODAL_INPUT_CLASS} mt-1`}
+            />
+          </div>
+        ) : null}
+
+        {isLandOnlyPropertyType ? null : (
+          <>
+            <div>
+              <label className={INVENTORY_MODAL_FIELD_TITLE_CLASS}>
+                Building Name
+              </label>
+              <input
+                type="text"
+                placeholder="DLF One Horizon"
+                value={formData.buildingName}
+                onChange={(e) => setFormData((prev) => ({ ...prev, buildingName: e.target.value }))}
+                className={`${INVENTORY_MODAL_INPUT_CLASS} mt-1`}
+              />
+            </div>
+            <div>
+              <label className={INVENTORY_MODAL_FIELD_TITLE_CLASS}>
+                Total Floors
+              </label>
+              <input
+                type="number"
+                min="0"
+                placeholder="20"
+                value={formData.totalFloors}
+                onChange={(e) => setFormData((prev) => ({ ...prev, totalFloors: e.target.value }))}
+                className={`${INVENTORY_MODAL_INPUT_CLASS} mt-1`}
+              />
+            </div>
+            <div>
+              <label className={INVENTORY_MODAL_FIELD_TITLE_CLASS}>
+                Floor Number
+              </label>
+              <input
+                type="number"
+                min="0"
+                placeholder="7"
+                value={formData.floorNumber}
+                onChange={(e) => setFormData((prev) => ({ ...prev, floorNumber: e.target.value }))}
+                className={`${INVENTORY_MODAL_INPUT_CLASS} mt-1`}
+              />
+            </div>
+          </>
+        )}
+
+        <div>
+          <label className={INVENTORY_MODAL_FIELD_TITLE_CLASS}>
+            Length
+          </label>
+          <input
+            type="number"
+            min="0"
+            placeholder="40"
+            value={formData.length}
+            onChange={(e) => updateInventoryDimensionField("length", e.target.value)}
+            className={`${INVENTORY_MODAL_INPUT_CLASS} mt-1`}
+          />
+        </div>
+        <div>
+          <label className={INVENTORY_MODAL_FIELD_TITLE_CLASS}>
+            Width
+          </label>
+          <input
+            type="number"
+            min="0"
+            placeholder="70"
+            value={formData.width}
+            onChange={(e) => updateInventoryDimensionField("width", e.target.value)}
+            className={`${INVENTORY_MODAL_INPUT_CLASS} mt-1`}
+          />
+        </div>
+        <div>
+          <label className={INVENTORY_MODAL_FIELD_TITLE_CLASS}>
+            Height
+          </label>
+          <input
+            type="number"
+            min="0"
+            placeholder="10"
+            value={formData.height}
+            onChange={(e) => updateInventoryDimensionField("height", e.target.value)}
+            className={`${INVENTORY_MODAL_INPUT_CLASS} mt-1`}
+          />
+        </div>
+        <div>
+          <label className={INVENTORY_MODAL_FIELD_TITLE_CLASS}>
+            Carpet Area
+          </label>
+          <input
+            type="number"
+            min="0"
+            placeholder="2800"
+            value={formData.totalArea}
+            onChange={(e) => setFormData((prev) => ({ ...prev, totalArea: e.target.value }))}
+            className={`${INVENTORY_MODAL_INPUT_CLASS} mt-1`}
+          />
+        </div>
+        {isLandOnlyPropertyType ? null : (
+          <>
+            <div>
+              <label className={INVENTORY_MODAL_FIELD_TITLE_CLASS}>
+                Built-up Area
+              </label>
+              <input
+                type="number"
+                min="0"
+                placeholder="2500"
+                value={formData.builtUpArea}
+                onChange={(e) => setFormData((prev) => ({ ...prev, builtUpArea: e.target.value }))}
+                className={`${INVENTORY_MODAL_INPUT_CLASS} mt-1`}
+              />
+            </div>
+            <div>
+              <label className={INVENTORY_MODAL_FIELD_TITLE_CLASS}>
+                Super Built-up Area
+              </label>
+              <input
+                type="number"
+                min="0"
+                placeholder="2900"
+                value={formData.superBuiltUpArea}
+                onChange={(e) => setFormData((prev) => ({ ...prev, superBuiltUpArea: e.target.value }))}
+                className={`${INVENTORY_MODAL_INPUT_CLASS} mt-1`}
+              />
+            </div>
+          </>
+        )}
       </div>
 
       {inventorySubtypeConfig ? (
@@ -2328,12 +2817,14 @@ const AssetVault = () => {
             <div className="grid grid-cols-1 gap-2 md:grid-cols-2">
               {(inventorySubtypeConfig.fields || [])
                 .filter((field) => field.type !== "checkbox")
+                .filter((field) => !isUnfurnishedLikeOffice || OFFICE_UNFURNISHED_VISIBLE_FIELD_KEYS.has(field.key))
                 .map(renderInventorySubtypeField)}
             </div>
           </div>
           <div className="flex flex-wrap gap-2">
             {(inventorySubtypeConfig.fields || [])
               .filter((field) => field.type === "checkbox")
+              .filter((field) => !isUnfurnishedLikeOffice || OFFICE_UNFURNISHED_VISIBLE_FIELD_KEYS.has(field.key))
               .map(renderInventorySubtypeField)}
           </div>
         </>
@@ -2491,76 +2982,10 @@ const AssetVault = () => {
 
               <ToastNotice message={formError} type="error" />
 
-              <div className="mobile-modal-scroll custom-scrollbar flex-1 space-y-3 px-3 py-3 sm:px-5">
-                <div className={INVENTORY_MODAL_SECTION_CLASS}>
-                  <div className={INVENTORY_MODAL_SECTION_HEADING_CLASS}>Inventory Media</div>
-                  <label className={`${INVENTORY_MODAL_FIELD_TITLE_CLASS} mb-2 block`}>
-                    Property Images
-                  </label>
-
-                  {formData.images.length > 0 && (
-                    <div className="mb-3 flex flex-wrap gap-2">
-                      {formData.images.map((url, index) => (
-                        <div
-                          key={`${url}-${index}`}
-                          className="relative w-16 h-16 rounded-lg overflow-hidden shrink-0 group"
-                        >
-                          <img src={url} className="w-full h-full object-cover" alt="asset" />
-                          <button
-                            onClick={() => removeImage(url)}
-                            className="absolute top-0 right-0 bg-red-500 text-white p-1 opacity-0 group-hover:opacity-100 transition-opacity"
-                          >
-                            <Trash2 size={12} />
-                          </button>
-                        </div>
-                      ))}
-                    </div>
-                  )}
-
-                  <div className="flex items-center justify-center w-full">
-                    <label
-                      className={`flex flex-col items-center justify-center w-full h-24 border-2 border-slate-200 border-dashed rounded-xl cursor-pointer bg-slate-50 hover:bg-slate-100 transition-all ${
-                        uploading ? "opacity-50 cursor-not-allowed" : ""
-                      }`}
-                    >
-                      <div className="flex flex-col items-center justify-center pt-5 pb-6">
-                        {uploading ? (
-                          <Loader className="animate-spin text-slate-400 mb-2" size={24} />
-                        ) : (
-                          <UploadCloud className="text-slate-400 mb-2" size={24} />
-                        )}
-                        <p className="text-xs text-slate-500 font-bold">
-                          {uploading ? "Uploading..." : "Click to upload photos"}
-                        </p>
-                        <p className="text-[10px] text-slate-400">SVG, PNG, JPG</p>
-                      </div>
-                      <input
-                        type="file"
-                        multiple
-                        accept="image/*"
-                        onChange={handleImageUpload}
-                        disabled={uploading}
-                        className="hidden"
-                      />
-                    </label>
-                  </div>
-                </div>
-
+              <div className="mobile-modal-scroll custom-scrollbar inventory-form-uppercase flex-1 space-y-3 px-3 py-3 sm:px-5">
                 <div className={INVENTORY_MODAL_SECTION_CLASS}>
                   <div className={INVENTORY_MODAL_SECTION_HEADING_CLASS}>Inventory Details</div>
                   <div className="mb-4 grid grid-cols-1 gap-3 sm:grid-cols-2 sm:gap-4">
-                    <div>
-                      <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">
-                        Property ID *
-                      </label>
-                      <input
-                        type="text"
-                        placeholder="PROP-1001"
-                        value={formData.propertyId}
-                        onChange={(e) => setFormData((prev) => ({ ...prev, propertyId: e.target.value }))}
-                        className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl text-sm font-bold text-slate-900 focus:outline-none focus:border-emerald-500 mt-1"
-                      />
-                    </div>
                     <div>
                       <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">
                         Inventory Type
@@ -2587,6 +3012,43 @@ const AssetVault = () => {
                         <option value="RESIDENTIAL">Residential</option>
                       </select>
                     </div>
+                    <div>
+                      <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">
+                        Rent or Sale
+                      </label>
+                      <select
+                        value={formData.type}
+                        onChange={(e) => {
+                          const nextType = e.target.value;
+                          setFormData((prev) => ({
+                            ...prev,
+                            type: nextType,
+                            price: nextType === "Rent" ? "" : prev.price,
+                            rent: nextType === "Sale" ? "" : prev.rent,
+                            deposit: isInventoryRentRequired(nextType) ? prev.deposit : "",
+                          }));
+                        }}
+                        className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl text-sm font-bold text-slate-900 focus:outline-none focus:border-emerald-500 mt-1"
+                      >
+                        <option value="Sale">For Sale</option>
+                        <option value="Rent">For Rent</option>
+                        <option value="Both">For Sale &amp; Rent</option>
+                      </select>
+                    </div>
+                    <div>
+                      <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">
+                        Property ID
+                      </label>
+                      <input
+                        type="text"
+                        readOnly
+                        disabled
+                        placeholder="Auto-generated on save"
+                        value={formData.propertyId}
+                        title="Property ID is auto-generated and cannot be edited"
+                        className="w-full p-3 bg-slate-100 border border-slate-200 rounded-xl text-sm font-bold text-slate-500 cursor-not-allowed mt-1"
+                      />
+                    </div>
                   </div>
 
                   <label className={INVENTORY_MODAL_FIELD_TITLE_CLASS}>
@@ -2605,36 +3067,40 @@ const AssetVault = () => {
 
                 <div className={`${INVENTORY_MODAL_SECTION_CLASS} grid grid-cols-1 gap-3 sm:grid-cols-2 sm:gap-4`}>
                   <div className="sm:col-span-2">
-                    <div className={INVENTORY_MODAL_SECTION_HEADING_CLASS}>Pricing & Location</div>
+                    <div className={INVENTORY_MODAL_SECTION_HEADING_CLASS}>Price</div>
                   </div>
-                  <div>
-                    <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">
-                      Price (Rs)
-                    </label>
-                    <input
-                      type="number"
-                      placeholder="12500000"
-                      value={formData.price}
-                      onChange={(e) => setFormData((prev) => ({ ...prev, price: e.target.value }))}
-                      className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl text-sm font-mono text-slate-900 focus:outline-none focus:border-emerald-500 mt-1"
-                    />
-                  </div>
+                  {isInventoryPriceRequired(formData.type) ? (
+                    <div>
+                      <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">
+                        Price (Rs)
+                      </label>
+                      <input
+                        type="number"
+                        placeholder="12500000"
+                        value={formData.price}
+                        onChange={(e) => setFormData((prev) => ({ ...prev, price: e.target.value }))}
+                        className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl text-sm font-mono text-slate-900 focus:outline-none focus:border-emerald-500 mt-1"
+                      />
+                    </div>
+                  ) : null}
 
-                  <div>
-                    <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">
-                      Rent (Rs)
-                    </label>
-                    <input
-                      type="number"
-                      min="0"
-                      placeholder="85000"
-                      value={formData.rent}
-                      onChange={(e) => setFormData((prev) => ({ ...prev, rent: e.target.value }))}
-                      className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl text-sm font-mono text-slate-900 focus:outline-none focus:border-emerald-500 mt-1"
-                    />
-                  </div>
+                  {isInventoryRentRequired(formData.type) ? (
+                    <div>
+                      <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">
+                        Rent (Rs)
+                      </label>
+                      <input
+                        type="number"
+                        min="0"
+                        placeholder="85000"
+                        value={formData.rent}
+                        onChange={(e) => setFormData((prev) => ({ ...prev, rent: e.target.value }))}
+                        className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl text-sm font-mono text-slate-900 focus:outline-none focus:border-emerald-500 mt-1"
+                      />
+                    </div>
+                  ) : null}
 
-                  {formData.type === "Rent" ? (
+                  {isInventoryRentRequired(formData.type) ? (
                     <div>
                       <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">
                         Security Deposit (Rs)
@@ -2650,6 +3116,67 @@ const AssetVault = () => {
                     </div>
                   ) : null}
 
+                  <div>
+                    <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">
+                      Maintenance Charges
+                    </label>
+                    <input
+                      type="number"
+                      min="0"
+                      placeholder="25000"
+                      value={formData.maintenanceCharges}
+                      onChange={(e) => setFormData((prev) => ({ ...prev, maintenanceCharges: e.target.value }))}
+                      className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl text-sm font-mono text-slate-900 focus:outline-none focus:border-emerald-500 mt-1"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">
+                      Security Deposit (Months)
+                    </label>
+                    <input
+                      type="number"
+                      min="0"
+                      placeholder="2"
+                      value={formData.depositMonths}
+                      onChange={(e) => setFormData((prev) => ({ ...prev, depositMonths: e.target.value }))}
+                      className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl text-sm font-mono text-slate-900 focus:outline-none focus:border-emerald-500 mt-1"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">
+                      Agreement (Years)
+                    </label>
+                    <input
+                      type="number"
+                      min="0"
+                      placeholder="3"
+                      value={formData.agreementYears}
+                      onChange={(e) => setFormData((prev) => ({ ...prev, agreementYears: e.target.value }))}
+                      className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl text-sm font-mono text-slate-900 focus:outline-none focus:border-emerald-500 mt-1"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">
+                      Lock-in (Years)
+                    </label>
+                    <input
+                      type="number"
+                      min="0"
+                      placeholder="1"
+                      value={formData.lockInYears}
+                      onChange={(e) => setFormData((prev) => ({ ...prev, lockInYears: e.target.value }))}
+                      className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl text-sm font-mono text-slate-900 focus:outline-none focus:border-emerald-500 mt-1"
+                    />
+                  </div>
+                </div>
+
+                <div className={`${INVENTORY_MODAL_SECTION_CLASS} grid grid-cols-1 gap-3 sm:grid-cols-2 sm:gap-4`}>
+                  <div className="sm:col-span-2">
+                    <div className={INVENTORY_MODAL_SECTION_HEADING_CLASS}>Location</div>
+                  </div>
                   <div className="sm:col-span-2">
                     <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">
                       Location
@@ -2798,123 +3325,6 @@ const AssetVault = () => {
                         className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl text-sm text-slate-900 focus:outline-none focus:border-emerald-500 mt-1"
                       />
                     </div>
-                  </div>
-
-                  <div className="grid grid-cols-1 gap-3 sm:col-span-2 sm:grid-cols-2 sm:gap-4">
-                    <div>
-                      <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">
-                        Building Name
-                      </label>
-                      <input
-                        type="text"
-                        placeholder="DLF One Horizon"
-                        value={formData.buildingName}
-                        onChange={(e) => setFormData((prev) => ({ ...prev, buildingName: e.target.value }))}
-                        className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl text-sm text-slate-900 focus:outline-none focus:border-emerald-500 mt-1"
-                      />
-                    </div>
-                    <div>
-                      <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">
-                        Floor Number
-                      </label>
-                      <input
-                        type="number"
-                        min="0"
-                        placeholder="7"
-                        value={formData.floorNumber}
-                        onChange={(e) => setFormData((prev) => ({ ...prev, floorNumber: e.target.value }))}
-                        className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl text-sm text-slate-900 focus:outline-none focus:border-emerald-500 mt-1"
-                      />
-                    </div>
-                    <div>
-                      <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">
-                        Total Floors
-                      </label>
-                      <input
-                        type="number"
-                        min="0"
-                        placeholder="20"
-                        value={formData.totalFloors}
-                        onChange={(e) => setFormData((prev) => ({ ...prev, totalFloors: e.target.value }))}
-                        className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl text-sm text-slate-900 focus:outline-none focus:border-emerald-500 mt-1"
-                      />
-                    </div>
-                    <div>
-                      <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">
-                        Maintenance Charges
-                      </label>
-                      <input
-                        type="number"
-                        min="0"
-                        placeholder="25000"
-                        value={formData.maintenanceCharges}
-                        onChange={(e) => setFormData((prev) => ({ ...prev, maintenanceCharges: e.target.value }))}
-                        className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl text-sm text-slate-900 focus:outline-none focus:border-emerald-500 mt-1"
-                      />
-                    </div>
-                  </div>
-
-                  <div className="grid grid-cols-1 gap-3 sm:col-span-2 sm:grid-cols-3 sm:gap-4">
-                    <div>
-                      <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">
-                        Total Area
-                      </label>
-                      <input
-                        type="number"
-                        min="0"
-                        placeholder="2800"
-                        value={formData.totalArea}
-                        onChange={(e) => setFormData((prev) => ({ ...prev, totalArea: e.target.value }))}
-                        className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl text-sm text-slate-900 focus:outline-none focus:border-emerald-500 mt-1"
-                      />
-                    </div>
-                    <div>
-                      <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">
-                        Carpet Area
-                      </label>
-                      <input
-                        type="number"
-                        min="0"
-                        placeholder="2200"
-                        value={formData.carpetArea}
-                        onChange={(e) => setFormData((prev) => ({ ...prev, carpetArea: e.target.value }))}
-                        className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl text-sm text-slate-900 focus:outline-none focus:border-emerald-500 mt-1"
-                      />
-                    </div>
-                    <div>
-                      <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">
-                        Built-up Area
-                      </label>
-                      <input
-                        type="number"
-                        min="0"
-                        placeholder="2500"
-                        value={formData.builtUpArea}
-                        onChange={(e) => setFormData((prev) => ({ ...prev, builtUpArea: e.target.value }))}
-                        className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl text-sm text-slate-900 focus:outline-none focus:border-emerald-500 mt-1"
-                      />
-                    </div>
-                  </div>
-
-                  <div>
-                    <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">
-                      Type
-                    </label>
-                    <select
-                      value={formData.type}
-                      onChange={(e) => {
-                        const nextType = e.target.value;
-                        setFormData((prev) => ({
-                          ...prev,
-                          type: nextType,
-                          deposit: nextType === "Rent" ? prev.deposit : "",
-                        }));
-                      }}
-                      className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl text-sm font-bold text-slate-900 focus:outline-none focus:border-emerald-500 mt-1"
-                    >
-                      <option value="Sale">For Sale</option>
-                      <option value="Rent">For Rent</option>
-                    </select>
                   </div>
 
                   <div className="hidden">
@@ -3425,37 +3835,6 @@ const AssetVault = () => {
                     </div>
                   ) : null}
 
-                  <div className="grid grid-cols-1 gap-3 sm:col-span-2 sm:gap-4">
-                    <div>
-                      <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">
-                        Floor Plans (one URL per line)
-                      </label>
-                      <textarea
-                        rows={3}
-                        placeholder="https://.../floor-plan-1.pdf"
-                        value={listToTextareaValue(formData.floorPlans)}
-                        onChange={(e) =>
-                          setFormData((prev) => ({ ...prev, floorPlans: parseTextareaList(e.target.value) }))
-                        }
-                        className="mt-1 w-full p-3 bg-slate-50 border border-slate-200 rounded-xl text-sm text-slate-900 focus:outline-none focus:border-emerald-500 resize-none"
-                      />
-                    </div>
-                    <div>
-                      <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">
-                        Video Tours (one URL per line)
-                      </label>
-                      <textarea
-                        rows={3}
-                        placeholder="https://.../property-video"
-                        value={listToTextareaValue(formData.videoTours)}
-                        onChange={(e) =>
-                          setFormData((prev) => ({ ...prev, videoTours: parseTextareaList(e.target.value) }))
-                        }
-                        className="mt-1 w-full p-3 bg-slate-50 border border-slate-200 rounded-xl text-sm text-slate-900 focus:outline-none focus:border-emerald-500 resize-none"
-                      />
-                    </div>
-                  </div>
-
                   {isReservedStatusValue(formData.status) ? (
                     <div className="sm:col-span-2">
                       <label className="text-[10px] font-bold text-amber-700 uppercase tracking-widest">
@@ -3618,6 +3997,327 @@ const AssetVault = () => {
                     </div>
                   ) : null}
                 </div>
+
+                <div className={INVENTORY_MODAL_SECTION_CLASS}>
+                  <div className={INVENTORY_MODAL_SECTION_HEADING_CLASS}>Documents Available</div>
+                  <div className="flex flex-wrap gap-2">
+                    {[
+                      ["registry", "Registry"],
+                      ["searchReport", "Search Report"],
+                      ["electricityNoc", "Electricity NOC"],
+                      ["maintenanceNoc", "Maintenance NOC"],
+                      ["taxReceipt", "Tax Receipt"],
+                      ["loanNoc", "Loan NOC"],
+                    ].map(([key, label]) => (
+                      <label key={key} className={INVENTORY_MODAL_CHECKBOX_CLASS}>
+                        <input
+                          type="checkbox"
+                          checked={Boolean(formData.documentsAvailable?.[key])}
+                          onChange={(e) =>
+                            setFormData((prev) => ({
+                              ...prev,
+                              documentsAvailable: {
+                                ...prev.documentsAvailable,
+                                [key]: e.target.checked,
+                              },
+                            }))
+                          }
+                          className="h-3.5 w-3.5 rounded border-slate-300 text-emerald-600 focus:ring-emerald-500"
+                        />
+                        {label}
+                      </label>
+                    ))}
+                    <label className={INVENTORY_MODAL_CHECKBOX_CLASS}>
+                      <input
+                        type="checkbox"
+                        checked={Boolean(formData.gstApplicable)}
+                        onChange={(e) => setFormData((prev) => ({ ...prev, gstApplicable: e.target.checked }))}
+                        className="h-3.5 w-3.5 rounded border-slate-300 text-emerald-600 focus:ring-emerald-500"
+                      />
+                      GST Applicable
+                    </label>
+                  </div>
+                </div>
+
+                <div className={`${INVENTORY_MODAL_SECTION_CLASS} grid grid-cols-1 gap-3 sm:grid-cols-2 sm:gap-4`}>
+                  <div className="sm:col-span-2">
+                    <div className={INVENTORY_MODAL_SECTION_HEADING_CLASS}>Owner Details</div>
+                  </div>
+                  <div>
+                    <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">
+                      Owner Name
+                    </label>
+                    <input
+                      type="text"
+                      value={formData.ownerName}
+                      onChange={(e) => setFormData((prev) => ({ ...prev, ownerName: e.target.value }))}
+                      placeholder="Owner name"
+                      className={`${INVENTORY_MODAL_INPUT_CLASS} mt-1`}
+                    />
+                  </div>
+                  <div>
+                    <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">
+                      Owner Number
+                    </label>
+                    <input
+                      type="tel"
+                      value={formData.ownerNumber}
+                      onChange={(e) => setFormData((prev) => ({ ...prev, ownerNumber: e.target.value }))}
+                      placeholder="e.g. 9876543210"
+                      className={`${INVENTORY_MODAL_INPUT_CLASS} mt-1`}
+                    />
+                  </div>
+                  <div>
+                    <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">
+                      Owner WhatsApp Number
+                    </label>
+                    <input
+                      type="tel"
+                      value={formData.ownerWhatsappNumber}
+                      onChange={(e) => setFormData((prev) => ({ ...prev, ownerWhatsappNumber: e.target.value }))}
+                      placeholder="e.g. 9876543210"
+                      className={`${INVENTORY_MODAL_INPUT_CLASS} mt-1`}
+                    />
+                  </div>
+                  <div>
+                    <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">
+                      Ownership
+                    </label>
+                    <select
+                      value={formData.ownerType}
+                      onChange={(e) => setFormData((prev) => ({ ...prev, ownerType: e.target.value }))}
+                      className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl text-sm text-slate-900 focus:outline-none focus:border-emerald-500 mt-1"
+                    >
+                      <option value="">Select ownership</option>
+                      <option value="1ST">1st</option>
+                      <option value="2ND">2nd</option>
+                      <option value="3RD">3rd</option>
+                      <option value="POWER_OF_ATTORNEY">Power of Attorney</option>
+                    </select>
+                  </div>
+                </div>
+
+                <div className={`${INVENTORY_MODAL_SECTION_CLASS} grid grid-cols-1 gap-3 sm:grid-cols-2 sm:gap-4`}>
+                  <div className="sm:col-span-2">
+                    <div className={INVENTORY_MODAL_SECTION_HEADING_CLASS}>Key Manager Details</div>
+                  </div>
+                  <div>
+                    <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">
+                      Key Manager Name
+                    </label>
+                    <input
+                      type="text"
+                      value={formData.keyManagerName}
+                      onChange={(e) => setFormData((prev) => ({ ...prev, keyManagerName: e.target.value }))}
+                      placeholder="Key manager name"
+                      className={`${INVENTORY_MODAL_INPUT_CLASS} mt-1`}
+                    />
+                  </div>
+                  <div>
+                    <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">
+                      Key Manager Number
+                    </label>
+                    <input
+                      type="tel"
+                      value={formData.keyManagerNumber}
+                      onChange={(e) => setFormData((prev) => ({ ...prev, keyManagerNumber: e.target.value }))}
+                      placeholder="e.g. 9876543210"
+                      className={`${INVENTORY_MODAL_INPUT_CLASS} mt-1`}
+                    />
+                  </div>
+                </div>
+
+                <div className={`${INVENTORY_MODAL_SECTION_CLASS} grid grid-cols-1 gap-3 sm:grid-cols-2 sm:gap-4`}>
+                  <div className="sm:col-span-2">
+                    <div className={INVENTORY_MODAL_SECTION_HEADING_CLASS}>Deal Details</div>
+                  </div>
+                  <div>
+                    <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">
+                      Property Date
+                    </label>
+                    <input
+                      type="date"
+                      value={formData.propertyDate}
+                      onChange={(e) => setFormData((prev) => ({ ...prev, propertyDate: e.target.value }))}
+                      className={`${INVENTORY_MODAL_INPUT_CLASS} mt-1`}
+                    />
+                  </div>
+                </div>
+
+                <div className={INVENTORY_MODAL_SECTION_CLASS}>
+                  <div className={INVENTORY_MODAL_SECTION_HEADING_CLASS}>Inventory Media</div>
+                  <label className={`${INVENTORY_MODAL_FIELD_TITLE_CLASS} mb-2 block`}>
+                    Property Images
+                  </label>
+
+                  {formData.images.length > 0 && (
+                    <div className="mb-3 flex flex-wrap gap-2">
+                      {formData.images.map((url, index) => (
+                        <div
+                          key={`${url}-${index}`}
+                          className="relative w-16 h-16 rounded-lg overflow-hidden shrink-0 group"
+                        >
+                          <img src={url} className="w-full h-full object-cover" alt="asset" />
+                          <button
+                            onClick={() => removeImage(url)}
+                            className="absolute top-0 right-0 bg-red-500 text-white p-1 opacity-0 group-hover:opacity-100 transition-opacity"
+                          >
+                            <Trash2 size={12} />
+                          </button>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+
+                  <div className="flex items-center justify-center w-full">
+                    <label
+                      className={`flex flex-col items-center justify-center w-full h-24 border-2 border-slate-200 border-dashed rounded-xl cursor-pointer bg-slate-50 hover:bg-slate-100 transition-all ${
+                        uploading ? "opacity-50 cursor-not-allowed" : ""
+                      }`}
+                    >
+                      <div className="flex flex-col items-center justify-center pt-5 pb-6">
+                        {uploading ? (
+                          <Loader className="animate-spin text-slate-400 mb-2" size={24} />
+                        ) : (
+                          <UploadCloud className="text-slate-400 mb-2" size={24} />
+                        )}
+                        <p className="text-xs text-slate-500 font-bold">
+                          {uploading ? "Uploading..." : "Click to upload photos"}
+                        </p>
+                        <p className="text-[10px] text-slate-400">SVG, PNG, JPG</p>
+                      </div>
+                      <input
+                        type="file"
+                        multiple
+                        accept="image/*"
+                        onChange={handleImageUpload}
+                        disabled={uploading}
+                        className="hidden"
+                      />
+                    </label>
+                  </div>
+
+                  <div className="mt-4 grid grid-cols-1 gap-3 sm:grid-cols-2 sm:gap-4">
+                    <div>
+                      <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">
+                        Floor Plans
+                      </label>
+
+                      {formData.floorPlans.length > 0 && (
+                        <div className="mt-2 mb-3 flex flex-wrap gap-2">
+                          {formData.floorPlans.map((url, index) => (
+                            <div
+                              key={`${url}-${index}`}
+                              className="relative w-16 h-16 rounded-lg overflow-hidden shrink-0 group border border-slate-200 bg-slate-50"
+                            >
+                              <FileThumbnail url={url} fallbackLabel="PDF" />
+                              <button
+                                onClick={() => removeFloorPlan(url)}
+                                className="absolute top-0 right-0 bg-red-500 text-white p-1 opacity-0 group-hover:opacity-100 transition-opacity"
+                              >
+                                <Trash2 size={12} />
+                              </button>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+
+                      <div className="flex items-center justify-center w-full">
+                        <label
+                          className={`flex flex-col items-center justify-center w-full h-24 border-2 border-slate-200 border-dashed rounded-xl cursor-pointer bg-slate-50 hover:bg-slate-100 transition-all ${
+                            uploadingFloorPlans ? "opacity-50 cursor-not-allowed" : ""
+                          }`}
+                        >
+                          <div className="flex flex-col items-center justify-center pt-5 pb-6">
+                            {uploadingFloorPlans ? (
+                              <Loader className="animate-spin text-slate-400 mb-2" size={24} />
+                            ) : (
+                              <UploadCloud className="text-slate-400 mb-2" size={24} />
+                            )}
+                            <p className="text-xs text-slate-500 font-bold">
+                              {uploadingFloorPlans ? "Uploading..." : "Click to browse & upload floor plans"}
+                            </p>
+                            <p className="text-[10px] text-slate-400">PDF, PNG, JPG</p>
+                          </div>
+                          <input
+                            type="file"
+                            multiple
+                            accept="image/*,application/pdf"
+                            onChange={handleFloorPlanUpload}
+                            disabled={uploadingFloorPlans}
+                            className="hidden"
+                          />
+                        </label>
+                      </div>
+                    </div>
+                    <div>
+                      <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">
+                        Documents (if any available)
+                      </label>
+
+                      {formData.documents.length > 0 && (
+                        <div className="mt-2 mb-3 flex flex-wrap gap-2">
+                          {formData.documents.map((url, index) => (
+                            <div
+                              key={`${url}-${index}`}
+                              className="relative w-16 h-16 rounded-lg overflow-hidden shrink-0 group border border-slate-200 bg-slate-50"
+                            >
+                              <FileThumbnail url={url} fallbackLabel="FILE" />
+                              <button
+                                onClick={() => removeDocument(url)}
+                                className="absolute top-0 right-0 bg-red-500 text-white p-1 opacity-0 group-hover:opacity-100 transition-opacity"
+                              >
+                                <Trash2 size={12} />
+                              </button>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+
+                      <div className="flex items-center justify-center w-full">
+                        <label
+                          className={`flex flex-col items-center justify-center w-full h-24 border-2 border-slate-200 border-dashed rounded-xl cursor-pointer bg-slate-50 hover:bg-slate-100 transition-all ${
+                            uploadingDocuments ? "opacity-50 cursor-not-allowed" : ""
+                          }`}
+                        >
+                          <div className="flex flex-col items-center justify-center pt-5 pb-6">
+                            {uploadingDocuments ? (
+                              <Loader className="animate-spin text-slate-400 mb-2" size={24} />
+                            ) : (
+                              <UploadCloud className="text-slate-400 mb-2" size={24} />
+                            )}
+                            <p className="text-xs text-slate-500 font-bold">
+                              {uploadingDocuments ? "Uploading..." : "Click to browse & upload documents"}
+                            </p>
+                            <p className="text-[10px] text-slate-400">PDF, PNG, JPG</p>
+                          </div>
+                          <input
+                            type="file"
+                            multiple
+                            accept="image/*,application/pdf"
+                            onChange={handleDocumentUpload}
+                            disabled={uploadingDocuments}
+                            className="hidden"
+                          />
+                        </label>
+                      </div>
+                    </div>
+                    <div>
+                      <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">
+                        Video Tours (one URL per line)
+                      </label>
+                      <textarea
+                        rows={3}
+                        placeholder="https://.../property-video"
+                        value={listToTextareaValue(formData.videoTours)}
+                        onChange={(e) =>
+                          setFormData((prev) => ({ ...prev, videoTours: parseTextareaList(e.target.value) }))
+                        }
+                        className="mt-1 w-full p-3 bg-slate-50 border border-slate-200 rounded-xl text-sm text-slate-900 focus:outline-none focus:border-emerald-500 resize-none"
+                      />
+                    </div>
+                  </div>
+                </div>
               </div>
 
               <div className="mobile-safe-footer flex shrink-0 gap-3 border-t border-slate-100 bg-slate-50/50 px-3 pt-3 sm:p-6">
@@ -3629,14 +4329,14 @@ const AssetVault = () => {
                 </button>
                 <button
                   onClick={isEditModalOpen ? handleUpdateAsset : handleSaveAsset}
-                  disabled={uploading || saving || resolvingLocation}
+                  disabled={uploading || uploadingFloorPlans || uploadingDocuments || saving || resolvingLocation}
                   className={`flex-1 py-3 text-white rounded-xl text-xs font-bold uppercase tracking-widest shadow-lg transition-all ${
-                    uploading || saving || resolvingLocation
+                    uploading || uploadingFloorPlans || uploadingDocuments || saving || resolvingLocation
                       ? "bg-slate-400 cursor-not-allowed"
                       : "bg-emerald-600 hover:bg-emerald-700"
                   }`}
                 >
-                  {uploading || saving || resolvingLocation
+                  {uploading || uploadingFloorPlans || uploadingDocuments || saving || resolvingLocation
                     ? isEditModalOpen
                       ? (resolvingLocation ? "Resolving..." : "Updating...")
                       : (resolvingLocation ? "Resolving..." : "Saving...")

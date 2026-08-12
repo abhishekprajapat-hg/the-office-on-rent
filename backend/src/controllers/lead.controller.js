@@ -48,6 +48,7 @@ const LEAD_INVENTORY_SELECT_FIELDS = [
   "totalArea",
   "carpetArea",
   "builtUpArea",
+  "superBuiltUpArea",
   "areaUnit",
   "price",
   "deposit",

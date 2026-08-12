@@ -55,6 +55,7 @@ const ROLE_OPTIONS = [
   { label: "Production Executive", value: "PRODUCTION_EXECUTIVE" },
   { label: "Community Manager", value: "COMMUNITY_MANAGER" },
   { label: "Channel Partner", value: "CHANNEL_PARTNER" },
+  { label: "Coworking admin", value: "COWORKING_ADMIN" },
 ];
 const EDIT_ROLE_OPTIONS = [
   { label: "Manager", value: "MANAGER" },
@@ -63,6 +64,7 @@ const EDIT_ROLE_OPTIONS = [
   { label: "Production Executive", value: "PRODUCTION_EXECUTIVE" },
   { label: "Community Manager", value: "COMMUNITY_MANAGER" },
   { label: "Channel Partner", value: "CHANNEL_PARTNER" },
+  { label: "Coworking admin", value: "COWORKING_ADMIN" },
 ];
 
 const EXECUTIVE_ROLES = new Set(["EXECUTIVE", "FIELD_EXECUTIVE"]);
@@ -74,6 +76,7 @@ const REPORTING_PARENT_ROLES: Record<string, string[]> = {
   PRODUCTION_EXECUTIVE: ["MANAGER"],
   COMMUNITY_MANAGER: ["MANAGER"],
   CHANNEL_PARTNER: ["MANAGER"],
+  COWORKING_ADMIN: ["ADMIN"],
 };
 const getRefId = (value: { _id?: string } | string | null | undefined) => {
   if (!value) return "";

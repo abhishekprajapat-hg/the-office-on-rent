@@ -7,6 +7,19 @@ html {
   scrollbar-gutter: stable;
 }
 
+/* Inventory create/edit form: free-text fields display uppercase to match the
+   uppercase normalization the backend applies on save. */
+.inventory-form-uppercase input[type="text"],
+.inventory-form-uppercase input[type="tel"],
+.inventory-form-uppercase textarea {
+  text-transform: uppercase;
+}
+.inventory-form-uppercase input[type="text"]::placeholder,
+.inventory-form-uppercase input[type="tel"]::placeholder,
+.inventory-form-uppercase textarea::placeholder {
+  text-transform: none;
+}
+
 :root {
   --bg-body: #f6f8fb;
   --text-body: #0f172a;
@@ -565,16 +578,13 @@ html.ui-reduce-motion .back-to-top-button::before {
 /* Dark mode utility override layer for existing Tailwind-heavy UI */
 html.theme-dark .bg-white,
 html.theme-dark .bg-slate-50,
-html.theme-dark .bg-slate-50\/50,
-html.theme-dark .bg-slate-50\/70,
 html.theme-dark .bg-slate-100,
-html.theme-dark .bg-white\/50,
-html.theme-dark .bg-white\/60,
-html.theme-dark .bg-white\/70,
-html.theme-dark .bg-white\/80,
-html.theme-dark .bg-white\/85,
-html.theme-dark .bg-white\/90,
-html.theme-dark .bg-white\/95 {
+html.theme-dark [class^="bg-white/"],
+html.theme-dark [class*=" bg-white/"],
+html.theme-dark [class^="bg-slate-50/"],
+html.theme-dark [class*=" bg-slate-50/"],
+html.theme-dark [class^="bg-slate-100/"],
+html.theme-dark [class*=" bg-slate-100/"] {
   background-color: rgba(15, 23, 42, 0.86) !important;
   color: #e2e8f0 !important;
 }
@@ -715,25 +725,27 @@ html.theme-dark .workspace-shell::after {
 }
 
 html.theme-light .workspace-shell .bg-white,
-html.theme-light .workspace-shell .bg-white\/90,
-html.theme-light .workspace-shell .bg-white\/95,
 html.theme-light .workspace-shell .bg-slate-50,
-html.theme-light .workspace-shell .bg-slate-50\/70,
-html.theme-light .workspace-shell .bg-slate-50\/80,
-html.theme-light .workspace-shell .bg-slate-50\/85,
-html.theme-light .workspace-shell .bg-slate-100 {
+html.theme-light .workspace-shell .bg-slate-100,
+html.theme-light .workspace-shell [class^="bg-white/"],
+html.theme-light .workspace-shell [class*=" bg-white/"],
+html.theme-light .workspace-shell [class^="bg-slate-50/"],
+html.theme-light .workspace-shell [class*=" bg-slate-50/"],
+html.theme-light .workspace-shell [class^="bg-slate-100/"],
+html.theme-light .workspace-shell [class*=" bg-slate-100/"] {
   background-color: var(--workspace-surface-light-solid) !important;
   backdrop-filter: none;
 }
 
 html.theme-dark .workspace-shell .bg-white,
-html.theme-dark .workspace-shell .bg-white\/90,
-html.theme-dark .workspace-shell .bg-white\/95,
 html.theme-dark .workspace-shell .bg-slate-50,
-html.theme-dark .workspace-shell .bg-slate-50\/70,
-html.theme-dark .workspace-shell .bg-slate-50\/80,
-html.theme-dark .workspace-shell .bg-slate-50\/85,
-html.theme-dark .workspace-shell .bg-slate-100 {
+html.theme-dark .workspace-shell .bg-slate-100,
+html.theme-dark .workspace-shell [class^="bg-white/"],
+html.theme-dark .workspace-shell [class*=" bg-white/"],
+html.theme-dark .workspace-shell [class^="bg-slate-50/"],
+html.theme-dark .workspace-shell [class*=" bg-slate-50/"],
+html.theme-dark .workspace-shell [class^="bg-slate-100/"],
+html.theme-dark .workspace-shell [class*=" bg-slate-100/"] {
   background-color: var(--workspace-surface-dark-solid) !important;
   backdrop-filter: none;
 }
@@ -1335,19 +1347,14 @@ html.theme-dark .ui-soft-panel {
 }
 
 .workspace-shell .bg-white,
-.workspace-shell .bg-white\/50,
-.workspace-shell .bg-white\/60,
-.workspace-shell .bg-white\/70,
-.workspace-shell .bg-white\/80,
-.workspace-shell .bg-white\/85,
-.workspace-shell .bg-white\/90,
-.workspace-shell .bg-white\/95,
 .workspace-shell .bg-slate-50,
-.workspace-shell .bg-slate-50\/50,
-.workspace-shell .bg-slate-50\/70,
-.workspace-shell .bg-slate-50\/80,
-.workspace-shell .bg-slate-50\/85,
-.workspace-shell .bg-slate-100 {
+.workspace-shell .bg-slate-100,
+.workspace-shell [class^="bg-white/"],
+.workspace-shell [class*=" bg-white/"],
+.workspace-shell [class^="bg-slate-50/"],
+.workspace-shell [class*=" bg-slate-50/"],
+.workspace-shell [class^="bg-slate-100/"],
+.workspace-shell [class*=" bg-slate-100/"] {
   background: var(--clay-surface) !important;
   border-color: var(--clay-border) !important;
   box-shadow: var(--flat-shadow);
@@ -1362,8 +1369,8 @@ html.theme-dark .ui-soft-panel {
 }
 
 .workspace-shell .bg-slate-200,
-.workspace-shell .bg-slate-200\/50,
-.workspace-shell .bg-slate-200\/70 {
+.workspace-shell [class^="bg-slate-200/"],
+.workspace-shell [class*=" bg-slate-200/"] {
   background: var(--clay-surface-muted) !important;
   box-shadow: none;
 }
@@ -1480,8 +1487,6 @@ html.theme-dark .workspace-shell select:not([multiple]):hover {
   transform: translateY(-1px);
 }
 
-.workspace-shell .bg-slate-900,
-.workspace-shell .bg-slate-800,
 .workspace-shell .from-slate-900,
 .workspace-shell .via-slate-800,
 .workspace-shell .to-cyan-900 {
@@ -1558,19 +1563,14 @@ html.theme-dark .workspace-shell select:not([multiple]):hover {
 }
 
 html.theme-dark .workspace-shell .bg-white,
-html.theme-dark .workspace-shell .bg-white\/50,
-html.theme-dark .workspace-shell .bg-white\/60,
-html.theme-dark .workspace-shell .bg-white\/70,
-html.theme-dark .workspace-shell .bg-white\/80,
-html.theme-dark .workspace-shell .bg-white\/85,
-html.theme-dark .workspace-shell .bg-white\/90,
-html.theme-dark .workspace-shell .bg-white\/95,
 html.theme-dark .workspace-shell .bg-slate-50,
-html.theme-dark .workspace-shell .bg-slate-50\/50,
-html.theme-dark .workspace-shell .bg-slate-50\/70,
-html.theme-dark .workspace-shell .bg-slate-50\/80,
-html.theme-dark .workspace-shell .bg-slate-50\/85,
-html.theme-dark .workspace-shell .bg-slate-100 {
+html.theme-dark .workspace-shell .bg-slate-100,
+html.theme-dark .workspace-shell [class^="bg-white/"],
+html.theme-dark .workspace-shell [class*=" bg-white/"],
+html.theme-dark .workspace-shell [class^="bg-slate-50/"],
+html.theme-dark .workspace-shell [class*=" bg-slate-50/"],
+html.theme-dark .workspace-shell [class^="bg-slate-100/"],
+html.theme-dark .workspace-shell [class*=" bg-slate-100/"] {
   background: var(--clay-surface) !important;
   border-color: var(--clay-border-strong) !important;
 }

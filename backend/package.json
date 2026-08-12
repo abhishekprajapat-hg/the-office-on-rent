@@ -15,7 +15,8 @@
     "seed:leads": "node src/seeder/seedLeads.cjs",
     "seed:inventory": "node src/seeder/seedInventory.cjs",
     "seed:inventory:titles": "node src/seeder/seedInventoryTitles.cjs",
-    "migrate:company": "node src/seeder/backfillCompany.cjs"
+    "migrate:company": "node src/seeder/backfillCompany.cjs",
+    "migrate:cloudinary-uploads": "node src/seeder/migrateCloudinaryUploads.cjs"
   },
   "type": "commonjs",
   "dependencies": {
@@ -29,6 +30,7 @@
     "helmet": "^8.1.0",
     "jsonwebtoken": "^9.0.3",
     "mongoose": "^9.2.1",
+    "multer": "^2.2.0",
     "pino": "^9.14.0",
     "pino-http": "^10.5.0",
     "prom-client": "^15.1.3",

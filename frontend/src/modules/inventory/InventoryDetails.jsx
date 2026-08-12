@@ -479,13 +479,19 @@ const InventoryDetails = () => {
           <FieldRow label="Building" value={inventory?.buildingName || asset?.buildingName} />
           <FieldRow label="Floor Number" value={inventory?.floorNumber ?? asset?.floorNumber} />
           <FieldRow label="Total Floors" value={inventory?.totalFloors ?? asset?.totalFloors} />
-          <FieldRow label="Total Area" value={formatArea(inventory?.totalArea ?? asset?.totalArea, inventory?.areaUnit || asset?.areaUnit)} />
-          <FieldRow label="Carpet Area" value={formatArea(inventory?.carpetArea ?? asset?.carpetArea, inventory?.areaUnit || asset?.areaUnit)} />
+          <FieldRow label="Carpet Area" value={formatArea(inventory?.totalArea ?? asset?.totalArea, inventory?.areaUnit || asset?.areaUnit)} />
           <FieldRow label="Built-up Area" value={formatArea(inventory?.builtUpArea ?? asset?.builtUpArea, inventory?.areaUnit || asset?.areaUnit)} />
+          <FieldRow label="Super Built-up Area" value={formatArea(inventory?.superBuiltUpArea ?? asset?.superBuiltUpArea, inventory?.areaUnit || asset?.areaUnit)} />
           <FieldRow label="Maintenance" value={formatPrice(inventory?.maintenanceCharges ?? asset?.maintenanceCharges)} />
           {String(transactionType || "").trim().toUpperCase() === "RENT" && (
             <FieldRow label="Security Deposit" value={formatPrice(inventory?.deposit ?? asset?.deposit)} />
           )}
+          {(inventory?.officeNumber || asset?.officeNumber) && (
+            <FieldRow label="Office Number" value={inventory?.officeNumber || asset?.officeNumber} />
+          )}
+          <FieldRow label="Deal Type" value={formatEnumLabel(inventory?.dealType || asset?.dealType)} />
+          <FieldRow label="Property Date" value={formatDate(inventory?.propertyDate || asset?.propertyDate)} />
+          <FieldRow label="GST Applicable" value={(inventory?.gstApplicable ?? asset?.gstApplicable) ? "Yes" : "No"} />
           <FieldRow label="Coordinates" value={inventoryCoordinates} />
           <FieldRow label="Type" value={transactionType} />
           <FieldRow label="Category" value={asset?.category || "Apartment"} />
@@ -513,6 +519,27 @@ const InventoryDetails = () => {
         </div>
       </div>
 
+      {(inventory?.ownerName || asset?.ownerName || inventory?.ownerNumber || asset?.ownerNumber
+        || inventory?.keyManagerName || asset?.keyManagerName
+        || inventory?.keyManagerNumber || asset?.keyManagerNumber) && (
+        <div className="grid grid-cols-1 xl:grid-cols-2 gap-6">
+          <div className="rounded-2xl border border-slate-200 bg-white p-4">
+            <h2 className="text-sm font-bold uppercase tracking-widest text-slate-500 mb-2">
+              Owner Details
+            </h2>
+            <FieldRow label="Owner Name" value={inventory?.ownerName || asset?.ownerName || "-"} />
+            <FieldRow label="Owner Number" value={inventory?.ownerNumber || asset?.ownerNumber || "-"} />
+          </div>
+          <div className="rounded-2xl border border-slate-200 bg-white p-4">
+            <h2 className="text-sm font-bold uppercase tracking-widest text-slate-500 mb-2">
+              Key Manager Details
+            </h2>
+            <FieldRow label="Key Manager Name" value={inventory?.keyManagerName || asset?.keyManagerName || "-"} />
+            <FieldRow label="Key Manager Number" value={inventory?.keyManagerNumber || asset?.keyManagerNumber || "-"} />
+          </div>
+        </div>
+      )}
+
       {(commercialDetails || residentialDetails) && (
         <div className="grid grid-cols-1 xl:grid-cols-2 gap-6">
           {isCommercial && commercialDetails && (
@@ -524,7 +551,6 @@ const InventoryDetails = () => {
               <FieldRow label="Cabins" value={commercialLayout?.totalCabins} />
               <FieldRow label="Cabin Seats" value={commercialLayout?.cabinSeats} />
               <FieldRow label="Workstations" value={commercialLayout?.workstations} />
-              <FieldRow label="Seats" value={commercialLayout?.seats} />
               <FieldRow label="Conference Rooms" value={commercialLayout?.conferenceRooms} />
               <FieldRow label="Conference Seats" value={commercialLayout?.conferenceSeats} />
               <FieldRow label="Reception Area" value={formatYesNo(commercialLayout?.receptionArea)} />

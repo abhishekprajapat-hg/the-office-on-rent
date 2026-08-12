@@ -3,6 +3,8 @@ import { Routes, Route, useLocation, useNavigate, Navigate } from "react-router-
 import api from "./services/api";
 import ErrorBoundary from "./components/ErrorBoundary";
 import { ChatNotificationProvider } from "./context/chatNotificationProvider";
+import PermissionProvider from "./context/PermissionProvider";
+import CoworkingPermissionGate from "./components/coworking/CoworkingPermissionGate";
 import { updateMyLiveLocation } from "./services/userService";
 import BackToTopButton from "./components/layout/BackToTopButton";
 import Loader from "./components/layout/Loader";
@@ -37,6 +39,8 @@ const FollowUpReminderToast = lazy(() => import("./components/layout/FollowUpRem
 const LeadsMatrix = lazy(() => import("./modules/leads/LeadsMatrix"));
 const AssetVault = lazy(() => import("./modules/inventory/AssetVault"));
 const InventoryDetails = lazy(() => import("./modules/inventory/InventoryDetails"));
+const Projects = lazy(() => import("./modules/inventory/Projects"));
+const ProjectDetails = lazy(() => import("./modules/inventory/ProjectDetails"));
 const FinancialCore = lazy(() => import("./modules/finance/FinancialCore"));
 const FieldOps = lazy(() => import("./modules/field/FieldOps"));
 const IntelligenceReports = lazy(() => import("./modules/reports/IntelligenceReports"));
@@ -50,6 +54,28 @@ const Performance = lazy(() => import("./modules/reports/Performance"));
 const UserProfile = lazy(() => import("./modules/profile/UserProfile"));
 const SharedInventoryView = lazy(() => import("./modules/inventory/SharedInventoryView"));
 const TaskManager = lazy(() => import("./modules/tasks/TaskManager"));
+
+const CoworkingDashboard = lazy(() => import("./modules/coworking/CoworkingDashboard"));
+const CoworkingProperties = lazy(() => import("./modules/coworking/Properties"));
+const CoworkingFloors = lazy(() => import("./modules/coworking/Floors"));
+const CoworkingCabins = lazy(() => import("./modules/coworking/Cabins"));
+const CoworkingSeats = lazy(() => import("./modules/coworking/Seats"));
+const CoworkingClients = lazy(() => import("./modules/coworking/Clients"));
+const CoworkingBookings = lazy(() => import("./modules/coworking/Bookings"));
+const CoworkingContracts = lazy(() => import("./modules/coworking/Contracts"));
+const CoworkingBilling = lazy(() => import("./modules/coworking/Billing"));
+const CoworkingPayments = lazy(() => import("./modules/coworking/Payments"));
+const CoworkingExpenses = lazy(() => import("./modules/coworking/Expenses"));
+const CoworkingMeetingRooms = lazy(() => import("./modules/coworking/MeetingRooms"));
+const CoworkingVisitors = lazy(() => import("./modules/coworking/Visitors"));
+const CoworkingTickets = lazy(() => import("./modules/coworking/Tickets"));
+const CoworkingAssets = lazy(() => import("./modules/coworking/Assets"));
+const CoworkingReports = lazy(() => import("./modules/coworking/Reports"));
+const CoworkingNotifications = lazy(() => import("./modules/coworking/Notifications"));
+const CoworkingUsers = lazy(() => import("./modules/coworking/Users"));
+const CoworkingRoles = lazy(() => import("./modules/coworking/Roles"));
+const CoworkingSettings = lazy(() => import("./modules/coworking/Settings"));
+const CoworkingAuditLogs = lazy(() => import("./modules/coworking/AuditLogs"));
 
 const EARTH_RADIUS_METERS = 6371000;
 const LOCATION_SYNC_MIN_INTERVAL_MS = 30000;
@@ -71,6 +97,30 @@ const FORCE_LIGHT_ROUTE_PREFIXES = [
 ];
 const MANAGEMENT_ROLES = ["MANAGER"];
 const PRODUCTION_ROLES = ["PRODUCTION_EXECUTIVE", "COMMUNITY_MANAGER"];
+const COWORKING_ROLES = ["ADMIN", "MANAGER", "COWORKING_ADMIN"];
+const COWORKING_PAGE_LABELS = {
+  dashboard: "Dashboard",
+  properties: "Properties",
+  floors: "Floors",
+  cabins: "Cabins",
+  seats: "Seats",
+  clients: "Clients",
+  bookings: "Bookings",
+  contracts: "Contracts",
+  billing: "Billing",
+  payments: "Payments",
+  expenses: "Expenses",
+  "meeting-rooms": "Meeting Rooms",
+  visitors: "Visitors",
+  tickets: "Tickets",
+  assets: "Assets",
+  reports: "Reports",
+  notifications: "Notifications",
+  users: "Users",
+  roles: "Roles",
+  settings: "Settings",
+  "audit-logs": "Audit Logs",
+};
 const CHAT_REFRESH_FALLBACK_ROLES = ["EXECUTIVE", "FIELD_EXECUTIVE", ...PRODUCTION_ROLES];
 const ROLE_LABELS = {
   ADMIN: "Admin",
@@ -80,6 +130,7 @@ const ROLE_LABELS = {
   PRODUCTION_EXECUTIVE: "Production Executive",
   COMMUNITY_MANAGER: "Community Manager",
   CHANNEL_PARTNER: "Channel Partner",
+  COWORKING_ADMIN: "Coworking admin",
 };
 
 const isProductionRole = (role) => PRODUCTION_ROLES.includes(role);
@@ -250,6 +301,20 @@ const resolvePageHeader = (pathname, userRole) => {
       title: "Targets Command Center",
       subtitle: "Goal pacing, conversion momentum and ownership tracking",
       scopeLabel: "Targets",
+    };
+  }
+
+  if (pathname.startsWith("/coworking")) {
+    const segment = pathname.split("/")[2] || "dashboard";
+    const pageLabel = COWORKING_PAGE_LABELS[segment] || "Coworking";
+    return {
+      title: `Coworking ${pageLabel}`,
+      subtitle: "Coworking space, client and billing management",
+      scopeLabel: "Coworking",
+      breadcrumbs: [
+        { label: "Coworking", path: "/coworking/dashboard" },
+        { label: pageLabel },
+      ],
     };
   }
 
@@ -587,6 +652,8 @@ export default function App() {
         return <ProductionExecutiveDashboard />;
       case "CHANNEL_PARTNER":
         return <Navigate to="/leads" />;
+      case "COWORKING_ADMIN":
+        return <Navigate to="/coworking/dashboard" />;
       default:
         return <Navigate to="/login" />;
     }
@@ -663,6 +730,20 @@ export default function App() {
           canAccess(["ADMIN", ...MANAGEMENT_ROLES, "EXECUTIVE", "FIELD_EXECUTIVE", "CHANNEL_PARTNER"])
           && (userRole !== "CHANNEL_PARTNER" || canChannelPartnerViewInventory)
         ) ? <InventoryDetails /> : <Navigate to="/" />}
+      />
+      <Route
+        path="/projects"
+        element={(
+          canAccess(["ADMIN", ...MANAGEMENT_ROLES, "EXECUTIVE", "FIELD_EXECUTIVE", "CHANNEL_PARTNER"])
+          && (userRole !== "CHANNEL_PARTNER" || canChannelPartnerViewInventory)
+        ) ? <Projects /> : <Navigate to="/" />}
+      />
+      <Route
+        path="/projects/:id"
+        element={(
+          canAccess(["ADMIN", ...MANAGEMENT_ROLES, "EXECUTIVE", "FIELD_EXECUTIVE", "CHANNEL_PARTNER"])
+          && (userRole !== "CHANNEL_PARTNER" || canChannelPartnerViewInventory)
+        ) ? <ProjectDetails /> : <Navigate to="/" />}
       />
       <Route
         path="/finance"
@@ -758,6 +839,122 @@ export default function App() {
             : <Navigate to="/" />
         }
       />
+      <Route
+        path="/coworking"
+        element={<Navigate to="/coworking/dashboard" replace />}
+      />
+      <Route
+        path="/coworking/dashboard"
+        element={canAccess(COWORKING_ROLES) ? (
+          <CoworkingPermissionGate permission="dashboard.view"><CoworkingDashboard /></CoworkingPermissionGate>
+        ) : <Navigate to="/" />}
+      />
+      <Route
+        path="/coworking/properties"
+        element={canAccess(COWORKING_ROLES) ? (
+          <CoworkingPermissionGate permission="properties.view"><CoworkingProperties /></CoworkingPermissionGate>
+        ) : <Navigate to="/" />}
+      />
+      <Route
+        path="/coworking/floors"
+        element={canAccess(COWORKING_ROLES) ? <CoworkingFloors /> : <Navigate to="/" />}
+      />
+      <Route
+        path="/coworking/cabins"
+        element={canAccess(COWORKING_ROLES) ? (
+          <CoworkingPermissionGate permission="cabins.view"><CoworkingCabins /></CoworkingPermissionGate>
+        ) : <Navigate to="/" />}
+      />
+      <Route
+        path="/coworking/seats"
+        element={canAccess(COWORKING_ROLES) ? (
+          <CoworkingPermissionGate permission="seats.view"><CoworkingSeats /></CoworkingPermissionGate>
+        ) : <Navigate to="/" />}
+      />
+      <Route
+        path="/coworking/clients"
+        element={canAccess(COWORKING_ROLES) ? (
+          <CoworkingPermissionGate permission="clients.view"><CoworkingClients /></CoworkingPermissionGate>
+        ) : <Navigate to="/" />}
+      />
+      <Route
+        path="/coworking/bookings"
+        element={canAccess(COWORKING_ROLES) ? (
+          <CoworkingPermissionGate permission="bookings.view"><CoworkingBookings /></CoworkingPermissionGate>
+        ) : <Navigate to="/" />}
+      />
+      <Route
+        path="/coworking/contracts"
+        element={canAccess(COWORKING_ROLES) ? (
+          <CoworkingPermissionGate permission="contracts.view"><CoworkingContracts /></CoworkingPermissionGate>
+        ) : <Navigate to="/" />}
+      />
+      <Route
+        path="/coworking/billing"
+        element={canAccess(COWORKING_ROLES) ? (
+          <CoworkingPermissionGate permission="billing.view"><CoworkingBilling /></CoworkingPermissionGate>
+        ) : <Navigate to="/" />}
+      />
+      <Route
+        path="/coworking/payments"
+        element={canAccess(COWORKING_ROLES) ? (
+          <CoworkingPermissionGate permission="payments.view"><CoworkingPayments /></CoworkingPermissionGate>
+        ) : <Navigate to="/" />}
+      />
+      <Route
+        path="/coworking/expenses"
+        element={canAccess(COWORKING_ROLES) ? (
+          <CoworkingPermissionGate permission="expenses.view"><CoworkingExpenses /></CoworkingPermissionGate>
+        ) : <Navigate to="/" />}
+      />
+      <Route
+        path="/coworking/meeting-rooms"
+        element={canAccess(COWORKING_ROLES) ? <CoworkingMeetingRooms /> : <Navigate to="/" />}
+      />
+      <Route
+        path="/coworking/visitors"
+        element={canAccess(COWORKING_ROLES) ? <CoworkingVisitors /> : <Navigate to="/" />}
+      />
+      <Route
+        path="/coworking/tickets"
+        element={canAccess(COWORKING_ROLES) ? <CoworkingTickets /> : <Navigate to="/" />}
+      />
+      <Route
+        path="/coworking/assets"
+        element={canAccess(COWORKING_ROLES) ? <CoworkingAssets /> : <Navigate to="/" />}
+      />
+      <Route
+        path="/coworking/reports"
+        element={canAccess(COWORKING_ROLES) ? (
+          <CoworkingPermissionGate permission="reports.view"><CoworkingReports /></CoworkingPermissionGate>
+        ) : <Navigate to="/" />}
+      />
+      <Route
+        path="/coworking/notifications"
+        element={canAccess(COWORKING_ROLES) ? <CoworkingNotifications /> : <Navigate to="/" />}
+      />
+      <Route
+        path="/coworking/users"
+        element={canAccess(COWORKING_ROLES) ? (
+          <CoworkingPermissionGate permission="users.view"><CoworkingUsers /></CoworkingPermissionGate>
+        ) : <Navigate to="/" />}
+      />
+      <Route
+        path="/coworking/roles"
+        element={canAccess(COWORKING_ROLES) ? (
+          <CoworkingPermissionGate permission="roles.view"><CoworkingRoles /></CoworkingPermissionGate>
+        ) : <Navigate to="/" />}
+      />
+      <Route
+        path="/coworking/settings"
+        element={canAccess(COWORKING_ROLES) ? <CoworkingSettings /> : <Navigate to="/" />}
+      />
+      <Route
+        path="/coworking/audit-logs"
+        element={canAccess(COWORKING_ROLES) ? (
+          <CoworkingPermissionGate permission="audit_logs.view"><CoworkingAuditLogs /></CoworkingPermissionGate>
+        ) : <Navigate to="/" />}
+      />
       <Route path="/privacy-policy" element={<DataUseNotice />} />
       <Route path="/terms-and-conditions" element={<ServiceTermsNotice />} />
       <Route path="/data-use-notice" element={<DataUseNotice />} />
@@ -791,6 +988,7 @@ export default function App() {
       }`}
     >
 
+      <PermissionProvider enabled={isLoggedIn && !isPublicPage} userRole={userRole}>
       <ChatNotificationProvider enabled={isLoggedIn && !isPublicPage}>
         <ErrorBoundary>
           <Suspense fallback={<RouteLoadingSkeleton compact={isPublicPage} />}>
@@ -871,6 +1069,7 @@ export default function App() {
         </ErrorBoundary>
         <BackToTopButton />
       </ChatNotificationProvider>
+      </PermissionProvider>
     </div>
   );
 }

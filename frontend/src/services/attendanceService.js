@@ -131,6 +131,25 @@ export const getMyLeaveBalance = async (params = {}) => {
   };
 };
 
+export const getLeaveBalanceForAdmin = async (userId, params = {}) => {
+  const id = String(userId || "").trim();
+  if (!id) return null;
+
+  const res = await api.get(`/attendance/leave-balance/${id}`, { params });
+  return {
+    month: res.data?.month || "",
+    timezone: res.data?.timezone || "",
+    monthlyAccrual: Number(res.data?.monthlyAccrual || 0),
+    accrualStartMonth: res.data?.accrualStartMonth || "",
+    monthsAccrued: Number(res.data?.monthsAccrued || 0),
+    accrued: Number(res.data?.accrued || 0),
+    used: Number(res.data?.used || 0),
+    pending: Number(res.data?.pending || 0),
+    available: Number(res.data?.available || 0),
+    carryForward: Number(res.data?.carryForward || 0),
+  };
+};
+
 export const createLeaveRequest = async (payload = {}) => {
   const res = await api.post("/attendance/leave-requests", payload);
   return {

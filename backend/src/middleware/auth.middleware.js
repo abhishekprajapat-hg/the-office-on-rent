@@ -77,6 +77,11 @@ exports.protect = async (req, res, next) => {
     }
 
     const decoded = jwt.verify(token, process.env.JWT_SECRET);
+    if (decoded.scope === "client-portal") {
+      // A client-portal token, replayed against a staff-only route — reject
+      // outright rather than trying to resolve it as a User id.
+      return res.status(401).json({ message: "Invalid or expired token" });
+    }
     const user = await User.findById(decoded.id).select("-password");
 
     if (!user || !user.isActive) {

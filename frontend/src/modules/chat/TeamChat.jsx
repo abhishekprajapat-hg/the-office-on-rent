@@ -39,6 +39,7 @@ import {
   sendDirectMessage,
 } from "../../services/chatService";
 import ToastNotice from "../../components/ui/ToastNotice";
+import { uploadFile } from "../../services/uploadService";
 import { acquireChatSocket, releaseChatSocket } from "../../services/chatSocket";
 import { useChatNotifications } from "../../context/useChatNotifications";
 import { toErrorMessage } from "../../utils/errorMessage";
@@ -97,8 +98,6 @@ const formatCurrency = (value) => {
   return `Rs ${parsed.toLocaleString("en-IN")}`;
 };
 
-const CLOUDINARY_CLOUD_NAME = "djfiq8kiy";
-const CLOUDINARY_UPLOAD_PRESET = "office_on_rent_upload";
 const MAX_MEDIA_ATTACHMENTS = 8;
 const MAX_MEDIA_SIZE_BYTES = 25 * 1024 * 1024;
 const TYPING_IDLE_TIMEOUT_MS = 1200;
@@ -249,26 +248,10 @@ const getCurrentUser = () => {
 };
 
 const uploadMediaFile = async (file) => {
-  const data = new FormData();
-  data.append("file", file);
-  data.append("upload_preset", CLOUDINARY_UPLOAD_PRESET);
-  data.append("cloud_name", CLOUDINARY_CLOUD_NAME);
-
-  const res = await fetch(
-    `https://api.cloudinary.com/v1_1/${CLOUDINARY_CLOUD_NAME}/auto/upload`,
-    {
-      method: "POST",
-      body: data,
-    },
-  );
-
-  const payload = await res.json();
-  if (!res.ok || !payload?.secure_url) {
-    throw new Error(payload?.error?.message || "Failed to upload media");
-  }
+  const payload = await uploadFile(file, "chat");
 
   const uploaded = sanitizeMediaAttachment({
-    url: payload.secure_url,
+    url: payload.url,
     kind: detectMediaKind({ mimeType: file.type }),
     mimeType: file.type,
     name: file.name,

@@ -27,6 +27,7 @@ const ROLE_OPTIONS = [
   { label: "Production Executive", value: "PRODUCTION_EXECUTIVE" },
   { label: "Community Manager", value: "COMMUNITY_MANAGER" },
   { label: "Channel Partner", value: "CHANNEL_PARTNER" },
+  { label: "Coworking admin", value: "COWORKING_ADMIN" },
 ];
 
 const MANAGEMENT_ROLES = ["MANAGER"];
@@ -38,6 +39,7 @@ const REPORTING_PARENT_ROLES = {
   PRODUCTION_EXECUTIVE: ["MANAGER"],
   COMMUNITY_MANAGER: ["MANAGER"],
   CHANNEL_PARTNER: ["MANAGER"],
+  COWORKING_ADMIN: ["ADMIN"],
 };
 const ROLE_LABELS = {
   ADMIN: "Admin",
@@ -47,6 +49,7 @@ const ROLE_LABELS = {
   PRODUCTION_EXECUTIVE: "Production Executive",
   COMMUNITY_MANAGER: "Community Manager",
   CHANNEL_PARTNER: "Channel Partner",
+  COWORKING_ADMIN: "Coworking admin",
 };
 const DEFAULT_BROKERAGE_VALUE = 50000;
 const ROLE_HIERARCHY = [
@@ -57,6 +60,7 @@ const ROLE_HIERARCHY = [
   { role: "PRODUCTION_EXECUTIVE", reportsTo: "Manager", scope: "Production tasks" },
   { role: "COMMUNITY_MANAGER", reportsTo: "Manager", scope: "Production tasks" },
   { role: "CHANNEL_PARTNER", reportsTo: "Manager", scope: "Partner-created leads" },
+  { role: "COWORKING_ADMIN", reportsTo: "Admin", scope: "Coworking workspace controls" },
 ];
 
 const normalizeBrokerageMode = (value) =>

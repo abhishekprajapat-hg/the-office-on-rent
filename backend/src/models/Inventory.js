@@ -4,6 +4,8 @@ const {
   INVENTORY_TYPES,
   INVENTORY_SALE_PAYMENT_MODES,
   INVENTORY_SALE_PAYMENT_TYPES,
+  INVENTORY_DEAL_TYPES,
+  INVENTORY_OWNER_TYPES,
 } = require("../constants/inventory.constants");
 
 const MAX_SALE_PAYMENT_NOTE_LENGTH = 1000;
@@ -226,7 +228,9 @@ const inventorySchema = new mongoose.Schema(
     },
     price: {
       type: Number,
-      required: true,
+      required: function () {
+        return this.type !== "Rent";
+      },
       min: 0,
     },
     rent: {
@@ -238,6 +242,77 @@ const inventorySchema = new mongoose.Schema(
       type: Number,
       default: null,
       min: 0,
+    },
+    depositMonths: {
+      type: Number,
+      default: null,
+      min: 0,
+    },
+    agreementYears: {
+      type: Number,
+      default: null,
+      min: 0,
+    },
+    lockInYears: {
+      type: Number,
+      default: null,
+      min: 0,
+    },
+    officeNumber: {
+      type: String,
+      trim: true,
+      default: "",
+      maxlength: 40,
+    },
+    ownerName: {
+      type: String,
+      trim: true,
+      default: "",
+      maxlength: 120,
+    },
+    ownerNumber: {
+      type: String,
+      trim: true,
+      default: "",
+      maxlength: 20,
+    },
+    ownerWhatsappNumber: {
+      type: String,
+      trim: true,
+      default: "",
+      maxlength: 20,
+    },
+    ownerType: {
+      type: String,
+      enum: [...INVENTORY_OWNER_TYPES, ""],
+      default: "",
+      trim: true,
+    },
+    keyManagerName: {
+      type: String,
+      trim: true,
+      default: "",
+      maxlength: 120,
+    },
+    keyManagerNumber: {
+      type: String,
+      trim: true,
+      default: "",
+      maxlength: 20,
+    },
+    dealType: {
+      type: String,
+      enum: [...INVENTORY_DEAL_TYPES, ""],
+      default: "",
+      trim: true,
+    },
+    propertyDate: {
+      type: Date,
+      default: null,
+    },
+    gstApplicable: {
+      type: Boolean,
+      default: false,
     },
     type: {
       type: String,
@@ -347,6 +422,26 @@ const inventorySchema = new mongoose.Schema(
       default: null,
       min: 0,
     },
+    superBuiltUpArea: {
+      type: Number,
+      default: null,
+      min: 0,
+    },
+    length: {
+      type: Number,
+      default: null,
+      min: 0,
+    },
+    width: {
+      type: Number,
+      default: null,
+      min: 0,
+    },
+    height: {
+      type: Number,
+      default: null,
+      min: 0,
+    },
     areaUnit: {
       type: String,
       enum: ["SQ_FT", "SQ_M"],
@@ -364,6 +459,14 @@ const inventorySchema = new mongoose.Schema(
     residentialDetails: {
       type: residentialDetailsSchema,
       default: undefined,
+    },
+    documentsAvailable: {
+      registry: { type: Boolean, default: false },
+      searchReport: { type: Boolean, default: false },
+      electricityNoc: { type: Boolean, default: false },
+      maintenanceNoc: { type: Boolean, default: false },
+      taxReceipt: { type: Boolean, default: false },
+      loanNoc: { type: Boolean, default: false },
     },
     siteLocation: {
       lat: {
@@ -421,6 +524,10 @@ const inventorySchema = new mongoose.Schema(
 inventorySchema.index(
   { companyId: 1, projectName: 1, towerName: 1, unitNumber: 1 },
   { unique: true },
+);
+inventorySchema.index(
+  { companyId: 1, propertyId: 1 },
+  { unique: true, partialFilterExpression: { propertyId: { $type: "string", $ne: "" } } },
 );
 inventorySchema.index({ companyId: 1, status: 1, updatedAt: -1 });
 inventorySchema.index({ companyId: 1, teamId: 1, updatedAt: -1 });
@@ -540,10 +647,10 @@ inventorySchema.pre("validate", function enforceStatusDetails() {
     }
   }
 
-  if (this.type !== "Rent" && this.deposit !== null && this.deposit !== undefined) {
+  if (!["Rent", "Both"].includes(this.type) && this.deposit !== null && this.deposit !== undefined) {
     this.deposit = null;
   }
-  if (this.type === "Rent" && (this.deposit === undefined || this.deposit === "")) {
+  if (["Rent", "Both"].includes(this.type) && (this.deposit === undefined || this.deposit === "")) {
     this.deposit = null;
   }
 });
