@@ -6,8 +6,6 @@ const CoworkingContract = require("../models/CoworkingContract");
 const CoworkingIdCounter = require("../models/CoworkingIdCounter");
 const { INVOICE_STATUSES, DEFAULT_GST_RATE } = require("../constants/billing.constants");
 const { computeInvoiceTotals, deriveInvoiceStatus, round2 } = require("./coworkingBilling.calc");
-const notificationService = require("./coworkingNotification.service");
-const { sendInvoiceReminder } = require("./invoiceReminderDelivery.service");
 const { createHttpError } = require("../utils/httpError");
 const { parsePagination, buildPaginationMeta } = require("../utils/queryOptions");
 const { writeAuditLog } = require("./auditLog.service");
@@ -273,89 +271,6 @@ const runInvoiceOverdueSweep = async () => {
   return result.modifiedCount || 0;
 };
 
-const addDays = (date, days) => {
-  const next = new Date(date);
-  next.setDate(next.getDate() + days);
-  return next;
-};
-
-const dayRange = (date) => {
-  const start = new Date(date);
-  start.setHours(0, 0, 0, 0);
-  const end = new Date(start);
-  end.setDate(end.getDate() + 1);
-  return { start, end };
-};
-
-const runRentReminderSweep = async ({ referenceDate = new Date(), daysBefore = 5 } = {}) => {
-  const normalizedDaysBefore = Math.max(1, Number.parseInt(daysBefore, 10) || 5);
-  const target = addDays(referenceDate, normalizedDaysBefore);
-  const { start, end } = dayRange(target);
-
-  const invoices = await CoworkingInvoice.find({
-    status: { $in: ["PENDING", "PARTIALLY_PAID"] },
-    dueDate: { $gte: start, $lt: end },
-    $expr: { $lt: ["$amountPaid", "$totalAmount"] },
-  })
-    .populate("clientId", "companyName contactPerson email phone")
-    .select("_id companyId invoiceNumber clientId dueDate totalAmount amountPaid")
-    .lean();
-
-  const summary = {
-    notificationsCreated: 0,
-    emailSent: 0,
-    emailSkipped: 0,
-    emailFailed: 0,
-    whatsappSent: 0,
-    whatsappSkipped: 0,
-    whatsappFailed: 0,
-  };
-
-  for (const invoice of invoices) {
-    const existing = await notificationService.listNotifications({
-      companyId: invoice.companyId,
-      query: {
-        type: "INVOICE",
-        search: invoice.invoiceNumber,
-        limit: 1,
-      },
-    });
-    const duplicate = existing.notifications.some(
-      (notification) =>
-        notification.entityType === "CoworkingInvoice" &&
-        String(notification.entityId || "") === String(invoice._id) &&
-        notification.title.includes("Rent Reminder"),
-    );
-    if (duplicate) continue;
-
-    const balance = Math.max(0, round2((invoice.totalAmount || 0) - (invoice.amountPaid || 0)));
-    await notificationService.createSystemNotification({
-      companyId: invoice.companyId,
-      payload: {
-        type: "INVOICE",
-        priority: "HIGH",
-        status: "UNREAD",
-        title: `Rent Reminder: ${invoice.invoiceNumber}`,
-        message: `${invoice.clientId?.companyName || "Client"} rent invoice is due in ${normalizedDaysBefore} days. Balance due: ${balance}.`,
-        entityType: "CoworkingInvoice",
-        entityId: invoice._id,
-        actionUrl: "/coworking/billing",
-        dueAt: invoice.dueDate,
-      },
-    });
-
-    summary.notificationsCreated += 1;
-    const delivery = await sendInvoiceReminder({ invoice, balance, daysBefore: normalizedDaysBefore });
-    for (const channel of ["email", "whatsapp"]) {
-      const status = delivery[channel]?.status || "failed";
-      const key = `${channel}${status.charAt(0).toUpperCase()}${status.slice(1)}`;
-      if (Object.prototype.hasOwnProperty.call(summary, key)) summary[key] += 1;
-    }
-  }
-
-  return summary;
-};
-
 module.exports = {
   generateInvoiceNumber,
   createInvoice,
@@ -366,5 +281,4 @@ module.exports = {
   cancelInvoice,
   recalculateAmountPaid,
   runInvoiceOverdueSweep,
-  runRentReminderSweep,
 };

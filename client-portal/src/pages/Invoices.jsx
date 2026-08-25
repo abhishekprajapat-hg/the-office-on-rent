@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { AlertCircle, Receipt } from "lucide-react";
+import { Receipt } from "lucide-react";
 import { getMyInvoices } from "../services/dataService";
 import { Card, EmptyState, Skeleton, StatusBadge } from "../components/ui";
 import { formatCurrency, formatDate } from "../utils/format";
@@ -9,16 +9,6 @@ const Invoices = () => {
   const navigate = useNavigate();
   const [invoices, setInvoices] = useState([]);
   const [loading, setLoading] = useState(true);
-
-  const isDueSoon = (invoice) => {
-    const dueDate = new Date(invoice.dueDate);
-    if (Number.isNaN(dueDate.getTime())) return false;
-    const now = new Date();
-    const fiveDaysFromNow = new Date(now);
-    fiveDaysFromNow.setDate(fiveDaysFromNow.getDate() + 5);
-    const balanceDue = Math.max(0, invoice.totalAmount - invoice.amountPaid);
-    return balanceDue > 0 && dueDate >= now && dueDate <= fiveDaysFromNow;
-  };
 
   useEffect(() => {
     getMyInvoices({ limit: 50 })
@@ -50,12 +40,6 @@ const Invoices = () => {
                 <div>
                   <p className="text-sm font-bold text-slate-900">{invoice.invoiceNumber}</p>
                   <p className="text-xs text-slate-400">Due {formatDate(invoice.dueDate)}</p>
-                  {isDueSoon(invoice) ? (
-                    <p className="mt-1 inline-flex items-center gap-1 text-xs font-semibold text-amber-700">
-                      <AlertCircle aria-hidden="true" size={12} />
-                      Rent due within 5 days
-                    </p>
-                  ) : null}
                 </div>
               </div>
               <div className="flex items-center gap-3">

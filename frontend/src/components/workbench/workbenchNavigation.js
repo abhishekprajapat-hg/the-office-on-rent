@@ -210,17 +210,17 @@ export const WORKBENCH_MENU = {
     {
       group: "Operations",
       items: [
-        { label: "Meeting Rooms", path: "/coworking/meeting-rooms", icon: Presentation, roles: COWORKING_ROLES, permission: "meeting_rooms.view" },
-        { label: "Visitors", path: "/coworking/visitors", icon: UserCheck, roles: COWORKING_ROLES, permission: "visitors.view" },
-        { label: "Tickets", path: "/coworking/tickets", icon: Ticket, roles: COWORKING_ROLES, permission: "tickets.view" },
-        { label: "Assets", path: "/coworking/assets", icon: Boxes, roles: COWORKING_ROLES, permission: "assets.view" },
+        { label: "Meeting Rooms", path: "/coworking/meeting-rooms", icon: Presentation, roles: COWORKING_ROLES },
+        { label: "Visitors", path: "/coworking/visitors", icon: UserCheck, roles: COWORKING_ROLES },
+        { label: "Tickets", path: "/coworking/tickets", icon: Ticket, roles: COWORKING_ROLES },
+        { label: "Assets", path: "/coworking/assets", icon: Boxes, roles: COWORKING_ROLES },
       ],
     },
     {
       group: "Insights",
       items: [
         { label: "Reports", path: "/coworking/reports", icon: BarChart3, roles: COWORKING_ROLES, permission: "reports.view" },
-        { label: "Notifications", path: "/coworking/notifications", icon: Bell, roles: COWORKING_ROLES, permission: "notifications.view" },
+        { label: "Notifications", path: "/coworking/notifications", icon: Bell, roles: COWORKING_ROLES },
       ],
     },
     {
@@ -228,7 +228,7 @@ export const WORKBENCH_MENU = {
       items: [
         { label: "Users", path: "/coworking/users", icon: UserCog, roles: COWORKING_ROLES, permission: "users.view" },
         { label: "Roles", path: "/coworking/roles", icon: ShieldCheck, roles: COWORKING_ROLES, permission: "roles.view" },
-        { label: "Settings", path: "/coworking/settings", icon: Settings, roles: COWORKING_ROLES, permission: "settings.view" },
+        { label: "Settings", path: "/coworking/settings", icon: Settings, roles: COWORKING_ROLES },
         { label: "Audit Logs", path: "/coworking/audit-logs", icon: ClipboardList, roles: COWORKING_ROLES, permission: "audit_logs.view" },
       ],
     },

@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { AlertCircle, CalendarCheck, FileSignature, Receipt } from "lucide-react";
+import { CalendarCheck, FileSignature, Receipt } from "lucide-react";
 import { getMyBookings, getMyContracts, getMyInvoices } from "../services/dataService";
 import { useAuth } from "../context/useAuth";
 import { Card, Skeleton } from "../components/ui";
@@ -11,7 +11,6 @@ const Dashboard = () => {
   const [outstanding, setOutstanding] = useState(0);
   const [activeBookings, setActiveBookings] = useState(0);
   const [activeContracts, setActiveContracts] = useState(0);
-  const [rentReminders, setRentReminders] = useState([]);
 
   useEffect(() => {
     let alive = true;
@@ -23,16 +22,7 @@ const Dashboard = () => {
       .then(([invoicesData, bookingsData, contractsData]) => {
         if (!alive) return;
         const balance = invoicesData.invoices.reduce((sum, inv) => sum + Math.max(0, inv.totalAmount - inv.amountPaid), 0);
-        const now = new Date();
-        const fiveDaysFromNow = new Date(now);
-        fiveDaysFromNow.setDate(fiveDaysFromNow.getDate() + 5);
-        const dueSoon = invoicesData.invoices.filter((invoice) => {
-          const dueDate = new Date(invoice.dueDate);
-          const balanceDue = Math.max(0, invoice.totalAmount - invoice.amountPaid);
-          return balanceDue > 0 && dueDate >= now && dueDate <= fiveDaysFromNow;
-        });
         setOutstanding(balance);
-        setRentReminders(dueSoon);
         setActiveBookings(bookingsData.bookings.length);
         setActiveContracts(contractsData.contracts.length);
       })
@@ -82,20 +72,6 @@ const Dashboard = () => {
           </>
         )}
       </div>
-
-      {!loading && rentReminders.length ? (
-        <Card className="border-amber-200 bg-amber-50">
-          <div className="flex items-start gap-3">
-            <AlertCircle aria-hidden="true" size={18} className="mt-0.5 shrink-0 text-amber-700" />
-            <div>
-              <p className="text-sm font-bold text-amber-900">Rent reminder</p>
-              <p className="mt-1 text-sm text-amber-800">
-                {rentReminders.length} unpaid invoice{rentReminders.length === 1 ? "" : "s"} due in the next 5 days.
-              </p>
-            </div>
-          </div>
-        </Card>
-      ) : null}
     </div>
   );
 };

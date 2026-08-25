@@ -14,7 +14,7 @@ import {
 } from "../../components/ui";
 import ToastNotice from "../../components/ui/ToastNotice";
 import { DataTableShell, FilterBar, PageToolbar, StatusBadge } from "../../components/crm";
-import { createClient, deleteClient, getClientById, getClients, updateClient } from "../../services/coworkingClientService";
+import { createClient, deleteClient, getClients, updateClient } from "../../services/coworkingClientService";
 import { usePermissions } from "../../context/usePermissions";
 import { useDebouncedValue } from "../../hooks/useDebouncedValue";
 import { toErrorMessage } from "../../utils/errorMessage";
@@ -62,7 +62,6 @@ const Clients = () => {
   const [deleting, setDeleting] = useState(false);
   const [toast, setToast] = useState(null);
   const [selectedClient, setSelectedClient] = useState(null);
-  const [openingClientId, setOpeningClientId] = useState("");
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -138,20 +137,6 @@ const Clients = () => {
     }
   };
 
-  const openClientDetail = async (client) => {
-    setOpeningClientId(client._id);
-    setToast(null);
-    try {
-      const fullClient = await getClientById(client._id);
-      setSelectedClient(fullClient || client);
-    } catch (detailError) {
-      setToast({ type: "error", message: toErrorMessage(detailError, "Failed to open client") });
-      setSelectedClient(client);
-    } finally {
-      setOpeningClientId("");
-    }
-  };
-
   if (error) {
     return (
       <div className="p-6">
@@ -201,7 +186,7 @@ const Clients = () => {
               {clients.map((client) => (
                 <tr
                   key={client._id}
-                  onClick={() => openClientDetail(client)}
+                  onClick={() => setSelectedClient(client)}
                   className="cursor-pointer border-b border-slate-50 last:border-0 hover:bg-slate-50 dark:border-slate-900 dark:hover:bg-slate-900/60"
                 >
                   <td className="px-4 py-2.5">
@@ -209,9 +194,7 @@ const Clients = () => {
                       <Users aria-hidden="true" size={14} className="shrink-0 text-slate-400" />
                       <div>
                         <p className="font-semibold text-slate-800 dark:text-slate-100">{client.companyName}</p>
-                        <p className="text-xs text-slate-400">
-                          {openingClientId === client._id ? "Opening..." : client.clientCode}
-                        </p>
+                        <p className="text-xs text-slate-400">{client.clientCode}</p>
                       </div>
                     </div>
                   </td>

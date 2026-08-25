@@ -11,21 +11,7 @@ const coworkingIdCounterSchema = new mongoose.Schema(
     category: {
       type: String,
       required: true,
-      enum: [
-        "PROPERTY",
-        "CABIN",
-        "CLIENT",
-        "BOOKING",
-        "CONTRACT",
-        "INVOICE",
-        "PAYMENT",
-        "EXPENSE",
-        "MEETING_ROOM",
-        "VISITOR",
-        "TICKET",
-        "ASSET",
-        "NOTIFICATION",
-      ],
+      enum: ["PROPERTY", "CABIN", "CLIENT", "BOOKING", "CONTRACT", "INVOICE", "PAYMENT", "EXPENSE"],
     },
     seq: {
       type: Number,

@@ -909,27 +909,19 @@ export default function App() {
       />
       <Route
         path="/coworking/meeting-rooms"
-        element={canAccess(COWORKING_ROLES) ? (
-          <CoworkingPermissionGate permission="meeting_rooms.view"><CoworkingMeetingRooms /></CoworkingPermissionGate>
-        ) : <Navigate to="/" />}
+        element={canAccess(COWORKING_ROLES) ? <CoworkingMeetingRooms /> : <Navigate to="/" />}
       />
       <Route
         path="/coworking/visitors"
-        element={canAccess(COWORKING_ROLES) ? (
-          <CoworkingPermissionGate permission="visitors.view"><CoworkingVisitors /></CoworkingPermissionGate>
-        ) : <Navigate to="/" />}
+        element={canAccess(COWORKING_ROLES) ? <CoworkingVisitors /> : <Navigate to="/" />}
       />
       <Route
         path="/coworking/tickets"
-        element={canAccess(COWORKING_ROLES) ? (
-          <CoworkingPermissionGate permission="tickets.view"><CoworkingTickets /></CoworkingPermissionGate>
-        ) : <Navigate to="/" />}
+        element={canAccess(COWORKING_ROLES) ? <CoworkingTickets /> : <Navigate to="/" />}
       />
       <Route
         path="/coworking/assets"
-        element={canAccess(COWORKING_ROLES) ? (
-          <CoworkingPermissionGate permission="assets.view"><CoworkingAssets /></CoworkingPermissionGate>
-        ) : <Navigate to="/" />}
+        element={canAccess(COWORKING_ROLES) ? <CoworkingAssets /> : <Navigate to="/" />}
       />
       <Route
         path="/coworking/reports"
@@ -939,9 +931,7 @@ export default function App() {
       />
       <Route
         path="/coworking/notifications"
-        element={canAccess(COWORKING_ROLES) ? (
-          <CoworkingPermissionGate permission="notifications.view"><CoworkingNotifications /></CoworkingPermissionGate>
-        ) : <Navigate to="/" />}
+        element={canAccess(COWORKING_ROLES) ? <CoworkingNotifications /> : <Navigate to="/" />}
       />
       <Route
         path="/coworking/users"
@@ -957,9 +947,7 @@ export default function App() {
       />
       <Route
         path="/coworking/settings"
-        element={canAccess(COWORKING_ROLES) ? (
-          <CoworkingPermissionGate permission="settings.view"><CoworkingSettings /></CoworkingPermissionGate>
-        ) : <Navigate to="/" />}
+        element={canAccess(COWORKING_ROLES) ? <CoworkingSettings /> : <Navigate to="/" />}
       />
       <Route
         path="/coworking/audit-logs"

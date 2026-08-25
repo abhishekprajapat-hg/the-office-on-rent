@@ -31,10 +31,6 @@ const STATUS_TONES = {
   CONFIRMED: "border-emerald-200 bg-emerald-50 text-emerald-700",
   COMPLETED: "border-slate-200 bg-slate-100 text-slate-600",
   NO_SHOW: "border-rose-200 bg-rose-50 text-rose-700",
-  OPEN: "border-blue-200 bg-blue-50 text-blue-700",
-  IN_PROGRESS: "border-amber-200 bg-amber-50 text-amber-700",
-  RESOLVED: "border-emerald-200 bg-emerald-50 text-emerald-700",
-  CLOSED: "border-slate-200 bg-slate-100 text-slate-600",
 };
 
 export const StatusBadge = ({ status }) => (

@@ -134,7 +134,6 @@ const listContracts = async ({ companyId, query = {} }) => {
     CoworkingContract.find(filter)
       .select("-documents")
       .populate("clientId", "companyName")
-      .populate("propertyId", "name propertyCode")
       .populate("cabinId", "cabinCode")
       .sort({ createdAt: -1 })
       .skip(skip)

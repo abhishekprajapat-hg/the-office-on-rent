@@ -49,24 +49,6 @@ const PLACEHOLDER_MODULES = [
   { label: "Tickets", icon: Ticket },
 ];
 
-const getDocumentSource = (doc) => {
-  if (doc?.uploadedByPortalUser) {
-    return {
-      label: "Submitted from client portal",
-      detail: [doc.uploadedByPortalUser.name, doc.uploadedByPortalUser.email].filter(Boolean).join(" | "),
-      tone: "blue",
-    };
-  }
-  if (doc?.uploadedBy) {
-    return {
-      label: "Uploaded in CRM",
-      detail: [doc.uploadedBy.name, doc.uploadedBy.email].filter(Boolean).join(" | "),
-      tone: "emerald",
-    };
-  }
-  return { label: "Document", detail: "", tone: "slate" };
-};
-
 const ClientDetailDrawer = ({ client, onClose, onChanged }) => {
   const { can } = usePermissions();
   const canUpdate = can("clients.update");
@@ -374,44 +356,32 @@ const ClientDetailDrawer = ({ client, onClose, onChanged }) => {
         {tab === "Documents" ? (
           <div className="space-y-3">
             {client.documents?.length ? (
-              client.documents.map((doc) => {
-                const source = getDocumentSource(doc);
-                return (
-                  <div
-                    key={doc._id}
-                    className="flex items-center justify-between gap-2 rounded-xl border border-slate-200 px-3 py-2 dark:border-slate-800"
+              client.documents.map((doc) => (
+                <div
+                  key={doc._id}
+                  className="flex items-center justify-between gap-2 rounded-xl border border-slate-200 px-3 py-2 dark:border-slate-800"
+                >
+                  <a
+                    href={doc.fileUrl}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="flex min-w-0 items-center gap-2 text-sm text-blue-700 hover:underline dark:text-blue-300"
                   >
-                    <a
-                      href={doc.fileUrl}
-                      target="_blank"
-                      rel="noreferrer"
-                      className="flex min-w-0 items-start gap-2 text-sm text-blue-700 hover:underline dark:text-blue-300"
-                    >
-                      <FileText aria-hidden="true" size={14} className="mt-0.5 shrink-0" />
-                      <span className="min-w-0">
-                        <span className="flex min-w-0 flex-wrap items-center gap-2">
-                          <span className="truncate font-semibold">{doc.name}</span>
-                          <Badge variant="slate">{doc.category}</Badge>
-                          <Badge variant={source.tone}>{source.label}</Badge>
-                        </span>
-                        <span className="mt-1 block text-xs text-slate-400">
-                          {formatDateTime(doc.uploadedAt)}
-                          {source.detail ? ` | ${source.detail}` : ""}
-                        </span>
-                      </span>
-                    </a>
-                    {canUpdate ? (
-                      <IconButton
-                        icon={Trash2}
-                        label="Remove document"
-                        size="sm"
-                        disabled={busyId === doc._id}
-                        onClick={() => handleRemoveDocument(doc._id)}
-                      />
-                    ) : null}
-                  </div>
-                );
-              })
+                    <FileText aria-hidden="true" size={14} className="shrink-0" />
+                    <span className="truncate">{doc.name}</span>
+                    <Badge variant="slate">{doc.category}</Badge>
+                  </a>
+                  {canUpdate ? (
+                    <IconButton
+                      icon={Trash2}
+                      label="Remove document"
+                      size="sm"
+                      disabled={busyId === doc._id}
+                      onClick={() => handleRemoveDocument(doc._id)}
+                    />
+                  ) : null}
+                </div>
+              ))
             ) : (
               <EmptyState title="No documents uploaded" />
             )}

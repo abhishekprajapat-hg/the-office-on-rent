@@ -34,30 +34,3 @@ export const getMyDocuments = async () => {
   const res = await api.get("/documents");
   return res.data.documents || [];
 };
-
-export const submitMyDocument = async ({ file, name, category }) => {
-  const formData = new FormData();
-  formData.append("file", file);
-  formData.append("name", name || file.name);
-  formData.append("category", category || "OTHER");
-
-  const res = await api.post("/documents", formData, {
-    headers: { "Content-Type": "multipart/form-data" },
-  });
-  return res.data.client;
-};
-
-export const getMyTicketOptions = async () => {
-  const res = await api.get("/tickets/options");
-  return { properties: res.data.properties || [] };
-};
-
-export const getMyTickets = async (params = {}) => {
-  const res = await api.get("/tickets", { params });
-  return { tickets: res.data.tickets || [], pagination: res.data.pagination || null };
-};
-
-export const createMyTicket = async (payload) => {
-  const res = await api.post("/tickets", payload);
-  return res.data.ticket;
-};
