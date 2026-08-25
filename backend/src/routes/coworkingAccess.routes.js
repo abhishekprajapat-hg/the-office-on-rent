@@ -28,6 +28,13 @@ router.use("/contracts", require("./coworkingContract.routes"));
 router.use("/invoices", require("./coworkingInvoice.routes"));
 router.use("/payments", require("./coworkingPayment.routes"));
 router.use("/expenses", require("./coworkingExpense.routes"));
+router.use("/meeting-rooms", require("./coworkingMeetingRoom.routes"));
+router.use("/visitors", require("./coworkingVisitor.routes"));
+router.use("/tickets", require("./coworkingTicket.routes"));
+router.use("/assets", require("./coworkingAsset.routes"));
+router.use("/reports", require("./coworkingReport.routes"));
+router.use("/notifications", require("./coworkingNotification.routes"));
+router.use("/settings", require("./coworkingSetting.routes"));
 
 router.get("/seats", requirePermission("seats.view"), cabinController.listSeats);
 

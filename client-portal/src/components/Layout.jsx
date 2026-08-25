@@ -1,5 +1,5 @@
 import { NavLink, useNavigate } from "react-router-dom";
-import { CalendarCheck, FileSignature, FileText, LayoutDashboard, LogOut, Receipt } from "lucide-react";
+import { CalendarCheck, FileSignature, FileText, LayoutDashboard, LifeBuoy, LogOut, Receipt } from "lucide-react";
 import { useAuth } from "../context/useAuth";
 import { cn } from "./utils";
 
@@ -9,6 +9,7 @@ const NAV_ITEMS = [
   { label: "Bookings", path: "/bookings", icon: CalendarCheck },
   { label: "Contracts", path: "/contracts", icon: FileSignature },
   { label: "Documents", path: "/documents", icon: FileText },
+  { label: "Tickets", path: "/tickets", icon: LifeBuoy },
 ];
 
 const Layout = ({ children }) => {

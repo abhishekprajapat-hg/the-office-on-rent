@@ -10,6 +10,9 @@ const UPLOAD_CATEGORIES = Object.freeze([
   "chat",
   "lead-documents",
   "profile-images",
+  "coworking-clients",
+  "coworking-contracts",
+  "coworking-expenses",
 ]);
 const DEFAULT_CATEGORY = "chat";
 

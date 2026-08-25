@@ -7,7 +7,7 @@ const { registerChatSocketHandlers } = require("./socket/chat.socket");
 const { runAutoCheckoutSweep } = require("./controllers/attendance.controller");
 const { runExpiredBookingSweep } = require("./services/coworkingBooking.service");
 const { runContractLifecycleSweep } = require("./services/coworkingContract.service");
-const { runInvoiceOverdueSweep } = require("./services/coworkingInvoice.service");
+const { runInvoiceOverdueSweep, runRentReminderSweep } = require("./services/coworkingInvoice.service");
 const logger = require("./config/logger");
 
 const PORT = process.env.PORT || 5000;
@@ -213,12 +213,45 @@ const startInvoiceOverdueSweep = () => {
   runSweep();
 };
 
+const startRentReminderSweep = () => {
+  if (String(process.env.RENT_REMINDER_SWEEP_ENABLED || "true").toLowerCase() === "false") {
+    return;
+  }
+
+  const intervalMs = Math.max(
+    60 * 1000,
+    toPositiveInt(process.env.RENT_REMINDER_SWEEP_INTERVAL_MS, 60 * 60 * 1000),
+  );
+  const daysBefore = toPositiveInt(process.env.RENT_REMINDER_DAYS_BEFORE, 5);
+  let isRunning = false;
+
+  const runSweep = async () => {
+    if (isRunning) return;
+    isRunning = true;
+    try {
+      const summary = await runRentReminderSweep({ daysBefore });
+      if (summary.notificationsCreated > 0) {
+        logger.info({ ...summary, daysBefore, message: "Coworking rent reminder sweep completed" });
+      }
+    } catch (error) {
+      logger.error({ error: error.message, message: "Coworking rent reminder sweep failed" });
+    } finally {
+      isRunning = false;
+    }
+  };
+
+  const timer = setInterval(runSweep, intervalMs);
+  if (typeof timer.unref === "function") timer.unref();
+  runSweep();
+};
+
 const bootstrap = async () => {
   await connectDB();
   startAttendanceAutoCheckoutSweep();
   startBookingExpirySweep();
   startContractLifecycleSweep();
   startInvoiceOverdueSweep();
+  startRentReminderSweep();
   httpServer.listen(PORT, () => {
     logger.info({ port: PORT, message: "Server started" });
   });

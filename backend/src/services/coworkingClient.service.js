@@ -146,7 +146,9 @@ const listClients = async ({ companyId, query = {} }) => {
 
 const getClientDoc = async (companyId, clientId) => {
   if (!isValidObjectId(clientId)) throw createHttpError(400, "Invalid client id");
-  const client = await CoworkingClient.findOne({ _id: clientId, companyId });
+  const client = await CoworkingClient.findOne({ _id: clientId, companyId })
+    .populate("documents.uploadedBy", "name email role")
+    .populate("documents.uploadedByPortalUser", "name email");
   if (!client) throw createHttpError(404, "Client not found");
   return client;
 };
@@ -283,6 +285,28 @@ const addDocument = async ({ companyId, clientId, payload, actingUser }) => {
   return client;
 };
 
+const addPortalDocument = async ({ companyId, clientId, payload, portalUser }) => {
+  const client = await getClientDoc(companyId, clientId);
+  const name = String(payload?.name || "").trim();
+  const fileUrl = String(payload?.fileUrl || "").trim();
+  if (!name || !fileUrl) throw createHttpError(400, "Document name and fileUrl are required");
+
+  const category = String(payload?.category || "OTHER").trim().toUpperCase();
+  if (!DOCUMENT_CATEGORIES.includes(category)) throw createHttpError(400, "Invalid document category");
+
+  client.documents.push({
+    name: name.slice(0, 200),
+    category,
+    fileUrl,
+    fileType: String(payload?.fileType || "").trim(),
+    uploadedByPortalUser: portalUser?._id || null,
+    uploadedAt: new Date(),
+  });
+  await client.save();
+
+  return client;
+};
+
 const removeDocument = async ({ companyId, clientId, documentId, actingUser }) => {
   const client = await getClientDoc(companyId, clientId);
   const before = client.documents.length;
@@ -354,6 +378,7 @@ module.exports = {
   addContact,
   removeContact,
   addDocument,
+  addPortalDocument,
   removeDocument,
   getClientAssignments,
   getClientActivity,

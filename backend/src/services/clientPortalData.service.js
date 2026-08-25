@@ -7,6 +7,7 @@ const clientService = require("./coworkingClient.service");
 const { listInvoices, getInvoiceById } = require("./coworkingInvoice.service");
 const { listBookings } = require("./coworkingBooking.service");
 const { listContracts, getContractById } = require("./coworkingContract.service");
+const ticketService = require("./coworkingTicket.service");
 const { createHttpError } = require("../utils/httpError");
 
 const getMyClientProfile = async ({ companyId, clientId }) =>
@@ -28,6 +29,60 @@ const getMyBookings = async ({ companyId, clientId, query }) =>
 
 const getMyContracts = async ({ companyId, clientId, query }) =>
   listContracts({ companyId, query: { ...query, clientId } });
+
+const getClientPropertyOptions = async ({ companyId, clientId }) => {
+  const [bookingData, contractData] = await Promise.all([
+    listBookings({ companyId, query: { clientId, limit: 100 } }),
+    listContracts({ companyId, query: { clientId, limit: 100 } }),
+  ]);
+
+  const propertyMap = new Map();
+  const addProperty = (property) => {
+    const id = String(property?._id || property || "");
+    if (!id || propertyMap.has(id)) return;
+    propertyMap.set(id, {
+      _id: id,
+      name: property?.name || "Workspace",
+      propertyCode: property?.propertyCode || "",
+    });
+  };
+
+  for (const booking of bookingData.bookings || []) addProperty(booking.propertyId);
+  for (const contract of contractData.contracts || []) addProperty(contract.propertyId);
+
+  return Array.from(propertyMap.values());
+};
+
+const getMyTickets = async ({ companyId, clientId, query }) =>
+  ticketService.listTickets({ companyId, query: { ...query, clientId } });
+
+const createMyTicket = async ({ companyId, clientId, portalUser, payload }) => {
+  const propertyOptions = await getClientPropertyOptions({ companyId, clientId });
+  if (propertyOptions.length === 0) {
+    throw createHttpError(400, "No workspace is linked to your portal account");
+  }
+
+  const requestedPropertyId = String(payload?.propertyId || "").trim();
+  const propertyId = requestedPropertyId || propertyOptions[0]._id;
+  if (!propertyOptions.some((property) => property._id === propertyId)) {
+    throw createHttpError(403, "You can raise tickets only for your assigned workspace");
+  }
+
+  return ticketService.createTicket({
+    companyId,
+    portalUser,
+    payload: {
+      propertyId,
+      clientId,
+      title: payload?.title,
+      description: payload?.description,
+      category: payload?.category,
+      priority: payload?.priority,
+      status: "OPEN",
+      reportedByName: portalUser?.name || "",
+    },
+  });
+};
 
 const getMyContractById = async ({ companyId, clientId, contractId }) => {
   const contract = await getContractById({ companyId, contractId });
@@ -64,6 +119,14 @@ const getMyDocuments = async ({ companyId, clientId }) => {
   );
 };
 
+const submitMyDocument = async ({ companyId, clientId, portalUser, payload }) =>
+  clientService.addPortalDocument({
+    companyId,
+    clientId,
+    portalUser,
+    payload,
+  });
+
 module.exports = {
   getMyClientProfile,
   getMyInvoices,
@@ -72,4 +135,8 @@ module.exports = {
   getMyContracts,
   getMyContractById,
   getMyDocuments,
+  submitMyDocument,
+  getClientPropertyOptions,
+  getMyTickets,
+  createMyTicket,
 };

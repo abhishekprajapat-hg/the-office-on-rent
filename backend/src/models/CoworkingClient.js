@@ -44,6 +44,7 @@ const documentSchema = new mongoose.Schema({
   fileUrl: { type: String, trim: true, required: true },
   fileType: { type: String, trim: true, default: "" },
   uploadedBy: { type: mongoose.Schema.Types.ObjectId, ref: "User" },
+  uploadedByPortalUser: { type: mongoose.Schema.Types.ObjectId, ref: "ClientPortalUser", default: null },
   uploadedAt: { type: Date, default: Date.now },
 });
 

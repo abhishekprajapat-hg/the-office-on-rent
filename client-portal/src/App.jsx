@@ -8,6 +8,7 @@ import InvoiceDetail from "./pages/InvoiceDetail";
 import Bookings from "./pages/Bookings";
 import Contracts from "./pages/Contracts";
 import Documents from "./pages/Documents";
+import Tickets from "./pages/Tickets";
 
 const App = () => {
   const { isAuthenticated, ready } = useAuth();
@@ -35,6 +36,7 @@ const App = () => {
                 <Route path="/bookings" element={<Bookings />} />
                 <Route path="/contracts" element={<Contracts />} />
                 <Route path="/documents" element={<Documents />} />
+                <Route path="/tickets" element={<Tickets />} />
                 <Route path="*" element={<Navigate to="/" replace />} />
               </Routes>
             </Layout>

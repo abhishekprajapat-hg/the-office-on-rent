@@ -67,3 +67,59 @@ exports.getMyDocuments = async (req, res) => {
     return handleControllerError(res, error, "getMyDocuments failed");
   }
 };
+
+exports.submitMyDocument = async (req, res) => {
+  try {
+    if (!req.file) {
+      return res.status(400).json({ message: "No file uploaded" });
+    }
+
+    const category = String(req.body?.category || "OTHER").trim().toUpperCase();
+    const publicUrl = `${req.protocol}://${req.get("host")}/api/uploads/files/${req.uploadCategory}/${req.file.filename}`;
+    const client = await portalDataService.submitMyDocument({
+      ...ctx(req),
+      portalUser: req.portalUser,
+      payload: {
+        name: req.body?.name || req.file.originalname,
+        category,
+        fileUrl: publicUrl,
+        fileType: req.file.mimetype,
+      },
+    });
+
+    return res.status(201).json({ client });
+  } catch (error) {
+    return handleControllerError(res, error, "submitMyDocument failed");
+  }
+};
+
+exports.getMyTicketOptions = async (req, res) => {
+  try {
+    const properties = await portalDataService.getClientPropertyOptions(ctx(req));
+    return res.json({ properties });
+  } catch (error) {
+    return handleControllerError(res, error, "getMyTicketOptions failed");
+  }
+};
+
+exports.getMyTickets = async (req, res) => {
+  try {
+    const { tickets, pagination } = await portalDataService.getMyTickets({ ...ctx(req), query: req.query });
+    return res.json({ tickets, pagination });
+  } catch (error) {
+    return handleControllerError(res, error, "getMyTickets failed");
+  }
+};
+
+exports.createMyTicket = async (req, res) => {
+  try {
+    const ticket = await portalDataService.createMyTicket({
+      ...ctx(req),
+      portalUser: req.portalUser,
+      payload: req.body,
+    });
+    return res.status(201).json({ ticket });
+  } catch (error) {
+    return handleControllerError(res, error, "createMyTicket failed");
+  }
+};
