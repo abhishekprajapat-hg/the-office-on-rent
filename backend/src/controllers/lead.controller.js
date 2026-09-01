@@ -168,6 +168,7 @@ const FIELD_EXECUTIVE_ROLE = USER_ROLES.FIELD_EXECUTIVE;
 const SITE_VISIT_STATUS = "SITE_VISIT";
 const SITE_VISIT_REQUIRED_STATUS = "SITE_VISIT_REQUIRED";
 const QUALIFIED_LEAD_STATUS = "QUALIFIED_LEAD";
+const ROLE_TYPE_VALUES = Object.freeze(["COMMERCIAL", "RESIDENTIAL"]);
 const REQUESTED_STATUS = "REQUESTED";
 const CLOSED_STATUS = "CLOSED";
 const LEAD_STATUS_VALUES = Object.freeze([
@@ -322,14 +323,57 @@ const toLeadView = (lead) => {
   };
 };
 
-const buildCompanyInventoryQuery = ({ inventoryId, companyId }) => {
+const buildCompanyInventoryQuery = ({ inventoryId, companyId, user = null }) => {
   const query = {
     _id: inventoryId,
   };
   if (companyId) {
     query.companyId = companyId;
   }
+  if (user?.role && user.role !== USER_ROLES.ADMIN) {
+    query.inventoryType = getUserRoleType(user);
+  }
   return query;
+};
+
+const normalizeRoleType = (value) => {
+  const normalized = String(value || "").trim().toUpperCase();
+  return ROLE_TYPE_VALUES.includes(normalized) ? normalized : "COMMERCIAL";
+};
+
+const getUserRoleType = (user) => normalizeRoleType(user?.roleType);
+
+const buildLeadTypeClause = (roleType) => {
+  if (roleType === "RESIDENTIAL") {
+    return { "requirements.inventoryType": "RESIDENTIAL" };
+  }
+
+  return {
+    $or: [
+      { "requirements.inventoryType": "COMMERCIAL" },
+      { "requirements.inventoryType": "" },
+      { "requirements.inventoryType": { $exists: false } },
+    ],
+  };
+};
+
+const addLeadRoleTypeScope = (query, user) => {
+  if (!query || user?.role === USER_ROLES.ADMIN) return query;
+  addLeadAndClause(query, buildLeadTypeClause(getUserRoleType(user)));
+  return query;
+};
+
+const assertLeadTypeMatchesUser = (leadOrRequirements, user) => {
+  if (user?.role === USER_ROLES.ADMIN) return null;
+  const userRoleType = getUserRoleType(user);
+  const leadType = normalizeRoleType(
+    leadOrRequirements?.requirements?.inventoryType
+    || leadOrRequirements?.inventoryType,
+  );
+  if (leadType !== userRoleType) {
+    return `This ${leadType.toLowerCase()} lead is not available for ${userRoleType.toLowerCase()} users`;
+  }
+  return null;
 };
 
 const applyLeadSelectionFromInventory = ({ lead, inventory }) => {
@@ -1492,11 +1536,12 @@ const resolveLiveLocationForVerification = (user) => {
   };
 };
 
-const getLeadViewById = async (leadId, companyId = null) => {
+const getLeadViewById = async (leadId, companyId = null, user = null) => {
   const query = { _id: leadId };
   if (companyId && isValidObjectId(companyId)) {
     query.companyId = companyId;
   }
+  addLeadRoleTypeScope(query, user);
   const row = await Lead.findOne(query).populate(LEAD_POPULATE_FIELDS).lean();
   return toLeadView(row);
 };
@@ -1526,18 +1571,18 @@ const buildLeadQueryForUser = async (user) => {
   }
 
   if (isManagementRole(user.role)) {
-    return companyScope;
+    return addLeadRoleTypeScope(companyScope, user);
   }
 
   if (EXECUTIVE_ROLES.includes(user.role)) {
-    return {
+    return addLeadRoleTypeScope({
       ...companyScope,
       assignedTo: user._id,
-    };
+    }, user);
   }
 
   if (user.role === USER_ROLES.CHANNEL_PARTNER) {
-    return { ...companyScope, createdBy: user._id };
+    return addLeadRoleTypeScope({ ...companyScope, createdBy: user._id }, user);
   }
 
   return null;
@@ -1891,6 +1936,9 @@ exports.createLead = async (req, res) => {
     if (requestedInventoryIds.length) {
       const inventoryQuery = { _id: { $in: requestedInventoryIds } };
       if (req.user?.companyId) inventoryQuery.companyId = req.user.companyId;
+      if (req.user?.role !== USER_ROLES.ADMIN) {
+        inventoryQuery.inventoryType = getUserRoleType(req.user);
+      }
 
       relatedInventories = await Inventory.find(inventoryQuery)
         .select(LEAD_INVENTORY_SELECT_FIELDS)
@@ -1934,6 +1982,11 @@ exports.createLead = async (req, res) => {
       createdBy: req.user._id,
     };
 
+    const roleTypeError = assertLeadTypeMatchesUser(createPayload, req.user);
+    if (roleTypeError) {
+      return res.status(403).json({ message: roleTypeError });
+    }
+
     if (inventory) {
       createPayload.inventoryId = inventory._id;
       createPayload.relatedInventoryIds = relatedInventories.map((row) => row._id);
@@ -1971,7 +2024,7 @@ exports.createLead = async (req, res) => {
       });
     }
 
-    const populatedLead = await getLeadViewById(lead._id, companyId);
+    const populatedLead = await getLeadViewById(lead._id, companyId, req.user);
 
     return res.status(201).json({
       message: shouldAutoAssignLead
@@ -2008,6 +2061,7 @@ const syncSelectedInventoryAsSoldForLeadClosure = async ({
     buildCompanyInventoryQuery({
       inventoryId: selectedInventoryId,
       companyId: user?.companyId || null,
+      user,
     }),
   );
 
@@ -2115,6 +2169,7 @@ const syncSelectedInventoryAsReservedForCloseRequest = async ({
     buildCompanyInventoryQuery({
       inventoryId: selectedInventoryId,
       companyId: user?.companyId || null,
+      user,
     }),
   );
 
@@ -2163,6 +2218,7 @@ const releaseSelectedInventoryReservationForLead = async ({
     buildCompanyInventoryQuery({
       inventoryId: selectedInventoryId,
       companyId: user?.companyId || null,
+      user,
     }),
   );
 
@@ -2298,6 +2354,9 @@ exports.bulkUploadLeads = async (req, res) => {
         ? Inventory.find({
           _id: { $in: payloadInventoryIds },
           companyId,
+          ...(req.user?.role === USER_ROLES.ADMIN
+            ? {}
+            : { inventoryType: getUserRoleType(req.user) }),
         })
           .select(LEAD_INVENTORY_SELECT_FIELDS)
           .lean()
@@ -2377,7 +2436,7 @@ exports.bulkUploadLeads = async (req, res) => {
 
           inventory = inventoryById.get(inventoryId) || null;
           if (!inventory) {
-            throw new Error("Inventory not found in your company");
+            throw new Error("Inventory not found in your accessible inventory");
           }
         }
 
@@ -2430,6 +2489,11 @@ exports.bulkUploadLeads = async (req, res) => {
           status,
           createdBy: req.user._id,
         };
+
+        const roleTypeError = assertLeadTypeMatchesUser(writePayload, req.user);
+        if (roleTypeError) {
+          throw new Error(roleTypeError);
+        }
 
         if (nextFollowUp) {
           writePayload.nextFollowUp = nextFollowUp;
@@ -2690,7 +2754,7 @@ exports.getLeadById = async (req, res) => {
       return res.status(404).json({ message: "Lead not found" });
     }
 
-    const lead = await getLeadViewById(leadId, req.user.companyId);
+    const lead = await getLeadViewById(leadId, req.user.companyId, req.user);
     if (!lead) {
       return res.status(404).json({ message: "Lead not found" });
     }
@@ -2822,6 +2886,13 @@ exports.assignLead = async (req, res) => {
       });
     }
 
+    const targetRoleTypeError = assertLeadTypeMatchesUser(lead, targetUser);
+    if (targetRoleTypeError) {
+      return res.status(400).json({
+        message: "Lead can only be assigned to a user with the same role type",
+      });
+    }
+
     const topManager = await getAncestorByRoles({
       user: targetUser,
       targetRoles: [USER_ROLES.MANAGER],
@@ -2870,7 +2941,7 @@ exports.assignLead = async (req, res) => {
       performedBy: req.user._id,
     });
 
-    const populatedLead = await getLeadViewById(lead._id, req.user.companyId);
+    const populatedLead = await getLeadViewById(lead._id, req.user.companyId, req.user);
 
     return res.json({
       message: "Lead assigned successfully",
@@ -2916,6 +2987,7 @@ exports.addRelatedPropertyToLead = async (req, res) => {
       buildCompanyInventoryQuery({
         inventoryId: rawInventoryId,
         companyId: req.user.companyId,
+        user: req.user,
       }),
     )
       .select(LEAD_INVENTORY_SELECT_FIELDS)
@@ -2941,7 +3013,7 @@ exports.addRelatedPropertyToLead = async (req, res) => {
     const inventoryIdStr = String(inventory._id);
 
     if (existingIds.includes(inventoryIdStr)) {
-      const populatedLead = await getLeadViewById(lead._id, req.user.companyId);
+      const populatedLead = await getLeadViewById(lead._id, req.user.companyId, req.user);
       return res.json({
         message: "Property already linked to this lead",
         lead: populatedLead,
@@ -2961,7 +3033,7 @@ exports.addRelatedPropertyToLead = async (req, res) => {
       performedBy: req.user._id,
     });
 
-    const populatedLead = await getLeadViewById(lead._id, req.user.companyId);
+    const populatedLead = await getLeadViewById(lead._id, req.user.companyId, req.user);
 
     return res.json({
       message: "Property linked to lead",
@@ -3002,6 +3074,7 @@ exports.selectRelatedPropertyForLead = async (req, res) => {
       buildCompanyInventoryQuery({
         inventoryId,
         companyId: req.user.companyId,
+        user: req.user,
       }),
     )
       .select(LEAD_INVENTORY_SELECT_FIELDS)
@@ -3030,7 +3103,7 @@ exports.selectRelatedPropertyForLead = async (req, res) => {
       performedBy: req.user._id,
     });
 
-    const populatedLead = await getLeadViewById(lead._id, req.user.companyId);
+    const populatedLead = await getLeadViewById(lead._id, req.user.companyId, req.user);
     return res.json({
       message: "Property selected",
       lead: populatedLead,
@@ -3080,7 +3153,7 @@ exports.removeRelatedPropertyFromLead = async (req, res) => {
     const targetInventoryId = String(inventoryId);
 
     if (!existingIds.includes(targetInventoryId)) {
-      const populatedLead = await getLeadViewById(lead._id, req.user.companyId);
+      const populatedLead = await getLeadViewById(lead._id, req.user.companyId, req.user);
       return res.json({
         message: "Property is already not linked",
         lead: populatedLead,
@@ -3107,6 +3180,7 @@ exports.removeRelatedPropertyFromLead = async (req, res) => {
           buildCompanyInventoryQuery({
             inventoryId: fallbackInventoryId,
             companyId: req.user.companyId,
+            user: req.user,
           }),
         )
           .select(LEAD_INVENTORY_SELECT_FIELDS)
@@ -3131,7 +3205,7 @@ exports.removeRelatedPropertyFromLead = async (req, res) => {
       performedBy: req.user._id,
     });
 
-    const populatedLead = await getLeadViewById(lead._id, req.user.companyId);
+    const populatedLead = await getLeadViewById(lead._id, req.user.companyId, req.user);
     return res.json({
       message: "Property removed",
       lead: populatedLead,
@@ -3281,7 +3355,7 @@ exports.updateLeadBasics = async (req, res) => {
     if (!updates.length) {
       return res.json({
         message: "No profile changes",
-        lead: await getLeadViewById(lead._id, req.user.companyId),
+        lead: await getLeadViewById(lead._id, req.user.companyId, req.user),
       });
     }
 
@@ -3292,7 +3366,7 @@ exports.updateLeadBasics = async (req, res) => {
       performedBy: req.user._id,
     });
 
-    const populatedLead = await getLeadViewById(lead._id, req.user.companyId);
+    const populatedLead = await getLeadViewById(lead._id, req.user.companyId, req.user);
     return res.json({
       message: "Lead profile updated",
       lead: populatedLead,
@@ -3480,6 +3554,7 @@ exports.updateLeadStatus = async (req, res) => {
           buildCompanyInventoryQuery({
             inventoryId: selectedInventoryId,
             companyId: req.user.companyId,
+            user: req.user,
           }),
         )
           .select(LEAD_INVENTORY_SELECT_FIELDS)
@@ -3490,6 +3565,10 @@ exports.updateLeadStatus = async (req, res) => {
         rawRequirements,
         inventory: selectedInventory,
       }) || {};
+      const roleTypeError = assertLeadTypeMatchesUser(normalizedRequirements, req.user);
+      if (roleTypeError) {
+        return res.status(403).json({ message: roleTypeError });
+      }
       const existingRequirements = lead?.requirements?.toObject
         ? lead.requirements.toObject()
         : (lead?.requirements || {});
@@ -4049,7 +4128,7 @@ exports.updateLeadStatus = async (req, res) => {
         })),
     );
 
-    const populatedLead = await getLeadViewById(lead._id, req.user.companyId);
+    const populatedLead = await getLeadViewById(lead._id, req.user.companyId, req.user);
 
     return res.json({
       message: "Lead status updated",
@@ -4461,7 +4540,7 @@ exports.approveLeadStatusRequest = async (req, res) => {
       });
     }
 
-    const populatedLead = await getLeadViewById(lead._id, req.user.companyId);
+    const populatedLead = await getLeadViewById(lead._id, req.user.companyId, req.user);
     const populatedRequest = await LeadStatusRequest.findById(request._id)
       .populate("requestedBy", "name role")
       .populate("reviewedBy", "name role")

@@ -51,6 +51,8 @@ export const AssetVaultFilters = ({
   statusOptions,
   inventoryTypeFilter,
   onInventoryTypeFilterChange,
+  canChooseInventoryRoleType = true,
+  userRoleType = "COMMERCIAL",
   furnishingFilter,
   onFurnishingFilterChange,
   bhkFilter,
@@ -141,11 +143,16 @@ export const AssetVaultFilters = ({
       <select
         value={inventoryTypeFilter}
         onChange={(event) => onInventoryTypeFilterChange(event.target.value)}
+        disabled={!canChooseInventoryRoleType}
         className="h-11 px-3 rounded-xl border border-slate-200 bg-white text-sm text-slate-700 focus:outline-none focus:border-emerald-500"
       >
-        <option value="all">Inventory Type (All)</option>
-        <option value="COMMERCIAL">Commercial</option>
-        <option value="RESIDENTIAL">Residential</option>
+        {canChooseInventoryRoleType ? <option value="all">Inventory Type (All)</option> : null}
+        {canChooseInventoryRoleType || userRoleType === "COMMERCIAL" ? (
+          <option value="COMMERCIAL">Commercial</option>
+        ) : null}
+        {canChooseInventoryRoleType || userRoleType === "RESIDENTIAL" ? (
+          <option value="RESIDENTIAL">Residential</option>
+        ) : null}
       </select>
 
       <select

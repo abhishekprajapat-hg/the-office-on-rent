@@ -68,6 +68,7 @@ const USER_SELECTABLE_FIELDS = [
   "name",
   "email",
   "phone",
+  "roleType",
   "role",
   "companyId",
   "parentId",
@@ -139,6 +140,10 @@ const sanitizePhone = (value) => String(value || "").trim();
 const sanitizeProfileImageUrl = (value) => String(value || "").trim();
 const sanitizeEmail = (value) => String(value || "").trim().toLowerCase();
 const sanitizeBrokerageNotes = (value) => String(value || "").trim();
+const normalizeRoleType = (value) => {
+  const normalized = String(value || "").trim().toUpperCase();
+  return ["COMMERCIAL", "RESIDENTIAL"].includes(normalized) ? normalized : "COMMERCIAL";
+};
 const isValidEmail = (value) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(String(value || ""));
 const isValidObjectId = (value) =>
   /^[a-fA-F0-9]{24}$/.test(String(value || "").trim());
@@ -639,6 +644,7 @@ const toProfileView = (user) => ({
   name: user.name,
   email: user.email,
   phone: user.phone || "",
+  roleType: normalizeRoleType(user.roleType),
   profileImageUrl: user.profileImageUrl || "",
   role: user.role,
   companyId: user.companyId || null,
@@ -1272,6 +1278,7 @@ exports.createUserByRole = async (req, res) => {
       name,
       email,
       phone,
+      roleType,
       password,
       role,
       managerId,
@@ -1365,6 +1372,7 @@ exports.createUserByRole = async (req, res) => {
       name,
       email,
       phone,
+      roleType: normalizeRoleType(roleType),
       password,
       role,
       companyId: req.user.companyId,
@@ -1382,6 +1390,7 @@ exports.createUserByRole = async (req, res) => {
         _id: newUser._id,
         name: newUser.name,
         email: newUser.email,
+        roleType: normalizeRoleType(newUser.roleType),
         role: newUser.role,
         companyId: newUser.companyId,
         parentId: newUser.parentId,
@@ -1426,6 +1435,7 @@ exports.updateUserByAdmin = async (req, res) => {
       "name",
       "email",
       "phone",
+      "roleType",
       "role",
       "reportingToId",
       "parentId",
@@ -1497,6 +1507,16 @@ exports.updateUserByAdmin = async (req, res) => {
         });
       }
       patch.phone = phone;
+    }
+
+    if (Object.prototype.hasOwnProperty.call(req.body || {}, "roleType")) {
+      const roleType = String(req.body.roleType || "").trim().toUpperCase();
+      if (!["COMMERCIAL", "RESIDENTIAL"].includes(roleType)) {
+        return res.status(400).json({
+          message: "roleType must be COMMERCIAL or RESIDENTIAL",
+        });
+      }
+      patch.roleType = roleType;
     }
 
     let nextRole = user.role;

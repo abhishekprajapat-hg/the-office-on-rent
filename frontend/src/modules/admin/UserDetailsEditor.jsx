@@ -59,6 +59,11 @@ const ROLE_OPTIONS = [
   { label: "Coworking admin", value: "COWORKING_ADMIN" },
 ];
 
+const ROLE_TYPE_OPTIONS = [
+  { label: "Commercial", value: "COMMERCIAL" },
+  { label: "Residential", value: "RESIDENTIAL" },
+];
+
 const REPORTING_PARENT_ROLES = {
   MANAGER: ["ADMIN"],
   EXECUTIVE: ["MANAGER"],
@@ -376,6 +381,7 @@ const UserDetailsEditor = ({ theme = "light" }) => {
     name: "",
     email: "",
     phone: "",
+    roleType: "COMMERCIAL",
     role: "MANAGER",
     reportingToId: "",
     isActive: true,
@@ -416,6 +422,7 @@ const UserDetailsEditor = ({ theme = "light" }) => {
         name: resolvedProfile.name || "",
         email: resolvedProfile.email || "",
         phone: resolvedProfile.phone || "",
+        roleType: resolvedProfile.roleType || "COMMERCIAL",
         role: resolvedProfile.role || "MANAGER",
         reportingToId: getEntityId(resolvedProfile.parentId),
         isActive: Boolean(resolvedProfile.isActive),
@@ -906,6 +913,7 @@ const UserDetailsEditor = ({ theme = "light" }) => {
       name,
       email,
       phone: String(formData.phone || "").trim(),
+      roleType: formData.roleType,
       role: formData.role,
       reportingToId: needsReporting ? formData.reportingToId : null,
       isActive: Boolean(formData.isActive),
@@ -960,6 +968,7 @@ const UserDetailsEditor = ({ theme = "light" }) => {
         name: updated.name || "",
         email: updated.email || "",
         phone: updated.phone || "",
+        roleType: updated.roleType || "COMMERCIAL",
         role: updated.role || prev.role,
         reportingToId: getEntityId(updated.parentId),
         isActive: Boolean(updated.isActive),
@@ -1122,6 +1131,19 @@ const UserDetailsEditor = ({ theme = "light" }) => {
                 className={`w-full rounded-lg border px-2.5 py-1.5 text-xs ${isDarkTheme ? "border-slate-700 bg-slate-950 text-slate-100" : "border-slate-300 bg-white text-slate-800"} disabled:opacity-60`}
               >
                 {ROLE_OPTIONS.map((option) => (
+                  <option key={option.value} value={option.value}>{option.label}</option>
+                ))}
+              </select>
+            </label>
+            <label className="space-y-0.5">
+              <span className={`text-[10px] font-semibold ${isDarkTheme ? "text-slate-400" : "text-slate-500"}`}>Role Type</span>
+              <select
+                value={formData.roleType}
+                onChange={(event) => handleChange("roleType", event.target.value)}
+                disabled={isEditingSelf}
+                className={`w-full rounded-lg border px-2.5 py-1.5 text-xs ${isDarkTheme ? "border-slate-700 bg-slate-950 text-slate-100" : "border-slate-300 bg-white text-slate-800"} disabled:opacity-60`}
+              >
+                {ROLE_TYPE_OPTIONS.map((option) => (
                   <option key={option.value} value={option.value}>{option.label}</option>
                 ))}
               </select>

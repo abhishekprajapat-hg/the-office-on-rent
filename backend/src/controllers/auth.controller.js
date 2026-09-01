@@ -15,6 +15,11 @@ const isValidObjectId = (value) => mongoose.Types.ObjectId.isValid(value);
 const BROKERAGE_MODES = new Set(["FLAT", "PERCENTAGE"]);
 const DEFAULT_BROKERAGE_VALUE = 50000;
 const DEFAULT_BROKERAGE_PERCENTAGE = 2;
+const ROLE_TYPE_VALUES = new Set(["COMMERCIAL", "RESIDENTIAL"]);
+const normalizeRoleType = (value) => {
+  const normalized = String(value || "").trim().toUpperCase();
+  return ROLE_TYPE_VALUES.has(normalized) ? normalized : "COMMERCIAL";
+};
 const toBrokerageConfigView = (config) => {
   const normalizedMode = String(config?.mode || "").trim().toUpperCase();
   const mode = BROKERAGE_MODES.has(normalizedMode) ? normalizedMode : "FLAT";
@@ -141,6 +146,7 @@ const toAuthResponse = ({ user, tokenBundle, tenant = null }) => ({
     name: user.name,
     email: user.email,
     role: user.role,
+    roleType: normalizeRoleType(user.roleType),
     companyId: user.companyId,
     parentId: user.parentId || null,
     partnerCode: user.partnerCode || null,
@@ -248,7 +254,7 @@ exports.refresh = async (req, res) => {
     }
 
     const user = await User.findById(rotated.userId).select(
-      "_id name email role companyId parentId partnerCode canViewInventory brokerageConfig isActive",
+      "_id name email role roleType companyId parentId partnerCode canViewInventory brokerageConfig isActive",
     );
 
     if (!user || !user.isActive) {
@@ -265,6 +271,7 @@ exports.refresh = async (req, res) => {
         name: user.name,
         email: user.email,
         role: user.role,
+        roleType: normalizeRoleType(user.roleType),
         companyId: user.companyId || null,
         parentId: user.parentId || null,
         partnerCode: user.partnerCode || null,
@@ -331,6 +338,7 @@ exports.getMe = async (req, res) => {
         name: req.user.name,
         email: req.user.email,
         role: req.user.role,
+        roleType: normalizeRoleType(req.user.roleType),
         companyId: req.user.companyId || null,
         parentId: req.user.parentId || null,
         partnerCode: req.user.partnerCode || null,

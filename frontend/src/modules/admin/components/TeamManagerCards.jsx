@@ -56,6 +56,11 @@ const formatBrokerageSummary = (config = null) => {
     : `${formatCurrency(normalized.value)} per closed deal`;
 };
 
+const formatRoleType = (value) =>
+  String(value || "").trim().toUpperCase() === "RESIDENTIAL"
+    ? "Residential"
+    : "Commercial";
+
 const roleBadgeTone = (role, isDarkTheme) => {
   if (role === "MANAGER") {
     return isDarkTheme
@@ -297,6 +302,7 @@ const TeamUserCard = ({
   const initials = getUserInitials(user.name);
   const brokerageSummary = isChannelPartner ? formatBrokerageSummary(user.brokerageConfig) : "";
   const brokerageNotes = String(user?.brokerageConfig?.notes || "").trim();
+  const roleTypeLabel = formatRoleType(user?.roleType);
 
   return (
     <Motion.div
@@ -378,6 +384,13 @@ const TeamUserCard = ({
       <div className="mt-3 flex flex-wrap items-center gap-2">
         <span className={`rounded-full border px-2 py-1 text-[10px] font-semibold ${roleBadgeTone(user.role, isDarkTheme)}`}>
           {roleLabels[user.role] || user.role}
+        </span>
+        <span className={`rounded-full border px-2 py-1 text-[10px] font-semibold ${
+          isDarkTheme
+            ? "border-emerald-400/30 bg-emerald-500/10 text-emerald-100"
+            : "border-emerald-200 bg-emerald-50 text-emerald-700"
+        }`}>
+          {roleTypeLabel}
         </span>
         <span className={`inline-flex items-center gap-1 text-[11px] ${
           isDarkTheme ? "text-slate-400" : "text-slate-500"

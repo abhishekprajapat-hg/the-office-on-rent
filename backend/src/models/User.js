@@ -43,6 +43,13 @@ const userSchema = new mongoose.Schema(
       type: String,
       trim: true,
     },
+
+    roleType: {
+      type: String,
+      enum: ["COMMERCIAL", "RESIDENTIAL"],
+      default: "COMMERCIAL",
+    },
+
     profileImageUrl: {
       type: String,
       trim: true,

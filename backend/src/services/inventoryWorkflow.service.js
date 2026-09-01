@@ -68,6 +68,7 @@ const INVENTORY_REVIEW_ROLES = Object.freeze([
   ...MANAGEMENT_ROLES,
 ]);
 const INVENTORY_TYPE_OPTIONS = Object.freeze(["COMMERCIAL", "RESIDENTIAL"]);
+const ROLE_TYPE_OPTIONS = INVENTORY_TYPE_OPTIONS;
 const FURNISHING_STATUS_OPTIONS = Object.freeze([
   "",
   "UNFURNISHED",
@@ -795,7 +796,28 @@ const getCompanyIdForUser = (user) => {
   return companyId;
 };
 
-const ensureManagerExistsInCompany = async ({ managerId, companyId }) => {
+const normalizeUserRoleType = (user) => {
+  const normalized = toUpperSnake(user?.roleType);
+  return ROLE_TYPE_OPTIONS.includes(normalized) ? normalized : "COMMERCIAL";
+};
+
+const ensureInventoryTypeAllowedForUser = ({ user, inventoryType }) => {
+  if (user?.role === USER_ROLES.ADMIN) return;
+  const userRoleType = normalizeUserRoleType(user);
+  const normalizedInventoryType = sanitizeEnum(
+    inventoryType,
+    INVENTORY_TYPE_OPTIONS,
+    "inventoryType",
+  );
+  if (normalizedInventoryType !== userRoleType) {
+    throw createHttpError(
+      403,
+      `This account can manage only ${userRoleType.toLowerCase()} inventory`,
+    );
+  }
+};
+
+const ensureManagerExistsInCompany = async ({ managerId, companyId, roleType = "" }) => {
   if (!managerId) return null;
   if (!isValidObjectId(managerId)) {
     throw createHttpError(400, "Invalid team id");
@@ -806,6 +828,9 @@ const ensureManagerExistsInCompany = async ({ managerId, companyId }) => {
     role: { $in: MANAGEMENT_ROLES },
     isActive: true,
     companyId,
+    ...(ROLE_TYPE_OPTIONS.includes(toUpperSnake(roleType))
+      ? { roleType: toUpperSnake(roleType) }
+      : {}),
   })
     .select("_id name role companyId")
     .lean();
@@ -842,6 +867,10 @@ const buildPendingRequestReviewQuery = ({ user, requestId }) => {
 
   if (requestId) {
     query._id = requestId;
+  }
+
+  if (isManagementRole(user?.role)) {
+    query.teamId = user._id;
   }
 
   return query;
@@ -946,6 +975,7 @@ const resolveDirectCreateTeamId = async ({ user, payload, companyId }) => {
     await ensureManagerExistsInCompany({
       managerId: requestedTeamId,
       companyId,
+      roleType: payload?.inventoryType,
     });
     return requestedTeamId;
   }
@@ -955,12 +985,14 @@ const resolveDirectCreateTeamId = async ({ user, payload, companyId }) => {
     await ensureManagerExistsInCompany({
       managerId: userTeamId,
       companyId,
+      roleType: payload?.inventoryType,
     });
     return userTeamId;
   }
 
   const manager = await User.findOne({
     role: USER_ROLES.MANAGER,
+    roleType: payload?.inventoryType,
     isActive: true,
     companyId,
   })
@@ -1377,19 +1409,22 @@ const sanitizeInventoryPayload = ({
 };
 
 const getInventoryScopeQueryForUser = (user) => {
-  if (
-    [
-      USER_ROLES.ADMIN,
-      ...MANAGEMENT_ROLES,
-      USER_ROLES.EXECUTIVE,
-      USER_ROLES.FIELD_EXECUTIVE,
-    ].includes(user.role)
-  ) {
+  if (user.role === USER_ROLES.ADMIN) {
     return { companyId: getCompanyIdForUser(user) };
   }
 
-  if (user.role === USER_ROLES.CHANNEL_PARTNER) {
-    return { companyId: getCompanyIdForUser(user) };
+  if (
+    [
+      ...MANAGEMENT_ROLES,
+      USER_ROLES.EXECUTIVE,
+      USER_ROLES.FIELD_EXECUTIVE,
+      USER_ROLES.CHANNEL_PARTNER,
+    ].includes(user.role)
+  ) {
+    return {
+      companyId: getCompanyIdForUser(user),
+      inventoryType: normalizeUserRoleType(user),
+    };
   }
 
   throw createHttpError(403, "Access denied");
@@ -1703,6 +1738,7 @@ const createInventoryDirect = async ({ user, payload }) => {
     payload: normalizedPayload,
     mode: "create",
   });
+  ensureInventoryTypeAllowedForUser({ user, inventoryType: proposed.inventoryType });
   await ensureSaleDetailsLeadExists(proposed.saleDetails);
   await ensureReservationLeadExists(proposed.reservationLeadId);
 
@@ -1753,9 +1789,10 @@ const updateInventoryDirect = async ({ user, inventoryId, payload }) => {
   }
 
   const companyId = getCompanyIdForUser(user);
+  const scope = getInventoryScopeQueryForUser(user);
   const inventory = await Inventory.findOne({
     _id: inventoryId,
-    companyId,
+    ...scope,
   });
 
   if (!inventory) {
@@ -1771,6 +1808,10 @@ const updateInventoryDirect = async ({ user, inventoryId, payload }) => {
     currentReservationReason: inventory.reservationReason,
     currentReservationLeadId: inventory.reservationLeadId,
     currentSaleDetails: inventory.saleDetails || null,
+  });
+  ensureInventoryTypeAllowedForUser({
+    user,
+    inventoryType: patch.inventoryType || inventory.inventoryType,
   });
   await ensureSaleDetailsLeadExists(patch.saleDetails);
   await ensureReservationLeadExists(patch.reservationLeadId);
@@ -1878,6 +1919,7 @@ const bulkCreateInventoryDirect = async ({ user, payload = [] }) => {
         payload: normalizedRow,
         mode: "create",
       });
+      ensureInventoryTypeAllowedForUser({ user, inventoryType: proposed.inventoryType });
       await ensureSaleDetailsLeadExists(proposed.saleDetails);
       await ensureReservationLeadExists(proposed.reservationLeadId);
 
@@ -1887,6 +1929,7 @@ const bulkCreateInventoryDirect = async ({ user, payload = [] }) => {
         await ensureManagerExistsInCompany({
           managerId: teamId,
           companyId,
+          roleType: proposed.inventoryType,
         });
         validatedTeamIds.add(teamIdKey);
       }
@@ -1945,6 +1988,7 @@ const createInventoryCreateRequest = async ({ user, payload, io }) => {
     payload: normalizedPayload,
     mode: "create",
   });
+  ensureInventoryTypeAllowedForUser({ user, inventoryType: proposed.inventoryType });
   await ensureSaleDetailsLeadExists(proposed.saleDetails);
   await ensureReservationLeadExists(proposed.reservationLeadId);
 
@@ -1953,6 +1997,7 @@ const createInventoryCreateRequest = async ({ user, payload, io }) => {
     await ensureManagerExistsInCompany({
       managerId: teamId,
       companyId,
+      roleType: proposed.inventoryType,
     });
   }
 
@@ -1990,9 +2035,10 @@ const createInventoryUpdateRequest = async ({
   }
 
   const companyId = getCompanyIdForUser(user);
+  const scope = getInventoryScopeQueryForUser(user);
   const inventory = await Inventory.findOne({
     _id: inventoryId,
-    companyId,
+    ...scope,
   })
     .select(
       "_id projectName towerName unitNumber propertyId inventoryType price rent deposit depositMonths agreementYears lockInYears type category furnishingStatus status reservationReason reservationLeadId saleDetails location city area pincode buildingName floorNumber totalFloors totalArea carpetArea builtUpArea superBuiltUpArea length width height areaUnit maintenanceCharges commercialDetails residentialDetails documentsAvailable siteLocation images documents floorPlans videoTours officeNumber ownerName ownerNumber ownerWhatsappNumber ownerType keyManagerName keyManagerNumber dealType propertyDate gstApplicable",
@@ -2012,6 +2058,10 @@ const createInventoryUpdateRequest = async ({
     currentReservationReason: inventory.reservationReason,
     currentReservationLeadId: inventory.reservationLeadId,
     currentSaleDetails: inventory.saleDetails || null,
+  });
+  ensureInventoryTypeAllowedForUser({
+    user,
+    inventoryType: proposed.inventoryType || inventory.inventoryType,
   });
   await ensureSaleDetailsLeadExists(proposed.saleDetails);
 
@@ -2064,6 +2114,7 @@ const createInventoryUpdateRequest = async ({
     await ensureManagerExistsInCompany({
       managerId: teamId,
       companyId,
+      roleType: proposed.inventoryType || inventory.inventoryType,
     });
   }
 
@@ -2122,9 +2173,10 @@ const createInventoryDeleteRequest = async ({
   }
 
   const companyId = getCompanyIdForUser(user);
+  const scope = getInventoryScopeQueryForUser(user);
   const inventory = await Inventory.findOne({
     _id: inventoryId,
-    companyId,
+    ...scope,
   }).lean();
 
   if (!inventory) {
@@ -2253,6 +2305,7 @@ const approveRequest = async ({ user, requestId, io }) => {
       payload: request.proposedData || request.proposedChanges || {},
       mode: "create",
     });
+    ensureInventoryTypeAllowedForUser({ user, inventoryType: proposed.inventoryType });
     await ensureSaleDetailsLeadExists(proposed.saleDetails);
     await ensureReservationLeadExists(proposed.reservationLeadId);
 
@@ -2291,7 +2344,7 @@ const approveRequest = async ({ user, requestId, io }) => {
 
     inventory = await Inventory.findOne({
       _id: request.inventoryId,
-      companyId,
+      ...getInventoryScopeQueryForUser(user),
     });
 
     if (!inventory) {
@@ -2306,6 +2359,10 @@ const approveRequest = async ({ user, requestId, io }) => {
       currentReservationReason: inventory.reservationReason,
       currentReservationLeadId: inventory.reservationLeadId,
       currentSaleDetails: inventory.saleDetails || null,
+    });
+    ensureInventoryTypeAllowedForUser({
+      user,
+      inventoryType: proposed.inventoryType || inventory.inventoryType,
     });
     await ensureSaleDetailsLeadExists(proposed.saleDetails);
     const nextStatus = Object.prototype.hasOwnProperty.call(proposed, "status")
@@ -2363,7 +2420,7 @@ const approveRequest = async ({ user, requestId, io }) => {
 
     inventory = await Inventory.findOne({
       _id: request.inventoryId,
-      companyId,
+      ...getInventoryScopeQueryForUser(user),
     });
 
     if (!inventory) {

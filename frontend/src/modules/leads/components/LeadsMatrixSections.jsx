@@ -1471,6 +1471,7 @@ export const AddLeadModal = ({
   onClose,
   onSave,
   savingLead,
+  availableInventoryTypes = INVENTORY_TYPE_OPTIONS,
 }) => {
   const [customNumberFields, setCustomNumberFields] = React.useState({});
   const [isManualBudgetRange, setIsManualBudgetRange] = React.useState(false);
@@ -1804,7 +1805,7 @@ export const AddLeadModal = ({
             <div className="grid grid-cols-1 gap-2 md:grid-cols-2">
               <AddLeadFieldShell fieldTitleClass={fieldTitleClass} title="Inventory Type">
                 <AddLeadSelectControl inputClass={inputClass} isDark={isDark} value={formData.requirementsInventoryType} onChange={(event) => updateRequirementInventoryType(event.target.value)}>
-                  {INVENTORY_TYPE_OPTIONS.map((option) => (
+                  {availableInventoryTypes.map((option) => (
                     <option key={option.value || "any-inventory-type"} value={option.value}>{option.label}</option>
                   ))}
                 </AddLeadSelectControl>

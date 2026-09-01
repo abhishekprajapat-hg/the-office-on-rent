@@ -30,6 +30,11 @@ const ROLE_OPTIONS = [
   { label: "Coworking admin", value: "COWORKING_ADMIN" },
 ];
 
+const ROLE_TYPE_OPTIONS = [
+  { label: "Commercial", value: "COMMERCIAL" },
+  { label: "Residential", value: "RESIDENTIAL" },
+];
+
 const MANAGEMENT_ROLES = ["MANAGER"];
 const EXECUTIVE_ROLES = ["EXECUTIVE", "FIELD_EXECUTIVE"];
 const REPORTING_PARENT_ROLES = {
@@ -91,6 +96,7 @@ const TeamManager = ({ theme = "light" }) => {
     name: "",
     email: "",
     phone: "",
+    roleType: "COMMERCIAL",
     password: "",
     role: "MANAGER",
     reportingToId: "",
@@ -181,6 +187,7 @@ const TeamManager = ({ theme = "light" }) => {
         user?.name,
         user?.email,
         user?.phone,
+        user?.roleType === "RESIDENTIAL" ? "Residential" : "Commercial",
         user?.parentId?.name,
         user?.partnerCode,
         ROLE_LABELS[user?.role] || user?.role,
@@ -319,6 +326,7 @@ const TeamManager = ({ theme = "light" }) => {
       name: "",
       email: "",
       phone: "",
+      roleType: "COMMERCIAL",
       password: "",
       role: "MANAGER",
       reportingToId: "",
@@ -352,6 +360,7 @@ const TeamManager = ({ theme = "light" }) => {
         name: formData.name.trim(),
         email: formData.email.trim(),
         phone: formData.phone.trim(),
+        roleType: formData.roleType,
         password: formData.password,
         role: formData.role,
       };
@@ -755,6 +764,7 @@ const TeamManager = ({ theme = "light" }) => {
           error={formError}
           isDarkTheme={isDarkTheme}
           roleOptions={ROLE_OPTIONS}
+          roleTypeOptions={ROLE_TYPE_OPTIONS}
           reportingParentRoles={REPORTING_PARENT_ROLES}
         />
       ) : null}

@@ -392,6 +392,31 @@ const DEFAULT_FORM = {
   videoTours: [],
 };
 
+const getStoredUserRole = () =>
+  String(localStorage.getItem("role") || "").trim().toUpperCase();
+
+const getStoredUserRoleType = () => {
+  try {
+    const parsedUser = JSON.parse(localStorage.getItem("user") || "{}");
+    const normalized = String(parsedUser?.roleType || "").trim().toUpperCase();
+    return normalized === "RESIDENTIAL" ? "RESIDENTIAL" : "COMMERCIAL";
+  } catch {
+    return "COMMERCIAL";
+  }
+};
+
+const getDefaultInventoryForm = () => {
+  const roleType = getStoredUserRoleType();
+  return {
+    ...DEFAULT_FORM,
+    inventoryType: roleType,
+    category: roleType === "COMMERCIAL" ? "Office" : "Flat",
+  };
+};
+
+const getDefaultInventoryTypeFilter = () =>
+  getStoredUserRole() === "ADMIN" ? "all" : getStoredUserRoleType();
+
 const isInventoryPriceRequired = (type) => String(type || "").trim() !== "Rent";
 const isInventoryRentRequired = (type) => ["Rent", "Both"].includes(String(type || "").trim());
 
@@ -763,7 +788,7 @@ const AssetVault = () => {
   const [loadingLeadOptions, setLoadingLeadOptions] = useState(false);
   const [searchTerm, setSearchTerm] = useState("");
   const [statusFilter, setStatusFilter] = useState("all");
-  const [inventoryTypeFilter, setInventoryTypeFilter] = useState("all");
+  const [inventoryTypeFilter, setInventoryTypeFilter] = useState(getDefaultInventoryTypeFilter);
   const [furnishingFilter, setFurnishingFilter] = useState("");
   const [bhkFilter, setBhkFilter] = useState("");
   const [cabinsFilter, setCabinsFilter] = useState("");
@@ -785,7 +810,7 @@ const AssetVault = () => {
   const [formError, setFormError] = useState("");
   const [success, setSuccess] = useState("");
 
-  const [formData, setFormData] = useState(DEFAULT_FORM);
+  const [formData, setFormData] = useState(getDefaultInventoryForm);
   const [inventoryCustomNumberFields, setInventoryCustomNumberFields] = useState({});
   const [locationSuggestions, setLocationSuggestions] = useState([]);
   const [loadingLocationSuggestions, setLoadingLocationSuggestions] = useState(false);
@@ -802,7 +827,9 @@ const AssetVault = () => {
   const googleAutocompleteServiceRef = useRef(null);
   const googleGeocoderRef = useRef(null);
 
-  const role = String(localStorage.getItem("role") || "").trim().toUpperCase();
+  const role = getStoredUserRole();
+  const userRoleType = getStoredUserRoleType();
+  const canChooseInventoryRoleType = role === "ADMIN";
   const canManage = role === "ADMIN" || role === "MANAGER";
   const canDeleteDirect = role === "ADMIN";
   const canRequestDelete = role !== "ADMIN" && UPDATE_STATUS_REQUEST_ROLES.has(role);
@@ -1424,7 +1451,7 @@ const AssetVault = () => {
   };
 
   const resetForm = () => {
-    setFormData({ ...DEFAULT_FORM });
+    setFormData(getDefaultInventoryForm());
     setFormError("");
     clearLocationSuggestionState();
     setLocationBaseline({
@@ -2856,6 +2883,8 @@ const AssetVault = () => {
         statusOptions={STATUS_OPTIONS}
         inventoryTypeFilter={inventoryTypeFilter}
         onInventoryTypeFilterChange={setInventoryTypeFilter}
+        canChooseInventoryRoleType={canChooseInventoryRoleType}
+        userRoleType={userRoleType}
         furnishingFilter={furnishingFilter}
         onFurnishingFilterChange={setFurnishingFilter}
         bhkFilter={bhkFilter}
@@ -3006,10 +3035,15 @@ const AssetVault = () => {
                                 : "",
                           }));
                         }}
+                        disabled={!canChooseInventoryRoleType}
                         className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl text-sm font-bold text-slate-900 focus:outline-none focus:border-emerald-500 mt-1"
                       >
-                        <option value="COMMERCIAL">Commercial</option>
-                        <option value="RESIDENTIAL">Residential</option>
+                        {canChooseInventoryRoleType || userRoleType === "COMMERCIAL" ? (
+                          <option value="COMMERCIAL">Commercial</option>
+                        ) : null}
+                        {canChooseInventoryRoleType || userRoleType === "RESIDENTIAL" ? (
+                          <option value="RESIDENTIAL">Residential</option>
+                        ) : null}
                       </select>
                     </div>
                     <div>
@@ -4472,5 +4506,3 @@ const AssetVault = () => {
 };
 
 export default AssetVault;
-
-

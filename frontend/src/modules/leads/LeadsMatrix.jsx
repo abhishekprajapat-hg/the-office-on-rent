@@ -391,6 +391,21 @@ const getStoredUserId = () => {
   }
 };
 
+const getStoredUserRoleType = () => {
+  try {
+    const parsedUser = JSON.parse(localStorage.getItem("user") || "{}");
+    const normalized = String(parsedUser?.roleType || "").trim().toUpperCase();
+    return normalized === "RESIDENTIAL" ? "RESIDENTIAL" : "COMMERCIAL";
+  } catch {
+    return "COMMERCIAL";
+  }
+};
+
+const getDefaultFormDataForRoleType = () => ({
+  ...defaultFormData,
+  requirementsInventoryType: getStoredUserRoleType(),
+});
+
 const getInventoryLeadSearchText = (inventoryLike = {}) => {
   const commercialLayout = inventoryLike?.commercialDetails?.officeLayout || {};
   const residentialDetails = inventoryLike?.residentialDetails || {};
@@ -1412,7 +1427,7 @@ const LeadsMatrix = () => {
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
   const [isEditLeadModalOpen, setIsEditLeadModalOpen] = useState(false);
   const [savingLead, setSavingLead] = useState(false);
-  const [formData, setFormData] = useState(defaultFormData);
+  const [formData, setFormData] = useState(getDefaultFormDataForRoleType);
   const [inventoryOptions, setInventoryOptions] = useState([]);
   const [isBulkUploadModalOpen, setIsBulkUploadModalOpen] = useState(false);
   const [bulkUploadText, setBulkUploadText] = useState("");
@@ -1484,6 +1499,8 @@ const LeadsMatrix = () => {
     : "/leads";
 
   const userRole = localStorage.getItem("role") || "";
+  const userRoleType = getStoredUserRoleType();
+  const canChooseLeadRoleType = userRole === "ADMIN";
   const isExecutiveUser = EXECUTIVE_ROLES.includes(userRole);
   const currentUserId = getStoredUserId();
   const canAddLead =
@@ -1498,6 +1515,16 @@ const LeadsMatrix = () => {
   const canConfigureSiteLocation =
     userRole === "ADMIN" || MANAGEMENT_ROLES.includes(userRole);
   const canReviewDealPayment = userRole === "ADMIN";
+  const availableLeadInventoryTypes = useMemo(
+    () =>
+      canChooseLeadRoleType
+        ? [
+          { label: "Commercial", value: "COMMERCIAL" },
+          { label: "Residential", value: "RESIDENTIAL" },
+        ]
+        : [{ label: userRoleType === "RESIDENTIAL" ? "Residential" : "Commercial", value: userRoleType }],
+    [canChooseLeadRoleType, userRoleType],
+  );
 
   useEffect(() => {
     if (!error) return undefined;
@@ -1563,13 +1590,14 @@ const LeadsMatrix = () => {
       const response = await getUsers({
         crmAssignable: true,
         limit: 200,
-        fields: "_id,name,role,isActive,lastAssignedAt",
+        fields: "_id,name,role,roleType,isActive,lastAssignedAt",
       });
       const users = response?.users || [];
       const list = users.filter(
         (user) =>
           user.isActive !== false
-          && MANUAL_LEAD_TRANSFER_TARGET_ROLES.includes(user.role),
+          && MANUAL_LEAD_TRANSFER_TARGET_ROLES.includes(user.role)
+          && (canChooseLeadRoleType || String(user.roleType || "COMMERCIAL").toUpperCase() === userRoleType),
       );
       setExecutives(list);
     } catch (fetchError) {
@@ -1577,7 +1605,7 @@ const LeadsMatrix = () => {
       console.error(`Load transfer users failed: ${message}`);
       setExecutives([]);
     }
-  }, [canAssignLead]);
+  }, [canAssignLead, canChooseLeadRoleType, userRoleType]);
 
   const fetchInventoryOptions = useCallback(async () => {
     if (!canManageLeadProperties) return;
@@ -2514,7 +2542,7 @@ const LeadsMatrix = () => {
       }
 
       setIsEditLeadModalOpen(false);
-      setFormData(defaultFormData);
+      setFormData(getDefaultFormDataForRoleType());
       setSuccess("Lead updated");
     } catch (updateError) {
       const message = toErrorMessage(updateError, "Failed to update lead");
@@ -3248,6 +3276,7 @@ const LeadsMatrix = () => {
             formData={formData}
             setFormData={setFormData}
             inventoryOptions={inventoryOptions}
+            availableInventoryTypes={availableLeadInventoryTypes}
             getInventoryLeadLabel={getInventoryLeadLabel}
             onInventorySelection={handleInventorySelection}
             onClose={() => setIsAddModalOpen(false)}
@@ -3267,11 +3296,12 @@ const LeadsMatrix = () => {
             formData={formData}
             setFormData={setFormData}
             inventoryOptions={inventoryOptions}
+            availableInventoryTypes={availableLeadInventoryTypes}
             getInventoryLeadLabel={getInventoryLeadLabel}
             onInventorySelection={handleInventorySelection}
             onClose={() => {
               setIsEditLeadModalOpen(false);
-              setFormData(defaultFormData);
+              setFormData(getDefaultFormDataForRoleType());
             }}
             onSave={handleSaveEditedLead}
             savingLead={savingUpdates}
