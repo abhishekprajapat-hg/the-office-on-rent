@@ -802,7 +802,6 @@ export const LeadsMatrixTable = ({
   formatDate,
   nowMs,
 }) => {
-  const [openStatusMenuId, setOpenStatusMenuId] = React.useState("");
   const [visibleLeadCount, setVisibleLeadCount] = React.useState(INITIAL_VISIBLE_LEADS);
   const [kanbanVisibleByStatus, setKanbanVisibleByStatus] = React.useState({});
 
@@ -831,11 +830,9 @@ export const LeadsMatrixTable = ({
     const leadId = String(lead?._id || "");
     const isUpdating = updatingInlineStatusId === leadId;
     const currentStatus = String(lead?.status || "NEW").toUpperCase();
-    const isOpen = openStatusMenuId === leadId;
 
     const handleStatusSelect = (status) => {
       const nextStatus = String(status || "").trim().toUpperCase();
-      setOpenStatusMenuId("");
 
       if (nextStatus === "CLOSED") {
         onOpenLeadDetails(lead);
@@ -845,52 +842,18 @@ export const LeadsMatrixTable = ({
       onInlineStatusChange?.(lead, nextStatus);
     };
 
-    if (compact) {
-      return (
-        <div
-          className="relative inline-flex shrink-0"
-          onClick={(event) => event.stopPropagation()}
-          onKeyDown={(event) => event.stopPropagation()}
-        >
-          <select
-            value={currentStatus}
-            disabled={isUpdating}
-            onChange={(event) => handleStatusSelect(event.target.value)}
-            className={`h-10 max-w-[116px] appearance-none rounded-full border py-1 pl-3 pr-7 text-[10px] font-bold uppercase outline-none transition-all focus:ring-2 ${
-              getStatusColor(lead?.status)
-            } ${
-              isUpdating ? "cursor-wait opacity-60" : "cursor-pointer"
-            } ${
-              isDark ? "focus:ring-cyan-300/20" : "focus:ring-blue-200"
-            }`}
-            title="Change lead status"
-            aria-label={`Change status for ${lead?.name || "lead"}`}
-          >
-            {leadStatuses.map((status) => (
-              <option key={status} value={status}>
-                {getStatusLabel(status)}
-              </option>
-            ))}
-          </select>
-          <span className="pointer-events-none absolute right-2.5 top-1/2 -translate-y-1/2 text-[9px] font-bold">
-            v
-          </span>
-        </div>
-      );
-    }
-
     return (
       <div
-        className={`relative inline-flex ${isOpen ? "z-[90]" : "z-10"}`}
+        className={`relative inline-flex shrink-0 ${compact ? "" : "min-w-[148px]"}`}
         onClick={(event) => event.stopPropagation()}
         onKeyDown={(event) => event.stopPropagation()}
       >
-        <button
-          type="button"
+        <select
+          value={currentStatus}
           disabled={isUpdating}
-          onClick={() => setOpenStatusMenuId((prev) => (prev === leadId ? "" : leadId))}
-          className={`inline-flex items-center gap-1.5 rounded-full border py-1 pl-2.5 pr-2 font-bold uppercase outline-none transition-all focus:ring-2 ${
-            compact ? "text-[10px]" : "text-[11px]"
+          onChange={(event) => handleStatusSelect(event.target.value)}
+          className={`h-9 appearance-none rounded-full border py-1 pl-3 pr-7 font-bold uppercase outline-none transition-all focus:ring-2 ${
+            compact ? "max-w-[118px] text-[10px]" : "w-full text-[11px]"
           } ${getStatusColor(lead?.status)} ${
             isUpdating ? "cursor-wait opacity-60" : "cursor-pointer hover:shadow-sm"
           } ${
@@ -898,56 +861,16 @@ export const LeadsMatrixTable = ({
           }`}
           title="Change lead status"
           aria-label={`Change status for ${lead?.name || "lead"}`}
-          aria-expanded={isOpen}
         >
-          <span>{isUpdating ? "Updating" : getStatusLabel(currentStatus)}</span>
-          <span className={`text-[9px] transition-transform ${isOpen ? "rotate-180" : ""}`}>
-            v
-          </span>
-        </button>
-
-        {isOpen ? (
-          <div
-            className={`absolute left-0 top-full z-[100] mt-1.5 w-44 overflow-hidden rounded-xl border p-1 text-left shadow-2xl backdrop-blur-xl ${
-              isDark
-                ? "border-slate-700 bg-slate-950/95"
-                : "border-slate-200 bg-white/95"
-            }`}
-          >
-            {leadStatuses.map((status) => {
-              const isCurrent = status === currentStatus;
-              const isClosed = status === "CLOSED";
-
-              return (
-                <button
-                  type="button"
-                  key={status}
-                  onClick={() => handleStatusSelect(status)}
-                  className={`flex w-full items-center justify-between gap-3 rounded-lg px-2.5 py-1.5 text-[11px] font-bold uppercase transition-colors ${
-                    isCurrent
-                      ? isDark
-                        ? "bg-cyan-400/15 text-cyan-100"
-                        : "bg-blue-50 text-blue-700"
-                      : isDark
-                        ? "text-slate-300 hover:bg-white/10 hover:text-white"
-                        : "text-slate-700 hover:bg-slate-100 hover:text-slate-950"
-                  }`}
-                >
-                  <span className="min-w-0 truncate">{getStatusLabel(status)}</span>
-                  {isClosed ? (
-                    <span className={isDark ? "shrink-0 text-[9px] text-amber-200" : "shrink-0 text-[9px] text-amber-700"}>
-                      OPEN
-                    </span>
-                  ) : isCurrent ? (
-                    <span className={isDark ? "shrink-0 text-[9px] text-cyan-200" : "shrink-0 text-[9px] text-blue-600"}>
-                      ACTIVE
-                    </span>
-                  ) : null}
-                </button>
-              );
-            })}
-          </div>
-        ) : null}
+          {leadStatuses.map((status) => (
+            <option key={status} value={status}>
+              {getStatusLabel(status)}
+            </option>
+          ))}
+        </select>
+        <span className="pointer-events-none absolute right-2.5 top-1/2 -translate-y-1/2 text-[9px] font-bold">
+          v
+        </span>
       </div>
     );
   };
@@ -1195,7 +1118,6 @@ export const LeadsMatrixTable = ({
               {visibleLeads.map((lead) => {
                 const pendingAmount = getLeadPendingAmount(lead);
                 const followUpDue = isFollowUpDue(lead);
-                const isStatusMenuOpen = openStatusMenuId === String(lead._id || "");
                 return (
                   <div
                     role="button"
@@ -1204,8 +1126,6 @@ export const LeadsMatrixTable = ({
                     onClick={() => onOpenLeadDetails(lead)}
                     onKeyDown={(event) => handleRowKeyDown(event, lead)}
                     className={`relative w-full rounded-2xl border p-3.5 text-left transition-all ${
-                      isStatusMenuOpen ? "z-50" : "z-0"
-                    } ${
                       isDark
                         ? "border-slate-700 bg-slate-950/70 hover:border-cyan-300/40"
                         : "border-slate-200 bg-white hover:border-cyan-300 hover:bg-slate-50"
@@ -1323,7 +1243,6 @@ export const LeadsMatrixTable = ({
                 {visibleLeads.map((lead) => {
                   const pendingAmount = getLeadPendingAmount(lead);
                   const followUpDue = isFollowUpDue(lead);
-                  const isStatusMenuOpen = openStatusMenuId === String(lead._id || "");
                   return (
                     <div
                       role="button"
@@ -1332,8 +1251,6 @@ export const LeadsMatrixTable = ({
                       onClick={() => onOpenLeadDetails(lead)}
                       onKeyDown={(event) => handleRowKeyDown(event, lead)}
                       className={`group relative grid w-full grid-cols-12 items-center gap-3 overflow-visible rounded-2xl border px-4 py-3 text-left transition-all ${
-                        isStatusMenuOpen ? "z-50" : "z-0"
-                      } ${
                         isDark
                           ? "border-slate-700 bg-slate-950/65 hover:border-cyan-300/45 hover:bg-slate-900"
                           : "border-slate-200 bg-white hover:border-cyan-300 hover:bg-slate-50"
@@ -2087,6 +2004,7 @@ export const BulkLeadUploadModal = ({
   isDark,
   csvText,
   sheetType,
+  availableInventoryTypes = INVENTORY_TYPE_OPTIONS,
   onSheetTypeChange,
   onCsvTextChange,
   selectedFileName,
@@ -2143,8 +2061,11 @@ export const BulkLeadUploadModal = ({
                   : "border-slate-300 bg-white text-slate-700"
               }`}
             >
-              <option value="RESIDENTIAL">Residantial</option>
-              <option value="COMMERCIAL">Commercial</option>
+              {availableInventoryTypes.map((option) => (
+                <option key={option.value} value={option.value}>
+                  {option.label}
+                </option>
+              ))}
             </select>
             <ChevronDown
               size={16}

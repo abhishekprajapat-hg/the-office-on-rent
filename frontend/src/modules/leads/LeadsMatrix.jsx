@@ -80,6 +80,7 @@ const LEAD_LIST_FIELDS = [
   "source",
   "status",
   "assignedTo",
+  "assignedFieldExecutive",
   "createdBy",
   "nextFollowUp",
   "lastContactedAt",
@@ -381,15 +382,6 @@ const getInventoryLeadLabel = (inventoryLike = {}) => {
 
 const getInventoryLeadCity = (inventoryLike = {}) =>
   String(inventoryLike?.city || inventoryLike?.location || "").trim();
-
-const getStoredUserId = () => {
-  try {
-    const parsedUser = JSON.parse(localStorage.getItem("user") || "{}");
-    return String(parsedUser?._id || parsedUser?.id || "").trim();
-  } catch {
-    return "";
-  }
-};
 
 const getStoredUserRoleType = () => {
   try {
@@ -1502,7 +1494,6 @@ const LeadsMatrix = () => {
   const userRoleType = getStoredUserRoleType();
   const canChooseLeadRoleType = userRole === "ADMIN";
   const isExecutiveUser = EXECUTIVE_ROLES.includes(userRole);
-  const currentUserId = getStoredUserId();
   const canAddLead =
     userRole === "ADMIN"
     || MANAGEMENT_ROLES.includes(userRole)
@@ -1525,6 +1516,17 @@ const LeadsMatrix = () => {
         : [{ label: userRoleType === "RESIDENTIAL" ? "Residential" : "Commercial", value: userRoleType }],
     [canChooseLeadRoleType, userRoleType],
   );
+  const defaultBulkUploadSheetType = availableLeadInventoryTypes[0]?.value || DEFAULT_BULK_LEAD_SHEET_TYPE;
+
+  useEffect(() => {
+    const allowedSheetTypes = new Set(availableLeadInventoryTypes.map((option) => option.value));
+    if (!allowedSheetTypes.has(bulkUploadSheetType)) {
+      setBulkUploadSheetType(defaultBulkUploadSheetType);
+      setBulkUploadParsedRows(null);
+      setBulkUploadText("");
+      setBulkUploadFileName("");
+    }
+  }, [availableLeadInventoryTypes, bulkUploadSheetType, defaultBulkUploadSheetType]);
 
   useEffect(() => {
     if (!error) return undefined;
@@ -1555,7 +1557,6 @@ const LeadsMatrix = () => {
         page,
         limit: LEAD_LIST_PAGE_LIMIT,
         fields: LEAD_LIST_FIELDS,
-        ...(isExecutiveUser && currentUserId ? { assignedTo: currentUserId } : {}),
       });
       const list = Array.isArray(response?.leads) ? response.leads : [];
       setLeadPagination(response?.pagination || null);
@@ -1581,7 +1582,7 @@ const LeadsMatrix = () => {
       setRefreshing(false);
       setLoadingMoreLeads(false);
     }
-  }, [currentUserId, isExecutiveUser]);
+  }, []);
 
   const fetchExecutives = useCallback(async () => {
     if (!canAssignLead) return;
@@ -2611,7 +2612,7 @@ const LeadsMatrix = () => {
         setBulkUploadText("");
         setBulkUploadParsedRows(null);
         setBulkUploadFileName("");
-        setBulkUploadSheetType(DEFAULT_BULK_LEAD_SHEET_TYPE);
+        setBulkUploadSheetType(defaultBulkUploadSheetType);
       }
     } catch (uploadError) {
       const message = toErrorMessage(uploadError, "Failed to bulk upload leads");
@@ -3315,6 +3316,7 @@ const LeadsMatrix = () => {
             isDark={isDark}
             csvText={bulkUploadText}
             sheetType={bulkUploadSheetType}
+            availableInventoryTypes={availableLeadInventoryTypes}
             onSheetTypeChange={(value) => {
               setBulkUploadSheetType(value);
               setBulkUploadParsedRows(null);

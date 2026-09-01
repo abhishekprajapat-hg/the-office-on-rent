@@ -12,6 +12,7 @@ const {
 const {
   USER_ROLES,
   EXECUTIVE_ROLES,
+  LEAD_OWNER_ROLES,
   MANUAL_LEAD_TRANSFER_TARGET_ROLES,
   MANAGEMENT_ROLES,
   isManagementRole,
@@ -1574,6 +1575,16 @@ const buildLeadQueryForUser = async (user) => {
     return addLeadRoleTypeScope(companyScope, user);
   }
 
+  if (user.role === USER_ROLES.FIELD_EXECUTIVE) {
+    return addLeadRoleTypeScope({
+      ...companyScope,
+      $or: [
+        { assignedTo: user._id },
+        { assignedFieldExecutive: user._id },
+      ],
+    }, user);
+  }
+
   if (EXECUTIVE_ROLES.includes(user.role)) {
     return addLeadRoleTypeScope({
       ...companyScope,
@@ -1883,6 +1894,50 @@ const getLeadRoleCounts = async (query) => {
   }, {});
 };
 
+const buildCreatorLeadAssignment = async (user) => {
+  if (!user?._id) {
+    return {};
+  }
+
+  const assignment = {
+    assignedTo: user._id,
+    assignmentHistory: [
+      {
+        action: "INITIAL_ASSIGNMENT",
+        fromUser: null,
+        toUser: user._id,
+        reason: "Lead assigned to creator on creation",
+        statusAtTransfer: "NEW",
+        createdAt: new Date(),
+        createdBy: user._id,
+      },
+    ],
+  };
+
+  if (isManagementRole(user.role)) {
+    assignment.assignedManager = user._id;
+    return assignment;
+  }
+
+  if (LEAD_OWNER_ROLES.includes(user.role)) {
+    assignment.assignedExecutive = user._id;
+  } else if (user.role === USER_ROLES.FIELD_EXECUTIVE) {
+    assignment.assignedFieldExecutive = user._id;
+  }
+
+  if (assignment.assignedExecutive || assignment.assignedFieldExecutive) {
+    const topManager = await getAncestorByRoles({
+      user,
+      targetRoles: [USER_ROLES.MANAGER],
+      companyId: user.companyId || null,
+      select: "_id role parentId companyId isActive",
+    });
+    assignment.assignedManager = topManager?._id || user.parentId || null;
+  }
+
+  return assignment;
+};
+
 exports.createLead = async (req, res) => {
   try {
     const {
@@ -1980,6 +2035,7 @@ exports.createLead = async (req, res) => {
       companyId,
       source: "MANUAL",
       createdBy: req.user._id,
+      ...(await buildCreatorLeadAssignment(req.user)),
     };
 
     const roleTypeError = assertLeadTypeMatchesUser(createPayload, req.user);
@@ -2008,28 +2064,16 @@ exports.createLead = async (req, res) => {
     }
 
     const lead = await Lead.create(createPayload);
-    const shouldAutoAssignLead = req.user.role !== USER_ROLES.CHANNEL_PARTNER;
-
-    if (shouldAutoAssignLead) {
-      await autoAssignLead({
-        lead,
-        requester: req.user,
-        performedBy: req.user._id,
-      });
-    } else {
-      await LeadActivity.create({
-        lead: lead._id,
-        action: "Lead created by channel partner and pending admin assignment",
-        performedBy: req.user._id,
-      });
-    }
+    await LeadActivity.create({
+      lead: lead._id,
+      action: "Lead created and assigned to creator",
+      performedBy: req.user._id,
+    });
 
     const populatedLead = await getLeadViewById(lead._id, companyId, req.user);
 
     return res.status(201).json({
-      message: shouldAutoAssignLead
-        ? "Lead created and assignment processed"
-        : "Lead created successfully",
+      message: "Lead created and assigned to creator",
       lead: populatedLead,
     });
   } catch (error) {

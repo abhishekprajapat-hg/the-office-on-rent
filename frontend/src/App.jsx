@@ -701,7 +701,7 @@ export default function App() {
       <Route path="/dashboard" element={DashboardByRole} />
       <Route
         path="/leads"
-        element={canAccess(["ADMIN", ...MANAGEMENT_ROLES, "EXECUTIVE", "CHANNEL_PARTNER"]) ? <LeadsMatrix /> : <Navigate to="/" />}
+        element={canAccess(["ADMIN", ...MANAGEMENT_ROLES, "EXECUTIVE", "FIELD_EXECUTIVE", "CHANNEL_PARTNER"]) ? <LeadsMatrix /> : <Navigate to="/" />}
       />
       <Route
         path="/leads/:leadId"
