@@ -2,22 +2,24 @@ import React from "react";
 import { createPortal } from "react-dom";
 import { AlertCircle, CheckCircle2, Info, XCircle } from "lucide-react";
 
+// Surface stays neutral; the tone is carried by a coloured left border and the
+// icon, so a toast never fights the page for attention.
 const TOAST_STYLES = {
   error: {
     icon: XCircle,
-    className: "border-rose-200 bg-rose-600 text-white shadow-rose-950/20",
+    className: "border-l-rose-600 text-rose-700 dark:text-rose-300",
   },
   success: {
     icon: CheckCircle2,
-    className: "border-emerald-200 bg-emerald-600 text-white shadow-emerald-950/20",
+    className: "border-l-emerald-600 text-emerald-700 dark:text-emerald-300",
   },
   warning: {
     icon: AlertCircle,
-    className: "border-amber-200 bg-amber-500 text-white shadow-amber-950/20",
+    className: "border-l-amber-600 text-amber-700 dark:text-amber-300",
   },
   info: {
     icon: Info,
-    className: "border-sky-200 bg-sky-600 text-white shadow-sky-950/20",
+    className: "border-l-blue-600 text-blue-700 dark:text-blue-300",
   },
 };
 
@@ -43,10 +45,10 @@ const ToastNotice = ({
       aria-live={type === "error" ? "assertive" : "polite"}
     >
       <div
-        className={`pointer-events-auto flex w-full max-w-sm items-start gap-2 rounded-2xl border px-3 py-2.5 text-sm font-semibold shadow-2xl sm:px-4 ${config.className} ${className}`}
+        className={`pointer-events-auto flex w-full max-w-sm items-start gap-2.5 rounded-xl border border-slate-200 border-l-[3px] bg-white px-3 py-2.5 text-[13px] font-semibold shadow-crm-panel sm:px-4 dark:border-slate-700 dark:bg-slate-900 ${config.className} ${className}`}
       >
         <Icon size={17} className="mt-0.5 shrink-0" />
-        <span className="min-w-0 break-words">{message}</span>
+        <span className="min-w-0 break-words text-slate-900 dark:text-slate-100">{message}</span>
       </div>
     </div>
   );

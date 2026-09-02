@@ -21,7 +21,7 @@ const Pagination = ({
 
   return (
     <div className={cn("flex flex-wrap items-center justify-between gap-3", className)}>
-      <p className="text-xs font-semibold text-slate-500 dark:text-slate-400">
+      <p className="text-xs font-semibold tabular-nums text-slate-500 dark:text-slate-400">
         {rangeStart && rangeEnd
           ? `Showing ${rangeStart}-${rangeEnd} of ${totalItems}`
           : `Page ${safePage} of ${safeTotalPages}`}
@@ -34,7 +34,7 @@ const Pagination = ({
           disabled={!canPrev}
           onClick={() => onPageChange?.(safePage - 1)}
         />
-        <span className="min-w-[3rem] text-center text-xs font-bold text-slate-700 dark:text-slate-200">
+        <span className="min-w-[3rem] text-center text-xs font-semibold tabular-nums text-slate-700 dark:text-slate-200">
           {safePage} / {safeTotalPages}
         </span>
         <IconButton
