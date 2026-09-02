@@ -30,14 +30,12 @@ import { useDebouncedValue } from "../../hooks/useDebouncedValue";
 import ToastNotice from "../../components/ui/ToastNotice";
 import {
   AssetVaultFilters,
-  AssetVaultToolbar,
   PendingInventoryRequestsPanel,
 } from "./components/AssetVaultSections";
 import {
-  InventoryKpiGrid,
   PropertyWorkspace,
 } from "./components/PropertyWorkspace";
-import { buildInventoryMetrics } from "./components/propertyWorkspaceUtils";
+import InventoryToolbar from "./components/InventoryToolbar";
 import {
   FURNISHING_OPTIONS,
   getInventorySubtypeConfig,
@@ -787,7 +785,7 @@ const AssetVault = () => {
   const [leadOptions, setLeadOptions] = useState([]);
   const [loadingLeadOptions, setLoadingLeadOptions] = useState(false);
   const [searchTerm, setSearchTerm] = useState("");
-  const [statusFilter, setStatusFilter] = useState("all");
+  const [statusFilter, setStatusFilter] = useState("Available");
   const [inventoryTypeFilter, setInventoryTypeFilter] = useState(getDefaultInventoryTypeFilter);
   const [furnishingFilter, setFurnishingFilter] = useState("");
   const [bhkFilter, setBhkFilter] = useState("");
@@ -893,7 +891,64 @@ const AssetVault = () => {
     () => assets.find((asset) => String(asset?._id || "") === String(reserveAssetId || "")) || null,
     [assets, reserveAssetId],
   );
-  const inventoryMetrics = useMemo(() => buildInventoryMetrics(assets), [assets]);
+  const statusCounts = useMemo(() => {
+    const counts = { all: assets.length, Available: 0, Blocked: 0, Sold: 0 };
+    assets.forEach((asset) => {
+      const status = toApiStatus(asset?.status);
+      if (counts[status] !== undefined) counts[status] += 1;
+    });
+    return counts;
+  }, [assets]);
+
+  // Active filters as removable chips. "Add filter" opens the full panel, which
+  // still owns every control - this only surfaces what is currently applied.
+  const inventoryFilterChips = useMemo(() => {
+    const chips = [];
+    const push = (id, label, value) => {
+      if (value) chips.push({ id, label, value: String(value).replace(/_/g, " ").toLowerCase(), active: true });
+    };
+    push("type", "Type", inventoryTypeFilter);
+    push("furnishing", "Furnishing", furnishingFilter);
+    push("bhk", "BHK", bhkFilter);
+    push("cabins", "Cabins", cabinsFilter);
+    push("seats", "Seats", seatsFilter);
+    push("area", "Area", areaRangeFilter);
+    push("budget", "Budget", budgetRangeFilter);
+    push("floor", "Floor", floorFilter);
+    push("parking", "Parking", parkingFilter);
+    push("pantry", "Pantry", pantryFilter);
+    push("amenities", "Amenities", amenitiesFilter);
+    return chips;
+  }, [
+    amenitiesFilter,
+    areaRangeFilter,
+    bhkFilter,
+    budgetRangeFilter,
+    cabinsFilter,
+    floorFilter,
+    furnishingFilter,
+    inventoryTypeFilter,
+    pantryFilter,
+    parkingFilter,
+    seatsFilter,
+  ]);
+
+  const handleRemoveInventoryFilter = useCallback((filter) => {
+    const clear = {
+      type: () => setInventoryTypeFilter(""),
+      furnishing: () => setFurnishingFilter(""),
+      bhk: () => setBhkFilter(""),
+      cabins: () => setCabinsFilter(""),
+      seats: () => setSeatsFilter(""),
+      area: () => setAreaRangeFilter(""),
+      budget: () => setBudgetRangeFilter(""),
+      floor: () => setFloorFilter(""),
+      parking: () => setParkingFilter(""),
+      pantry: () => setPantryFilter(""),
+      amenities: () => setAmenitiesFilter(""),
+    };
+    clear[filter.id]?.();
+  }, []);
 
   const sortedLeadOptions = useMemo(
     () =>
@@ -2861,15 +2916,21 @@ const AssetVault = () => {
 
   return (
     <div className="ui-page-shell asset-vault-page custom-scrollbar relative flex flex-col bg-slate-50/50">
-      <AssetVaultToolbar
+      <InventoryToolbar
         modeType={modeType}
         onModeChange={setModeType}
-        canOpenCreateModal={canOpenCreateModal}
-        canManage={canManage}
+        statusFilter={statusFilter}
+        onStatusFilterChange={setStatusFilter}
+        statusCounts={statusCounts}
+        filters={inventoryFilterChips}
+        onRemoveFilter={handleRemoveInventoryFilter}
+        onToggleFilter={handleRemoveInventoryFilter}
+        onAddFilter={() => setAdvancedFiltersOpen((prev) => !prev)}
+        viewMode={viewMode}
+        onViewModeChange={setViewMode}
+        canManage={canOpenCreateModal}
         onOpenAddModal={openAddModal}
       />
-
-      <InventoryKpiGrid metrics={inventoryMetrics} />
 
       <AssetVaultFilters
         searchTerm={searchTerm}
