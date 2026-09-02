@@ -55,6 +55,9 @@ const UserProfile = lazy(() => import("./modules/profile/UserProfile"));
 const SharedInventoryView = lazy(() => import("./modules/inventory/SharedInventoryView"));
 const TaskManager = lazy(() => import("./modules/tasks/TaskManager"));
 
+// TEMPORARY: Phase 4 component review surface. Removed in Phase 14.
+const KitchenSink = lazy(() => import("./modules/dev/KitchenSink"));
+
 const CoworkingDashboard = lazy(() => import("./modules/coworking/CoworkingDashboard"));
 const CoworkingProperties = lazy(() => import("./modules/coworking/Properties"));
 const CoworkingFloors = lazy(() => import("./modules/coworking/Floors"));
@@ -697,6 +700,8 @@ export default function App() {
   const roleLabel = ROLE_LABELS[userRole] || userRole || "Workspace";
   const appRoutes = useMemo(() => (
     <Routes>
+      {/* TEMPORARY: Phase 4 component review surface, dev builds only. Removed in Phase 14. */}
+      {import.meta.env.DEV ? <Route path="/_kitchen-sink" element={<KitchenSink />} /> : null}
       <Route path="/" element={DashboardByRole} />
       <Route path="/dashboard" element={DashboardByRole} />
       <Route
