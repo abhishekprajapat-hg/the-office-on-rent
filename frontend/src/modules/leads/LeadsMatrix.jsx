@@ -3132,12 +3132,7 @@ const LeadsMatrix = () => {
         isDark ? "bg-slate-950" : ""
       }`}
     >
-      <div className={`pointer-events-none absolute inset-0 ${
-        isDark
-          ? "bg-[radial-gradient(circle_at_9%_10%,rgba(56,189,248,0.18),transparent_35%),radial-gradient(circle_at_93%_16%,rgba(16,185,129,0.16),transparent_30%),radial-gradient(circle_at_50%_105%,rgba(30,41,59,0.65),transparent_50%)]"
-          : "bg-[radial-gradient(circle_at_10%_9%,rgba(14,165,233,0.16),transparent_35%),radial-gradient(circle_at_90%_14%,rgba(16,185,129,0.14),transparent_30%),linear-gradient(180deg,rgba(255,255,255,0.45),rgba(241,245,249,0.82))]"
-      }`} />
-      <div className={`relative z-10 flex flex-col ${isRouteDetailsView ? "" : "flex-1"}`}>
+      <div className={`relative z-10 flex flex-col gap-4 p-5 ${isRouteDetailsView ? "" : "flex-1"}`}>
         {isRouteDetailsView ? (
           <>
             <LeadsMatrixAlerts isDark={isDark} error={error} success={success} />
