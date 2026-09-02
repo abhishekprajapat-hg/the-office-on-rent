@@ -2,10 +2,8 @@ import { memo, useCallback, useMemo, useState } from "react";
 import { useChatNotifications } from "../../context/useChatNotifications";
 import { usePermissions } from "../../context/usePermissions";
 import { cn } from "../ui";
-import ActivityBar from "./ActivityBar";
 import AppTopCommandBar from "./AppTopCommandBar";
 import PrimarySidebar from "./PrimarySidebar";
-import TopNavigation from "./TopNavigation";
 
 const WorkbenchShell = ({
   children,
@@ -38,41 +36,38 @@ const WorkbenchShell = ({
         shouldLockDocumentScroll ? "h-dvh overflow-hidden" : "min-h-screen",
       )}
     >
-      <ActivityBar
-        userRole={userRole}
-        user={userForNav}
-        onLogout={onLogout}
-        unreadAlerts={adminRequestUnread}
-        unreadChats={unreadTotal}
-        onMobileMenuOpen={handleOpenMobileMenu}
-      />
       <PrimarySidebar
         userRole={userRole}
         user={userForNav}
+        roleLabel={roleLabel}
         onLogout={onLogout}
         collapsed={sidebarCollapsed}
         onToggleCollapsed={handleToggleSidebar}
         mobileOpen={mobileMenuOpen}
         onMobileClose={handleCloseMobileMenu}
         unreadChats={unreadTotal}
+        unreadAlerts={adminRequestUnread}
       />
 
       <main className="workspace-main app-page-bg relative min-w-0 flex flex-1 flex-col overflow-hidden">
-        <TopNavigation
-          userRole={userRole}
-          user={userForNav}
-          unreadAlerts={adminRequestUnread}
-          unreadChats={unreadTotal}
-          onMenuOpen={handleOpenMobileMenu}
-        />
         {!isChatPage ? (
           <AppTopCommandBar
             pageHeader={pageHeader}
-            roleLabel={roleLabel}
             theme={theme}
             onToggleTheme={onToggleTheme}
+            onMenuOpen={handleOpenMobileMenu}
           />
-        ) : null}
+        ) : (
+          // Chat keeps its full-bleed desktop layout; mobile still needs a way
+          // into the navigation drawer, which the old TopNavigation provided.
+          <AppTopCommandBar
+            className="md:hidden"
+            pageHeader={{ title: "Team Chat" }}
+            theme={theme}
+            onToggleTheme={onToggleTheme}
+            onMenuOpen={handleOpenMobileMenu}
+          />
+        )}
         <div
           className={cn(
             "workspace-main-content min-h-0 flex-1 overflow-hidden",

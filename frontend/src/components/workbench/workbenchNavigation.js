@@ -255,6 +255,85 @@ export const WORKBENCH_MENU = {
   ],
 };
 
+// ---------------------------------------------------------------------------
+// Sidebar model: five groups plus Coworking, replacing the icon-rail-plus-menu
+// split. Items are looked up out of WORKBENCH_MENU by path rather than being
+// redeclared, so every roles array, permission and partner-inventory flag is
+// literally the same data this file already exported. Grouping and labels
+// change here; who can see what does not.
+// ---------------------------------------------------------------------------
+
+const ALL_MENU_ITEMS = Object.values(WORKBENCH_MENU)
+  .flat()
+  .flatMap((group) => group.items);
+
+const itemsAtPath = (path) => ALL_MENU_ITEMS.filter((item) => item.path === path);
+
+/**
+ * One sidebar entry per path. Where a path was declared more than once - /targets
+ * is "Targets" for sales and "Performance" for production - the roles are unioned,
+ * which reproduces the previous combined visibility exactly.
+ */
+const navItem = (path, overrides = {}) => {
+  const matches = itemsAtPath(path);
+  if (!matches.length) throw new Error(`workbenchNavigation: no menu item for ${path}`);
+  const roles = [...new Set(matches.flatMap((item) => item.roles))];
+  return { ...matches[0], roles, ...overrides };
+};
+
+const coworkingItems = (WORKBENCH_MENU.coworking || []).flatMap((group) => group.items);
+
+export const SIDEBAR_GROUPS = [
+  {
+    group: "Work",
+    items: [
+      navItem("/dashboard", { label: "Home", icon: Home }),
+      navItem("/tasks", { label: "Tasks" }),
+      navItem("/calendar", { label: "Calendar" }),
+      navItem("/attendance", { label: "Attendance" }),
+    ],
+  },
+  {
+    group: "Sales",
+    items: [
+      navItem("/leads", { label: "Pipeline" }),
+      navItem("/my-leads", { label: "My Leads" }),
+      navItem("/inventory", { label: "Inventory" }),
+      navItem("/projects", { label: "Projects", icon: Layers }),
+      navItem("/map", { label: "Field Ops" }),
+    ],
+  },
+  {
+    group: "Business",
+    items: [
+      navItem("/finance", { label: "Finance" }),
+      navItem("/reports", { label: "Reports" }),
+      navItem("/leaderboard", { label: "Leaderboard" }),
+      navItem("/targets", { label: "Targets" }),
+    ],
+  },
+  {
+    group: "Team",
+    items: [navItem("/chat", { label: "Chat" })],
+  },
+  {
+    group: "Admin",
+    items: [
+      navItem("/admin/users", { label: "Team", icon: Users }),
+      navItem("/admin/console", { label: "Console", icon: ShieldCheck }),
+      navItem("/admin/meta-ads", { label: "Meta Ads" }),
+      navItem("/admin/notifications", { label: "Notifications" }),
+      navItem("/settings", { label: "Settings" }),
+    ],
+  },
+  {
+    // Not among the redesign five, but 24 live permission-gated routes.
+    // Dropping the group would remove access, which this phase must not do.
+    group: "Coworking",
+    items: coworkingItems,
+  },
+];
+
 export const roleCanSeeItem = (item, userRole, user = {}) => {
   if (!item?.roles?.includes(userRole)) return false;
   if (
@@ -334,3 +413,16 @@ export const getActiveSectionId = (pathname, userRole, user = {}) => {
 
   return activeSection?.id || visibleSections[0]?.id || "dashboard";
 };
+
+/**
+ * Profile lives in the sidebar footer chip rather than a nav group, matching the
+ * redesign. Exported so the footer can gate it on exactly the roles it always had.
+ */
+export const PROFILE_ITEM = navItem("/profile");
+
+/** Groups for the collapsed two-layer shell: everything the role can reach, at once. */
+export const getVisibleSidebarGroups = (userRole, user = {}) =>
+  SIDEBAR_GROUPS.map((group) => ({
+    ...group,
+    items: group.items.filter((item) => roleCanSeeItem(item, userRole, user)),
+  })).filter((group) => group.items.length > 0);
