@@ -21,47 +21,47 @@ html {
 }
 
 :root {
-  --bg-body: #f6f8fb;
-  --text-body: #0f172a;
+  --bg-body: #f5f7fa;
+  --text-body: #161c24;
   --bg-root:
-    radial-gradient(circle at 10% 0%, rgba(37, 99, 235, 0.07), transparent 28%),
-    linear-gradient(180deg, #ffffff 0%, #f6f8fb 42%, #eef2f7 100%);
-  --clay-bg: #f6f8fb;
+    radial-gradient(circle at 10% 0%, rgba(37, 73, 214, 0.06), transparent 28%),
+    linear-gradient(180deg, #ffffff 0%, #f5f7fa 42%, #edf0f5 100%);
+  --clay-bg: #f5f7fa;
   --clay-surface: #ffffff;
   --clay-surface-strong: #ffffff;
-  --clay-surface-muted: #f1f5f9;
-  --clay-border: #e2e8f0;
-  --clay-border-strong: #cbd5e1;
-  --clay-text: #0f172a;
-  --clay-muted: #64748b;
-  --clay-accent: #2563eb;
-  --clay-accent-strong: #1d4ed8;
-  --clay-green: #059669;
-  --clay-rose: #e11d48;
-  --clay-gold: #d97706;
-  --clay-shadow: 0 18px 42px -34px rgba(15, 23, 42, 0.45);
-  --clay-shadow-sm: 0 10px 24px -20px rgba(15, 23, 42, 0.36);
-  --clay-shadow-inset: inset 1px 1px 2px rgba(148, 163, 184, 0.18), inset -1px -1px 2px rgba(255, 255, 255, 0.72);
-  --glass-surface: rgba(255, 255, 255, 0.72);
-  --glass-border: rgba(255, 255, 255, 0.62);
-  --flat-shadow: 0 1px 2px rgba(15, 23, 42, 0.06), 0 10px 30px -24px rgba(15, 23, 42, 0.3);
-  --scroll-track: rgba(15, 23, 42, 0.08);
-  --scroll-thumb: rgba(51, 65, 85, 0.35);
-  --scroll-thumb-hover: rgba(30, 41, 59, 0.55);
-  --crm-bg: #f6f8fb;
+  --clay-surface-muted: #edf0f5;
+  --clay-border: #e0e5ed;
+  --clay-border-strong: #c8d0dd;
+  --clay-text: #161c24;
+  --clay-muted: #6c7789;
+  --clay-accent: #2549d6;
+  --clay-accent-strong: #1c37ab;
+  --clay-green: #0d8055;
+  --clay-rose: #b83232;
+  --clay-gold: #a26f06;
+  --clay-shadow: 0 12px 36px -14px rgba(16, 24, 40, 0.28), 0 2px 6px rgba(16, 24, 40, 0.06);
+  --clay-shadow-sm: 0 1px 2px rgba(16, 24, 40, 0.05);
+  --clay-shadow-inset: 0 1px 2px rgba(16, 24, 40, 0.05);
+  --glass-surface: #ffffff;
+  --glass-border: #e0e5ed;
+  --flat-shadow: 0 1px 2px rgba(16, 24, 40, 0.06), 0 8px 20px -12px rgba(16, 24, 40, 0.24);
+  --scroll-track: rgba(22, 28, 36, 0.08);
+  --scroll-thumb: rgba(108, 119, 137, 0.4);
+  --scroll-thumb-hover: rgba(78, 88, 103, 0.6);
+  --crm-bg: #f5f7fa;
   --crm-surface: #ffffff;
-  --crm-surface-muted: #f8fafc;
-  --crm-border: #e2e8f0;
-  --crm-border-strong: #cbd5e1;
-  --crm-text: #0f172a;
-  --crm-text-muted: #64748b;
-  --crm-accent: #2563eb;
-  --crm-focus-ring: rgba(37, 99, 235, 0.2);
-  --crm-radius-sm: 0.75rem;
-  --crm-radius-md: 0.9rem;
-  --crm-radius-lg: 1.125rem;
-  --crm-shadow-soft: 0 1px 2px rgba(15, 23, 42, 0.06), 0 10px 24px -22px rgba(15, 23, 42, 0.32);
-  --crm-shadow-card: 0 1px 2px rgba(15, 23, 42, 0.06), 0 16px 34px -30px rgba(15, 23, 42, 0.32);
+  --crm-surface-muted: #f5f7fa;
+  --crm-border: #e0e5ed;
+  --crm-border-strong: #c8d0dd;
+  --crm-text: #161c24;
+  --crm-text-muted: #6c7789;
+  --crm-accent: #2549d6;
+  --crm-focus-ring: rgba(37, 73, 214, 0.22);
+  --crm-radius-sm: 7px;
+  --crm-radius-md: 10px;
+  --crm-radius-lg: 14px;
+  --crm-shadow-soft: 0 1px 2px rgba(16, 24, 40, 0.05);
+  --crm-shadow-card: 0 1px 2px rgba(16, 24, 40, 0.06), 0 8px 20px -12px rgba(16, 24, 40, 0.24);
 }
 
 html.theme-light {
@@ -70,44 +70,44 @@ html.theme-light {
 
 html.theme-dark {
   color-scheme: dark;
-  --bg-body: #0f172a;
-  --text-body: #e2e8f0;
+  --bg-body: #0d1219;
+  --text-body: #e8ecf2;
   --bg-root:
-    radial-gradient(circle at 10% 0%, rgba(37, 99, 235, 0.22), transparent 30%),
-    linear-gradient(180deg, #111827 0%, #0f172a 50%, #020617 100%);
-  --clay-bg: #0f172a;
-  --clay-surface: #111827;
-  --clay-surface-strong: #1e293b;
-  --clay-surface-muted: #0b1220;
-  --clay-border: rgba(148, 163, 184, 0.22);
-  --clay-border-strong: rgba(148, 163, 184, 0.34);
-  --clay-text: #e2e8f0;
-  --clay-muted: #94a3b8;
-  --clay-accent: #60a5fa;
-  --clay-accent-strong: #93c5fd;
-  --clay-green: #34d399;
-  --clay-rose: #fb7185;
-  --clay-gold: #fbbf24;
-  --clay-shadow: 0 20px 50px -34px rgba(0, 0, 0, 0.75);
-  --clay-shadow-sm: 0 14px 32px -24px rgba(0, 0, 0, 0.72);
-  --clay-shadow-inset: inset 1px 1px 2px rgba(2, 6, 23, 0.36), inset -1px -1px 2px rgba(148, 163, 184, 0.12);
-  --glass-surface: rgba(15, 23, 42, 0.72);
-  --glass-border: rgba(148, 163, 184, 0.2);
-  --flat-shadow: 0 1px 2px rgba(0, 0, 0, 0.24), 0 14px 36px -28px rgba(0, 0, 0, 0.75);
-  --scroll-track: rgba(148, 163, 184, 0.12);
-  --scroll-thumb: rgba(100, 116, 139, 0.6);
-  --scroll-thumb-hover: rgba(148, 163, 184, 0.75);
-  --crm-bg: #0f172a;
-  --crm-surface: #111827;
-  --crm-surface-muted: #0b1220;
-  --crm-border: rgba(148, 163, 184, 0.22);
-  --crm-border-strong: rgba(148, 163, 184, 0.34);
-  --crm-text: #e2e8f0;
-  --crm-text-muted: #94a3b8;
-  --crm-accent: #60a5fa;
-  --crm-focus-ring: rgba(96, 165, 250, 0.24);
-  --crm-shadow-soft: 0 1px 2px rgba(0, 0, 0, 0.24), 0 14px 32px -26px rgba(0, 0, 0, 0.72);
-  --crm-shadow-card: 0 1px 2px rgba(0, 0, 0, 0.24), 0 18px 44px -32px rgba(0, 0, 0, 0.78);
+    radial-gradient(circle at 10% 0%, rgba(92, 135, 251, 0.16), transparent 30%),
+    linear-gradient(180deg, #161c24 0%, #10161d 50%, #0d1219 100%);
+  --clay-bg: #0d1219;
+  --clay-surface: #141a22;
+  --clay-surface-strong: #1b222b;
+  --clay-surface-muted: #232b35;
+  --clay-border: #2a323d;
+  --clay-border-strong: #3a434f;
+  --clay-text: #e8ecf2;
+  --clay-muted: #8b96a5;
+  --clay-accent: #6b93ff;
+  --clay-accent-strong: #a5c0ff;
+  --clay-green: #3ecf94;
+  --clay-rose: #f07070;
+  --clay-gold: #e6ae3c;
+  --clay-shadow: 0 14px 40px -16px rgba(0, 0, 0, 0.8), 0 2px 6px rgba(0, 0, 0, 0.5);
+  --clay-shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.4);
+  --clay-shadow-inset: 0 1px 2px rgba(0, 0, 0, 0.4);
+  --glass-surface: #141a22;
+  --glass-border: #2a323d;
+  --flat-shadow: 0 1px 2px rgba(0, 0, 0, 0.4), 0 8px 20px -12px rgba(0, 0, 0, 0.7);
+  --scroll-track: rgba(169, 180, 194, 0.12);
+  --scroll-thumb: rgba(108, 118, 134, 0.6);
+  --scroll-thumb-hover: rgba(139, 150, 165, 0.75);
+  --crm-bg: #0d1219;
+  --crm-surface: #141a22;
+  --crm-surface-muted: #1b222b;
+  --crm-border: #2a323d;
+  --crm-border-strong: #3a434f;
+  --crm-text: #e8ecf2;
+  --crm-text-muted: #8b96a5;
+  --crm-accent: #6b93ff;
+  --crm-focus-ring: rgba(107, 147, 255, 0.28);
+  --crm-shadow-soft: 0 1px 2px rgba(0, 0, 0, 0.4);
+  --crm-shadow-card: 0 1px 2px rgba(0, 0, 0, 0.4), 0 8px 20px -12px rgba(0, 0, 0, 0.7);
 }
 
 body {
