@@ -1,6 +1,6 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { AnimatePresence } from "framer-motion";
-import { useLocation, useNavigate, useParams } from "react-router-dom";
+import { useLocation, useNavigate, useParams, useSearchParams } from "react-router-dom";
 import {
   getLeadPool,
   getLeadById,
@@ -25,10 +25,16 @@ import {
   AddLeadModal,
   BulkLeadUploadModal,
   LeadsMatrixAlerts,
-  LeadsMatrixFilters,
-  LeadsMatrixTable,
-  LeadsMatrixToolbar,
 } from "./components/LeadsMatrixSections";
+import PipelineSelectionBar from "./components/PipelineSelectionBar";
+import PipelineTable from "./components/PipelineTable";
+import PipelineToolbar from "./components/PipelineToolbar";
+import {
+  PIPELINE_VIEWS,
+  countNeedsAction,
+  matchesView,
+} from "./components/pipelineViews";
+import { Button } from "../../components/ui";
 import { LeadDetailsRebuilt } from "./components/LeadDetailsRebuilt";
 import {
   getPropertySubtypeConfig,
@@ -673,39 +679,6 @@ const getLeadRelatedInventories = (lead = {}) => {
   return merged;
 };
 
-const getStatusColor = (status) => {
-  switch (status) {
-    case "NEW":
-      return "bg-blue-50 text-blue-700 border-blue-200";
-    case "CONTACTED":
-      return "bg-amber-50 text-amber-700 border-amber-200";
-    case "INTERESTED":
-      return "bg-emerald-50 text-emerald-700 border-emerald-200";
-    case "SITE_VISIT_SCHEDULED":
-      return "bg-cyan-50 text-cyan-700 border-cyan-200";
-    case "SITE_VISIT":
-      return "bg-violet-50 text-violet-700 border-violet-200";
-    case "SITE_VISIT_OVERDUE":
-      return "bg-red-50 text-red-700 border-red-200";
-    case "MISSING_IN_ACTION":
-    case "NOT_PICKING_CALLS":
-      return "bg-yellow-50 text-yellow-800 border-yellow-200";
-    case "INVALID":
-      return "bg-zinc-100 text-zinc-700 border-zinc-300";
-    case "OWNER":
-      return "bg-sky-50 text-sky-700 border-sky-200";
-    case "BROKER":
-      return "bg-purple-50 text-purple-700 border-purple-200";
-    case "REQUESTED":
-      return "bg-orange-50 text-orange-700 border-orange-200";
-    case "CLOSED":
-      return "bg-slate-900 text-white border-slate-900";
-    case "LOST":
-      return "bg-rose-50 text-rose-700 border-rose-200";
-    default:
-      return "bg-slate-50 text-slate-600 border-slate-200";
-  }
-};
 
 const getStatusLabel = (status) =>
   String(status || "")
@@ -1428,10 +1401,24 @@ const LeadsMatrix = () => {
   const [bulkUploadSheetType, setBulkUploadSheetType] = useState(DEFAULT_BULK_LEAD_SHEET_TYPE);
   const [bulkUploading, setBulkUploading] = useState(false);
 
-  const [query, setQuery] = useState("");
-  const [statusFilter, setStatusFilter] = useState("ALL");
-  const [propertySubtypeFilter, setPropertySubtypeFilter] = useState("");
-  const [sortBy, setSortBy] = useState(LEAD_SORT_OPTIONS.RECENT);
+  const [searchParams, setSearchParams] = useSearchParams();
+  const [query, setQuery] = useState(() => searchParams.get("q") || "");
+  const [statusFilter, setStatusFilter] = useState(() => {
+    const fromUrl = String(searchParams.get("status") || "").toUpperCase();
+    return LEAD_STATUS_SET.has(fromUrl) ? fromUrl : "ALL";
+  });
+  const [propertySubtypeFilter, setPropertySubtypeFilter] = useState(
+    () => String(searchParams.get("subtype") || "").toUpperCase(),
+  );
+  const [sortBy, setSortBy] = useState(() => {
+    const fromUrl = String(searchParams.get("sort") || "").toUpperCase();
+    return LEAD_SORT_OPTIONS[fromUrl] || LEAD_SORT_OPTIONS.FOLLOW_UP;
+  });
+  const [view, setView] = useState(() => {
+    const fromUrl = String(searchParams.get("view") || "").toUpperCase();
+    return PIPELINE_VIEWS[fromUrl] || PIPELINE_VIEWS.NEEDS_ACTION;
+  });
+  const [selectedLeadKeys, setSelectedLeadKeys] = useState([]);
   const [nowMs, setNowMs] = useState(0);
   const debouncedQuery = useDebouncedValue(query, 180);
 
@@ -1447,7 +1434,6 @@ const LeadsMatrix = () => {
   const [isDiaryMicSupported, setIsDiaryMicSupported] = useState(false);
   const [isDiaryListening, setIsDiaryListening] = useState(false);
   const [savingUpdates, setSavingUpdates] = useState(false);
-  const [updatingInlineStatusId, setUpdatingInlineStatusId] = useState("");
   const [assigning, setAssigning] = useState(false);
   const [linkingProperty, setLinkingProperty] = useState(false);
   const [propertyActionInventoryId, setPropertyActionInventoryId] = useState("");
@@ -1793,19 +1779,16 @@ const LeadsMatrix = () => {
     };
   }, []);
 
-  const statusBreakdown = useMemo(
-    () =>
-      LEAD_STATUSES.reduce(
-        (acc, status) => ({ ...acc, [status]: leads.filter((lead) => lead.status === status).length }),
-        {},
-      ),
-    [leads],
-  );
 
   const filteredLeads = useMemo(() => {
     const normalized = debouncedQuery.trim().toLowerCase();
 
     const filtered = leads.filter((lead) => {
+      // TODO(backend): the lead list endpoint has no "needs action" or
+      // "unassigned" parameter, so these two views filter the already-fetched
+      // page in the browser. A needsFollowUpBefore + assignedTo=null pair on
+      // GET /leads would make them exact across every page.
+      const viewMatch = matchesView(lead, view, nowMs);
       const statusMatch = statusFilter === "ALL" || lead.status === statusFilter;
       const leadPropertySubtype = String(lead?.requirements?.propertySubtype || "").trim().toUpperCase();
       const propertySubtypeMatch = !propertySubtypeFilter || leadPropertySubtype === propertySubtypeFilter;
@@ -1831,7 +1814,7 @@ const LeadsMatrix = () => {
           .map((value) => String(value || "").toLowerCase())
           .some((value) => value.includes(normalized));
 
-      return statusMatch && propertySubtypeMatch && searchMatch;
+      return viewMatch && statusMatch && propertySubtypeMatch && searchMatch;
     });
 
     const sorted = [...filtered];
@@ -1858,31 +1841,79 @@ const LeadsMatrix = () => {
       return bMs - aMs;
     });
     return sorted;
-  }, [debouncedQuery, leads, propertySubtypeFilter, sortBy, statusFilter]);
+  }, [debouncedQuery, leads, nowMs, propertySubtypeFilter, sortBy, statusFilter, view]);
 
-  const metrics = useMemo(() => {
-    const closed = statusBreakdown.CLOSED || 0;
-    const contacted = statusBreakdown.CONTACTED || 0;
-    const interested = statusBreakdown.INTERESTED || 0;
-    const fresh = statusBreakdown.NEW || 0;
-    const dueFollowUps = leads.filter((lead) => {
-      const followUpMs = getDateMs(lead.nextFollowUp);
-      return followUpMs > 0 && followUpMs <= nowMs && !["REQUESTED", "CLOSED", "LOST"].includes(String(lead.status || ""));
-    }).length;
+  const needsActionCount = useMemo(() => countNeedsAction(leads, nowMs), [leads, nowMs]);
 
-    const total = leads.length;
-    const conversionRate = total > 0 ? Math.round((closed / total) * 100) : 0;
+  // Filter state lives in the URL so a filtered pipeline can be shared and
+  // survives a reload.
+  useEffect(() => {
+    const next = new URLSearchParams();
+    if (view !== PIPELINE_VIEWS.NEEDS_ACTION) next.set("view", view);
+    if (statusFilter !== "ALL") next.set("status", statusFilter);
+    if (propertySubtypeFilter) next.set("subtype", propertySubtypeFilter);
+    if (sortBy !== LEAD_SORT_OPTIONS.FOLLOW_UP) next.set("sort", sortBy);
+    if (debouncedQuery.trim()) next.set("q", debouncedQuery.trim());
+    setSearchParams(next, { replace: true });
+  }, [debouncedQuery, propertySubtypeFilter, setSearchParams, sortBy, statusFilter, view]);
 
-    return {
-      total,
-      new: fresh,
-      contacted,
-      interested,
-      closed,
-      dueFollowUps,
-      conversionRate,
-    };
-  }, [leads, nowMs, statusBreakdown]);
+  const pipelineFilters = useMemo(
+    () => [
+      {
+        id: "status",
+        label: "Status",
+        value: statusFilter === "ALL" ? "" : getStatusLabel(statusFilter),
+        active: statusFilter !== "ALL",
+      },
+      {
+        id: "subtype",
+        label: "Property type",
+        value: propertySubtypeFilter
+          ? String(propertySubtypeFilter).replace(/_/g, " ").toLowerCase()
+          : "",
+        active: Boolean(propertySubtypeFilter),
+      },
+    ],
+    [propertySubtypeFilter, statusFilter],
+  );
+
+  const handleRemovePipelineFilter = useCallback((filter) => {
+    if (filter.id === "status") setStatusFilter("ALL");
+    if (filter.id === "subtype") setPropertySubtypeFilter("");
+  }, []);
+
+  const handleExportSelectedLeads = useCallback(() => {
+    const chosen = new Set(selectedLeadKeys.map(String));
+    const rows = filteredLeads.filter((lead) => chosen.has(String(lead?._id)));
+    if (!rows.length) return;
+
+    const escape = (value) => JSON.stringify(String(value ?? ""));
+    const header = ["Name", "Phone", "Email", "Status", "City", "Assigned to", "Next follow-up"];
+    const csv = [
+      header.map(escape).join(","),
+      ...rows.map((lead) =>
+        [
+          lead?.name,
+          lead?.phone,
+          lead?.email,
+          getStatusLabel(lead?.status),
+          lead?.city,
+          lead?.assignedTo?.name,
+          lead?.nextFollowUp ? formatDate(lead.nextFollowUp) : "",
+        ]
+          .map(escape)
+          .join(","),
+      ),
+    ].join("\n");
+
+    const url = URL.createObjectURL(new Blob([csv], { type: "text/csv;charset=utf-8;" }));
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = "leads-" + new Date().toISOString().slice(0, 10) + ".csv";
+    link.click();
+    URL.revokeObjectURL(url);
+  }, [filteredLeads, selectedLeadKeys]);
+
 
   const openLeadDetails = useCallback(async (lead) => {
     const resolvedLeadId = String(lead?._id || "").trim();
@@ -2117,71 +2148,7 @@ const LeadsMatrix = () => {
     setRequirementsDraft(mapLeadRequirementsToDraft(updatedLead?.requirements));
   };
 
-  const applyInlineUpdatedLeadState = (updatedLead) => {
-    if (!updatedLead?._id) return;
 
-    setLeads((prev) =>
-      prev.map((lead) => (lead._id === updatedLead._id ? updatedLead : lead)),
-    );
-
-    if (String(selectedLead?._id || "") === String(updatedLead._id)) {
-      setSelectedLead(updatedLead);
-      setStatusDraft(String(updatedLead.status || "NEW"));
-    }
-  };
-
-  const handleInlineStatusChange = async (lead, nextStatus) => {
-    const leadId = String(lead?._id || "").trim();
-    const normalizedStatus = String(nextStatus || "").trim().toUpperCase();
-    if (!leadId || !normalizedStatus || normalizedStatus === String(lead?.status || "").toUpperCase()) {
-      return;
-    }
-
-    if (normalizedStatus === "CLOSED") {
-      setError("Open lead details to enter Brokerage Received before closing the deal");
-      handleOpenLeadDetailsPage(lead);
-      return;
-    }
-
-    try {
-      setUpdatingInlineStatusId(leadId);
-      setError("");
-      setLeads((prev) =>
-        prev.map((row) =>
-          String(row?._id || "") === leadId
-            ? { ...row, status: normalizedStatus, updatedAt: new Date().toISOString() }
-            : row),
-      );
-      if (String(selectedLead?._id || "") === leadId) {
-        setSelectedLead((prev) =>
-          prev ? { ...prev, status: normalizedStatus, updatedAt: new Date().toISOString() } : prev,
-        );
-      }
-
-      const updatedLead = await updateLeadStatus(leadId, { status: normalizedStatus });
-
-      if (!updatedLead) {
-        await fetchLeads(true);
-      } else {
-        applyInlineUpdatedLeadState(updatedLead);
-      }
-
-      setSuccess(`Lead status updated to ${getStatusLabel(normalizedStatus)}`);
-    } catch (statusError) {
-      const message = toErrorMessage(statusError, "Failed to update lead status");
-      console.error(`Inline lead status update failed: ${message}`);
-      setLeads((prev) =>
-        prev.map((row) =>
-          String(row?._id || "") === leadId ? { ...row, status: lead.status } : row),
-      );
-      if (String(selectedLead?._id || "") === leadId) {
-        setSelectedLead((prev) => (prev ? { ...prev, status: lead.status } : prev));
-      }
-      setError(message);
-    } finally {
-      setUpdatingInlineStatusId("");
-    }
-  };
 
   const handleInventorySelection = (inventoryId, checked = true) => {
     setFormData((prev) => {
@@ -3197,53 +3164,70 @@ const LeadsMatrix = () => {
           </>
         ) : (
           <>
-            <LeadsMatrixToolbar
-              isDark={isDark}
+            <PipelineToolbar
+              view={view}
+              onViewChange={setView}
+              needsActionCount={needsActionCount}
+              canSeeUnassigned={canAssignLead}
+              filters={pipelineFilters}
+              onToggleFilter={handleRemovePipelineFilter}
+              onRemoveFilter={handleRemovePipelineFilter}
+              query={query}
+              onQueryChange={setQuery}
+              sortBy={sortBy}
+              onSortByChange={setSortBy}
+              sortOptions={[
+                { value: LEAD_SORT_OPTIONS.FOLLOW_UP, label: "Follow-up" },
+                { value: LEAD_SORT_OPTIONS.RECENT, label: "Recent" },
+                { value: LEAD_SORT_OPTIONS.NAME, label: "Name" },
+              ]}
               refreshing={refreshing}
-              canAddLead={canAddLead}
-              canBulkUploadLeads={canBulkUploadLeads}
               onRefresh={() => fetchLeads(true)}
-              onOpenAddModal={() => setIsAddModalOpen(true)}
-              onOpenBulkUploadModal={() => setIsBulkUploadModalOpen(true)}
-              totalLeads={leadPagination?.totalCount ?? metrics.total}
-              filteredLeads={filteredLeads.length}
-              dueFollowUps={metrics.dueFollowUps}
+              actions={
+                <>
+                  {canBulkUploadLeads ? (
+                    <Button size="sm" variant="secondary" onClick={() => setIsBulkUploadModalOpen(true)}>
+                      Bulk upload
+                    </Button>
+                  ) : null}
+                  {canAddLead ? (
+                    <Button size="sm" onClick={() => setIsAddModalOpen(true)}>
+                      + Add lead
+                    </Button>
+                  ) : null}
+                </>
+              }
             />
 
             <LeadsMatrixAlerts isDark={isDark} error={error} success={success} />
 
-            <div className="z-30 -mx-2.5 px-2.5 pb-1 pt-0.5 md:sticky md:top-0 md:pb-2 md:pt-1 md:backdrop-blur-xl sm:-mx-6 sm:px-6 lg:-mx-10 lg:px-10">
-              <LeadsMatrixFilters
-                isDark={isDark}
-                query={query}
-                onQueryChange={setQuery}
-                statusFilter={statusFilter}
-                onStatusFilterChange={setStatusFilter}
-                leadStatuses={LEAD_STATUSES}
-                propertySubtypeFilter={propertySubtypeFilter}
-                onPropertySubtypeFilterChange={setPropertySubtypeFilter}
-                propertySubtypeOptions={ALL_PROPERTY_SUBTYPE_OPTIONS}
-                sortBy={sortBy}
-                onSortByChange={setSortBy}
-                getStatusLabel={getStatusLabel}
+            <div className="rounded-xl border border-slate-200 bg-white dark:border-slate-700 dark:bg-slate-900">
+              <PipelineTable
+                leads={filteredLeads}
+                loading={loading}
+                nowMs={nowMs}
+                showAssigned={canAssignLead}
+                selectedKeys={selectedLeadKeys}
+                onSelectionChange={setSelectedLeadKeys}
+                onOpenLead={handleOpenLeadDetailsPage}
+                onCall={(lead) => {
+                  const href = getDialerHref(lead?.phone);
+                  if (href) window.location.href = href;
+                }}
+                onWhatsApp={(lead) => {
+                  const href = getWhatsAppHref(lead?.phone);
+                  if (href) window.open(href, "_blank", "noopener");
+                }}
+                // TODO(phase 7): swap for QuickLogPopover once it exists; until
+                // then Log opens the record where the diary already lives.
+                onLog={handleOpenLeadDetailsPage}
+              />
+              <PipelineSelectionBar
+                count={selectedLeadKeys.length}
+                onClear={() => setSelectedLeadKeys([])}
+                onExport={handleExportSelectedLeads}
               />
             </div>
-
-            <LeadsMatrixTable
-              isDark={isDark}
-              loading={loading}
-              filteredLeads={filteredLeads}
-              statusBreakdown={statusBreakdown}
-              onOpenLeadDetails={handleOpenLeadDetailsPage}
-              canAssignLead={canAssignLead}
-              onInlineStatusChange={handleInlineStatusChange}
-              updatingInlineStatusId={updatingInlineStatusId}
-              leadStatuses={LEAD_STATUSES}
-              getStatusColor={getStatusColor}
-              getStatusLabel={getStatusLabel}
-              formatDate={formatDate}
-              nowMs={nowMs}
-            />
 
             {leadPagination?.hasNextPage ? (
               <div className="flex justify-center px-4 py-5">
