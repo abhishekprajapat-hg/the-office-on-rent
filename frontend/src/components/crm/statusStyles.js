@@ -1,32 +1,71 @@
 export const STATUS_STYLES = {
+  // ---- Lead pipeline. Mirrors the 14-value enum in backend/src/models/Lead.js,
+  // grouped into six semantic families so a stage reads by colour alone.
+  // Open
   NEW: {
     label: "New",
-    tone: "slate",
+    tone: "blue",
   },
   CONTACTED: {
     label: "Contacted",
-    tone: "cyan",
+    tone: "blue",
   },
+  // Warm
   INTERESTED: {
     label: "Interested",
     tone: "amber",
+  },
+  REQUESTED: {
+    label: "Requested",
+    tone: "amber",
+  },
+  // Scheduled
+  SITE_VISIT_SCHEDULED: {
+    label: "Visit Scheduled",
+    tone: "violet",
   },
   SITE_VISIT: {
     label: "Site Visit",
     tone: "violet",
   },
-  REQUESTED: {
-    label: "Requested",
-    tone: "blue",
+  // At risk
+  SITE_VISIT_OVERDUE: {
+    label: "Visit Overdue",
+    tone: "rose",
   },
+  MISSING_IN_ACTION: {
+    label: "Missing In Action",
+    tone: "rose",
+  },
+  NOT_PICKING_CALLS: {
+    label: "Not Picking Calls",
+    tone: "rose",
+  },
+  // Won
   CLOSED: {
     label: "Closed",
     tone: "emerald",
   },
+  // Out
   LOST: {
     label: "Lost",
-    tone: "rose",
+    tone: "slate",
   },
+  INVALID: {
+    label: "Invalid",
+    tone: "slate",
+  },
+  // Not a buyer - describes who the contact is, not a pipeline stage.
+  OWNER: {
+    label: "Owner",
+    tone: "outline",
+  },
+  BROKER: {
+    label: "Broker",
+    tone: "outline",
+  },
+
+  // ---- Shared by inventory, payments, tasks, attendance and users.
   AVAILABLE: {
     label: "Available",
     tone: "emerald",
