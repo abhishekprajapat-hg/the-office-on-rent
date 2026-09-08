@@ -15,7 +15,7 @@ const isValidObjectId = (value) => mongoose.Types.ObjectId.isValid(value);
 const BROKERAGE_MODES = new Set(["FLAT", "PERCENTAGE"]);
 const DEFAULT_BROKERAGE_VALUE = 50000;
 const DEFAULT_BROKERAGE_PERCENTAGE = 2;
-const ROLE_TYPE_VALUES = new Set(["COMMERCIAL", "RESIDENTIAL"]);
+const ROLE_TYPE_VALUES = new Set(["COMMERCIAL", "RESIDENTIAL", "BOTH"]);
 const normalizeRoleType = (value) => {
   const normalized = String(value || "").trim().toUpperCase();
   return ROLE_TYPE_VALUES.has(normalized) ? normalized : "COMMERCIAL";

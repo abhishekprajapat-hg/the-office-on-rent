@@ -1,6 +1,6 @@
-import React from "react";
+import React, { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
-import { AlertCircle, CheckCircle2, Info, XCircle } from "lucide-react";
+import { AlertCircle, CheckCircle2, Info, XCircle, X } from "lucide-react";
 
 // Surface stays neutral; the tone is carried by a coloured left border and the
 // icon, so a toast never fights the page for attention.
@@ -23,13 +23,28 @@ const TOAST_STYLES = {
   },
 };
 
-const ToastNotice = ({
+const ToastMessage = ({
   message,
   type = "info",
   position = "top-right",
   className = "",
+  persistent = false,
+  duration,
+  onDismiss,
 }) => {
-  if (!message) return null;
+  const [dismissed, setDismissed] = useState(false);
+  const dismissRef = useRef(onDismiss);
+  useEffect(() => { dismissRef.current = onDismiss; }, [onDismiss]);
+  const timeout = duration ?? (type === "success" ? 2500 : 4000);
+  useEffect(() => {
+    if (persistent) return undefined;
+    const timer = setTimeout(() => {
+      setDismissed(true);
+      dismissRef.current?.();
+    }, timeout);
+    return () => clearTimeout(timer);
+  }, [persistent, timeout]);
+  if (dismissed) return null;
 
   const config = TOAST_STYLES[type] || TOAST_STYLES.info;
   const Icon = config.icon;
@@ -49,6 +64,10 @@ const ToastNotice = ({
       >
         <Icon size={17} className="mt-0.5 shrink-0" />
         <span className="min-w-0 break-words text-slate-900 dark:text-slate-100">{message}</span>
+        <button type="button" aria-label="Dismiss notification" className="ml-auto shrink-0 rounded p-0.5" onClick={() => {
+          setDismissed(true);
+          dismissRef.current?.();
+        }}><X size={16} /></button>
       </div>
     </div>
   );
@@ -56,5 +75,9 @@ const ToastNotice = ({
   if (typeof document === "undefined") return toast;
   return createPortal(toast, document.body);
 };
+
+const ToastNotice = (props) => props.message
+  ? <ToastMessage key={`${props.type || "info"}:${props.message}`} {...props} />
+  : null;
 
 export default ToastNotice;

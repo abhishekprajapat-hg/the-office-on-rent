@@ -42,7 +42,6 @@ import {
   getAdminLeaveRequests,
   getLeaveBalanceForAdmin,
   getUserAttendanceForAdmin,
-  updateUserAttendanceStatus,
 } from "../../services/attendanceService";
 import { getTasks } from "../../services/taskService";
 import { getProjectsWithMeta } from "../../services/projectService";
@@ -62,6 +61,7 @@ const ROLE_OPTIONS = [
 const ROLE_TYPE_OPTIONS = [
   { label: "Commercial", value: "COMMERCIAL" },
   { label: "Residential", value: "RESIDENTIAL" },
+  { label: "Both", value: "BOTH" },
 ];
 
 const REPORTING_PARENT_ROLES = {
@@ -101,12 +101,6 @@ const ATTENDANCE_STATUS_STYLES = {
   LEAVE: "border-teal-200 bg-teal-50 text-teal-800",
   PENDING: "border-amber-200 bg-amber-50 text-amber-800",
 };
-const MANUAL_ATTENDANCE_STATUS_OPTIONS = [
-  { label: "Present", value: "PRESENT" },
-  { label: "Half Day", value: "HALF_DAY" },
-  { label: "Absent", value: "ABSENT" },
-];
-
 const TASK_STATUS_LABELS = {
   BACKLOG: "Backlog",
   TODO: "To Do",
@@ -363,9 +357,6 @@ const UserDetailsEditor = ({ theme = "light" }) => {
     summary: {},
     attendance: [],
   });
-  const [attendanceStatusModal, setAttendanceStatusModal] = useState(null);
-  const [manualStatusSaving, setManualStatusSaving] = useState(false);
-
   const [tasks, setTasks] = useState([]);
   const [tasksLoading, setTasksLoading] = useState(false);
   const [taskStatusFilter, setTaskStatusFilter] = useState("");
@@ -864,35 +855,6 @@ const UserDetailsEditor = ({ theme = "light" }) => {
     scrollToSection(performanceSectionRef);
   };
 
-  const openAttendanceStatusModal = (dateKey, row = null) => {
-    if (!dateKey || !userId || profile?.role === "ADMIN") return;
-    setAttendanceStatusModal({
-      date: dateKey,
-      status: MANUAL_ATTENDANCE_STATUS_OPTIONS.some((option) => option.value === row?.status)
-        ? row.status
-        : "PRESENT",
-    });
-  };
-
-  const handleManualAttendanceSave = async () => {
-    if (!userId || !attendanceStatusModal?.date || !attendanceStatusModal?.status) return;
-
-    try {
-      setManualStatusSaving(true);
-      setError("");
-      const result = await updateUserAttendanceStatus(userId, attendanceStatusModal.date, {
-        status: attendanceStatusModal.status,
-      });
-      setSuccess(result.message || "Attendance status updated");
-      setAttendanceStatusModal(null);
-      await loadAttendanceCalendar();
-    } catch (saveError) {
-      setError(toErrorMessage(saveError, "Failed to update attendance status"));
-    } finally {
-      setManualStatusSaving(false);
-    }
-  };
-
   const handleSave = async () => {
     if (!profile || !userId) return;
 
@@ -1026,8 +988,8 @@ const UserDetailsEditor = ({ theme = "light" }) => {
     .toUpperCase();
 
   return (
-    <div className={`ui-page-shell custom-scrollbar flex flex-col gap-4 ${isDarkTheme ? "bg-slate-950/40" : "bg-slate-50/70"}`}>
-      <div className="flex flex-wrap items-center justify-between gap-2">
+    <div className={`user-access-doc-screen ui-page-shell custom-scrollbar flex flex-col gap-4 ${isDarkTheme ? "bg-slate-950/40" : "bg-slate-50/70"}`}>
+      <div className="user-access-toolbar flex flex-wrap items-center justify-between gap-2">
         <button
           type="button"
           onClick={() => navigate("/admin/users")}
@@ -1735,16 +1697,13 @@ const UserDetailsEditor = ({ theme = "light" }) => {
                   const hasRecord = Boolean(row);
                   const statusLabel = formatAttendanceStatus(row?.status);
                   return (
-                    <button
-                      type="button"
+                    <div
                       key={day.key}
-                      onClick={() => openAttendanceStatusModal(day.dateKey, row)}
-                      disabled={!day.dateKey || profile.role === "ADMIN"}
                       className={`min-h-[108px] border-b border-r p-2 ${
                         isDarkTheme
                           ? "border-slate-800 bg-slate-950/40"
                           : "border-slate-100 bg-white"
-                      } ${day.dateKey ? "text-left transition hover:bg-cyan-50 disabled:hover:bg-white" : isDarkTheme ? "bg-slate-950/20" : "bg-slate-50/60"}`}
+                      } ${day.dateKey ? "text-left" : isDarkTheme ? "bg-slate-950/20" : "bg-slate-50/60"}`}
                     >
                       {day.dateKey ? (
                         <div className="flex h-full flex-col gap-1.5">
@@ -1773,7 +1732,7 @@ const UserDetailsEditor = ({ theme = "light" }) => {
                           )}
                         </div>
                       ) : null}
-                    </button>
+                    </div>
                   );
                 })}
               </div>
@@ -1781,64 +1740,6 @@ const UserDetailsEditor = ({ theme = "light" }) => {
           </>
         ) : null}
       </section>
-
-      {attendanceStatusModal ? (
-        <div className="fixed inset-0 z-50 flex items-end justify-end bg-slate-950/20 p-4">
-          <div className={`w-full max-w-sm rounded-xl border p-4 shadow-2xl ${
-            isDarkTheme ? "border-slate-700 bg-slate-900 text-slate-100" : "border-slate-200 bg-white text-slate-900"
-          }`}>
-            <div className="flex items-start justify-between gap-3">
-              <div>
-                <h3 className="text-sm font-bold">Change Attendance Status</h3>
-                <p className={`mt-0.5 text-xs ${isDarkTheme ? "text-slate-400" : "text-slate-500"}`}>
-                  {formatDateLabel(attendanceStatusModal.date)}
-                </p>
-              </div>
-              <button
-                type="button"
-                onClick={() => setAttendanceStatusModal(null)}
-                className={`rounded-lg border px-2 py-1 text-xs font-semibold ${
-                  isDarkTheme
-                    ? "border-slate-700 text-slate-300 hover:bg-slate-800"
-                    : "border-slate-200 text-slate-600 hover:bg-slate-50"
-                }`}
-              >
-                Close
-              </button>
-            </div>
-
-            <label className={`mt-4 block text-xs font-semibold ${isDarkTheme ? "text-slate-300" : "text-slate-600"}`}>
-              Status
-              <select
-                value={attendanceStatusModal.status}
-                onChange={(event) =>
-                  setAttendanceStatusModal((prev) => ({ ...prev, status: event.target.value }))}
-                className={`mt-1 h-10 w-full rounded-lg border px-3 text-sm outline-none ${
-                  isDarkTheme
-                    ? "border-slate-700 bg-slate-950 text-slate-100"
-                    : "border-slate-300 bg-white text-slate-800"
-                }`}
-              >
-                {MANUAL_ATTENDANCE_STATUS_OPTIONS.map((option) => (
-                  <option key={option.value} value={option.value}>
-                    {option.label}
-                  </option>
-                ))}
-              </select>
-            </label>
-
-            <button
-              type="button"
-              onClick={handleManualAttendanceSave}
-              disabled={manualStatusSaving}
-              className="mt-4 inline-flex h-10 w-full items-center justify-center gap-2 rounded-lg bg-cyan-600 px-4 text-sm font-semibold text-white hover:bg-cyan-500 disabled:cursor-not-allowed disabled:opacity-60"
-            >
-              {manualStatusSaving ? <Loader2 size={14} className="animate-spin" /> : <Save size={14} />}
-              Save Status
-            </button>
-          </div>
-        </div>
-      ) : null}
     </div>
   );
 };

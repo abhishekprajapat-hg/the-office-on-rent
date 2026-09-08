@@ -68,7 +68,7 @@ const INVENTORY_REVIEW_ROLES = Object.freeze([
   ...MANAGEMENT_ROLES,
 ]);
 const INVENTORY_TYPE_OPTIONS = Object.freeze(["COMMERCIAL", "RESIDENTIAL"]);
-const ROLE_TYPE_OPTIONS = INVENTORY_TYPE_OPTIONS;
+const ROLE_TYPE_OPTIONS = [...INVENTORY_TYPE_OPTIONS, "BOTH"];
 const FURNISHING_STATUS_OPTIONS = Object.freeze([
   "",
   "UNFURNISHED",
@@ -809,7 +809,7 @@ const ensureInventoryTypeAllowedForUser = ({ user, inventoryType }) => {
     INVENTORY_TYPE_OPTIONS,
     "inventoryType",
   );
-  if (normalizedInventoryType !== userRoleType) {
+  if (userRoleType !== "BOTH" && normalizedInventoryType !== userRoleType) {
     throw createHttpError(
       403,
       `This account can manage only ${userRoleType.toLowerCase()} inventory`,
@@ -825,18 +825,22 @@ const ensureManagerExistsInCompany = async ({ managerId, companyId, roleType = "
 
   const manager = await User.findOne({
     _id: managerId,
-    role: { $in: MANAGEMENT_ROLES },
-    isActive: true,
     companyId,
-    ...(ROLE_TYPE_OPTIONS.includes(toUpperSnake(roleType))
-      ? { roleType: toUpperSnake(roleType) }
-      : {}),
   })
-    .select("_id name role companyId")
+    .select("_id name role roleType isActive companyId")
     .lean();
 
   if (!manager) {
-    throw createHttpError(403, "Team owner is inactive or does not belong to your company");
+    throw createHttpError(403, "Team owner was not found in your company. Ask an admin to assign an active manager to your account.");
+  }
+  if (!manager.isActive) {
+    throw createHttpError(403, `Team owner ${manager.name} is inactive. Ask an admin to reactivate the manager or assign you to an active manager.`);
+  }
+  if (!MANAGEMENT_ROLES.includes(manager.role)) {
+    throw createHttpError(403, "Your team owner is not a manager. Ask an admin to correct your reporting manager.");
+  }
+  if (ROLE_TYPE_OPTIONS.includes(toUpperSnake(roleType)) && normalizeUserRoleType(manager) !== "BOTH" && normalizeUserRoleType(manager) !== toUpperSnake(roleType)) {
+    throw createHttpError(403, `Team owner ${manager.name} manages ${normalizeUserRoleType(manager).toLowerCase()} properties. Ask an admin to assign a ${toUpperSnake(roleType).toLowerCase()} manager or correct the account property type.`);
   }
 
   return manager;
@@ -992,7 +996,7 @@ const resolveDirectCreateTeamId = async ({ user, payload, companyId }) => {
 
   const manager = await User.findOne({
     role: USER_ROLES.MANAGER,
-    roleType: payload?.inventoryType,
+    roleType: { $in: [payload?.inventoryType, "BOTH"] },
     isActive: true,
     companyId,
   })
@@ -1423,7 +1427,7 @@ const getInventoryScopeQueryForUser = (user) => {
   ) {
     return {
       companyId: getCompanyIdForUser(user),
-      inventoryType: normalizeUserRoleType(user),
+      ...(normalizeUserRoleType(user) === "BOTH" ? {} : { inventoryType: normalizeUserRoleType(user) }),
     };
   }
 
@@ -1924,7 +1928,7 @@ const bulkCreateInventoryDirect = async ({ user, payload = [] }) => {
       await ensureReservationLeadExists(proposed.reservationLeadId);
 
       const teamId = row?.teamId || null;
-      const teamIdKey = teamId ? String(teamId) : "";
+      const teamIdKey = teamId ? `${teamId}:${proposed.inventoryType}` : "";
       if (teamId && !validatedTeamIds.has(teamIdKey)) {
         await ensureManagerExistsInCompany({
           managerId: teamId,

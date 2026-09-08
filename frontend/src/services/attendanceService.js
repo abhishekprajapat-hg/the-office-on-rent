@@ -1,5 +1,10 @@
 import api from "./api";
 
+export const correctUserBreak = async (userId, date, payload) => {
+  const res = await api.patch(`/attendance/users/${userId}/${date}/breaks`, payload);
+  return res.data;
+};
+
 export const checkInAttendance = async (payload = {}) => {
   const res = await api.post("/attendance/check-in", payload);
   return {

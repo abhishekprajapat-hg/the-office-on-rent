@@ -142,7 +142,7 @@ const sanitizeEmail = (value) => String(value || "").trim().toLowerCase();
 const sanitizeBrokerageNotes = (value) => String(value || "").trim();
 const normalizeRoleType = (value) => {
   const normalized = String(value || "").trim().toUpperCase();
-  return ["COMMERCIAL", "RESIDENTIAL"].includes(normalized) ? normalized : "COMMERCIAL";
+  return ["COMMERCIAL", "RESIDENTIAL", "BOTH"].includes(normalized) ? normalized : "COMMERCIAL";
 };
 const isValidEmail = (value) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(String(value || ""));
 const isValidObjectId = (value) =>
@@ -1511,9 +1511,9 @@ exports.updateUserByAdmin = async (req, res) => {
 
     if (Object.prototype.hasOwnProperty.call(req.body || {}, "roleType")) {
       const roleType = String(req.body.roleType || "").trim().toUpperCase();
-      if (!["COMMERCIAL", "RESIDENTIAL"].includes(roleType)) {
+      if (!["COMMERCIAL", "RESIDENTIAL", "BOTH"].includes(roleType)) {
         return res.status(400).json({
-          message: "roleType must be COMMERCIAL or RESIDENTIAL",
+          message: "roleType must be COMMERCIAL, RESIDENTIAL or BOTH",
         });
       }
       patch.roleType = roleType;

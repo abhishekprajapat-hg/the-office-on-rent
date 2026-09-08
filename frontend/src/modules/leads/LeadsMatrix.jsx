@@ -393,7 +393,7 @@ const getStoredUserRoleType = () => {
   try {
     const parsedUser = JSON.parse(localStorage.getItem("user") || "{}");
     const normalized = String(parsedUser?.roleType || "").trim().toUpperCase();
-    return normalized === "RESIDENTIAL" ? "RESIDENTIAL" : "COMMERCIAL";
+    return ["RESIDENTIAL", "BOTH"].includes(normalized) ? normalized : "COMMERCIAL";
   } catch {
     return "COMMERCIAL";
   }
@@ -401,7 +401,7 @@ const getStoredUserRoleType = () => {
 
 const getDefaultFormDataForRoleType = () => ({
   ...defaultFormData,
-  requirementsInventoryType: getStoredUserRoleType(),
+  requirementsInventoryType: getStoredUserRoleType() === "RESIDENTIAL" ? "RESIDENTIAL" : "COMMERCIAL",
 });
 
 const getInventoryLeadSearchText = (inventoryLike = {}) => {
@@ -1478,7 +1478,7 @@ const LeadsMatrix = () => {
 
   const userRole = localStorage.getItem("role") || "";
   const userRoleType = getStoredUserRoleType();
-  const canChooseLeadRoleType = userRole === "ADMIN";
+  const canChooseLeadRoleType = userRole === "ADMIN" || userRoleType === "BOTH";
   const isExecutiveUser = EXECUTIVE_ROLES.includes(userRole);
   const canAddLead =
     userRole === "ADMIN"
@@ -1584,7 +1584,7 @@ const LeadsMatrix = () => {
         (user) =>
           user.isActive !== false
           && MANUAL_LEAD_TRANSFER_TARGET_ROLES.includes(user.role)
-          && (canChooseLeadRoleType || String(user.roleType || "COMMERCIAL").toUpperCase() === userRoleType),
+          && (canChooseLeadRoleType || [userRoleType, "BOTH"].includes(String(user.roleType || "COMMERCIAL").toUpperCase())),
       );
       setExecutives(list);
     } catch (fetchError) {
@@ -2436,7 +2436,7 @@ const LeadsMatrix = () => {
       }
 
       setIsAddModalOpen(false);
-      setFormData(defaultFormData);
+      setFormData(getDefaultFormDataForRoleType());
       setSuccess("Lead created successfully");
     } catch (saveError) {
       const message = toErrorMessage(saveError, "Failed to save lead");
@@ -3186,7 +3186,10 @@ const LeadsMatrix = () => {
                     </Button>
                   ) : null}
                   {canAddLead ? (
-                    <Button size="sm" onClick={() => setIsAddModalOpen(true)}>
+                    <Button size="sm" onClick={() => {
+                      setFormData(getDefaultFormDataForRoleType());
+                      setIsAddModalOpen(true);
+                    }}>
                       + Add lead
                     </Button>
                   ) : null}

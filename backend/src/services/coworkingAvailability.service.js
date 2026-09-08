@@ -126,6 +126,8 @@ const assertAvailable = async ({
   assertCabinBookable(cabin);
   if (bookingType === "SEAT") {
     assertSeatNotManuallyUnavailable(cabin, seatCode);
+  } else {
+    cabin.seats.forEach((seat) => assertSeatNotManuallyUnavailable(cabin, seat.seatCode));
   }
 
   const conflicts = await findConflictingBookings({
@@ -208,6 +210,7 @@ const listAvailableCabins = async ({ companyId, propertyId, floorId, startDate, 
   const results = [];
   for (const cabin of cabins) {
     if (cabin.manualOverride !== "NONE") continue;
+    if (cabin.seats.some((seat) => ["OCCUPIED", "BLOCKED", "MAINTENANCE"].includes(seat.status))) continue;
 
     // eslint-disable-next-line no-await-in-loop
     const conflicts = await findConflictingBookings({

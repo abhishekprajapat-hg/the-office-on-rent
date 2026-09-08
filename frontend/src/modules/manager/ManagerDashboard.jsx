@@ -365,7 +365,7 @@ const ManagerDashboard = ({ theme = "light" }) => {
   if (loading) {
     return (
       <div
-        className="ui-page-shell flex h-full w-full items-center justify-center px-4"
+        className="ui-page-shell dashboard-doc-screen flex h-full w-full items-center justify-center px-4"
       >
         <div className={`flex items-center gap-2 rounded-2xl border px-4 py-3 text-sm ${
           isDark ? "border-slate-700 bg-slate-900" : "border-slate-200 bg-white"
@@ -382,7 +382,7 @@ const ManagerDashboard = ({ theme = "light" }) => {
       initial="hidden"
       animate="visible"
       variants={containerMotion}
-      className={`ui-page-shell relative h-full w-full overflow-y-auto custom-scrollbar ${
+      className={`ui-page-shell dashboard-doc-screen relative h-full w-full overflow-y-auto custom-scrollbar ${
         isDark ? "bg-slate-950" : "bg-slate-100"
       }`}
     >

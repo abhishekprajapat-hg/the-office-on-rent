@@ -59,6 +59,11 @@ const attendanceLocationSchema = new mongoose.Schema(
 
 const breakSessionSchema = new mongoose.Schema(
   {
+    correctedBy: { type: mongoose.Schema.Types.ObjectId, ref: "User", default: null },
+    correctedByName: { type: String, default: "" },
+    correctedByRole: { type: String, default: "" },
+    correctedAt: { type: Date, default: null },
+    correctionReason: { type: String, maxlength: 240, default: "" },
     startAt: {
       type: Date,
       required: true,
@@ -136,6 +141,19 @@ const attendanceSchema = new mongoose.Schema(
     },
     breakSessions: {
       type: [breakSessionSchema],
+      default: [],
+    },
+    breakAudit: {
+      type: [new mongoose.Schema({
+        actorId: { type: mongoose.Schema.Types.ObjectId, ref: "User", required: true },
+        actorName: String,
+        actorRole: String,
+        changedAt: { type: Date, required: true },
+        reason: { type: String, required: true, maxlength: 240 },
+        sessionIndex: Number,
+        before: { type: breakSessionSchema, default: null },
+        after: { type: breakSessionSchema, required: true },
+      }, { _id: false })],
       default: [],
     },
     status: {

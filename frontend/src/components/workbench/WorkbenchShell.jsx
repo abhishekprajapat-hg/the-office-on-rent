@@ -17,7 +17,6 @@ const WorkbenchShell = ({
   isChatPage = false,
   shouldLockDocumentScroll = true,
 }) => {
-  const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const { adminRequestUnread, unreadTotal } = useChatNotifications();
   const { permissions, loading: permissionsLoading } = usePermissions();
@@ -27,7 +26,6 @@ const WorkbenchShell = ({
   );
   const handleOpenMobileMenu = useCallback(() => setMobileMenuOpen(true), []);
   const handleCloseMobileMenu = useCallback(() => setMobileMenuOpen(false), []);
-  const handleToggleSidebar = useCallback(() => setSidebarCollapsed((prev) => !prev), []);
 
   return (
     <div
@@ -41,8 +39,6 @@ const WorkbenchShell = ({
         user={userForNav}
         roleLabel={roleLabel}
         onLogout={onLogout}
-        collapsed={sidebarCollapsed}
-        onToggleCollapsed={handleToggleSidebar}
         mobileOpen={mobileMenuOpen}
         onMobileClose={handleCloseMobileMenu}
         unreadChats={unreadTotal}

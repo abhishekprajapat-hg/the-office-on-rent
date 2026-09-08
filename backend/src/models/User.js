@@ -46,7 +46,7 @@ const userSchema = new mongoose.Schema(
 
     roleType: {
       type: String,
-      enum: ["COMMERCIAL", "RESIDENTIAL"],
+      enum: ["COMMERCIAL", "RESIDENTIAL", "BOTH"],
       default: "COMMERCIAL",
     },
 

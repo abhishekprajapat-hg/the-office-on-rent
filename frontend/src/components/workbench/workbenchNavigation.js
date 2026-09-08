@@ -1,37 +1,27 @@
 import {
-  Armchair,
   BarChart3,
   Bell,
-  Boxes,
   Briefcase,
   Building,
   Building2,
-  CalendarCheck,
   Calendar,
   CheckSquare,
   ClipboardList,
-  CreditCard,
-  DoorOpen,
-  FileSignature,
   Home,
   Layers,
+  LayoutGrid,
   Map,
   Megaphone,
   MessageSquare,
   PieChart,
-  Presentation,
-  Receipt,
   Settings,
   ShieldCheck,
   Target,
   TerminalSquare,
-  Ticket,
   Trophy,
   UserCheck,
   UserCircle2,
-  UserCog,
   Users,
-  Wallet,
 } from "lucide-react";
 
 const MANAGEMENT_ROLES = ["ADMIN", "MANAGER"];
@@ -184,52 +174,8 @@ export const WORKBENCH_MENU = {
     {
       group: "Spaces",
       items: [
-        { label: "Dashboard", path: "/coworking/dashboard", icon: Home, roles: COWORKING_ROLES, permission: "dashboard.view" },
-        { label: "Properties", path: "/coworking/properties", icon: Building2, roles: COWORKING_ROLES, permission: "properties.view" },
-        { label: "Floors", path: "/coworking/floors", icon: Layers, roles: COWORKING_ROLES },
-        { label: "Cabins", path: "/coworking/cabins", icon: DoorOpen, roles: COWORKING_ROLES, permission: "cabins.view" },
-        { label: "Seats", path: "/coworking/seats", icon: Armchair, roles: COWORKING_ROLES, permission: "seats.view" },
-      ],
-    },
-    {
-      group: "Clients & Bookings",
-      items: [
+        { label: "Booking Board", path: "/coworking/booking-board", icon: LayoutGrid, roles: COWORKING_ROLES, permission: "cabins.view" },
         { label: "Clients", path: "/coworking/clients", icon: Users, roles: COWORKING_ROLES, permission: "clients.view" },
-        { label: "Bookings", path: "/coworking/bookings", icon: CalendarCheck, roles: COWORKING_ROLES, permission: "bookings.view" },
-        { label: "Contracts", path: "/coworking/contracts", icon: FileSignature, roles: COWORKING_ROLES, permission: "contracts.view" },
-      ],
-    },
-    {
-      group: "Finance",
-      items: [
-        { label: "Billing", path: "/coworking/billing", icon: Receipt, roles: COWORKING_ROLES, permission: "billing.view" },
-        { label: "Payments", path: "/coworking/payments", icon: CreditCard, roles: COWORKING_ROLES, permission: "payments.view" },
-        { label: "Expenses", path: "/coworking/expenses", icon: Wallet, roles: COWORKING_ROLES, permission: "expenses.view" },
-      ],
-    },
-    {
-      group: "Operations",
-      items: [
-        { label: "Meeting Rooms", path: "/coworking/meeting-rooms", icon: Presentation, roles: COWORKING_ROLES },
-        { label: "Visitors", path: "/coworking/visitors", icon: UserCheck, roles: COWORKING_ROLES },
-        { label: "Tickets", path: "/coworking/tickets", icon: Ticket, roles: COWORKING_ROLES },
-        { label: "Assets", path: "/coworking/assets", icon: Boxes, roles: COWORKING_ROLES },
-      ],
-    },
-    {
-      group: "Insights",
-      items: [
-        { label: "Reports", path: "/coworking/reports", icon: BarChart3, roles: COWORKING_ROLES, permission: "reports.view" },
-        { label: "Notifications", path: "/coworking/notifications", icon: Bell, roles: COWORKING_ROLES },
-      ],
-    },
-    {
-      group: "Administration",
-      items: [
-        { label: "Users", path: "/coworking/users", icon: UserCog, roles: COWORKING_ROLES, permission: "users.view" },
-        { label: "Roles", path: "/coworking/roles", icon: ShieldCheck, roles: COWORKING_ROLES, permission: "roles.view" },
-        { label: "Settings", path: "/coworking/settings", icon: Settings, roles: COWORKING_ROLES },
-        { label: "Audit Logs", path: "/coworking/audit-logs", icon: ClipboardList, roles: COWORKING_ROLES, permission: "audit_logs.view" },
       ],
     },
   ],

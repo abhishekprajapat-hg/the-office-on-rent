@@ -4,6 +4,19 @@ const { handleControllerError: handleError } = require("../utils/httpError");
 
 const handleControllerError = (res, error, message) => handleError(res, error, logger, message);
 
+exports.getFloorView = async (req, res) => {
+  try {
+    const { hasPermission } = require("../services/permission.service");
+    const { getFloorView } = require("../services/coworkingFloorView.service");
+    const [clients, contracts, bookings, billing] = await Promise.all(
+      ["clients.view", "contracts.view", "bookings.view", "billing.view"].map((p) => hasPermission(req.user, p)),
+    );
+    return res.json(await getFloorView({ companyId: req.user.companyId, floorId: req.query.floorId, access: { clients, contracts, bookings, billing } }));
+  } catch (error) {
+    return handleControllerError(res, error, "getFloorView failed");
+  }
+};
+
 exports.listCabins = async (req, res) => {
   try {
     const { cabins, pagination } = await cabinService.listCabins({

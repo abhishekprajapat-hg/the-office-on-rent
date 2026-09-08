@@ -12,6 +12,7 @@ router.get("/me", attendanceController.getMyAttendance);
 router.post("/check-in", writeLimiter, attendanceController.checkIn);
 router.post("/break/start", writeLimiter, attendanceController.startBreak);
 router.post("/break/end", writeLimiter, attendanceController.endBreak);
+router.patch("/users/:userId/:date/breaks", writeLimiter, attendanceController.correctUserBreak);
 router.post("/check-out", writeLimiter, attendanceController.checkOut);
 router.patch(
   "/users/:userId/:date/status",

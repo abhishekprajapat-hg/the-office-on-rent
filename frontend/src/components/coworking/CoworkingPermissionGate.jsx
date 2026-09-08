@@ -1,12 +1,17 @@
-import { Navigate } from "react-router-dom";
+import { Lock } from "lucide-react";
 import { usePermissions } from "../../context/usePermissions";
-import { Skeleton } from "../ui";
+import { EmptyState, Skeleton } from "../ui";
 
 // Second, finer-grained gate layered on top of the role check already applied
 // in App.jsx's route table. Role gets you into /coworking/*; permission
 // decides which pages inside it you can actually open. The API enforces the
 // same permission independently (see requirePermission on the backend) —
 // this only controls what renders client-side.
+//
+// A refusal renders in place rather than redirecting. It used to bounce to the
+// coworking dashboard, but the booking board is now the only page in the
+// module and it is gated on cabins.view - so for a COWORKING_ADMIN, whose "/"
+// resolves to the board, any redirect out of here is a loop back into here.
 const CoworkingPermissionGate = ({ permission, children }) => {
   const { can, loading } = usePermissions();
 
@@ -21,7 +26,15 @@ const CoworkingPermissionGate = ({ permission, children }) => {
   }
 
   if (permission && !can(permission)) {
-    return <Navigate to="/coworking/dashboard" replace />;
+    return (
+      <div className="p-6">
+        <EmptyState
+          icon={Lock}
+          title="You do not have access to this page"
+          description={`Opening it needs the "${permission}" permission on your coworking role. Ask an admin to grant it.`}
+        />
+      </div>
+    );
   }
 
   return children;

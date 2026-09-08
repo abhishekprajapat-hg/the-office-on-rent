@@ -57,6 +57,7 @@ const formatBrokerageSummary = (config = null) => {
 };
 
 const formatRoleType = (value) =>
+  String(value || "").trim().toUpperCase() === "BOTH" ? "Both" :
   String(value || "").trim().toUpperCase() === "RESIDENTIAL"
     ? "Residential"
     : "Commercial";

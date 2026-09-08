@@ -31,7 +31,7 @@ const AUTO_ASSIGNMENT_REASON = "New lead automatically assigned to Inside Execut
 const DEFAULT_MAX_ACTIVE_LEADS = 120;
 const ACTIVE_LOAD_WEIGHT = 100;
 const DAILY_LOAD_WEIGHT = 10;
-const ROLE_TYPE_VALUES = Object.freeze(["COMMERCIAL", "RESIDENTIAL"]);
+const ROLE_TYPE_VALUES = Object.freeze(["COMMERCIAL", "RESIDENTIAL", "BOTH"]);
 
 const configuredMaxActiveLeads = Number.parseInt(
   process.env.AUTO_ASSIGN_MAX_ACTIVE_LEADS || "",
@@ -311,7 +311,7 @@ const autoAssignLead = async ({ lead, requester = null, performedBy = null }) =>
     requester
     && LEAD_OWNER_ROLES.includes(requester.role)
     && requester.isActive
-    && getUserRoleType(requester) === leadRoleType
+    && [leadRoleType, "BOTH"].includes(getUserRoleType(requester))
   ) {
     await persistAssignment({
       lead,
@@ -331,7 +331,7 @@ const autoAssignLead = async ({ lead, requester = null, performedBy = null }) =>
 
   const executiveQuery = {
     role: { $in: LEAD_OWNER_ROLES },
-    roleType: leadRoleType,
+    roleType: { $in: [leadRoleType, "BOTH"] },
     isActive: true,
   };
   if (resolvedCompanyId) {
@@ -403,7 +403,7 @@ const autoAssignLead = async ({ lead, requester = null, performedBy = null }) =>
       role: { $in: MANAGEMENT_ROLES },
       isActive: true,
       ...(resolvedCompanyId ? { companyId: resolvedCompanyId } : {}),
-      roleType: leadRoleType,
+      roleType: { $in: [leadRoleType, "BOTH"] },
     })
       .select("_id name role roleType createdAt lastAssignedAt")
       .sort({ createdAt: 1 })
@@ -617,7 +617,7 @@ const redistributePipelineLeads = async ({
   pipelineLeads.forEach((lead) => {
     const leadRoleType = getLeadRoleType(lead);
     const selectedExecutive =
-      orderedExecutives.find((executive) => getUserRoleType(executive) === leadRoleType)
+      orderedExecutives.find((executive) => [leadRoleType, "BOTH"].includes(getUserRoleType(executive)))
       || null;
     if (!selectedExecutive) return;
     const selectedExecutiveId = toId(selectedExecutive._id);

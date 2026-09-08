@@ -3,6 +3,7 @@ const AttendancePolicy = require("../models/AttendancePolicy");
 const LeaveRequestModel = require("../models/LeaveRequest");
 const AttendanceRegularizationModel = require("../models/AttendanceRegularization");
 const User = require("../models/User");
+const { validateBreakTimeline } = require("../utils/attendanceBreaks");
 const logger = require("../config/logger");
 const {
   USER_ROLES,
@@ -402,6 +403,11 @@ const normalizeBreakSessions = (
         durationMinutes: closedDuration,
         startNote: toBreakNote(session?.startNote),
         endNote: toBreakNote(session?.endNote),
+        correctedBy: session?.correctedBy || null,
+        correctedByName: session?.correctedByName || "",
+        correctedByRole: session?.correctedByRole || "",
+        correctedAt: session?.correctedAt || null,
+        correctionReason: session?.correctionReason || "",
       };
     })
     .filter(Boolean);
@@ -669,6 +675,11 @@ const toAttendanceView = (row, policy = DEFAULT_POLICY) => {
         ? Number(session.durationMinutes || 0)
         : toMinutesBetween(session.startAt, new Date());
       return {
+        correctedBy: session.correctedBy,
+        correctedByName: session.correctedByName,
+        correctedByRole: session.correctedByRole,
+        correctedAt: session.correctedAt,
+        correctionReason: session.correctionReason,
         startAt: session.startAt || null,
         endAt: session.endAt || null,
         durationMinutes: liveDurationMinutes,
@@ -678,6 +689,7 @@ const toAttendanceView = (row, policy = DEFAULT_POLICY) => {
       };
     }),
     activeBreakStartedAt: normalizedBreaks.activeBreakStartedAt,
+    breakAudit: row.breakAudit || [],
     isOnBreak,
     isLateCheckIn,
     status,
@@ -2352,6 +2364,66 @@ exports.getUserAttendanceForAdmin = async (req, res) => {
   }
 };
 
+exports.correctUserBreak = async (req, res) => {
+  try {
+    if (!req.user?.companyId) return res.status(403).json({ message: "Company context is required" });
+    if (!ensureManageAttendanceRole(req, res)) return;
+    const targetUserId = toTrimmedString(req.params?.userId);
+    const attendanceDate = toTrimmedString(req.params?.date);
+    if (!/^[a-f\d]{24}$/i.test(targetUserId) || !ATTENDANCE_DATE_PATTERN.test(attendanceDate)) {
+      return res.status(400).json({ message: "Valid user and attendance date are required" });
+    }
+    if (!await ensureUserInScope({ actor: req.user, targetUserId })) {
+      return res.status(403).json({ message: "User is outside your attendance scope" });
+    }
+    const target = await User.findOne({ _id: targetUserId, companyId: req.user.companyId, isActive: true }).select("_id role").lean();
+    if (!target || target.role === USER_ROLES.ADMIN) return res.status(403).json({ message: "Select an active employee in your company" });
+    const attendance = await Attendance.findOne({ companyId: req.user.companyId, userId: targetUserId, attendanceDate });
+    if (!attendance?.checkInAt) return res.status(400).json({ message: "Employee must have a check-in before a break can be corrected" });
+    if (!req.body?.expectedUpdatedAt || new Date(req.body.expectedUpdatedAt).getTime() !== new Date(attendance.updatedAt).getTime()) {
+      return res.status(409).json({ message: "Attendance has changed. Refresh the attendance list and reopen the break form." });
+    }
+    const reason = toTrimmedString(req.body?.reason);
+    if (!reason || reason.length > 240) return res.status(400).json({ message: "Enter a correction reason (1–240 characters)" });
+    const now = new Date();
+    const startAt = toSafeDate(req.body?.startAt);
+    const endAt = req.body?.endAt ? toSafeDate(req.body.endAt) : null;
+    if (!startAt || (req.body?.endAt && !endAt)) return res.status(400).json({ message: "Enter valid break times" });
+    const sessions = normalizeBreakSessions(attendance.breakSessions).sessions;
+    const index = req.body?.sessionIndex == null ? sessions.length : req.body.sessionIndex;
+    if (!Number.isInteger(index) || index < 0 || index > sessions.length) return res.status(400).json({ message: "Invalid break session" });
+    const before = sessions[index] || null;
+    const after = {
+      ...before, startAt, endAt, durationMinutes: endAt ? toMinutesBetween(startAt, endAt) : 0,
+      correctedBy: req.user._id, correctedByName: req.user.name || "", correctedByRole: req.user.role,
+      correctedAt: now, correctionReason: reason,
+    };
+    sessions[index] = after;
+    validateBreakTimeline({ sessions, checkInAt: attendance.checkInAt, checkOutAt: attendance.checkOutAt, now });
+    attendance.breakSessions = sessions;
+    applyWorkingSnapshot(attendance, { referenceTime: now });
+    const policy = await resolvePolicyForCompany(req.user.companyId);
+    const status = attendance.checkOutAt && attendance.source !== ATTENDANCE_SOURCE.MANUAL
+      ? resolveAttendanceStatus({ attendanceDate, checkInAt: attendance.checkInAt, workedMinutes: attendance.workedMinutes, policy })
+      : attendance.status;
+    const updated = await Attendance.findOneAndUpdate(
+      { _id: attendance._id, companyId: req.user.companyId, updatedAt: attendance.updatedAt },
+      {
+        $set: { breakSessions: attendance.breakSessions, totalBreakMinutes: attendance.totalBreakMinutes, workedMinutes: attendance.workedMinutes, status },
+        $push: { breakAudit: { actorId: req.user._id, actorName: req.user.name || "", actorRole: req.user.role, changedAt: now, reason, sessionIndex: index, before, after } },
+        $inc: { __v: 1 },
+      },
+      { new: true, runValidators: true },
+    );
+    if (!updated) return res.status(409).json({ message: "Attendance changed while saving. Refresh and try again." });
+    return res.json({ message: before ? "Break corrected" : "Break added", attendance: toAttendanceView(updated.toObject(), policy) });
+  } catch (error) {
+    if (error.statusCode === 400) return res.status(400).json({ message: error.message });
+    req.log?.error(error);
+    return res.status(500).json({ message: "Failed to correct break" });
+  }
+};
+
 exports.updateUserAttendanceStatus = async (req, res) => {
   try {
     if (!req.user?.companyId) {
@@ -2508,7 +2580,7 @@ exports.getDailyAttendanceForAdmin = async (req, res) => {
         userId: { $in: userIds },
       })
         .select(
-          "_id userId attendanceDate checkInAt checkOutAt checkInLocation checkOutLocation workedMinutes totalBreakMinutes breakSessions status source checkInNote checkOutNote createdAt updatedAt",
+          "_id userId attendanceDate checkInAt checkOutAt checkInLocation checkOutLocation workedMinutes totalBreakMinutes breakSessions breakAudit status source checkInNote checkOutNote createdAt updatedAt",
         )
         .lean(),
       getApprovedLeavesMap({

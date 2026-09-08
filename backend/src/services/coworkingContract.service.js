@@ -206,6 +206,11 @@ const activateContract = async ({ companyId, contractId, actingUser }) => {
     throw createHttpError(409, `Contract is ${contract.status}, expected DRAFT`);
   }
 
+  await require("./coworkingAvailability.service").assertAvailable({
+    companyId, cabinId: contract.cabinId, seatCode: contract.seatCode,
+    bookingType: contract.contractType, startDate: contract.startDate, endDate: contract.endDate,
+  });
+
   const cabin = await CoworkingCabin.findOne({ _id: contract.cabinId, companyId });
   if (!cabin) throw createHttpError(404, "Cabin not found");
 

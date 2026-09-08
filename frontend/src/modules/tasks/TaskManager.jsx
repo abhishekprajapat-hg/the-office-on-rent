@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback, useMemo } from "react";
+import React, { useState, useEffect, useCallback, useMemo, useRef } from "react";
 import { useNavigate } from "react-router-dom";
 import { motion as Motion, AnimatePresence } from "framer-motion";
 import {
@@ -71,6 +71,15 @@ export default function TaskManager({ theme = "light" }) {
   const isProductionExecutive = ["PRODUCTION_EXECUTIVE", "COMMUNITY_MANAGER"].includes(currentRole);
   const canViewProfiles = ["ADMIN", "MANAGER"].includes(currentRole);
   const canViewRoster = ["ADMIN", "MANAGER"].includes(currentRole);
+  const currentUserId = (() => {
+    try { const user = JSON.parse(localStorage.getItem("user") || "{}"); return String(user.id || user._id || ""); }
+    catch { return ""; }
+  })();
+  const taskReferenceId = (value) => String(value?._id || value || "");
+  const isTaskCreator = (task) => Boolean(currentUserId) && taskReferenceId(task?.createdBy) === currentUserId;
+  const isTaskReceiver = (task) => Boolean(currentUserId) && taskReferenceId(task?.assignedTo) === currentUserId && !isTaskCreator(task);
+  const canEditTask = (task) => Boolean(currentUserId) && (isTaskCreator(task) || (!isTaskReceiver(task) && canViewRoster));
+  const canDeleteTask = (task) => Boolean(currentUserId) && (isTaskCreator(task) || (!isTaskReceiver(task) && currentRole === "ADMIN"));
 
   const handleOpenAssigneeProfile = (e, assignee) => {
     e.stopPropagation();
@@ -97,6 +106,8 @@ export default function TaskManager({ theme = "light" }) {
   const [statusFilter, setStatusFilter] = useState("");
   const [priorityFilter, setPriorityFilter] = useState("");
   const [assigneeFilter, setAssigneeFilter] = useState("");
+  const [taskScope, setTaskScope] = useState(canViewRoster ? "all" : "mine");
+  const [statusUpdating, setStatusUpdating] = useState("");
   const [leadFilter, setLeadFilter] = useState("");
   const [tagFilter, setTagFilter] = useState("");
 
@@ -148,11 +159,14 @@ export default function TaskManager({ theme = "light" }) {
   const [inlineSubtaskInput, setInlineSubtaskInput] = useState("");
 
   // Fetch initial data
+  const fetchSequence = useRef(0);
   const fetchData = useCallback(async () => {
+    const sequence = ++fetchSequence.current;
     setLoading(true);
     setError("");
     try {
       const filters = {};
+      filters.scope = taskScope;
       if (statusFilter) filters.status = statusFilter;
       if (priorityFilter) filters.priority = priorityFilter;
       if (assigneeFilter) filters.assignedTo = assigneeFilter;
@@ -160,12 +174,18 @@ export default function TaskManager({ theme = "light" }) {
       if (searchQuery) filters.search = searchQuery;
       if (tagFilter) filters.tag = tagFilter;
 
-      const [tasksData, statsData, usersData, leadsData] = await Promise.all([
+      const [taskResult, statsResult, usersResult, leadsResult] = await Promise.allSettled([
         getTasks(filters),
-        getTaskStats(),
+        getTaskStats({ scope: taskScope, assignedTo: assigneeFilter }),
         getUsers(),
         isProductionExecutive ? Promise.resolve([]) : getAllLeads()
       ]);
+      if (sequence !== fetchSequence.current) return;
+      if (taskResult.status === "rejected") throw taskResult.reason;
+      const tasksData = taskResult.value;
+      const statsData = statsResult.status === "fulfilled" ? statsResult.value : null;
+      const usersData = usersResult.status === "fulfilled" ? usersResult.value : null;
+      const leadsData = leadsResult.status === "fulfilled" ? leadsResult.value : null;
 
       setTasks(tasksData);
       if (statsData) setStats(statsData);
@@ -173,11 +193,11 @@ export default function TaskManager({ theme = "light" }) {
       if (leadsData) setLeads(leadsData);
     } catch (err) {
       console.error(err);
-      setError("Failed to retrieve task details");
+      if (sequence === fetchSequence.current) setError("Failed to retrieve task details");
     } finally {
-      setLoading(false);
+      if (sequence === fetchSequence.current) setLoading(false);
     }
-  }, [statusFilter, priorityFilter, assigneeFilter, leadFilter, searchQuery, tagFilter, isProductionExecutive]);
+  }, [statusFilter, priorityFilter, assigneeFilter, leadFilter, searchQuery, tagFilter, isProductionExecutive, taskScope]);
 
   useEffect(() => {
     fetchData();
@@ -205,12 +225,14 @@ export default function TaskManager({ theme = "light" }) {
   }, [viewLevel, canViewRoster]);
 
   const handleSelectRosterUser = (user) => {
+    setTaskScope("all");
     setSelectedUserObj(user);
     setAssigneeFilter(user._id);
     setViewLevel("board");
   };
 
   const handleViewAllTasks = () => {
+    setTaskScope("all");
     setSelectedUserObj(null);
     setAssigneeFilter("");
     setViewLevel("board");
@@ -257,6 +279,7 @@ export default function TaskManager({ theme = "light" }) {
   };
 
   const handleOpenEditModal = (task) => {
+    if (!canEditTask(task)) return;
     setEditingTask(task);
     setFormData({
       title: task.title || "",
@@ -328,6 +351,15 @@ export default function TaskManager({ theme = "light" }) {
         if (created) {
           setSuccess("Task created successfully");
           setIsModalOpen(false);
+          setTaskScope("assigned");
+          setAssigneeFilter("");
+          setStatusFilter("");
+          setPriorityFilter("");
+          setLeadFilter("");
+          setTagFilter("");
+          setSearchQuery("");
+          setSelectedUserObj(null);
+          setViewLevel("board");
           fetchData();
         }
       }
@@ -353,15 +385,20 @@ export default function TaskManager({ theme = "light" }) {
   };
 
   const handleUpdateStatus = async (taskId, newStatus) => {
+    if (statusUpdating) return;
+    setStatusUpdating(taskId);
     try {
       const updated = await updateTask(taskId, { status: newStatus });
       if (updated) {
         setSuccess("Status updated");
+        setDetailsTask(prev => prev?._id === taskId ? updated : prev);
         fetchData();
       }
     } catch (err) {
       console.error(err);
       setError("Failed to update status");
+    } finally {
+      setStatusUpdating("");
     }
   };
 
@@ -377,7 +414,10 @@ export default function TaskManager({ theme = "light" }) {
         title,
         status: "TODO",
         priority: "MEDIUM",
-        assignedTo: selectedUserObj?._id || null,
+        assignedTo: selectedUserObj?._id || (() => {
+          try { const user = JSON.parse(localStorage.getItem("user") || "{}"); return user.id || user._id || null; }
+          catch { return null; }
+        })(),
         leadId: null
       });
       if (created) {
@@ -394,16 +434,11 @@ export default function TaskManager({ theme = "light" }) {
 
   const handleToggleComplete = async (task) => {
     const nextStatus = task.status === "COMPLETED" ? "TODO" : "COMPLETED";
-    try {
-      await updateTask(task._id, { status: nextStatus });
-      fetchData();
-    } catch (err) {
-      console.error(err);
-      setError("Failed to update task");
-    }
+    await handleUpdateStatus(task._id, nextStatus);
   };
 
   const handleInlineUpdate = async (taskId, patch) => {
+    if (!canEditTask(tasks.find(task => task._id === taskId))) return;
     try {
       await updateTask(taskId, patch);
       fetchData();
@@ -456,6 +491,7 @@ export default function TaskManager({ theme = "light" }) {
 
     const taskIndex = tasks.findIndex(t => String(t._id) === String(taskId));
     if (taskIndex === -1) return;
+    if (groupBy !== "status" && !canEditTask(tasks[taskIndex])) return;
 
     let updatedField = {};
     let hasChanged = false;
@@ -498,7 +534,7 @@ export default function TaskManager({ theme = "light" }) {
     try {
       await updateTask(taskId, updatedField);
       setSuccess("Task updated successfully");
-      const statsData = await getTaskStats();
+      const statsData = await getTaskStats({ scope: taskScope, assignedTo: assigneeFilter });
       if (statsData) setStats(statsData);
       fetchData();
     } catch (err) {
@@ -675,6 +711,8 @@ export default function TaskManager({ theme = "light" }) {
           <button
             type="button"
             onClick={(e) => { e.stopPropagation(); handleToggleComplete(task); }}
+            disabled={Boolean(statusUpdating)}
+            aria-label={isDone ? `Reopen ${task.title}` : `Mark ${task.title} completed`}
             title={isDone ? "Mark as not done" : "Mark as done"}
             className={`mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-full border-2 transition-colors ${
               isDone
@@ -718,6 +756,15 @@ export default function TaskManager({ theme = "light" }) {
             )}
           </div>
 
+          <select
+            aria-label={`Status for ${task.title}`}
+            value={task.status}
+            disabled={Boolean(statusUpdating)}
+            onChange={(event) => handleUpdateStatus(task._id, event.target.value)}
+            className={`h-8 max-w-32 rounded-lg border px-2 text-xs font-semibold ${styles.input}`}
+          >
+            {STATUS_COLUMNS.map(option => <option key={option.id} value={option.id}>{option.label}</option>)}
+          </select>
           <ChevronRight
             size={16}
             onClick={() => handleToggleRowExpand(task._id)}
@@ -732,12 +779,14 @@ export default function TaskManager({ theme = "light" }) {
             <div className="flex flex-wrap items-center gap-2">
               <input
                 type="date"
+                disabled={!canEditTask(task)}
                 value={task.dueDate ? new Date(task.dueDate).toISOString().split("T")[0] : ""}
                 onChange={(e) => handleInlineUpdate(task._id, { dueDate: e.target.value || null })}
                 className={`h-8 rounded-lg border px-2 text-xs ${styles.input}`}
               />
               <select
                 value={task.priority}
+                disabled={!canEditTask(task)}
                 onChange={(e) => handleInlineUpdate(task._id, { priority: e.target.value })}
                 className={`h-8 rounded-lg border px-2 text-xs font-semibold ${styles.input}`}
               >
@@ -745,6 +794,8 @@ export default function TaskManager({ theme = "light" }) {
               </select>
               <select
                 value={task.status}
+                aria-label={`Update status for ${task.title}`}
+                disabled={Boolean(statusUpdating)}
                 onChange={(e) => handleUpdateStatus(task._id, e.target.value)}
                 className={`h-8 rounded-lg border px-2 text-xs font-semibold ${styles.input}`}
               >
@@ -771,6 +822,7 @@ export default function TaskManager({ theme = "light" }) {
                   <input
                     type="checkbox"
                     checked={s.isCompleted}
+                    disabled={!canEditTask(task)}
                     onChange={() => handleInlineToggleSubtask(task, i)}
                     className="h-3.5 w-3.5 rounded"
                   />
@@ -781,6 +833,7 @@ export default function TaskManager({ theme = "light" }) {
                 <input
                   type="text"
                   value={inlineSubtaskInput}
+                  disabled={!canEditTask(task)}
                   onChange={(e) => setInlineSubtaskInput(e.target.value)}
                   onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); handleInlineAddSubtask(task); } }}
                   placeholder="Add a subtask..."
@@ -789,6 +842,7 @@ export default function TaskManager({ theme = "light" }) {
                 <button
                   type="button"
                   onClick={() => handleInlineAddSubtask(task)}
+                  disabled={!canEditTask(task)}
                   className={`h-8 rounded-lg border px-2.5 text-xs font-bold ${styles.button}`}
                 >
                   Add
@@ -811,12 +865,14 @@ export default function TaskManager({ theme = "light" }) {
               <div className="flex items-center gap-1.5">
                 <button
                   onClick={() => handleOpenEditModal(task)}
+                  disabled={!canEditTask(task)}
                   className={`flex h-8 items-center gap-1 rounded-lg border px-2.5 text-xs font-semibold ${styles.button}`}
                 >
                   <Edit2 size={12} /> Edit
                 </button>
                 <button
                   onClick={() => handleDeleteTask(task._id)}
+                  disabled={!canDeleteTask(task)}
                   className="flex h-8 items-center gap-1 rounded-lg border border-rose-500/20 px-2.5 text-xs font-semibold text-rose-500 hover:bg-rose-500/10"
                 >
                   <Trash2 size={12} /> Delete
@@ -861,6 +917,18 @@ export default function TaskManager({ theme = "light" }) {
     <div className={`flex flex-col h-full w-full overflow-hidden ${isDark ? "bg-slate-950" : "bg-slate-50/50"}`}>
       <ToastNotice message={success} type="success" />
       <ToastNotice message={error} type="error" />
+      <nav aria-label="Task lists" className="flex flex-wrap gap-2 px-4 pt-3">
+        {[["mine", "My Tasks"], ["assigned", "Assigned by Me"], ["all", "All Accessible Tasks"]].map(([scope, label]) => (
+          <button key={scope} type="button" aria-pressed={taskScope === scope && viewLevel === "board"}
+            className={`rounded-lg border px-3 py-2 text-sm font-semibold ${taskScope === scope && viewLevel === "board" ? "border-sky-500 bg-sky-100 text-sky-800" : styles.button}`}
+            onClick={() => {
+              setTaskScope(scope); setViewLevel("board"); setSelectedUserObj(null);
+              setAssigneeFilter(""); setStatusFilter(""); setPriorityFilter("");
+              setLeadFilter(""); setTagFilter(""); setSearchQuery("");
+            }}>{label}</button>
+        ))}
+        {canViewRoster && <button type="button" onClick={handleBackToRoster} className={`rounded-lg border px-3 py-2 text-sm font-semibold ${styles.button}`}>Team Tasks</button>}
+      </nav>
 
       {/* Main Container */}
       <div className="mx-auto flex min-h-0 w-full flex-1 flex-col space-y-3 p-3 sm:space-y-4 sm:p-4 lg:p-6">
@@ -975,10 +1043,10 @@ export default function TaskManager({ theme = "light" }) {
                 className={`flex items-center gap-1.5 rounded-lg border px-3 py-1.5 text-xs font-bold ${styles.button}`}
               >
                 <ArrowLeft size={14} />
-                {selectedUserObj ? `${selectedUserObj.name}'s Tasks` : "All Tasks"}
+                Back to Team Tasks
               </button>
             ) : (
-              <h2 className={`text-lg font-black ${styles.title}`}>My Tasks</h2>
+              <h2 className={`text-lg font-black ${styles.title}`}>{taskScope === "mine" ? "My Tasks" : taskScope === "assigned" ? "Assigned by Me" : "All Accessible Tasks"}</h2>
             )}
           </div>
           <div className={`flex items-center gap-3 text-xs font-semibold ${styles.label}`}>
@@ -1235,7 +1303,7 @@ export default function TaskManager({ theme = "light" }) {
                           <Motion.div
                             key={task._id}
                             layoutId={task._id}
-                            draggable
+                            draggable={groupBy === "status" || canEditTask(task)}
                             onDragStart={(e) => handleDragStart(e, task._id)}
                             onClick={() => handleOpenDetails(task)}
                             className={`rounded-xl p-3 border group/card relative cursor-pointer active:cursor-grabbing hover:shadow-md transition-all ${
@@ -1257,6 +1325,7 @@ export default function TaskManager({ theme = "light" }) {
                               <div className="opacity-0 group-hover/card:opacity-100 flex items-center gap-1 transition-opacity">
                                 <button
                                   onClick={(e) => { e.stopPropagation(); handleOpenEditModal(task); }}
+                                  disabled={!canEditTask(task)}
                                   className={`p-1 rounded hover:bg-slate-800/50 ${isDark ? "text-slate-400 hover:text-white" : "text-slate-500 hover:text-slate-800"}`}
                                   title="Edit Task"
                                 >
@@ -1264,6 +1333,7 @@ export default function TaskManager({ theme = "light" }) {
                                 </button>
                                 <button
                                   onClick={(e) => { e.stopPropagation(); handleDeleteTask(task._id); }}
+                                  disabled={!canDeleteTask(task)}
                                   className="p-1 rounded hover:bg-rose-950/20 text-rose-500 hover:text-rose-400"
                                   title="Delete Task"
                                 >
@@ -1514,11 +1584,10 @@ export default function TaskManager({ theme = "light" }) {
                   <div className="flex items-center gap-2">
                     <span className={`text-[10px] font-bold uppercase tracking-wider ${styles.label}`}>Status:</span>
                     <select
+                      aria-label="Task status"
+                      disabled={Boolean(statusUpdating)}
                       value={detailsTask.status}
-                      onChange={(e) => {
-                        handleUpdateStatus(detailsTask._id, e.target.value);
-                        setDetailsTask(prev => ({ ...prev, status: e.target.value }));
-                      }}
+                      onChange={(e) => handleUpdateStatus(detailsTask._id, e.target.value)}
                       className={`h-8 rounded-lg border px-2 text-xs font-semibold ${styles.input}`}
                     >
                       {STATUS_COLUMNS.map(colOpt => (
@@ -1533,6 +1602,16 @@ export default function TaskManager({ theme = "light" }) {
                   </div>
 
                   {/* Description */}
+                  <div className="space-y-2">
+                    <p className={`text-sm ${styles.text}`}>{detailsTask.status === "COMPLETED" ? "Completed. No further action is required unless the task needs to be reopened." : "Review the requirement below, mark the task In Progress when you start, and mark Completed when finished."}</p>
+                    <div className="flex flex-wrap gap-2">
+                      {detailsTask.status !== "COMPLETED" && <>
+                        <button type="button" disabled={Boolean(statusUpdating) || detailsTask.status === "IN_PROGRESS"} onClick={() => handleUpdateStatus(detailsTask._id, "IN_PROGRESS")} className={`rounded-lg border px-3 py-2 text-sm font-semibold disabled:opacity-50 ${styles.button}`}>In Progress / Ongoing</button>
+                        <button type="button" disabled={Boolean(statusUpdating)} onClick={() => handleUpdateStatus(detailsTask._id, "COMPLETED")} className="rounded-lg bg-emerald-600 px-3 py-2 text-sm font-semibold text-white disabled:opacity-50">Mark Completed</button>
+                      </>}
+                      <button type="button" onClick={handleCloseDetails} className={`rounded-lg border px-3 py-2 text-sm font-semibold ${styles.button}`}>Back to task list</button>
+                    </div>
+                  </div>
                   {detailsTask.description && (
                     <div className="space-y-1">
                       <span className={`text-[10px] font-bold uppercase tracking-wider ${styles.label}`}>Description</span>
@@ -1603,11 +1682,19 @@ export default function TaskManager({ theme = "light" }) {
                       <div className={`rounded-xl border p-2 space-y-1.5 ${isDark ? "border-slate-850 bg-slate-950/40" : "border-slate-150 bg-slate-50/50"}`}>
                         {detailsTask.subtasks.map((st, idx) => (
                           <div key={idx} className="flex items-center gap-2 text-xs py-0.5">
-                            {st.isCompleted ? (
-                              <CheckSquare size={13} className="text-emerald-500 shrink-0" />
-                            ) : (
-                              <div className="h-3.5 w-3.5 rounded border border-slate-500 shrink-0" />
-                            )}
+                            <input type="checkbox" aria-label={st.title} checked={st.isCompleted} disabled={Boolean(statusUpdating) || !canEditTask(detailsTask)} onChange={async () => {
+                              if (statusUpdating || !canEditTask(detailsTask)) return;
+                              setStatusUpdating(detailsTask._id);
+                              try {
+                                const updated = await updateTask(detailsTask._id, { subtasks: detailsTask.subtasks.map((item, i) => i === idx ? { ...item, isCompleted: !item.isCompleted } : item) });
+                                setDetailsTask(updated);
+                                fetchData();
+                              } catch (err) {
+                                setError(err.response?.data?.message || "Failed to update checklist");
+                              } finally {
+                                setStatusUpdating("");
+                              }
+                            }} className="h-3.5 w-3.5 shrink-0 rounded" />
                             <span className={`truncate ${st.isCompleted ? "line-through text-slate-500" : styles.text}`}>
                               {st.title}
                             </span>
@@ -1618,8 +1705,10 @@ export default function TaskManager({ theme = "light" }) {
                   )}
 
                   {/* Actions */}
+                  {isTaskReceiver(detailsTask) && <p className={`text-sm ${styles.label}`}>You can only change the status of this assigned task. Contact the task creator for other changes.</p>}
                   <div className="mobile-safe-footer -mx-4 flex items-center justify-end gap-2 border-t border-slate-200 bg-inherit px-4 pt-3 sm:mx-0 sm:border-t-0 sm:px-0 sm:pt-2">
                     <button
+                      disabled={!canDeleteTask(detailsTask)}
                       onClick={() => {
                         handleCloseDetails();
                         handleDeleteTask(detailsTask._id);
@@ -1629,6 +1718,7 @@ export default function TaskManager({ theme = "light" }) {
                       Delete
                     </button>
                     <button
+                      disabled={!canEditTask(detailsTask)}
                       onClick={() => {
                         handleCloseDetails();
                         handleOpenEditModal(detailsTask);

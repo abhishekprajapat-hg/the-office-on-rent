@@ -6,6 +6,7 @@ const { requirePermission } = require("../middleware/permission.middleware");
 const { writeLimiter } = require("../middleware/rateLimit.middleware");
 
 router.get("/", requirePermission("cabins.view"), cabinController.listCabins);
+router.get("/floor-view", requirePermission("cabins.view"), cabinController.getFloorView);
 router.get("/:cabinId", requirePermission("cabins.view"), cabinController.getCabin);
 router.post("/", writeLimiter, requirePermission("cabins.create"), cabinController.createCabin);
 router.patch("/:cabinId", writeLimiter, requirePermission("cabins.update"), cabinController.updateCabin);

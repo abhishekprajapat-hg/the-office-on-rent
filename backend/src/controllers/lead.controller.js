@@ -169,7 +169,7 @@ const FIELD_EXECUTIVE_ROLE = USER_ROLES.FIELD_EXECUTIVE;
 const SITE_VISIT_STATUS = "SITE_VISIT";
 const SITE_VISIT_REQUIRED_STATUS = "SITE_VISIT_REQUIRED";
 const QUALIFIED_LEAD_STATUS = "QUALIFIED_LEAD";
-const ROLE_TYPE_VALUES = Object.freeze(["COMMERCIAL", "RESIDENTIAL"]);
+const ROLE_TYPE_VALUES = Object.freeze(["COMMERCIAL", "RESIDENTIAL", "BOTH"]);
 const REQUESTED_STATUS = "REQUESTED";
 const CLOSED_STATUS = "CLOSED";
 const LEAD_STATUS_VALUES = Object.freeze([
@@ -331,7 +331,7 @@ const buildCompanyInventoryQuery = ({ inventoryId, companyId, user = null }) => 
   if (companyId) {
     query.companyId = companyId;
   }
-  if (user?.role && user.role !== USER_ROLES.ADMIN) {
+  if (user?.role && user.role !== USER_ROLES.ADMIN && getUserRoleType(user) !== "BOTH") {
     query.inventoryType = getUserRoleType(user);
   }
   return query;
@@ -359,13 +359,13 @@ const buildLeadTypeClause = (roleType) => {
 };
 
 const addLeadRoleTypeScope = (query, user) => {
-  if (!query || user?.role === USER_ROLES.ADMIN) return query;
+  if (!query || user?.role === USER_ROLES.ADMIN || getUserRoleType(user) === "BOTH") return query;
   addLeadAndClause(query, buildLeadTypeClause(getUserRoleType(user)));
   return query;
 };
 
 const assertLeadTypeMatchesUser = (leadOrRequirements, user) => {
-  if (user?.role === USER_ROLES.ADMIN) return null;
+  if (user?.role === USER_ROLES.ADMIN || getUserRoleType(user) === "BOTH") return null;
   const userRoleType = getUserRoleType(user);
   const leadType = normalizeRoleType(
     leadOrRequirements?.requirements?.inventoryType
@@ -1991,7 +1991,7 @@ exports.createLead = async (req, res) => {
     if (requestedInventoryIds.length) {
       const inventoryQuery = { _id: { $in: requestedInventoryIds } };
       if (req.user?.companyId) inventoryQuery.companyId = req.user.companyId;
-      if (req.user?.role !== USER_ROLES.ADMIN) {
+      if (req.user?.role !== USER_ROLES.ADMIN && getUserRoleType(req.user) !== "BOTH") {
         inventoryQuery.inventoryType = getUserRoleType(req.user);
       }
 
@@ -2398,7 +2398,7 @@ exports.bulkUploadLeads = async (req, res) => {
         ? Inventory.find({
           _id: { $in: payloadInventoryIds },
           companyId,
-          ...(req.user?.role === USER_ROLES.ADMIN
+          ...((req.user?.role === USER_ROLES.ADMIN || getUserRoleType(req.user) === "BOTH")
             ? {}
             : { inventoryType: getUserRoleType(req.user) }),
         })

@@ -44,7 +44,7 @@ const Metric = ({ label, value, icon: Icon, tone = "cyan" }) => {
           {label}
         </p>
         <span className={`rounded-lg p-2 ${toneClass}`}>
-          <Icon size={16} />
+          {React.createElement(Icon, { size: 16 })}
         </span>
       </div>
       <p className="mt-4 text-3xl font-semibold text-slate-950">{value}</p>
@@ -59,7 +59,7 @@ const ActionCard = ({ to, icon: Icon, title, subtitle }) => (
   >
     <div className="flex items-start gap-3">
       <span className="rounded-lg bg-slate-100 p-2 text-slate-700">
-        <Icon size={16} />
+        {React.createElement(Icon, { size: 16 })}
       </span>
       <div>
         <p className="text-sm font-semibold text-slate-950">{title}</p>
@@ -131,14 +131,14 @@ const ProductionExecutiveDashboard = ({ mode = "home" }) => {
 
   if (loading) {
     return (
-      <div className="flex min-h-[60vh] items-center justify-center text-sm font-semibold text-slate-500">
+      <div className="dashboard-doc-screen flex min-h-[60vh] items-center justify-center text-sm font-semibold text-slate-500">
         Loading {isCommunityManager ? "community" : "production"} workspace...
       </div>
     );
   }
 
   return (
-    <div className="min-h-full overflow-y-auto bg-slate-50 px-4 py-5 text-slate-950 sm:px-6 lg:px-8">
+    <div className="dashboard-doc-screen min-h-full overflow-y-auto bg-slate-50 px-4 py-5 text-slate-950 sm:px-6 lg:px-8">
       <div className="mx-auto max-w-7xl space-y-5">
         <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
           <div className="flex flex-col gap-4 md:flex-row md:items-end md:justify-between">

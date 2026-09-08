@@ -397,14 +397,14 @@ const getStoredUserRoleType = () => {
   try {
     const parsedUser = JSON.parse(localStorage.getItem("user") || "{}");
     const normalized = String(parsedUser?.roleType || "").trim().toUpperCase();
-    return normalized === "RESIDENTIAL" ? "RESIDENTIAL" : "COMMERCIAL";
+    return ["RESIDENTIAL", "BOTH"].includes(normalized) ? normalized : "COMMERCIAL";
   } catch {
     return "COMMERCIAL";
   }
 };
 
 const getDefaultInventoryForm = () => {
-  const roleType = getStoredUserRoleType();
+  const roleType = getStoredUserRoleType() === "RESIDENTIAL" ? "RESIDENTIAL" : "COMMERCIAL";
   return {
     ...DEFAULT_FORM,
     inventoryType: roleType,
@@ -413,7 +413,7 @@ const getDefaultInventoryForm = () => {
 };
 
 const getDefaultInventoryTypeFilter = () =>
-  getStoredUserRole() === "ADMIN" ? "all" : getStoredUserRoleType();
+  getStoredUserRole() === "ADMIN" || getStoredUserRoleType() === "BOTH" ? "all" : getStoredUserRoleType();
 
 const isInventoryPriceRequired = (type) => String(type || "").trim() !== "Rent";
 const isInventoryRentRequired = (type) => ["Rent", "Both"].includes(String(type || "").trim());
@@ -805,7 +805,12 @@ const AssetVault = () => {
   const debouncedFloorFilter = useDebouncedValue(floorFilter, 160);
   const debouncedAmenitiesFilter = useDebouncedValue(amenitiesFilter, 180);
   const [error, setError] = useState("");
-  const [formError, setFormError] = useState("");
+  const [formError, setFormErrorMessage] = useState("");
+  const [formErrorPersistent, setFormErrorPersistent] = useState(true);
+  const setFormError = (message, persistent = true) => {
+    setFormErrorMessage(message);
+    setFormErrorPersistent(persistent);
+  };
   const [success, setSuccess] = useState("");
 
   const [formData, setFormData] = useState(getDefaultInventoryForm);
@@ -827,7 +832,7 @@ const AssetVault = () => {
 
   const role = getStoredUserRole();
   const userRoleType = getStoredUserRoleType();
-  const canChooseInventoryRoleType = role === "ADMIN";
+  const canChooseInventoryRoleType = role === "ADMIN" || userRoleType === "BOTH";
   const canManage = role === "ADMIN" || role === "MANAGER";
   const canDeleteDirect = role === "ADMIN";
   const canRequestDelete = role !== "ADMIN" && UPDATE_STATUS_REQUEST_ROLES.has(role);
@@ -2158,7 +2163,7 @@ const AssetVault = () => {
       closeFormModal();
     } catch (saveError) {
       console.error(`Save asset failed: ${toErrorMessage(saveError, "Unknown error")}`);
-      setFormError(toErrorMessage(saveError, "Failed to save asset"));
+      setFormError(toErrorMessage(saveError, "Failed to save asset"), [400, 403, 409, 422].includes(saveError.response?.status));
     } finally {
       setSaving(false);
     }
@@ -2448,7 +2453,7 @@ const AssetVault = () => {
       closeFormModal();
     } catch (updateError) {
       console.error(`Update asset failed: ${toErrorMessage(updateError, "Unknown error")}`);
-      setFormError(toErrorMessage(updateError, "Failed to update asset"));
+      setFormError(toErrorMessage(updateError, "Failed to update asset"), [400, 403, 409, 422].includes(updateError.response?.status));
     } finally {
       setSaving(false);
       setResolvingLocation(false);
@@ -2968,8 +2973,8 @@ const AssetVault = () => {
         onAmenitiesFilterChange={setAmenitiesFilter}
       />
 
-      <ToastNotice message={error} type="error" />
-      <ToastNotice message={success} type="success" />
+      <ToastNotice message={error} type="error" onDismiss={() => setError("")} />
+      <ToastNotice message={success} type="success" onDismiss={() => setSuccess("")} />
 
       <PendingInventoryRequestsPanel
         canManage={canReviewInventoryRequests}
@@ -3070,7 +3075,7 @@ const AssetVault = () => {
                 </button>
               </div>
 
-              <ToastNotice message={formError} type="error" />
+              <ToastNotice message={formError} type="error" persistent={formErrorPersistent} onDismiss={() => setFormError("")} />
 
               <div className="mobile-modal-scroll custom-scrollbar inventory-form-uppercase flex-1 space-y-3 px-3 py-3 sm:px-5">
                 <div className={INVENTORY_MODAL_SECTION_CLASS}>

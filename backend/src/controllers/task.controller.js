@@ -5,6 +5,7 @@ const Lead = require("../models/Lead");
 const { USER_ROLES, PRODUCTION_ROLES } = require("../constants/role.constants");
 
 const isProductionTaskRole = (user) => PRODUCTION_ROLES.includes(user?.role);
+const referenceId = (value) => String(value?._id || value || "");
 
 // Helper to check access permissions
 const checkTaskAccess = (task, user) => {
@@ -17,7 +18,7 @@ const checkTaskAccess = (task, user) => {
   }
   
   // Executives/Field Executives can only access tasks assigned to or created by them
-  return String(task.assignedTo) === String(user._id) || String(task.createdBy) === String(user._id);
+  return referenceId(task.assignedTo) === referenceId(user) || referenceId(task.createdBy) === referenceId(user);
 };
 
 // Create a new task
@@ -80,8 +81,10 @@ exports.createTask = async (req, res) => {
 
     // Real-time notification via Socket.io
     const io = req.app.get("io");
-    if (io && assignedTo) {
+    if (io && assignedTo && referenceId(assignedTo) !== referenceId(req.user)) {
       io.to(`user:${assignedTo}`).emit("task:created", {
+        actorId: referenceId(req.user),
+        eventId: `task:created:${savedTask._id}:${savedTask.createdAt || Date.now()}`,
         task: populatedTask,
         message: `You have been assigned a new task: "${title}" by ${req.user.name}`,
       });
@@ -98,7 +101,7 @@ exports.createTask = async (req, res) => {
 exports.getTasks = async (req, res) => {
   try {
     const companyId = req.user.companyId;
-    const { status, priority, leadId, assignedTo, search, dueDateStart, dueDateEnd, tag } = req.query;
+    const { status, priority, leadId, assignedTo, search, dueDateStart, dueDateEnd, tag, scope } = req.query;
 
     const query = { companyId };
 
@@ -117,6 +120,8 @@ exports.getTasks = async (req, res) => {
     if (priority) query.priority = priority;
     if (leadId && !isProductionTaskRole(req.user)) query.leadId = leadId;
     if (assignedTo) query.assignedTo = assignedTo;
+    if (scope === "assigned") query.createdBy = req.user._id;
+    if (scope === "mine") query.assignedTo = req.user._id;
     if (tag) query.tags = tag;
     
     if (search) {
@@ -202,6 +207,15 @@ exports.updateTask = async (req, res) => {
       return res.status(403).json({ message: "Access denied. You do not have permission to edit this task" });
     }
 
+    const isCreator = referenceId(task.createdBy) === referenceId(req.user);
+    const isReceiver = referenceId(task.assignedTo) === referenceId(req.user) && !isCreator;
+    if (isReceiver && Object.keys(req.body).some((field) => field !== "status")) {
+      return res.status(403).json({ message: "Task receivers can only change the status" });
+    }
+    if (status !== undefined && !["TODO", "IN_PROGRESS", "COMPLETED", "BACKLOG"].includes(status)) {
+      return res.status(400).json({ message: "Invalid task status" });
+    }
+
     // Validate updates if changed
     if (assignedTo && String(assignedTo) !== String(task.assignedTo)) {
       if (!mongoose.Types.ObjectId.isValid(assignedTo)) {
@@ -223,6 +237,7 @@ exports.updateTask = async (req, res) => {
       }
     }
 
+    const originalStatus = task.status;
     const originalAssignee = task.assignedTo;
 
     // Apply updates
@@ -251,34 +266,37 @@ exports.updateTask = async (req, res) => {
       .populate("createdBy", "name role")
       .populate("leadId", "name phone email status");
 
-    // Socket Notifications
+    // Employee changes go to company admins; admin changes go to the assignee.
     const io = req.app.get("io");
-    if (io) {
-      // Notify new assignee if changed
-      if (assignedTo && String(assignedTo) !== String(originalAssignee)) {
-        io.to(`user:${assignedTo}`).emit("task:updated", {
-          task: populatedTask,
-          message: `Task assigned to you: "${task.title}" by ${req.user.name}`,
-        });
+    const statusChanged = status !== undefined && status !== originalStatus;
+    const assignmentChanged = assignedTo !== undefined && referenceId(assignedTo) !== referenceId(originalAssignee);
+    const hasDetailChanges = Object.keys(req.body).some(field => field !== "status");
+    if (io && (statusChanged || assignmentChanged || hasDetailChanges)) {
+      const actorId = referenceId(req.user);
+      const event = {
+        actorId,
+        eventId: `task:updated:${task._id}:${updatedTask.updatedAt || Date.now()}`,
+        task: populatedTask,
+        message: statusChanged
+          ? `${req.user.name} changed "${task.title}" to ${status.replaceAll("_", " ")}`
+          : `Task updated by ${req.user.name}: "${task.title}"`,
+      };
+      if (req.user.role !== USER_ROLES.ADMIN && statusChanged) {
+        io.to(`company:${companyId}:role:${USER_ROLES.ADMIN}`).emit("task:updated", event);
+      } else {
+        const recipient = referenceId(task.assignedTo);
+        if (recipient && recipient !== actorId) {
+          io.to(`user:${recipient}`).emit("task:updated", {
+            ...event,
+            message: assignmentChanged ? `Task assigned to you: "${task.title}" by ${req.user.name}` : event.message,
+          });
+        }
       }
-      // Notify original assignee of update if it wasn't unassigned
-      if (originalAssignee && String(originalAssignee) !== String(assignedTo)) {
-        io.to(`user:${originalAssignee}`).emit("task:updated", {
-          taskId: task._id,
-          message: `Task "${task.title}" has been reassigned to someone else`,
-        });
-      } else if (originalAssignee) {
-        io.to(`user:${originalAssignee}`).emit("task:updated", {
-          task: populatedTask,
-          message: `Task updated: "${task.title}"`,
-        });
-      }
-      
-      // Notify creator of status changes
-      if (String(task.createdBy) !== String(req.user._id)) {
-        io.to(`user:${task.createdBy}`).emit("task:updated", {
-          task: populatedTask,
-          message: `Task you created was updated by ${req.user.name}: "${task.title}"`,
+      const previousRecipient = referenceId(originalAssignee);
+      if (assignmentChanged && previousRecipient && previousRecipient !== actorId) {
+        io.to(`user:${previousRecipient}`).emit("task:updated", {
+          ...event, task: undefined, taskId: task._id,
+          message: `Task "${task.title}" has been reassigned`,
         });
       }
     }
@@ -308,8 +326,9 @@ exports.deleteTask = async (req, res) => {
     // Access check: Admin or creator can delete
     const isCreator = String(task.createdBy) === String(req.user._id);
     const isAdmin = req.user.role === USER_ROLES.ADMIN;
+    const isReceiver = referenceId(task.assignedTo) === referenceId(req.user) && !isCreator;
 
-    if (!isAdmin && !isCreator) {
+    if (String(task.companyId) !== String(req.user.companyId) || isReceiver || (!isAdmin && !isCreator)) {
       return res.status(403).json({ message: "Access denied. Only the creator or an Admin can delete this task" });
     }
 
@@ -341,6 +360,12 @@ exports.getTaskStats = async (req, res) => {
   try {
     const companyId = req.user.companyId;
     const query = { companyId };
+    if (req.query.scope === "assigned") query.createdBy = req.user._id;
+    if (req.query.scope === "mine") query.assignedTo = req.user._id;
+    else if (req.query.assignedTo) {
+      if (!mongoose.Types.ObjectId.isValid(req.query.assignedTo)) return res.status(400).json({ message: "Invalid assignee ID" });
+      query.assignedTo = new mongoose.Types.ObjectId(req.query.assignedTo);
+    }
 
     // Apply role filter (Executives only see their tasks)
     if (req.user.role !== USER_ROLES.ADMIN && 
