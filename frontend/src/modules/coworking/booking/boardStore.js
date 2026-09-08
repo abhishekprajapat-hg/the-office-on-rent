@@ -1,5 +1,4 @@
 import { useEffect, useReducer } from "react";
-import { SAMPLE_CABINS } from "./sampleFloor";
 
 /*
  * The board's single source of truth.
@@ -20,7 +19,8 @@ import { SAMPLE_CABINS } from "./sampleFloor";
  * wiring, or the two will disagree about what "booked" means.
  */
 
-const STORAGE_KEY = "oor.coworking.board.v1";
+// v2 intentionally starts empty; v1 contained the removed frontend demo floor.
+const STORAGE_KEY = "oor.coworking.board.v2";
 const DAY = 24 * 60 * 60 * 1000;
 const UNDO_DEPTH = 15;
 
@@ -372,16 +372,15 @@ const expireHolds = (state) => {
 };
 
 export const loadBoard = () => {
-  let base = { cabins: SAMPLE_CABINS, activity: [] };
+  let base = { cabins: [], activity: [] };
   try {
     const saved = window.localStorage.getItem(STORAGE_KEY);
     if (saved) {
       const parsed = JSON.parse(saved);
-      if (Array.isArray(parsed?.cabins) && parsed.cabins.length) base = parsed;
+      if (Array.isArray(parsed?.cabins)) base = parsed;
     }
   } catch {
-    // Private mode, cleared storage, or a shape from an older build. Seeding
-    // from the sample floor is always a valid board, so never fail the screen.
+    // Private mode, cleared storage, or an invalid persisted shape.
   }
   const swept = expireHolds(base);
   return { cabins: decorate(swept.cabins), activity: swept.activity, undoStack: [] };
@@ -404,7 +403,7 @@ export const resetBoard = () => {
   } catch {
     // ignore
   }
-  return { cabins: decorate(SAMPLE_CABINS), activity: [], undoStack: [] };
+  return { cabins: [], activity: [], undoStack: [] };
 };
 
 /** Reducer wrapper that keeps an undo stack and re-derives the day counts. */
