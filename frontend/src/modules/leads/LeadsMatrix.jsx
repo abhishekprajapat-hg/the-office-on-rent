@@ -29,7 +29,10 @@ import {
 import PipelineSelectionBar from "./components/PipelineSelectionBar";
 import PipelineCards from "./components/PipelineCards";
 import PipelineTable from "./components/PipelineTable";
+import PipelineTeam from "./components/PipelineTeam";
 import PipelineToolbar from "./components/PipelineToolbar";
+import LeadFiltersFlyout from "./components/LeadFiltersFlyout";
+import { QUICK_FILTER_KEYS } from "./components/leadFilterConstants";
 import {
   PIPELINE_VIEWS,
   countNeedsAction,
@@ -95,6 +98,40 @@ const LEAD_LIST_FIELDS = [
   "createdAt",
   "updatedAt",
 ].join(",");
+
+const formatLeadFilterDate = (date) => {
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, "0");
+  const day = String(date.getDate()).padStart(2, "0");
+  return `${year}-${month}-${day}`;
+};
+
+const getLeadFilterDate = (offset = 0, base = new Date()) => {
+  const date = new Date(base);
+  date.setDate(date.getDate() + offset);
+  return formatLeadFilterDate(date);
+};
+
+const getLeadFilterDateRange = (preset, type) => {
+  if (!preset) return ["", ""];
+  if (type === "followUp") {
+    return {
+      TODAY: [getLeadFilterDate(0), getLeadFilterDate(0)],
+      OVERDUE: ["", getLeadFilterDate(-1)],
+      TOMORROW: [getLeadFilterDate(1), getLeadFilterDate(1)],
+      THIS_WEEK: [getLeadFilterDate(0), getLeadFilterDate(6)],
+      NEXT_WEEK: [getLeadFilterDate(7), getLeadFilterDate(13)],
+    }[preset] || ["", ""];
+  }
+  const today = new Date();
+  return {
+    TODAY: [getLeadFilterDate(0), getLeadFilterDate(0)],
+    YESTERDAY: [getLeadFilterDate(-1), getLeadFilterDate(-1)],
+    THIS_WEEK: [getLeadFilterDate(-6), getLeadFilterDate(0)],
+    THIS_MONTH: [formatLeadFilterDate(new Date(today.getFullYear(), today.getMonth(), 1)), getLeadFilterDate(0)],
+    LAST_30_DAYS: [getLeadFilterDate(-30), getLeadFilterDate(0)],
+  }[preset] || ["", ""];
+};
 
 const EXECUTIVE_ROLES = ["INSIDE_EXECUTIVE", "EXECUTIVE", "FIELD_EXECUTIVE"];
 const LEAD_OWNER_ROLES = ["INSIDE_EXECUTIVE", "EXECUTIVE"];
@@ -1404,6 +1441,13 @@ const LeadsMatrix = () => {
   const [bulkUploading, setBulkUploading] = useState(false);
 
   const [searchParams, setSearchParams] = useSearchParams();
+  const [advancedFilters, setAdvancedFilters] = useState(() => Object.fromEntries(
+    ["source", "assignedTo", "inventoryType", "subtype", "transactionType", "city", "project", "budgetMin", "budgetMax", "budgetRange", "createdFrom", "createdTo", "createdDate", "followUpDateFrom", "followUpDateTo", "followUpDate"]
+      .map((key) => [key, searchParams.get(key) || ""]),
+  ));
+  const [quickFilter, setQuickFilter] = useState(() => searchParams.get("quickFilter") || "");
+  const [filtersFlyoutOpen, setFiltersFlyoutOpen] = useState(false);
+  const leadRequestVersion = useRef(0);
   const [query, setQuery] = useState(() => searchParams.get("q") || "");
   const [statusFilter, setStatusFilter] = useState(() => {
     const fromUrl = String(searchParams.get("status") || "").toUpperCase();
@@ -1412,17 +1456,106 @@ const LeadsMatrix = () => {
   const [propertySubtypeFilter, setPropertySubtypeFilter] = useState(
     () => String(searchParams.get("subtype") || "").toUpperCase(),
   );
-  const [sortBy, setSortBy] = useState(() => {
+  const [sortBy] = useState(() => {
     const fromUrl = String(searchParams.get("sort") || "").toUpperCase();
     return LEAD_SORT_OPTIONS[fromUrl] || LEAD_SORT_OPTIONS.FOLLOW_UP;
   });
   const [view, setView] = useState(() => {
     const fromUrl = String(searchParams.get("view") || "").toUpperCase();
-    return PIPELINE_VIEWS[fromUrl] || PIPELINE_VIEWS.NEEDS_ACTION;
+    return PIPELINE_VIEWS[fromUrl] || PIPELINE_VIEWS.ALL;
   });
   const [selectedLeadKeys, setSelectedLeadKeys] = useState([]);
   const [nowMs, setNowMs] = useState(0);
   const debouncedQuery = useDebouncedValue(query, 180);
+
+  const filterState = useMemo(() => ({
+    status: statusFilter,
+    source: advancedFilters.source || "",
+    assignedTo: advancedFilters.assignedTo || "",
+    propertyType: advancedFilters.subtype || "",
+    budgetRange: advancedFilters.budgetRange || "",
+    followUpDate: advancedFilters.followUpDate || "",
+    createdDate: advancedFilters.createdDate || "",
+    quickFilter,
+  }), [advancedFilters, quickFilter, statusFilter]);
+
+  const applyToolbarFilters = useCallback((next) => {
+    const nextAdvanced = { ...advancedFilters };
+    const map = { source: "source", assignedTo: "assignedTo", propertyType: "subtype" };
+    Object.entries(map).forEach(([from, to]) => { nextAdvanced[to] = next[from] || ""; });
+    const budgetMap = { UNDER_50L: ["", "5000000"], "50L_1CR": ["5000000", "10000000"], "1CR_3CR": ["10000000", "30000000"], "3CR_5CR": ["30000000", "50000000"], ABOVE_5CR: ["50000000", ""] };
+    const range = budgetMap[next.budgetRange] || ["", ""];
+    nextAdvanced.budgetRange = next.budgetRange || "";
+    nextAdvanced.budgetMin = range[0]; nextAdvanced.budgetMax = range[1];
+    nextAdvanced.followUpDate = next.followUpDate || "";
+    nextAdvanced.createdDate = next.createdDate || "";
+    const followUpRange = getLeadFilterDateRange(next.followUpDate, "followUp");
+    const createdRange = getLeadFilterDateRange(next.createdDate, "created");
+    nextAdvanced.followUpDateFrom = followUpRange[0];
+    nextAdvanced.followUpDateTo = followUpRange[1];
+    nextAdvanced.createdFrom = createdRange[0];
+    nextAdvanced.createdTo = createdRange[1];
+    if (next.status !== undefined) setStatusFilter(next.status || "ALL");
+    if (next.propertyType !== undefined) setPropertySubtypeFilter(next.propertyType || "");
+    if (next.quickFilter !== undefined) setQuickFilter(next.quickFilter || "");
+    if (next.quickFilter === QUICK_FILTER_KEYS.UNASSIGNED_LEADS) nextAdvanced.assignedTo = "UNASSIGNED";
+    if (next.quickFilter === QUICK_FILTER_KEYS.NEW_THIS_WEEK) {
+      nextAdvanced.createdFrom = getLeadFilterDate(-7);
+      nextAdvanced.createdTo = "";
+    }
+    if (next.quickFilter === QUICK_FILTER_KEYS.NEEDS_FOLLOW_UP_TODAY) {
+      const today = getLeadFilterDate(0);
+      nextAdvanced.followUpDateFrom = today; nextAdvanced.followUpDateTo = today;
+    }
+    if (next.quickFilter === QUICK_FILTER_KEYS.OVERDUE_FOLLOW_UPS) {
+      nextAdvanced.followUpDateFrom = "";
+      nextAdvanced.followUpDateTo = getLeadFilterDate(-1);
+    }
+    if (!next.quickFilter && quickFilter === QUICK_FILTER_KEYS.UNASSIGNED_LEADS) nextAdvanced.assignedTo = "";
+    if (!next.quickFilter && quickFilter === QUICK_FILTER_KEYS.NEW_THIS_WEEK) { nextAdvanced.createdFrom = ""; nextAdvanced.createdTo = ""; }
+    if (!next.quickFilter && [QUICK_FILTER_KEYS.NEEDS_FOLLOW_UP_TODAY, QUICK_FILTER_KEYS.OVERDUE_FOLLOW_UPS].includes(quickFilter)) { nextAdvanced.followUpDateFrom = ""; nextAdvanced.followUpDateTo = ""; }
+    setAdvancedFilters({ ...nextAdvanced });
+    if (next.quickFilter || next.status && next.status !== "ALL" || Object.values(nextAdvanced).some(Boolean)) setView(PIPELINE_VIEWS.ALL);
+  }, [advancedFilters, quickFilter]);
+
+  const resetAllLeadFilters = useCallback(() => {
+    setStatusFilter("ALL"); setPropertySubtypeFilter(""); setQuickFilter("");
+    setAdvancedFilters({});
+  }, []);
+
+  const applyFlyoutFilters = useCallback((next) => {
+    const budgetMap = { UNDER_50L: ["", "5000000"], "50L_1CR": ["5000000", "10000000"], "1CR_3CR": ["10000000", "30000000"], "3CR_5CR": ["30000000", "50000000"], ABOVE_5CR: ["50000000", ""] };
+    const range = budgetMap[next.budgetRange] || ["", ""];
+    const updated = {
+      ...advancedFilters,
+      source: next.source || "", assignedTo: next.assignedTo || "", subtype: next.propertyType || "",
+      budgetMin: range[0], budgetMax: range[1],
+      budgetRange: next.budgetRange || "", followUpDate: next.followUpDate || "", createdDate: next.createdDate || "",
+    };
+    const followRange = getLeadFilterDateRange(next.followUpDate, "followUp");
+    const createdRange = getLeadFilterDateRange(next.createdDate, "created");
+    updated.followUpDateFrom = followRange[0]; updated.followUpDateTo = followRange[1];
+    updated.createdFrom = createdRange[0]; updated.createdTo = createdRange[1];
+    if (next.quickFilter === QUICK_FILTER_KEYS.UNASSIGNED_LEADS) updated.assignedTo = "UNASSIGNED";
+    if (next.quickFilter === QUICK_FILTER_KEYS.NEW_THIS_WEEK) {
+      updated.createdFrom = getLeadFilterDate(-7);
+      updated.createdTo = "";
+    }
+    if (next.quickFilter === QUICK_FILTER_KEYS.NEEDS_FOLLOW_UP_TODAY) {
+      const today = getLeadFilterDate(0);
+      updated.followUpDateFrom = today;
+      updated.followUpDateTo = today;
+    }
+    if (next.quickFilter === QUICK_FILTER_KEYS.OVERDUE_FOLLOW_UPS) {
+      updated.followUpDateFrom = "";
+      updated.followUpDateTo = getLeadFilterDate(-1);
+    }
+    setStatusFilter(next.status || "ALL");
+    setPropertySubtypeFilter(next.propertyType || "");
+    setQuickFilter(next.quickFilter || "");
+    setAdvancedFilters(updated);
+    setView(PIPELINE_VIEWS.ALL);
+  }, [advancedFilters]);
 
   const [selectedLead, setSelectedLead] = useState(null);
   const [isDetailsOpen, setIsDetailsOpen] = useState(false);
@@ -1529,6 +1662,7 @@ const LeadsMatrix = () => {
   }, [success]);
 
   const fetchLeads = useCallback(async (asRefresh = false, options = {}) => {
+    const requestVersion = ++leadRequestVersion.current;
     const page = Number(options.page || 1);
     const append = Boolean(options.append);
     try {
@@ -1545,7 +1679,11 @@ const LeadsMatrix = () => {
         page,
         limit: LEAD_LIST_PAGE_LIMIT,
         fields: LEAD_LIST_FIELDS,
+        ...Object.fromEntries(Object.entries(advancedFilters).filter(([, value]) => value !== "")),
+        ...(statusFilter !== "ALL" ? { status: statusFilter } : {}),
+        ...(propertySubtypeFilter ? { subtype: propertySubtypeFilter } : {}),
       });
+      if (requestVersion !== leadRequestVersion.current) return;
       const list = Array.isArray(response?.leads) ? response.leads : [];
       setLeadPagination(response?.pagination || null);
       setLeads((prev) => {
@@ -1558,6 +1696,7 @@ const LeadsMatrix = () => {
         return [...rowsById.values()];
       });
     } catch (fetchError) {
+      if (requestVersion !== leadRequestVersion.current) return;
       const message = toErrorMessage(fetchError, "Failed to load leads");
       console.error(`Load leads failed: ${message}`);
       setError(message);
@@ -1566,11 +1705,13 @@ const LeadsMatrix = () => {
         setLeadPagination(null);
       }
     } finally {
-      setLoading(false);
-      setRefreshing(false);
-      setLoadingMoreLeads(false);
+      if (requestVersion === leadRequestVersion.current) {
+        setLoading(false);
+        setRefreshing(false);
+        setLoadingMoreLeads(false);
+      }
     }
-  }, []);
+  }, [advancedFilters, statusFilter, propertySubtypeFilter]);
 
   const fetchExecutives = useCallback(async () => {
     if (!canAssignLead) return;
@@ -1635,9 +1776,14 @@ const LeadsMatrix = () => {
 
   useEffect(() => {
     fetchLeads();
+    setSelectedLeadKeys([]);
+    return () => { leadRequestVersion.current += 1; };
+  }, [fetchLeads]);
+
+  useEffect(() => {
     fetchExecutives();
     fetchInventoryOptions();
-  }, [fetchLeads, fetchExecutives, fetchInventoryOptions]);
+  }, [fetchExecutives, fetchInventoryOptions]);
 
   useEffect(() => {
     setNowMs(Date.now());
@@ -1856,33 +2002,9 @@ const LeadsMatrix = () => {
     if (propertySubtypeFilter) next.set("subtype", propertySubtypeFilter);
     if (sortBy !== LEAD_SORT_OPTIONS.FOLLOW_UP) next.set("sort", sortBy);
     if (debouncedQuery.trim()) next.set("q", debouncedQuery.trim());
+    Object.entries(advancedFilters).forEach(([key, value]) => { if (value) next.set(key, value); });
     setSearchParams(next, { replace: true });
-  }, [debouncedQuery, propertySubtypeFilter, setSearchParams, sortBy, statusFilter, view]);
-
-  const pipelineFilters = useMemo(
-    () => [
-      {
-        id: "status",
-        label: "Status",
-        value: statusFilter === "ALL" ? "" : getStatusLabel(statusFilter),
-        active: statusFilter !== "ALL",
-      },
-      {
-        id: "subtype",
-        label: "Property type",
-        value: propertySubtypeFilter
-          ? String(propertySubtypeFilter).replace(/_/g, " ").toLowerCase()
-          : "",
-        active: Boolean(propertySubtypeFilter),
-      },
-    ],
-    [propertySubtypeFilter, statusFilter],
-  );
-
-  const handleRemovePipelineFilter = useCallback((filter) => {
-    if (filter.id === "status") setStatusFilter("ALL");
-    if (filter.id === "subtype") setPropertySubtypeFilter("");
-  }, []);
+  }, [advancedFilters, debouncedQuery, propertySubtypeFilter, setSearchParams, sortBy, statusFilter, view]);
 
   const handleExportSelectedLeads = useCallback(() => {
     const chosen = new Set(selectedLeadKeys.map(String));
@@ -2070,6 +2192,14 @@ const LeadsMatrix = () => {
     if (!resolvedLeadId) return;
     navigate(`${currentLeadRouteBase}/${resolvedLeadId}`);
   }, [currentLeadRouteBase, navigate]);
+
+  const handleOpenTeamEmployee = useCallback((employee) => {
+    const employeeId = String(employee?.id || employee?._id || "").trim();
+    if (!employeeId) return;
+    setAdvancedFilters((previous) => ({ ...previous, assignedTo: employeeId }));
+    setQuickFilter("");
+    setView(PIPELINE_VIEWS.ALL);
+  }, []);
 
   // Everything both pipeline presentations need. Defined once: the card list
   // and the table are the same list, and a callback that exists on only one of
@@ -3193,42 +3323,54 @@ const LeadsMatrix = () => {
               onViewChange={setView}
               needsActionCount={needsActionCount}
               canSeeUnassigned={canAssignLead}
-              filters={pipelineFilters}
-              onToggleFilter={handleRemovePipelineFilter}
-              onRemoveFilter={handleRemovePipelineFilter}
               query={query}
               onQueryChange={setQuery}
-              sortBy={sortBy}
-              onSortByChange={setSortBy}
-              sortOptions={[
-                { value: LEAD_SORT_OPTIONS.FOLLOW_UP, label: "Follow-up" },
-                { value: LEAD_SORT_OPTIONS.RECENT, label: "Recent" },
-                { value: LEAD_SORT_OPTIONS.NAME, label: "Name" },
-              ]}
               refreshing={refreshing}
               onRefresh={() => fetchLeads(true)}
-              actions={
-                <>
-                  {canBulkUploadLeads ? (
-                    <Button size="sm" variant="secondary" onClick={() => setIsBulkUploadModalOpen(true)}>
-                      Bulk upload
-                    </Button>
-                  ) : null}
-                  {canAddLead ? (
-                    <Button size="sm" onClick={() => {
-                      setFormData(getDefaultFormDataForRoleType());
-                      setIsAddModalOpen(true);
-                    }}>
-                      + Add lead
-                    </Button>
-                  ) : null}
-                </>
-              }
+              onOpenFiltersFlyout={() => setFiltersFlyoutOpen(true)}
+              onOpenAddModal={() => { setFormData(getDefaultFormDataForRoleType()); setIsAddModalOpen(true); }}
+              onOpenBulkUploadModal={() => setIsBulkUploadModalOpen(true)}
+              canAddLead={canAddLead}
+              canBulkUploadLeads={canBulkUploadLeads}
+              filterState={filterState}
+              onFilterChange={applyToolbarFilters}
+              onResetFilters={resetAllLeadFilters}
+              employees={executives}
+              propertySubtypes={ALL_PROPERTY_SUBTYPE_OPTIONS}
             />
 
             <LeadsMatrixAlerts isDark={isDark} error={error} success={success} />
+            {(Object.values(advancedFilters).some(Boolean) || statusFilter !== "ALL" || propertySubtypeFilter) && <div className="flex flex-wrap items-center justify-between gap-2 text-xs text-slate-500"><span>{loading ? "Finding matching leads…" : `${leadPagination?.totalCount ?? leads.length} matching leads · ${filteredLeads.length} shown in this view`}</span><button type="button" className="font-medium text-blue-600 dark:text-blue-400" onClick={() => { setAdvancedFilters({}); setStatusFilter("ALL"); setPropertySubtypeFilter(""); }}>Clear all filters</button></div>}
+            <LeadFiltersFlyout
+              isOpen={filtersFlyoutOpen}
+              onClose={() => setFiltersFlyoutOpen(false)}
+              status={statusFilter}
+              source={advancedFilters.source}
+              assignedTo={advancedFilters.assignedTo}
+              propertyType={advancedFilters.subtype}
+              budgetRange={advancedFilters.budgetRange || ""}
+              followUpDate={advancedFilters.followUpDate || ""}
+              createdDate={advancedFilters.createdDate || ""}
+              quickFilter={quickFilter}
+              employees={executives}
+              statuses={LEAD_STATUSES}
+              propertySubtypes={ALL_PROPERTY_SUBTYPE_OPTIONS}
+              onApply={applyFlyoutFilters}
+              onReset={resetAllLeadFilters}
+            />
 
-            <div className="rounded-xl border border-slate-200 bg-white dark:border-slate-700 dark:bg-slate-900">
+            {view === PIPELINE_VIEWS.TEAM ? (
+              <div className="rounded-xl border border-slate-200 bg-white dark:border-slate-700 dark:bg-slate-900">
+                <PipelineTeam
+                  leads={filteredLeads}
+                  employees={executives}
+                  loading={loading}
+                  onOpenEmployee={handleOpenTeamEmployee}
+                />
+              </div>
+            ) : null}
+
+            {view !== PIPELINE_VIEWS.TEAM ? <div className="rounded-xl border border-slate-200 bg-white dark:border-slate-700 dark:bg-slate-900">
               {/*
                 Same data, same callbacks, two presentations: a table needs
                 columns a phone does not have, and cards waste a wide screen.
@@ -3241,9 +3383,9 @@ const LeadsMatrix = () => {
                 onClear={() => setSelectedLeadKeys([])}
                 onExport={handleExportSelectedLeads}
               />
-            </div>
+            </div> : null}
 
-            {leadPagination?.hasNextPage ? (
+            {view !== PIPELINE_VIEWS.TEAM && leadPagination?.hasNextPage ? (
               <div className="px-1 py-4">
                 <button
                   type="button"

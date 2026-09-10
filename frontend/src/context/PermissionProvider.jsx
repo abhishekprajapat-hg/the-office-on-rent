@@ -8,10 +8,6 @@ const EMPTY_ACCESS = {
   pages: [],
   dataScope: "ASSIGNED",
   enforcePageAccess: false,
-  hasDynamicRole: false,
-  roleName: "",
-  roleId: null,
-  roleTypeId: null,
 };
 
 export const PermissionProvider = ({ children, enabled = true, userRole }) => {
@@ -21,35 +17,31 @@ export const PermissionProvider = ({ children, enabled = true, userRole }) => {
 
   const isAdmin = userRole === "ADMIN";
 
-  const refresh = useCallback(async () => {
+  const refresh = useCallback(async ({ background = false } = {}) => {
     if (!enabled) return;
 
-    setLoading(true);
-    setError(null);
+    if (!background) setLoading(true);
     try {
       // /api/access/me answers for every signed-in role, unlike the
       // coworking-only endpoint this used to call, so a lead-side account now
       // gets its real page grants instead of an empty list.
       const data = await getMyAccess();
+      setError(null);
       setAccess({
         permissions: data.permissions,
         pages: data.pages,
         dataScope: data.dataScope,
         enforcePageAccess: data.enforcePageAccess,
-        hasDynamicRole: data.hasDynamicRole,
-        roleName: data.roleName,
-        roleId: data.roleId,
-        roleTypeId: data.roleTypeId,
       });
     } catch {
       // Fail closed on permissions, but never on page access: leaving
       // enforcePageAccess false means a transient network error cannot lock a
       // user out of pages their role legitimately has. The backend guard is
       // the real gate either way.
-      setAccess(EMPTY_ACCESS);
+      if (!background) setAccess(EMPTY_ACCESS);
       setError("permissions_unavailable");
     } finally {
-      setLoading(false);
+      if (!background) setLoading(false);
     }
   }, [enabled]);
 
@@ -63,6 +55,23 @@ export const PermissionProvider = ({ children, enabled = true, userRole }) => {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [enabled, userRole]);
 
+  useEffect(() => {
+    if (!enabled) return;
+    // Admin changes may happen in a different browser or employee session.
+    // Refresh without unmounting the employee's current page or form.
+    const syncAccess = () => {
+      if (document.visibilityState === "visible") refresh({ background: true });
+    };
+    window.addEventListener("focus", syncAccess);
+    document.addEventListener("visibilitychange", syncAccess);
+    const timer = window.setInterval(syncAccess, 30000);
+    return () => {
+      window.removeEventListener("focus", syncAccess);
+      document.removeEventListener("visibilitychange", syncAccess);
+      window.clearInterval(timer);
+    };
+  }, [enabled, refresh]);
+
   const permissionSet = useMemo(() => new Set(access.permissions), [access.permissions]);
 
   const can = useCallback(
@@ -70,12 +79,7 @@ export const PermissionProvider = ({ children, enabled = true, userRole }) => {
     [isAdmin, permissionSet],
   );
 
-  /**
-   * Page-level check used by route guards and navigation. Accepts one key or a
-   * list; any one of them being granted is enough. Returns true while the role
-   * does not enforce page access, which is every account that predates the
-   * Role Types work.
-   */
+  // Explicit employee selections drive navigation; otherwise use role defaults.
   const canPage = useCallback(
     (pageKeys) => {
       if (isAdmin || !access.enforcePageAccess) return true;
@@ -99,10 +103,6 @@ export const PermissionProvider = ({ children, enabled = true, userRole }) => {
       pages: access.pages,
       dataScope: access.dataScope,
       enforcePageAccess: access.enforcePageAccess,
-      hasDynamicRole: access.hasDynamicRole,
-      roleName: access.roleName,
-      roleId: access.roleId,
-      roleTypeId: access.roleTypeId,
       loading,
       error,
       can,

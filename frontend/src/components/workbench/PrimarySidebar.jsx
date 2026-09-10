@@ -1,4 +1,4 @@
-import { memo, useCallback, useMemo, useState } from "react";
+import { memo, useCallback, useEffect, useMemo, useState } from "react";
 import { NavLink, useLocation } from "react-router-dom";
 import { ChevronRight, LogOut, X } from "lucide-react";
 import { IconButton, Tooltip, cn } from "../ui";
@@ -34,9 +34,18 @@ const PrimarySidebar = ({
     const activeGroup = groups.find((group) =>
       group.items.some((item) => pathMatchesItem(location.pathname, item.path)),
     );
-    return activeGroup?.group || groups[0]?.group || "";
+    return activeGroup?.group || "SALES";
   }, [groups, location.pathname]);
-  const [expandedGroupNames, setExpandedGroupNames] = useState([]);
+
+  // Default active group to open
+  const [expandedGroupNames, setExpandedGroupNames] = useState(["SALES", "WORK"]);
+
+  useEffect(() => {
+    if (activeGroupName && !expandedGroupNames.includes(activeGroupName)) {
+      setExpandedGroupNames((prev) => [...prev, activeGroupName]);
+    }
+  }, [activeGroupName]);
+
   const canSeeProfile = useMemo(
     () => roleCanSeeItem(PROFILE_ITEM, userRole, user),
     [userRole, user],
@@ -53,11 +62,13 @@ const PrimarySidebar = ({
 
   const renderNav = useCallback(
     () => (
-      <nav aria-label="Workbench navigation" className="custom-scrollbar min-h-0 flex-1 overflow-y-auto py-3">
+      <nav aria-label="Workbench navigation" className="custom-scrollbar min-h-0 flex-1 overflow-y-auto px-2 py-2">
         {groups.map((group) => {
-          const isExpanded = activeGroupName === group.group || expandedGroupNames.includes(group.group);
+          const isExpanded = expandedGroupNames.includes(group.group);
+          const hasActiveChild = group.items.some((item) => pathMatchesItem(location.pathname, item.path));
+
           return (
-            <div key={group.group} className="mb-2 last:mb-0">
+            <div key={group.group} className="mb-1.5 last:mb-0">
               <button
                 type="button"
                 onClick={() => {
@@ -68,28 +79,22 @@ const PrimarySidebar = ({
                   );
                 }}
                 className={cn(
-                  "sidebar-section-toggle relative mx-2 flex w-[calc(100%-1rem)] items-center rounded-md px-2.5 py-[7px]",
-                  "text-left text-[12px] font-bold uppercase tracking-[0.06em] outline-none transition",
+                  "relative flex w-full items-center justify-between rounded-lg px-2.5 py-1.5",
+                  "text-left text-[11.5px] font-bold tracking-[0.04em] outline-none transition",
                   "focus-visible:ring-2 focus-visible:ring-blue-500/40",
-                  activeGroupName === group.group
-                    ? "text-slate-950 dark:text-slate-50"
-                    : "text-slate-500 hover:bg-slate-50 hover:text-slate-900 dark:text-slate-400 dark:hover:bg-slate-800 dark:hover:text-slate-100",
+                  hasActiveChild
+                    ? "text-slate-900 dark:text-slate-100"
+                    : "text-slate-500 hover:bg-slate-50 hover:text-slate-800 dark:text-slate-400 dark:hover:bg-slate-800/60 dark:hover:text-slate-200",
                 )}
                 aria-expanded={isExpanded}
                 title={group.group}
               >
-                {activeGroupName === group.group ? (
-                  <span
-                    aria-hidden="true"
-                    className="absolute -left-2 bottom-[7px] top-[7px] w-[3px] rounded-r-[3px] bg-blue-600 dark:bg-blue-400"
-                  />
-                ) : null}
                 <span className="truncate">{group.group}</span>
                 <ChevronRight
                   aria-hidden="true"
                   className={cn(
-                    "ml-auto shrink-0 transition-transform",
-                    isExpanded && "rotate-90",
+                    "ml-auto shrink-0 text-slate-400 transition-transform duration-200",
+                    isExpanded && "rotate-90 text-slate-600 dark:text-slate-300",
                   )}
                   size={14}
                   strokeWidth={2}
@@ -97,7 +102,7 @@ const PrimarySidebar = ({
               </button>
 
               {isExpanded ? (
-                <div>
+                <div className="mt-0.5 space-y-0.5">
                   {group.items.map((item) => {
                     const Icon = item.icon;
                     const badge = badgeFor(item.path);
@@ -110,26 +115,33 @@ const PrimarySidebar = ({
                         onClick={onMobileClose}
                         className={({ isActive }) =>
                           cn(
-                            "relative mx-2 my-px flex items-center gap-2.5 rounded-md px-2.5 py-[7px]",
-                            "text-[12.8px] font-medium outline-none transition",
+                            "relative flex items-center gap-2.5 rounded-lg px-3 py-1.5 pl-3",
+                            "text-[13px] font-medium outline-none transition-all duration-150",
                             "focus-visible:ring-2 focus-visible:ring-blue-500/40",
-                            "ml-5",
                             isActive
-                              ? "bg-blue-50 font-semibold text-blue-700 dark:bg-blue-500/10 dark:text-blue-200"
-                              : "text-slate-600 hover:bg-slate-50 hover:text-slate-900 dark:text-slate-400 dark:hover:bg-slate-800 dark:hover:text-slate-100",
+                              ? "bg-blue-50/80 font-semibold text-blue-600 dark:bg-blue-500/15 dark:text-blue-300"
+                              : "text-slate-600 hover:bg-slate-50 hover:text-slate-900 dark:text-slate-400 dark:hover:bg-slate-800/60 dark:hover:text-slate-100",
                           )
                         }
                       >
                         {({ isActive }) => (
                           <>
-                            {/* 3px accent on the left edge of the active item. */}
+                            {/* Accent bar on the left edge of the active item */}
                             {isActive ? (
                               <span
                                 aria-hidden="true"
-                                className="absolute -left-2 bottom-[7px] top-[7px] w-[3px] rounded-r-[3px] bg-blue-600 dark:bg-blue-400"
+                                className="absolute left-0 top-1.5 bottom-1.5 w-[3px] rounded-r bg-blue-600 dark:bg-blue-400"
                               />
                             ) : null}
-                            <Icon aria-hidden="true" className="shrink-0" size={16} strokeWidth={1.9} />
+                            <Icon
+                              aria-hidden="true"
+                              className={cn(
+                                "shrink-0 transition-colors",
+                                isActive ? "text-blue-600 dark:text-blue-400" : "text-slate-400 dark:text-slate-500",
+                              )}
+                              size={16}
+                              strokeWidth={isActive ? 2.2 : 1.8}
+                            />
                             <span className="truncate">{item.label}</span>
                             {badge > 0 ? (
                               <span
@@ -153,7 +165,7 @@ const PrimarySidebar = ({
         })}
       </nav>
     ),
-    [activeGroupName, badgeFor, expandedGroupNames, groups, onMobileClose],
+    [badgeFor, expandedGroupNames, groups, location.pathname, onMobileClose],
   );
 
   const sidebar = useCallback(
@@ -161,30 +173,30 @@ const PrimarySidebar = ({
       return (
         <aside
           className={cn(
-            "flex h-full shrink-0 flex-col border-r border-slate-200 bg-white dark:border-slate-800 dark:bg-slate-900",
-            "transition-transform duration-200",
-            mobile ? "w-72" : "md:w-[206px]",
+            "flex h-full shrink-0 flex-col border-r border-slate-200/80 bg-white dark:border-slate-800 dark:bg-slate-900",
+            "transition-all duration-200",
+            mobile ? "w-64" : "w-[218px]",
           )}
         >
-          <div className="flex h-14 items-center gap-2 px-3">
-            <div className="brand-logo-frame flex h-8 w-9 shrink-0 items-center justify-center rounded-md border border-slate-200 bg-white p-0.5 dark:border-slate-700">
+          {/* Top Brand Header */}
+          <div className="flex h-14 items-center gap-2.5 border-b border-slate-100 px-3.5 dark:border-slate-800/80">
+            <div className="brand-logo-frame flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border border-slate-200 bg-white p-0.5 shadow-sm dark:border-slate-700">
               <BrandLogo className="h-full w-full" />
             </div>
             <div className="min-w-0 flex-1">
-              <p className="truncate text-[13px] font-semibold leading-tight text-slate-900 dark:text-slate-50">
+              <p className="truncate text-[13.5px] font-bold leading-tight text-slate-900 dark:text-slate-50">
                 Office on Rent
               </p>
-              <p className="truncate text-[10.5px] font-medium text-slate-500 dark:text-slate-400">
-                {roleLabel || "CRM Workbench"}
+              <p className="truncate text-[11px] font-medium text-slate-500 dark:text-slate-400">
+                {roleLabel || "Admin"}
               </p>
             </div>
-            <div className="flex shrink-0 items-center gap-1">
-              {mobile ? (
-                <IconButton icon={X} label="Close navigation" size="sm" onClick={onMobileClose} />
-              ) : null}
-            </div>
+            {mobile ? (
+              <IconButton icon={X} label="Close navigation" size="sm" onClick={onMobileClose} />
+            ) : null}
           </div>
 
+          {/* Navigation Links */}
           {groups.length > 0 ? (
             renderNav()
           ) : (
@@ -193,36 +205,41 @@ const PrimarySidebar = ({
             </div>
           )}
 
-          <div className="mt-auto border-t border-slate-200 p-2 dark:border-slate-800">
-            <div className="flex items-center gap-2">
+          {/* Bottom User Profile Section */}
+          <div className="mt-auto border-t border-slate-100 p-2.5 dark:border-slate-800">
+            <div className="flex items-center gap-2 rounded-xl p-1 transition-colors hover:bg-slate-50 dark:hover:bg-slate-800/60">
               {canSeeProfile ? (
                 <NavLink
                   to="/profile"
                   onClick={onMobileClose}
-                  className={({ isActive }) =>
-                    cn(
-                      "flex min-w-0 flex-1 items-center gap-2.5 rounded-md p-1.5 outline-none transition",
-                      "focus-visible:ring-2 focus-visible:ring-blue-500/40",
-                      isActive
-                        ? "bg-blue-50 dark:bg-blue-500/10"
-                        : "hover:bg-slate-50 dark:hover:bg-slate-800",
-                    )
-                  }
+                  className="flex min-w-0 flex-1 items-center gap-2.5 outline-none"
                 >
-                  <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-blue-100 text-[10.5px] font-bold text-blue-700 dark:bg-blue-500/20 dark:text-blue-200">
+                  <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-blue-600 text-[11px] font-bold text-white shadow-sm">
                     {initialsOf(user)}
                   </span>
                   <span className="min-w-0 flex-1 text-left">
-                    <span className="block truncate text-[12.5px] font-semibold leading-tight text-slate-900 dark:text-slate-100">
-                      {user?.name || user?.email || "My profile"}
+                    <span className="block truncate text-[12.5px] font-bold leading-tight text-slate-900 dark:text-slate-100">
+                      {user?.name || user?.fullName || "Akhil Singh Thakur"}
                     </span>
-                    <span className="block truncate text-[10.5px] text-slate-500 dark:text-slate-400">
-                      {roleLabel || userRole}
+                    <span className="block truncate text-[11px] text-slate-500 dark:text-slate-400">
+                      {roleLabel || "Admin"}
                     </span>
                   </span>
                 </NavLink>
               ) : (
-                <span className="min-w-0 flex-1" />
+                <div className="flex min-w-0 flex-1 items-center gap-2.5">
+                  <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-blue-600 text-[11px] font-bold text-white shadow-sm">
+                    {initialsOf(user)}
+                  </span>
+                  <span className="min-w-0 flex-1 text-left">
+                    <span className="block truncate text-[12.5px] font-bold leading-tight text-slate-900 dark:text-slate-100">
+                      {user?.name || user?.fullName || "User"}
+                    </span>
+                    <span className="block truncate text-[11px] text-slate-500 dark:text-slate-400">
+                      {roleLabel || "Admin"}
+                    </span>
+                  </span>
+                </div>
               )}
               <Tooltip label="Logout" side="right">
                 <IconButton
@@ -230,7 +247,7 @@ const PrimarySidebar = ({
                   label="Logout"
                   size="sm"
                   onClick={onLogout}
-                  className="border-transparent bg-transparent text-slate-500 hover:bg-rose-50 hover:text-rose-600 dark:hover:bg-rose-500/10 dark:hover:text-rose-300"
+                  className="border-transparent bg-transparent text-slate-400 hover:bg-rose-50 hover:text-rose-600 dark:hover:bg-rose-500/10 dark:hover:text-rose-300"
                 />
               </Tooltip>
             </div>
@@ -238,7 +255,7 @@ const PrimarySidebar = ({
         </aside>
       );
     },
-    [canSeeProfile, groups.length, onLogout, onMobileClose, renderNav, roleLabel, user, userRole],
+    [canSeeProfile, groups.length, onLogout, onMobileClose, renderNav, roleLabel, user],
   );
 
   return (

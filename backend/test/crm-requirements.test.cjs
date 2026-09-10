@@ -31,6 +31,16 @@ const load = (relative, stubs, exposed = "") => {
   return module.exports;
 };
 
+test("lead list assignment filter intersects existing employee and tenant restrictions", () => {
+  const { applyFilters } = load("controllers/lead.controller.js", {}, "\nmodule.exports.applyFilters = applyLeadListFilters;");
+  const scope = { companyId, assignedTo: employeeId };
+  applyFilters(scope, { assignedTo: otherId, source: "META", city: "Indore" });
+  assert.equal(scope.assignedTo, employeeId);
+  assert.equal(scope.companyId, companyId);
+  assert.ok(scope.$and.some((clause) => clause.assignedTo === otherId));
+  assert.equal(scope.source, "META");
+});
+
 for (const owner of ["assignedTo", "createdBy"]) {
   test(`task details allow populated ${owner} references`, async () => {
     const task = { companyId, assignedTo: { _id: otherId }, createdBy: { _id: otherId }, [owner]: { _id: employeeId, name: "Employee" } };

@@ -23,15 +23,11 @@ export const UserFormPanel = ({
   error,
   isDarkTheme,
   roleOptions,
-  roleTypeOptions,
-  roleTypesLoading = false,
-  rolesLoading = false,
   selectedBaseRole = "",
   reportingParentRoles,
 }) => {
   const needsReporting = Boolean(reportingParentRoles[selectedBaseRole]?.length);
   const isChannelPartner = selectedBaseRole === "CHANNEL_PARTNER";
-  const hasRoleType = Boolean(formData.roleTypeId);
   const fieldLabelClass = `text-xs font-semibold ${isDarkTheme ? "text-slate-300" : "text-slate-600"}`;
   const fieldControlClass = `w-full border rounded-lg px-3 py-2 ${
     isDarkTheme ? "bg-slate-900 border-slate-700 text-slate-100" : ""
@@ -110,73 +106,19 @@ export const UserFormPanel = ({
                 />
               </label>
 
-              {/* Role Type and Role are loaded from the backend and are
-                  dependent: choosing a type loads only the roles under it, and
-                  changing the type clears a role that no longer fits. */}
               <label className="block space-y-1">
-                <span className={fieldLabelClass}>Role Type</span>
-                <select
-                  value={formData.roleTypeId}
-                  disabled={roleTypesLoading}
-                  onChange={(event) =>
-                    setFormData({
-                      ...formData,
-                      roleTypeId: event.target.value,
-                      roleId: "",
-                      reportingToId: "",
-                      canViewInventory: false,
-                    })
-                  }
-                  className={fieldControlClass}
-                >
-                  <option value="">
-                    {roleTypesLoading ? "Loading role types..." : "Select a role type"}
-                  </option>
-                  {(roleTypeOptions || []).map((roleTypeOption) => (
-                    <option key={roleTypeOption._id} value={String(roleTypeOption._id)}>
-                      {roleTypeOption.name}
-                    </option>
-                  ))}
+                <span className={fieldLabelClass}>Business category</span>
+                <select value={formData.roleType} onChange={(event) => setFormData({ ...formData, roleType: event.target.value })} className={fieldControlClass}>
+                  <option value="COMMERCIAL">Commercial</option>
+                  <option value="RESIDENTIAL">Residential</option>
+                  <option value="BOTH">Both</option>
                 </select>
-                {!roleTypesLoading && (roleTypeOptions || []).length === 0 ? (
-                  <span className="text-xs text-amber-600">
-                    No active role types are available.
-                  </span>
-                ) : null}
               </label>
-
               <label className="block space-y-1">
                 <span className={fieldLabelClass}>Role</span>
-                <select
-                  value={formData.roleId}
-                  disabled={!hasRoleType || rolesLoading}
-                  onChange={(event) =>
-                    setFormData({
-                      ...formData,
-                      roleId: event.target.value,
-                      reportingToId: "",
-                    })
-                  }
-                  className={fieldControlClass}
-                >
-                  <option value="">
-                    {!hasRoleType
-                      ? "Select a role type first"
-                      : rolesLoading
-                        ? "Loading roles..."
-                        : "Select a role"}
-                  </option>
-                  {(roleOptions || []).map((roleOption) => (
-                    <option key={roleOption._id} value={String(roleOption._id)}>
-                      {roleOption.name}
-                    </option>
-                  ))}
+                <select value={formData.role} onChange={(event) => setFormData({ ...formData, role: event.target.value, reportingToId: "", canViewInventory: false })} className={fieldControlClass}>
+                  {roleOptions.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
                 </select>
-                {hasRoleType && !rolesLoading && (roleOptions || []).length === 0 ? (
-                  <span className="text-xs text-amber-600">
-                    No active roles are available for this Role Type.
-                  </span>
-                ) : null}
               </label>
 
               {needsReporting && (

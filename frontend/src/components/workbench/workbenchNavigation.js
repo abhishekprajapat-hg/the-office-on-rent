@@ -185,7 +185,6 @@ export const WORKBENCH_MENU = {
       items: [
         { label: "Alerts", path: "/admin/notifications", icon: Bell, page: "admin_notifications", roles: MANAGEMENT_ROLES },
         { label: "Access", path: "/admin/users", icon: ShieldCheck, page: "admin_team", roles: MANAGEMENT_ROLES },
-        { label: "Role Types", path: "/admin/role-types", icon: Layers, page: "admin_role_types", roles: MANAGEMENT_ROLES, permission: "role_types.view" },
         { label: "Console", path: "/admin/console", icon: TerminalSquare, page: "admin_console", roles: ["ADMIN", "MANAGER"] },
         { label: "Meta Ads", path: "/admin/meta-ads", icon: Megaphone, page: "admin_meta_ads", roles: ["ADMIN", "MANAGER"] },
       ],
@@ -232,7 +231,7 @@ const coworkingItems = (WORKBENCH_MENU.coworking || []).flatMap((group) => group
 
 export const SIDEBAR_GROUPS = [
   {
-    group: "Work",
+    group: "WORK",
     items: [
       navItem("/dashboard", { label: "Home", icon: Home }),
       navItem("/tasks", { label: "Tasks" }),
@@ -241,7 +240,7 @@ export const SIDEBAR_GROUPS = [
     ],
   },
   {
-    group: "Sales",
+    group: "SALES",
     items: [
       navItem("/leads", { label: "Pipeline" }),
       navItem("/my-leads", { label: "My Leads" }),
@@ -251,7 +250,7 @@ export const SIDEBAR_GROUPS = [
     ],
   },
   {
-    group: "Business",
+    group: "BUSINESS",
     items: [
       navItem("/finance", { label: "Finance" }),
       navItem("/reports", { label: "Reports" }),
@@ -260,14 +259,13 @@ export const SIDEBAR_GROUPS = [
     ],
   },
   {
-    group: "Team",
+    group: "TEAM",
     items: [navItem("/chat", { label: "Chat" })],
   },
   {
-    group: "Admin",
+    group: "ADMIN",
     items: [
       navItem("/admin/users", { label: "Team", icon: Users }),
-      navItem("/admin/role-types", { label: "Role Types", icon: Layers }),
       navItem("/admin/console", { label: "Console", icon: ShieldCheck }),
       navItem("/admin/meta-ads", { label: "Meta Ads" }),
       navItem("/admin/notifications", { label: "Notifications" }),
@@ -275,9 +273,7 @@ export const SIDEBAR_GROUPS = [
     ],
   },
   {
-    // Not among the redesign five, but 24 live permission-gated routes.
-    // Dropping the group would remove access, which this phase must not do.
-    group: "Coworking",
+    group: "COWORKING",
     items: coworkingItems,
   },
 ];
@@ -288,7 +284,6 @@ export const SIDEBAR_GROUPS = [
 // these routes for the same reason.
 const ROLE_ONLY_PAGES = new Set([
   "admin_team",
-  "admin_role_types",
   "admin_notifications",
   "admin_console",
   "admin_meta_ads",
@@ -298,10 +293,8 @@ const ROLE_ONLY_PAGES = new Set([
 export const roleCanSeeItem = (item, userRole, user = {}) => {
   const permissions = Array.isArray(user?.permissions) ? user.permissions : null;
 
-  // A role with explicit page access configured is decided by that
-  // configuration: it both grants pages the built-in role list never had and
-  // takes away ones it did. Roles without it — every account before the Role
-  // Types work — keep using the built-in list, and ADMIN sees everything.
+  // Explicit employee pages override the menu defaults. Protected admin
+  // pages also retain their built-in role requirements.
   const isConfiguredRole =
     userRole !== "ADMIN" && Boolean(user?.enforcePageAccess) && Boolean(permissions);
   const pageIsWidenable = Boolean(item.page) && !ROLE_ONLY_PAGES.has(item.page);

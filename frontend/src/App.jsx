@@ -32,8 +32,6 @@ const TeamManager = lazy(() => import("./modules/admin/TeamManager"));
 const UserDetailsEditor = lazy(() => import("./modules/admin/UserDetailsEditor"));
 const AdminNotifications = lazy(() => import("./modules/admin/AdminNotifications"));
 const AdminCommandConsole = lazy(() => import("./modules/admin/AdminCommandConsole"));
-const RoleTypesManager = lazy(() => import("./modules/admin/RoleTypesManager"));
-const RoleTypeDetail = lazy(() => import("./modules/admin/RoleTypeDetail"));
 const AdminMetaAdsPanel = lazy(() => import("./modules/admin/AdminMetaAdsPanel"));
 const TeamChat = lazy(() => import("./modules/chat/TeamChat"));
 const ChatMessageAlertToast = lazy(() => import("./components/layout/ChatMessageAlertToast"));
@@ -776,13 +774,6 @@ export default function App() {
         path="/admin/users/:userId"
         element={["ADMIN", "MANAGER"].includes(userRole) ? withPageAccess("admin_team", <UserDetailsEditor theme={theme} />) : <Navigate to="/" />}
       />
-      <Route
-        path="/admin/role-types"
-        element={canAccess(["ADMIN", ...MANAGEMENT_ROLES])
-          ? withPageAccess("admin_role_types", <RoleTypesManager theme={theme} />)
-          : <Navigate to="/" />}
-      />
-      <Route path="/admin/role-types/:roleTypeId" element={canAccess(["ADMIN", ...MANAGEMENT_ROLES]) ? withPageAccess("admin_role_types", <RoleTypeDetail />) : <Navigate to="/" />} />
       <Route
         path="/admin/console"
         element={["ADMIN", "MANAGER"].includes(userRole) ? withPageAccess("admin_console", <AdminCommandConsole />) : <Navigate to="/" />}

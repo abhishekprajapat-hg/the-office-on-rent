@@ -43,18 +43,10 @@ import {
   getLeaveBalanceForAdmin,
   getUserAttendanceForAdmin,
 } from "../../services/attendanceService";
-import {
-  getAssignableRoleTypes,
-  getAssignableRoles,
-} from "../../services/accessService";
 import { getTasks } from "../../services/taskService";
 import { getProjectsWithMeta } from "../../services/projectService";
 import { toErrorMessage } from "../../utils/errorMessage";
 import ToastNotice from "../../components/ui/ToastNotice";
-
-// Role types and roles are loaded from the backend (see the effects below);
-// formData.role keeps holding the built-in base role the chosen role maps to,
-// so every downstream rule on this screen carries on working unchanged.
 
 const REPORTING_PARENT_ROLES = {
   MANAGER: ["ADMIN"],
@@ -360,18 +352,11 @@ const UserDetailsEditor = ({ theme = "light" }) => {
   const [projectRows, setProjectRows] = useState([]);
   const [projectsLoading, setProjectsLoading] = useState(false);
 
-  const [roleTypeOptions, setRoleTypeOptions] = useState([]);
-  const [roleOptions, setRoleOptions] = useState([]);
-  const [roleTypesLoading, setRoleTypesLoading] = useState(false);
-  const [rolesLoading, setRolesLoading] = useState(false);
-
   const [formData, setFormData] = useState({
     name: "",
     email: "",
     phone: "",
     roleType: "COMMERCIAL",
-    roleTypeId: "",
-    roleId: "",
     role: "MANAGER",
     reportingToId: "",
     isActive: true,
@@ -413,8 +398,6 @@ const UserDetailsEditor = ({ theme = "light" }) => {
         email: resolvedProfile.email || "",
         phone: resolvedProfile.phone || "",
         roleType: resolvedProfile.roleType || "COMMERCIAL",
-        roleTypeId: getEntityId(resolvedProfile.roleTypeId),
-        roleId: getEntityId(resolvedProfile.roleId),
         role: resolvedProfile.role || "MANAGER",
         reportingToId: getEntityId(resolvedProfile.parentId),
         isActive: Boolean(resolvedProfile.isActive),
@@ -823,67 +806,8 @@ const UserDetailsEditor = ({ theme = "light" }) => {
     setFormData((prev) => ({ ...prev, [field]: value }));
   };
 
-  // Active role types, loaded once for the edit form.
-  useEffect(() => {
-    let alive = true;
-    setRoleTypesLoading(true);
-
-    getAssignableRoleTypes()
-      .then((rows) => { if (alive) setRoleTypeOptions(rows); })
-      .catch(() => { if (alive) setRoleTypeOptions([]); })
-      .finally(() => { if (alive) setRoleTypesLoading(false); });
-
-    return () => { alive = false; };
-  }, []);
-
-  // Roles depend on the selected role type, same dependent behaviour as the
-  // Create User form.
-  useEffect(() => {
-    if (!formData.roleTypeId) {
-      setRoleOptions([]);
-      return undefined;
-    }
-
-    let alive = true;
-    setRolesLoading(true);
-
-    getAssignableRoles(formData.roleTypeId)
-      .then((rows) => {
-        if (!alive) return;
-        setRoleOptions(rows);
-        setFormData((prev) => (
-          prev.roleId && !rows.some((option) => String(option._id) === String(prev.roleId))
-            ? { ...prev, roleId: "" }
-            : prev
-        ));
-      })
-      .catch(() => { if (alive) setRoleOptions([]); })
-      .finally(() => { if (alive) setRolesLoading(false); });
-
-    return () => { alive = false; };
-  }, [formData.roleTypeId]);
-
-  const handleRoleChange = (nextRoleId) => {
-    const nextRole = roleOptions.find((option) => String(option._id) === String(nextRoleId));
-    setFormData((prev) => ({
-      ...prev,
-      roleId: nextRoleId,
-      // The base role is what the rest of this screen reasons about.
-      role: nextRole?.baseRole || prev.role,
-      reportingToId: "",
-      canViewInventory:
-        nextRole?.baseRole === "CHANNEL_PARTNER" ? prev.canViewInventory : false,
-    }));
-  };
-
-  const handleRoleTypeChange = (nextRoleTypeId) => {
-    setFormData((prev) => ({
-      ...prev,
-      roleTypeId: nextRoleTypeId,
-      // Changing the role type drops a role that no longer belongs to it.
-      roleId: "",
-      reportingToId: "",
-    }));
+  const handleRoleChange = (role) => {
+    setFormData((prev) => ({ ...prev, role, reportingToId: "", canViewInventory: role === "CHANNEL_PARTNER" ? prev.canViewInventory : false }));
   };
 
   const scrollToSection = (ref) => {
@@ -931,11 +855,6 @@ const UserDetailsEditor = ({ theme = "light" }) => {
       phone: String(formData.phone || "").trim(),
       roleType: formData.roleType,
       role: formData.role,
-      // When both ids are present the backend resolves the pair and derives
-      // role / roleType from it; otherwise it falls back to the fields above.
-      ...(formData.roleTypeId && formData.roleId
-        ? { roleTypeId: formData.roleTypeId, roleId: formData.roleId }
-        : {}),
       reportingToId: needsReporting ? formData.reportingToId : null,
       isActive: Boolean(formData.isActive),
       canViewInventory:
@@ -1146,42 +1065,27 @@ const UserDetailsEditor = ({ theme = "light" }) => {
             <label className="space-y-0.5">
               <span className={`text-[10px] font-semibold ${isDarkTheme ? "text-slate-400" : "text-slate-500"}`}>Role</span>
               <select
-                value={formData.roleId}
+                value={formData.role}
                 onChange={(event) => handleRoleChange(event.target.value)}
-                disabled={isEditingSelf || !formData.roleTypeId || rolesLoading}
+                disabled={isEditingSelf}
                 className={`w-full rounded-lg border px-2.5 py-1.5 text-xs ${isDarkTheme ? "border-slate-700 bg-slate-950 text-slate-100" : "border-slate-300 bg-white text-slate-800"} disabled:opacity-60`}
               >
-                <option value="">
-                  {!formData.roleTypeId
-                    ? "Select a role type first"
-                    : rolesLoading
-                      ? "Loading roles..."
-                      : "Select a role"}
-                </option>
-                {roleOptions.map((option) => (
-                  <option key={option._id} value={String(option._id)}>{option.name}</option>
+                {Object.entries(ROLE_LABELS).filter(([role]) => role !== "ADMIN" || profile.role === "ADMIN").map(([value, label]) => (
+                  <option key={value} value={value}>{label}</option>
                 ))}
               </select>
-              {formData.roleTypeId && !rolesLoading && roleOptions.length === 0 ? (
-                <span className="text-[10px] text-amber-600">
-                  No active roles are available for this Role Type.
-                </span>
-              ) : null}
             </label>
             <label className="space-y-0.5">
-              <span className={`text-[10px] font-semibold ${isDarkTheme ? "text-slate-400" : "text-slate-500"}`}>Role Type</span>
+              <span className={`text-[10px] font-semibold ${isDarkTheme ? "text-slate-400" : "text-slate-500"}`}>Business category</span>
               <select
-                value={formData.roleTypeId}
-                onChange={(event) => handleRoleTypeChange(event.target.value)}
-                disabled={isEditingSelf || roleTypesLoading}
+                value={formData.roleType}
+                onChange={(event) => handleChange("roleType", event.target.value)}
+                disabled={isEditingSelf}
                 className={`w-full rounded-lg border px-2.5 py-1.5 text-xs ${isDarkTheme ? "border-slate-700 bg-slate-950 text-slate-100" : "border-slate-300 bg-white text-slate-800"} disabled:opacity-60`}
               >
-                <option value="">
-                  {roleTypesLoading ? "Loading role types..." : "Select a role type"}
-                </option>
-                {roleTypeOptions.map((option) => (
-                  <option key={option._id} value={String(option._id)}>{option.name}</option>
-                ))}
+                <option value="COMMERCIAL">Commercial</option>
+                <option value="RESIDENTIAL">Residential</option>
+                <option value="BOTH">Both</option>
               </select>
             </label>
 

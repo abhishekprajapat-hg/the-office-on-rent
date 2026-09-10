@@ -25,6 +25,8 @@ const brokerageConfigSchema = new mongoose.Schema(
 
 const userSchema = new mongoose.Schema(
   {
+    // Null inherits the role; an empty list keeps only always-accessible pages.
+    pageAccessOverride: { type: [String], default: null },
     name: {
       type: String,
       required: true,
@@ -45,27 +47,11 @@ const userSchema = new mongoose.Schema(
     },
 
     // Legacy vertical, unchanged: lead routing and inventory ownership have
-    // always keyed off these three values and still do. For a user on a custom
-    // Role Type this mirrors that type's legacyRoleType.
+    // key off these three values.
     roleType: {
       type: String,
       enum: ["COMMERCIAL", "RESIDENTIAL", "BOTH"],
       default: "COMMERCIAL",
-    },
-
-    // Dynamic, database-driven assignment. Stored as ids so renaming a Role
-    // Type or Role never touches user records. Null on accounts created before
-    // the migration ran, which the access layer treats as "legacy role only".
-    roleTypeId: {
-      type: mongoose.Schema.Types.ObjectId,
-      ref: "RoleType",
-      default: null,
-    },
-
-    roleId: {
-      type: mongoose.Schema.Types.ObjectId,
-      ref: "Role",
-      default: null,
     },
 
     profileImageUrl: {
@@ -186,9 +172,6 @@ userSchema.index({ companyId: 1, parentId: 1, role: 1, isActive: 1 });
 // Team pickers often filter direct reports and sort by display name.
 userSchema.index({ companyId: 1, parentId: 1, isActive: 1, name: 1 });
 userSchema.index({ companyId: 1, role: 1, "liveLocation.updatedAt": -1 });
-// Role Type / Role deletion has to count dependants before it is allowed.
-userSchema.index({ companyId: 1, roleTypeId: 1, isActive: 1 });
-userSchema.index({ companyId: 1, roleId: 1, isActive: 1 });
 
 userSchema.pre("save", async function () {
   if (!this.isModified("password")) return;

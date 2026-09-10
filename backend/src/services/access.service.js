@@ -1,5 +1,3 @@
-const mongoose = require("mongoose");
-const Role = require("../models/Role");
 const RolePermission = require("../models/RolePermission");
 const { USER_ROLES } = require("../constants/role.constants");
 const {
@@ -24,10 +22,8 @@ const {
 const { createHttpError } = require("../utils/httpError");
 const { createTtlCache } = require("../utils/ttlCache");
 
-// The API page guard resolves a profile on every guarded request, so without a
-// cache this would add two reads (RolePermission + Role) to every leads, task
-// and inventory call. Same short-TTL treatment the company status check in
-// auth.middleware already uses; role and permission writes clear it outright.
+// Avoid repeating company permission reads on every API request.
+// Permission and employee page updates invalidate this short-lived cache.
 const accessProfileCache = createTtlCache({
   ttlMs: process.env.ACCESS_PROFILE_CACHE_TTL_MS || 30000,
   maxEntries: process.env.ACCESS_PROFILE_CACHE_MAX_ENTRIES || 2000,
@@ -35,25 +31,7 @@ const accessProfileCache = createTtlCache({
 
 const invalidateAccessCache = () => accessProfileCache.clear();
 
-// Single resolution point for "what may this account actually do".
-//
-// Effective permissions are the union of three layers, in this order:
-//   1. the legacy per-USER_ROLES default (permission.constants)
-//   2. the per-company RolePermission override, when one exists
-//   3. the dynamic Role document the user is assigned to, when one exists
-//
-// The union only ever adds, so an account that predates the Role Type work
-// keeps exactly the access it had. ADMIN bypasses all of it, matching the
-// existing ADMIN-is-tenant-root convention used across the codebase.
-
 const isAdminRole = (role) => role === USER_ROLES.ADMIN;
-const isValidObjectId = (value) => mongoose.Types.ObjectId.isValid(value);
-
-const toId = (value) => {
-  if (!value) return "";
-  if (typeof value === "string") return value;
-  return String(value._id || value);
-};
 
 const resolveLegacyPermissions = async ({ companyId, role }) => {
   if (isAdminRole(role)) return [...PERMISSIONS];
@@ -96,17 +74,6 @@ const withAlwaysAccessiblePages = (pages) => {
   return [...byKey.values()];
 };
 
-const loadAssignedRole = async (user) => {
-  const roleId = toId(user?.roleId);
-  if (!roleId || !isValidObjectId(roleId)) return null;
-
-  return Role.findOne({ _id: roleId, companyId: user.companyId })
-    .select(
-      "_id name code baseRole roleTypeIds pages permissions dataScope status enforcePageAccess reportingRoleId",
-    )
-    .lean();
-};
-
 const buildAccessProfile = async (user) => {
   const baseRole = user?.role || "";
   const companyId = user?.companyId || null;
@@ -117,41 +84,38 @@ const buildAccessProfile = async (user) => {
       role: baseRole,
       baseRole,
       isAdmin: true,
-      roleId: null,
-      roleTypeId: toId(user?.roleTypeId) || null,
-      roleName: "Admin",
       permissions: [...PERMISSIONS, ...toPagePermissions(pages)],
       pages,
       dataScope: "ALL",
       // Nothing to enforce: an ADMIN reaches every page by definition.
       enforcePageAccess: false,
-      hasDynamicRole: false,
     };
   }
 
-  const [legacyPermissions, assignedRole] = await Promise.all([
-    companyId ? resolveLegacyPermissions({ companyId, role: baseRole }) : [],
-    loadAssignedRole(user),
-  ]);
+  const legacyPermissions = companyId ? await resolveLegacyPermissions({ companyId, role: baseRole }) : [];
+  let pages = withAlwaysAccessiblePages(normalizePageEntries(getDefaultPageAccessForRole(baseRole)));
 
-  // An inactive role must not silently strip access mid-session; it stops the
-  // role being *assigned* (see role.service) rather than locking out accounts
-  // that already hold it, so fall back to the legacy defaults for its base role.
-  const roleIsUsable = assignedRole && assignedRole.status === "ACTIVE";
-
-  const pages = withAlwaysAccessiblePages(
-    normalizePageEntries(
-      roleIsUsable && assignedRole.pages?.length
-        ? assignedRole.pages
-        : getDefaultPageAccessForRole(baseRole),
-    ),
-  );
+  const hasPageOverride = Array.isArray(user?.pageAccessOverride);
+  if (hasPageOverride) {
+    const inherited = new Map(pages.map((page) => [page.pageKey, page]));
+    pages = withAlwaysAccessiblePages(normalizePageEntries(
+      user.pageAccessOverride.map((pageKey) => inherited.get(pageKey) || { pageKey, actions: ["view"] }),
+    ));
+  }
 
   const permissions = [
     ...new Set([
-      ...legacyPermissions,
-      ...(roleIsUsable ? assignedRole.permissions || [] : []),
+      ...legacyPermissions.filter((permission) => !hasPageOverride || !permission.startsWith("page.")),
       ...toPagePermissions(pages),
+      // Coworking has an additional read-permission gate in navigation, the
+      // page component and the API. An explicit page grant must satisfy all
+      // three, without granting create/update/delete capabilities.
+      ...(hasPageOverride
+        ? pages.flatMap(({ pageKey }) => ({
+          coworking_booking: ["cabins.view", "bookings.view", "seats.view"],
+          coworking_clients: ["clients.view"],
+        }[pageKey] || []))
+        : []),
     ]),
   ];
 
@@ -159,33 +123,19 @@ const buildAccessProfile = async (user) => {
     role: baseRole,
     baseRole,
     isAdmin: false,
-    roleId: roleIsUsable ? String(assignedRole._id) : null,
-    roleTypeId: toId(user?.roleTypeId) || null,
-    roleName: roleIsUsable ? assignedRole.name : "",
     permissions,
     pages,
-    dataScope: roleIsUsable
-      ? assignedRole.dataScope
-      : getDefaultDataScopeForRole(baseRole),
-    enforcePageAccess: Boolean(roleIsUsable && assignedRole.enforcePageAccess),
-    hasDynamicRole: Boolean(roleIsUsable),
+    dataScope: getDefaultDataScopeForRole(baseRole),
+    enforcePageAccess: hasPageOverride,
   };
 };
 
-/**
- * Full access profile for one account: permissions, page access, data scope and
- * whether the API page guard applies. Used by GET /api/access/me, by the page
- * guard middleware and by the escalation checks in the role services.
- *
- * Cached per (company, base role, assigned role) — the three inputs the answer
- * actually depends on — rather than per user.
- */
+// Cache by company, built-in role and employee page selection.
 const resolveAccessProfile = async (user) => {
   const cacheKey = [
     String(user?.companyId || ""),
     String(user?.role || ""),
-    String(user?.roleId?._id || user?.roleId || ""),
-    String(user?.roleTypeId?._id || user?.roleTypeId || ""),
+    JSON.stringify(user?.pageAccessOverride ?? null),
   ].join("|");
 
   const cached = accessProfileCache.get(cacheKey);
@@ -260,29 +210,6 @@ const assertGrantablePermissions = async ({ actor, permissions = [] }) => {
   }
 };
 
-const assertGrantablePages = async ({ actor, pages = [] }) => {
-  if (isAdminRole(actor?.role)) return;
-
-  const { permissionSet } = await getActorPermissionSet(actor);
-  const beyondActor = [];
-
-  normalizePageEntries(pages).forEach((entry) => {
-    entry.actions.forEach((action) => {
-      const permission = toPagePermission(entry.pageKey, action);
-      if (!permissionSet.has(permission)) beyondActor.push(permission);
-    });
-  });
-
-  if (beyondActor.length) {
-    throw createHttpError(
-      403,
-      `You cannot grant access to pages or actions you do not have yourself (${beyondActor
-        .slice(0, 3)
-        .join(", ")})`,
-    );
-  }
-};
-
 module.exports = {
   CRM_PAGES,
   invalidateAccessCache,
@@ -296,5 +223,4 @@ module.exports = {
   canAccessPage,
   getActorPermissionSet,
   assertGrantablePermissions,
-  assertGrantablePages,
 };

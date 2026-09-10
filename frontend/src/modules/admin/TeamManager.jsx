@@ -11,19 +11,12 @@ import {
   updateChannelPartnerInventoryAccess,
 } from "../../services/userService";
 import { getAllLeads } from "../../services/leadService";
-import {
-  getAssignableRoleTypes,
-  getAssignableRoles,
-} from "../../services/accessService";
 import { toErrorMessage } from "../../utils/errorMessage";
 import ToastNotice from "../../components/ui/ToastNotice";
+import EmployeePageAccess from "./components/EmployeePageAccess";
 import {
   UserFormPanel,
 } from "./components/TeamManagerPanels";
-
-// Role types and roles for the create-user form are loaded from the backend —
-// see loadRoleTypeOptions / the roleTypeId effect below. Nothing about the
-// catalogue is hardcoded here any more.
 
 const MANAGEMENT_ROLES = ["MANAGER"];
 const EXECUTIVE_ROLES = ["EXECUTIVE", "FIELD_EXECUTIVE"];
@@ -112,6 +105,7 @@ const getRolePillClass = (role) => {
 const TeamManager = ({ theme = "light" }) => {
   const navigate = useNavigate();
   const [users, setUsers] = useState([]);
+  const [accessEmployee, setAccessEmployee] = useState(null);
   const [leads, setLeads] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
@@ -131,21 +125,15 @@ const TeamManager = ({ theme = "light" }) => {
     name: "",
     email: "",
     phone: "",
-    roleTypeId: "",
+    roleType: "COMMERCIAL",
     password: "",
-    roleId: "",
+    role: "EXECUTIVE",
     reportingToId: "",
     canViewInventory: false,
     brokerageMode: "FLAT",
     brokerageValue: String(DEFAULT_BROKERAGE_VALUE),
     brokerageNotes: "",
   });
-  const [roleTypeOptions, setRoleTypeOptions] = useState([]);
-  const [roleOptions, setRoleOptions] = useState([]);
-  const [roleTypesLoading, setRoleTypesLoading] = useState(false);
-  const [rolesLoading, setRolesLoading] = useState(false);
-  const [catalogError, setCatalogError] = useState("");
-
   const currentRole = localStorage.getItem("role");
   const isAdmin = currentRole === "ADMIN";
   const canUseAdminTools = isAdmin || currentRole === "MANAGER";
@@ -154,13 +142,10 @@ const TeamManager = ({ theme = "light" }) => {
   const currentUser = JSON.parse(localStorage.getItem("user") || "{}");
   const currentUserId = currentUser?.id || currentUser?._id || "";
 
-  // The selected role carries a base role; the reporting rules key off that,
-  // exactly as they did when the form posted a raw role string.
-  const selectedRole = useMemo(
-    () => roleOptions.find((role) => String(role._id) === String(formData.roleId)) || null,
-    [roleOptions, formData.roleId],
-  );
-  const selectedBaseRole = selectedRole?.baseRole || "";
+  const selectedBaseRole = formData.role;
+  const roleOptions = Object.entries(ROLE_LABELS)
+    .filter(([value]) => value !== "ADMIN")
+    .map(([value, label]) => ({ value, label }));
 
   const reportingCandidates = useMemo(() => {
     const allowedParentRoles = REPORTING_PARENT_ROLES[selectedBaseRole] || [];
@@ -388,62 +373,6 @@ const TeamManager = ({ theme = "light" }) => {
     loadData();
   }, []);
 
-  // Active role types come from the backend the moment the panel opens.
-  useEffect(() => {
-    if (!panelOpen || !canUseAdminTools) return;
-
-    let alive = true;
-    setRoleTypesLoading(true);
-    setCatalogError("");
-
-    getAssignableRoleTypes()
-      .then((rows) => { if (alive) setRoleTypeOptions(rows); })
-      .catch((err) => {
-        if (!alive) return;
-        setRoleTypeOptions([]);
-        setCatalogError(toErrorMessage(err, "Failed to load role types"));
-      })
-      .finally(() => { if (alive) setRoleTypesLoading(false); });
-
-    return () => { alive = false; };
-  }, [panelOpen, canUseAdminTools]);
-
-  // Roles depend on the chosen role type; changing the type drops a role that
-  // no longer belongs to it rather than posting an incompatible pair.
-  useEffect(() => {
-    if (!panelOpen) return undefined;
-
-    if (!formData.roleTypeId) {
-      setRoleOptions([]);
-      setRolesLoading(false);
-      return undefined;
-    }
-
-    let alive = true;
-    setRolesLoading(true);
-
-    getAssignableRoles(formData.roleTypeId)
-      .then((rows) => {
-        if (!alive) return;
-        setRoleOptions(rows);
-        setFormData((prev) => (
-          prev.roleId && !rows.some((role) => String(role._id) === String(prev.roleId))
-            ? { ...prev, roleId: "", reportingToId: "" }
-            : prev
-        ));
-      })
-      .catch((err) => {
-        if (!alive) return;
-        setRoleOptions([]);
-        setCatalogError(toErrorMessage(err, "Failed to load roles"));
-      })
-      .finally(() => { if (alive) setRolesLoading(false); });
-
-    return () => { alive = false; };
-    // Reacts to the role type changing only; the current role id is read
-    // inside the updater, so it is not a dependency.
-  }, [panelOpen, formData.roleTypeId]);
-
   useEffect(() => {
     if (roleFilter === "ALL") return;
     const hasFilterValue = roleFilterOptions.some((option) => option.value === roleFilter);
@@ -457,17 +386,15 @@ const TeamManager = ({ theme = "light" }) => {
       name: "",
       email: "",
       phone: "",
-      roleTypeId: "",
+      roleType: "COMMERCIAL",
       password: "",
-      roleId: "",
+      role: "EXECUTIVE",
       reportingToId: "",
       canViewInventory: false,
       brokerageMode: "FLAT",
       brokerageValue: String(DEFAULT_BROKERAGE_VALUE),
       brokerageNotes: "",
     });
-    setRoleOptions([]);
-    setCatalogError("");
     setFormError("");
   };
 
@@ -485,12 +412,7 @@ const TeamManager = ({ theme = "light" }) => {
       return;
     }
 
-    if (!formData.roleTypeId) {
-      setFormError("Select a role type.");
-      return;
-    }
-
-    if (!formData.roleId) {
+    if (!formData.role) {
       setFormError("Select a role.");
       return;
     }
@@ -499,15 +421,13 @@ const TeamManager = ({ theme = "light" }) => {
       setSubmitting(true);
       setFormError("");
 
-      // The backend resolves the Role Type / Role pair into the stored role and
-      // vertical, so the form no longer has to know either vocabulary.
       const payload = {
         name: formData.name.trim(),
         email: formData.email.trim(),
         phone: formData.phone.trim(),
         password: formData.password,
-        roleTypeId: formData.roleTypeId,
-        roleId: formData.roleId,
+        roleType: formData.roleType,
+        role: formData.role,
       };
 
       if (selectedBaseRole === "CHANNEL_PARTNER") {
@@ -825,6 +745,7 @@ const TeamManager = ({ theme = "light" }) => {
                       </td>
                       <td>
                         <div className="team-rowacts">
+                          {isAdmin && user.role !== "ADMIN" && <button type="button" className="team-mini-toggle" onClick={(event) => { event.stopPropagation(); setAccessEmployee(user); }} title={`Manage page access for ${user.name}`}>Page access</button>}
                           {canUseAdminTools ? (
                             <button
                               type="button"
@@ -897,19 +818,16 @@ const TeamManager = ({ theme = "light" }) => {
           reportingCandidates={reportingCandidates}
           reportingLabel={reportingLabel}
           submitting={submitting}
-          error={formError || catalogError}
+          error={formError}
           isDarkTheme={isDarkTheme}
           roleOptions={roleOptions}
-          roleTypeOptions={roleTypeOptions}
-          roleTypesLoading={roleTypesLoading}
-          rolesLoading={rolesLoading}
           selectedBaseRole={selectedBaseRole}
           reportingParentRoles={REPORTING_PARENT_ROLES}
         />
       ) : null}
+      {accessEmployee && <EmployeePageAccess key={accessEmployee._id} user={accessEmployee} onClose={() => setAccessEmployee(null)} />}
     </div>
   );
 };
 
 export default TeamManager;
-

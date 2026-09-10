@@ -1,14 +1,8 @@
 const { USER_ROLES } = require("./role.constants");
 const { PAGE_ACTIONS, CRM_PAGES, buildFullPageAccess } = require("./page.constants");
 
-// Page access each *system* role already has today, transcribed from the route
-// matrix in frontend/src/App.jsx and the roles arrays in
-// frontend/src/components/workbench/workbenchNavigation.js.
-//
-// The migration seeds the system Role records from this map so that turning
-// page access on for a system role grants exactly what that role could already
-// reach — never more, never less. Anything wider or narrower is a deliberate
-// edit an Admin makes afterwards in the Role Types UI.
+// Default pages and data scopes for the built-in employee roles.
+// Individual page selections override these defaults in access.service.
 
 const { VIEW, CREATE, EDIT, DELETE, EXPORT, APPROVE, ASSIGN, FOLLOW_UP } = PAGE_ACTIONS;
 
@@ -96,8 +90,7 @@ const DEFAULT_ROLE_PAGE_ACCESS = Object.freeze({
   [USER_ROLES.ADMIN]: buildFullPageAccess(),
   [USER_ROLES.MANAGER]: MANAGER_PAGES,
   [USER_ROLES.EXECUTIVE]: EXECUTIVE_PAGES,
-  // INSIDE_EXECUTIVE has no route of its own today; it mirrors EXECUTIVE so the
-  // migration cannot narrow whatever API access such accounts already have.
+  // Legacy inside executives share the executive defaults.
   [USER_ROLES.INSIDE_EXECUTIVE]: EXECUTIVE_PAGES,
   [USER_ROLES.FIELD_EXECUTIVE]: FIELD_EXECUTIVE_PAGES,
   [USER_ROLES.PRODUCTION_EXECUTIVE]: PRODUCTION_PAGES,

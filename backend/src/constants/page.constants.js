@@ -1,15 +1,6 @@
-// Canonical catalogue of CRM pages a Role can be granted access to.
-//
-// Page access is expressed twice, on purpose:
-//   * Role.pages[]  — { pageKey, actions[] }, the shape the Role Type / Role
-//     admin UI edits.
-//   * "page.<pageKey>.<action>" permission strings — the flattened projection
-//     that route guards, navigation and the API page guard actually test, so
-//     page access composes with the existing `<module>.<action>` permission
-//     vocabulary in permission.constants.js instead of being a parallel system.
-//
-// `alwaysAccessible` pages (profile, logout) can never be revoked: every signed
-// in user keeps a way to see who they are and to sign out.
+// Canonical employee page catalogue. Page selections project into
+// page.<key>.<action> permissions for navigation and API access checks.
+// Always-accessible pages remain available for every signed-in account.
 
 const PAGE_ACTIONS = Object.freeze({
   VIEW: "view",
@@ -184,18 +175,6 @@ const CRM_PAGES = Object.freeze([
     ],
   },
   {
-    key: "admin_role_types",
-    label: "Role Types",
-    group: "Admin",
-    path: "/admin/role-types",
-    actions: [
-      PAGE_ACTIONS.VIEW,
-      PAGE_ACTIONS.CREATE,
-      PAGE_ACTIONS.EDIT,
-      PAGE_ACTIONS.DELETE,
-    ],
-  },
-  {
     key: "admin_notifications",
     label: "Alerts",
     group: "Admin",
@@ -246,7 +225,7 @@ const isValidPageAction = (pageKey, action) =>
 
 const toPagePermission = (pageKey, action) => `page.${pageKey}.${action}`;
 
-// Flattens Role.pages[] into permission strings. "view" is implied by any
+// Flattens page entries into permission strings. "view" is implied by any
 // granted action: a role that can edit leads can necessarily open the page.
 const toPagePermissions = (pages = []) => {
   const permissions = new Set();

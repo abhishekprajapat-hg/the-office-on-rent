@@ -8,6 +8,7 @@
 export const PIPELINE_VIEWS = {
   NEEDS_ACTION: "NEEDS_ACTION",
   ALL: "ALL",
+  TEAM: "TEAM",
   UNASSIGNED: "UNASSIGNED",
   CLOSED: "CLOSED",
 };
@@ -52,6 +53,7 @@ export const matchesView = (lead, view, nowMs) => {
     case PIPELINE_VIEWS.CLOSED:
       return String(lead?.status || "") === "CLOSED";
     case PIPELINE_VIEWS.ALL:
+    case PIPELINE_VIEWS.TEAM:
     default:
       return true;
   }
@@ -90,12 +92,11 @@ export const describeFollowUp = (value, nowMs) => {
   };
 };
 
-/** Indian short form, because that is how these numbers get said out loud. */
 export const formatBudgetShort = (value) => {
   const amount = Number(value);
   if (!Number.isFinite(amount) || amount <= 0) return "";
-  if (amount >= 10000000) return `₹${(amount / 10000000).toFixed(2).replace(/\.00$/, "")} Cr`;
-  if (amount >= 100000) return `₹${(amount / 100000).toFixed(2).replace(/\.00$/, "")} L`;
+  if (amount >= 10000000) return `₹${(amount / 10000000).toFixed(2)} Cr`;
+  if (amount >= 100000) return `₹${(amount / 100000).toFixed(2)} L`;
   if (amount >= 1000) return `₹${Math.round(amount / 1000)} K`;
   return `₹${amount}`;
 };
@@ -103,6 +104,7 @@ export const formatBudgetShort = (value) => {
 export const formatBudgetRange = (requirements = {}) => {
   const min = formatBudgetShort(requirements?.budgetMin);
   const max = formatBudgetShort(requirements?.budgetMax);
-  if (min && max) return min === max ? min : `${min}–${max}`;
-  return min || max || "—";
+  if (max) return max;
+  if (min) return min;
+  return "—";
 };

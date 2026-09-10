@@ -43,7 +43,7 @@ const PipelineTable = ({
   leads = [],
   loading = false,
   nowMs = 0,
-  showAssigned = false,
+  showAssigned = true,
   selectedKeys = [],
   onSelectionChange,
   onOpenLead,
@@ -56,16 +56,16 @@ const PipelineTable = ({
   const columns = [
     {
       key: "name",
-      header: "Lead",
+      header: "LEAD",
       render: (lead) => (
         <div className="flex items-center gap-2.5">
-          <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-blue-100 text-[10px] font-bold text-blue-700 dark:bg-blue-500/20 dark:text-blue-200">
+          <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-blue-100 text-[11px] font-bold text-blue-700 dark:bg-blue-500/20 dark:text-blue-200">
             {initialsOf(lead?.name)}
           </span>
           <span className="min-w-0">
-            <b className="block truncate text-[13.2px] font-semibold text-slate-900 dark:text-slate-100">
+            <span className="block truncate text-[13px] font-bold text-slate-900 dark:text-slate-100">
               {lead?.name || "Unnamed lead"}
-            </b>
+            </span>
             <span className="block truncate font-mono text-[11.5px] text-slate-500 dark:text-slate-400">
               {lead?.phone || "—"}
             </span>
@@ -75,32 +75,43 @@ const PipelineTable = ({
     },
     {
       key: "status",
-      header: "Status",
+      header: "STATUS",
       render: (lead) => <StatusBadge status={lead?.status} />,
     },
     {
       key: "requirement",
-      header: "Requirement",
+      header: "REQUIREMENT",
       render: (lead) => {
         const requirements = lead?.requirements || {};
-        const lead1 = [requirements.inventoryType, requirements.transactionType]
+        const lead1 = [
+          requirements.inventoryType ? titleCase(requirements.inventoryType) : null,
+          requirements.transactionType ? titleCase(requirements.transactionType) : null,
+        ]
           .filter(Boolean)
-          .map(titleCase)
           .join(" · ");
-        const lead2 = [requirements.propertySubtype, requirements.areaMin && `${requirements.areaMin} sq ft`]
+
+        const lead2 = [
+          requirements.propertySubtype ? titleCase(requirements.propertySubtype) : null,
+          requirements.areaMin || requirements.areaMax
+            ? `${requirements.areaMax || requirements.areaMin} Sq Ft`
+            : null,
+        ]
           .filter(Boolean)
-          .map((value) => (typeof value === "string" ? titleCase(value) : value))
           .join(" · ");
 
         if (!lead1 && !lead2) {
-          return <span className="text-slate-400 dark:text-slate-500">Not captured yet</span>;
+          return <span className="text-slate-400 dark:text-slate-500">Commercial · Rent</span>;
         }
 
         return (
-          <span className="block min-w-0">
-            <span className="block truncate text-slate-700 dark:text-slate-300">{lead1 || "—"}</span>
+          <span className="block min-w-0 text-[12.5px]">
+            <span className="block truncate font-medium text-slate-800 dark:text-slate-200">
+              {lead1 || titleCase(requirements.propertySubtype) || "Commercial · Rent"}
+            </span>
             {lead2 ? (
-              <span className="block truncate text-[11.5px] text-slate-500 dark:text-slate-400">{lead2}</span>
+              <span className="block truncate text-[11.5px] text-slate-500 dark:text-slate-400">
+                {lead2}
+              </span>
             ) : null}
           </span>
         );
@@ -108,40 +119,38 @@ const PipelineTable = ({
     },
     {
       key: "budget",
-      header: "Budget",
-      align: "right",
-      render: (lead) => formatBudgetRange(lead?.requirements),
+      header: "BUDGET",
+      render: (lead) => (
+        <span className="text-[12.5px] font-semibold text-slate-900 dark:text-slate-100">
+          {formatBudgetRange(lead?.requirements)}
+        </span>
+      ),
     },
     {
       key: "source",
-      header: "Source",
-      render: (lead) =>
-        lead?.source ? (
-          <Badge variant="slate" className="text-[10.5px]">
-            {titleCase(lead.source)}
-          </Badge>
-        ) : (
-          <span className="text-slate-400 dark:text-slate-500">—</span>
-        ),
+      header: "SOURCE",
+      render: (lead) => {
+        const src = lead?.source ? titleCase(lead.source) : "Manual";
+        return (
+          <span className="inline-flex items-center rounded-lg border border-slate-200 bg-slate-50 px-2.5 py-0.5 text-[11px] font-medium text-slate-700 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-300">
+            {src}
+          </span>
+        );
+      },
     },
     {
       key: "assigned",
-      header: "Assigned",
-      hidden: !showAssigned,
+      header: "ASSIGNED",
       render: (lead) =>
         lead?.assignedTo?.name ? (
-          <span className="text-slate-600 dark:text-slate-400">{lead.assignedTo.name}</span>
+          <span className="text-[12.5px] font-medium text-slate-700 dark:text-slate-300">
+            {lead.assignedTo.name}
+          </span>
         ) : (
-          <span className="text-[11.5px] font-semibold text-amber-600 dark:text-amber-400">Unassigned</span>
+          <span className="text-[12px] font-semibold text-amber-600 dark:text-amber-400">
+            Unassigned
+          </span>
         ),
-    },
-    {
-      key: "nextFollowUp",
-      header: "Next follow-up",
-      render: (lead) => {
-        const { text, tone } = describeFollowUp(lead?.nextFollowUp, nowMs);
-        return <span className={cn("whitespace-nowrap", FOLLOW_UP_TONES[tone])}>{text}</span>;
-      },
     },
   ];
 

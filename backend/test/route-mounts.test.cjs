@@ -39,8 +39,7 @@ const statusOf = (server, path) =>
 // route answers 401 rather than 404.
 const ROUTES = [
   "/access/me",
-  "/access/role-types",
-  "/access/roles",
+  "/access/users/111111111111111111111111/pages",
   "/users",
   "/leads",
   "/tasks",

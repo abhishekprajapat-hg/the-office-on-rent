@@ -919,6 +919,7 @@ const addLeadAndClause = (query, clause) => {
 };
 
 const applyLeadListFilters = (query, rawQuery = {}) => {
+  require("../utils/leadAdvancedFilters").applyLeadAdvancedFilters(query, rawQuery);
   const status = normalizeLeadStatusValue(rawQuery.status);
   if (status && LEAD_STATUS_VALUES.includes(status)) {
     query.status = status;
@@ -932,18 +933,18 @@ const applyLeadListFilters = (query, rawQuery = {}) => {
   const assignedTo = String(rawQuery.assignedTo || "").trim();
   if (assignedTo) {
     if (assignedTo.toUpperCase() === "UNASSIGNED") {
-      query.assignedTo = null;
+      addLeadAndClause(query, { assignedTo: null });
     } else if (isValidObjectId(assignedTo)) {
-      query.assignedTo = assignedTo;
+      addLeadAndClause(query, { assignedTo });
     }
   }
 
   const dateFrom = normalizeDateBoundary(
-    rawQuery.dateFrom || rawQuery.startDate || rawQuery.createdFrom,
+    rawQuery.dateFrom || rawQuery.startDate,
     "start",
   );
   const dateTo = normalizeDateBoundary(
-    rawQuery.dateTo || rawQuery.endDate || rawQuery.createdTo,
+    rawQuery.dateTo || rawQuery.endDate,
     "end",
   );
   if (dateFrom || dateTo) {
@@ -2809,7 +2810,7 @@ exports.getAllLeads = async (req, res) => {
       error: error.message,
       message: "getAllLeads failed",
     });
-    return res.status(500).json({ message: "Server error" });
+    return res.status(error.statusCode || 500).json({ message: error.statusCode ? error.message : "Server error" });
   }
 };
 
