@@ -2,7 +2,7 @@ import React from "react";
 import { AlertTriangle, CalendarClock, DoorOpen, IndianRupee } from "lucide-react";
 import { cn } from "../../../../components/ui";
 import { formatCurrency } from "../../../../utils/format";
-import { STATUS_META, STATUS_ORDER } from "../floorPlanData";
+import { STATUS_META, STATUS_ORDER } from "../cabinData";
 
 /*
  * The standing summary, as three cards rather than one long one. They answer
@@ -35,7 +35,20 @@ const StatBox = ({ icon: Icon, value, label, hint }) => (
   </div>
 );
 
-const FloorSummaryPanel = ({ cabins, counts, statusFilter, onStatusFilter }) => {
+/*
+ * On a phone these three cards do not belong in one run. The occupancy figure
+ * is the headline and goes above the cabins; the status filter and the renewal
+ * list are follow-up reading and go below. `sections` lets the page place them
+ * separately without this component knowing anything about breakpoints.
+ */
+const SpaceSummaryPanel = ({
+  cabins,
+  counts,
+  statusFilter,
+  onStatusFilter,
+  sections = ["occupancy", "status", "freeing"],
+}) => {
+  const shows = (name) => sections.includes(name);
   /*
    * Occupancy is cabins let over cabins, not seats filled over seats. Cabins go
    * whole here, so a seat-based rate would just be a weighted restatement of the
@@ -59,6 +72,7 @@ const FloorSummaryPanel = ({ cabins, counts, statusFilter, onStatusFilter }) => 
 
   return (
     <>
+      {shows("occupancy") ? (
       <Card>
         <div className="flex items-baseline justify-between gap-2">
           <h2 className="text-[13px] font-semibold text-slate-900 dark:text-slate-100">Occupancy</h2>
@@ -83,7 +97,9 @@ const FloorSummaryPanel = ({ cabins, counts, statusFilter, onStatusFilter }) => 
           />
         </div>
       </Card>
+      ) : null}
 
+      {shows("status") ? (
       <Card>
         <h3 className="mb-1 text-[13px] font-semibold text-slate-900 dark:text-slate-100">Cabins by status</h3>
         <ul>
@@ -113,8 +129,9 @@ const FloorSummaryPanel = ({ cabins, counts, statusFilter, onStatusFilter }) => 
           })}
         </ul>
       </Card>
+      ) : null}
 
-      {freeingSoon.length || overdue.length ? (
+      {shows("freeing") && (freeingSoon.length || overdue.length) ? (
         <Card>
           <h3 className="mb-1.5 flex items-center gap-1.5 text-[13px] font-semibold text-slate-900 dark:text-slate-100">
             <CalendarClock aria-hidden="true" size={14} className="text-slate-400" />
@@ -160,4 +177,4 @@ const FloorSummaryPanel = ({ cabins, counts, statusFilter, onStatusFilter }) => 
   );
 };
 
-export default FloorSummaryPanel;
+export default SpaceSummaryPanel;

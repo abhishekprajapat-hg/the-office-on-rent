@@ -8,6 +8,7 @@ const companyMiddleware = require("../middleware/company.middleware");
 const { requirePermission } = require("../middleware/permission.middleware");
 const { writeLimiter } = require("../middleware/rateLimit.middleware");
 const { USER_ROLES, COWORKING_ROLES } = require("../constants/role.constants");
+const { checkRoleOrPageAccess } = require("../middleware/pageAccess.middleware");
 
 const COWORKING_ACCESS_ROLES = [
   USER_ROLES.ADMIN,
@@ -16,7 +17,7 @@ const COWORKING_ACCESS_ROLES = [
 ];
 
 router.use(authMiddleware.protect);
-router.use(authMiddleware.checkRole(COWORKING_ACCESS_ROLES));
+router.use(checkRoleOrPageAccess(COWORKING_ACCESS_ROLES, "coworking_booking", "coworking_clients"));
 router.use(companyMiddleware.requireCompanyContext);
 
 router.use("/properties", require("./coworkingProperty.routes"));

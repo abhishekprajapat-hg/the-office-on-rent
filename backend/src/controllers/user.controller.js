@@ -32,6 +32,13 @@ const {
   buildPaginationMeta,
   parseFieldSelection,
 } = require("../utils/queryOptions");
+const {
+  resolveRoleAssignment,
+  assertReportingTargetInActorScope,
+  assertNotSelfPromotion,
+  recordAssignment,
+  auditAssignmentChange,
+} = require("../services/userRoleAssignment.service");
 
 const LOCATION_ALLOWED_ROLES = [...EXECUTIVE_ROLES];
 const LOCATION_VIEWER_ROLES = [
@@ -69,6 +76,8 @@ const USER_SELECTABLE_FIELDS = [
   "email",
   "phone",
   "roleType",
+  "roleTypeId",
+  "roleId",
   "role",
   "companyId",
   "parentId",
@@ -645,6 +654,8 @@ const toProfileView = (user) => ({
   email: user.email,
   phone: user.phone || "",
   roleType: normalizeRoleType(user.roleType),
+  roleTypeId: user.roleTypeId || null,
+  roleId: user.roleId || null,
   profileImageUrl: user.profileImageUrl || "",
   role: user.role,
   companyId: user.companyId || null,
@@ -1280,7 +1291,9 @@ exports.createUserByRole = async (req, res) => {
       phone,
       roleType,
       password,
-      role,
+      role: requestedRole,
+      roleTypeId,
+      roleId,
       managerId,
       parentId,
       reportingToId,
@@ -1300,6 +1313,21 @@ exports.createUserByRole = async (req, res) => {
     if (existingUser) {
       return res.status(400).json({ message: "User already exists" });
     }
+
+    // Resolves the Role Type / Role pair chosen on the form into the legacy
+    // `role` and `roleType` values the rest of the system reads, and enforces
+    // tenant ownership plus the no-privilege-escalation rules. A payload
+    // without roleTypeId/roleId keeps the previous behaviour untouched.
+    const assignment = await resolveRoleAssignment({
+      companyId: req.user.companyId,
+      roleTypeId,
+      roleId,
+      fallbackRole: requestedRole,
+      fallbackRoleType: roleType,
+      actingUser: req.user,
+    });
+
+    const role = assignment.role;
 
     if (!Object.values(USER_ROLES).includes(role)) {
       return res.status(400).json({
@@ -1321,6 +1349,14 @@ exports.createUserByRole = async (req, res) => {
       let reportingParent = null;
 
       if (requestedReportingToId) {
+        // A Manager may only point new accounts at themselves or someone in
+        // their own branch of the tree; Admins are unrestricted.
+        await assertReportingTargetInActorScope({
+          actingUser: req.user,
+          parentId: requestedReportingToId,
+          companyId: req.user.companyId,
+        });
+
         reportingParent = await User.findOne({
           _id: requestedReportingToId,
           role: { $in: allowedParentRoles },
@@ -1372,7 +1408,9 @@ exports.createUserByRole = async (req, res) => {
       name,
       email,
       phone,
-      roleType: normalizeRoleType(roleType),
+      roleType: normalizeRoleType(assignment.roleType),
+      roleTypeId: assignment.roleTypeId,
+      roleId: assignment.roleId,
       password,
       role,
       companyId: req.user.companyId,
@@ -1384,6 +1422,33 @@ exports.createUserByRole = async (req, res) => {
       brokerageConfig: parsedBrokerageConfig.value,
     });
 
+    await recordAssignment({
+      companyId: req.user.companyId,
+      userId: newUser._id,
+      roleId: assignment.roleId,
+      roleTypeId: assignment.roleTypeId,
+      baseRole: role,
+      actingUser: req.user,
+      source: "create-user",
+    });
+
+    await auditAssignmentChange({
+      companyId: req.user.companyId,
+      actingUser: req.user,
+      targetUser: newUser,
+      previous: null,
+      next: {
+        role,
+        roleType: newUser.roleType,
+        roleTypeId: assignment.roleTypeId,
+        roleId: assignment.roleId,
+        roleName: assignment.roleDoc?.name || ROLE_LABELS[role] || role,
+        roleTypeName: assignment.roleTypeDoc?.name || newUser.roleType,
+      },
+      req,
+      action: "USER_ROLE_ASSIGNED",
+    });
+
     res.status(201).json({
       message: `${role} created successfully`,
       user: {
@@ -1391,6 +1456,8 @@ exports.createUserByRole = async (req, res) => {
         name: newUser.name,
         email: newUser.email,
         roleType: normalizeRoleType(newUser.roleType),
+        roleTypeId: newUser.roleTypeId,
+        roleId: newUser.roleId,
         role: newUser.role,
         companyId: newUser.companyId,
         parentId: newUser.parentId,
@@ -1404,7 +1471,9 @@ exports.createUserByRole = async (req, res) => {
       error: error.message,
       message: "createUserByRole failed",
     });
-    return res.status(500).json({ message: "Server error" });
+    return res.status(error.statusCode || 500).json({
+      message: error.statusCode ? error.message : "Server error",
+    });
   }
 };
 
@@ -1436,6 +1505,8 @@ exports.updateUserByAdmin = async (req, res) => {
       "email",
       "phone",
       "roleType",
+      "roleTypeId",
+      "roleId",
       "role",
       "reportingToId",
       "parentId",
@@ -1466,6 +1537,9 @@ exports.updateUserByAdmin = async (req, res) => {
     }
 
     const previousRole = user.role;
+    const previousRoleType = user.roleType;
+    const previousRoleTypeId = user.roleTypeId ? String(user.roleTypeId) : null;
+    const previousRoleId = user.roleId ? String(user.roleId) : null;
     const patch = {};
 
     if (Object.prototype.hasOwnProperty.call(req.body || {}, "name")) {
@@ -1520,7 +1594,35 @@ exports.updateUserByAdmin = async (req, res) => {
     }
 
     let nextRole = user.role;
-    if (Object.prototype.hasOwnProperty.call(req.body || {}, "role")) {
+
+    // Dynamic Role Type / Role change. When the pair is supplied it wins over a
+    // raw `role` string, because the Role document is what carries the page
+    // access and permissions the account should end up with.
+    const hasDynamicAssignment =
+      Object.prototype.hasOwnProperty.call(req.body || {}, "roleTypeId")
+      && Object.prototype.hasOwnProperty.call(req.body || {}, "roleId")
+      && req.body.roleTypeId
+      && req.body.roleId;
+
+    let dynamicAssignment = null;
+    if (hasDynamicAssignment) {
+      assertNotSelfPromotion({ actingUser: req.user, targetUserId: user._id });
+
+      dynamicAssignment = await resolveRoleAssignment({
+        companyId: req.user.companyId,
+        roleTypeId: req.body.roleTypeId,
+        roleId: req.body.roleId,
+        fallbackRole: user.role,
+        fallbackRoleType: user.roleType,
+        actingUser: req.user,
+      });
+
+      nextRole = dynamicAssignment.role;
+      patch.role = nextRole;
+      patch.roleType = dynamicAssignment.roleType;
+      patch.roleTypeId = dynamicAssignment.roleTypeId;
+      patch.roleId = dynamicAssignment.roleId;
+    } else if (Object.prototype.hasOwnProperty.call(req.body || {}, "role")) {
       const requestedRole = String(req.body.role || "").trim().toUpperCase();
       if (!requestedRole || !Object.values(USER_ROLES).includes(requestedRole)) {
         return res.status(400).json({ message: "Invalid role" });
@@ -1742,6 +1844,40 @@ exports.updateUserByAdmin = async (req, res) => {
       }
     }
 
+    if (dynamicAssignment) {
+      await recordAssignment({
+        companyId: req.user.companyId,
+        userId: user._id,
+        roleId: dynamicAssignment.roleId,
+        roleTypeId: dynamicAssignment.roleTypeId,
+        baseRole: nextRole,
+        actingUser: req.user,
+        source: "update-user",
+      });
+
+      await auditAssignmentChange({
+        companyId: req.user.companyId,
+        actingUser: req.user,
+        targetUser: user,
+        previous: {
+          role: previousRole,
+          roleType: previousRoleType,
+          roleTypeId: previousRoleTypeId,
+          roleId: previousRoleId,
+        },
+        next: {
+          role: nextRole,
+          roleType: dynamicAssignment.roleType,
+          roleTypeId: dynamicAssignment.roleTypeId,
+          roleId: dynamicAssignment.roleId,
+          roleName: dynamicAssignment.roleDoc?.name || "",
+          roleTypeName: dynamicAssignment.roleTypeDoc?.name || "",
+        },
+        req,
+        action: "USER_ROLE_TYPE_CHANGED",
+      });
+    }
+
     const updated = await User.findOne({
       _id: user._id,
       companyId: req.user.companyId,
@@ -1759,7 +1895,9 @@ exports.updateUserByAdmin = async (req, res) => {
       error: error.message,
       message: "updateUserByAdmin failed",
     });
-    return res.status(500).json({ message: "Server error" });
+    return res.status(error.statusCode || 500).json({
+      message: error.statusCode ? error.message : "Server error",
+    });
   }
 };
 

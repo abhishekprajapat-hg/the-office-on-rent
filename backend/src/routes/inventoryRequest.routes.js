@@ -6,9 +6,11 @@ const companyMiddleware = require("../middleware/company.middleware");
 const inventoryRequestController = require("../controllers/inventoryRequest.controller");
 const inventoryApprovalController = require("../controllers/inventoryApproval.controller");
 const { writeLimiter } = require("../middleware/rateLimit.middleware");
+const { requirePageAccess } = require("../middleware/pageAccess.middleware");
 
 router.use(authMiddleware.protect);
 router.use(companyMiddleware.requireCompanyContext);
+router.use(requirePageAccess("inventory"));
 
 router.post(
   "/",

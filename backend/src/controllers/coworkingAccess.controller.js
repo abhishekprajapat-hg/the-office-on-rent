@@ -16,6 +16,7 @@ exports.getMyPermissions = async (req, res) => {
     const permissions = await resolveEffectivePermissions({
       companyId: req.user.companyId,
       role: req.user.role,
+      user: req.user,
     });
 
     return res.json({

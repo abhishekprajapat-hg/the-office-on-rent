@@ -1,7 +1,7 @@
 import React from "react";
 import { Check } from "lucide-react";
 import { cn } from "../../../../components/ui";
-import { STATUS_META } from "../floorPlanData";
+import { STATUS_META } from "../cabinData";
 
 /*
  * One cabin, in one of two forms.
@@ -73,7 +73,7 @@ const CabinTile = React.memo(
           className={cn(
             "truncate font-semibold leading-none tracking-tight",
             // On the plan the number is the whole tile, so it grows with zoom.
-            isPlan ? (dense ? "text-[10px]" : "text-[13px]") : "text-[15px]",
+            isPlan ? (dense ? "text-[10px]" : "text-[13px]") : "text-[18px]",
           )}
         >
           {cabin.label}

@@ -25,7 +25,7 @@ const SelectionBar = ({ cabins, onRemove, onClear, onOnboard }) => {
       className={cn(
         // Docked: the board scrolls behind it, so the running total and the way
         // out of the selection are never scrolled off.
-        "sticky bottom-0 z-30 flex flex-wrap items-center gap-x-3 gap-y-2",
+        "sticky bottom-0 z-30 flex flex-col items-stretch gap-2 sm:flex-row sm:flex-wrap sm:items-center sm:gap-x-3 sm:gap-y-2",
         "border-t border-slate-200 bg-white px-4 py-2.5",
         "shadow-[0_-8px_20px_-14px_rgba(16,24,40,0.35)]",
         "dark:border-slate-700 dark:bg-slate-900",
@@ -40,7 +40,7 @@ const SelectionBar = ({ cabins, onRemove, onClear, onOnboard }) => {
         </p>
       </div>
 
-      <ul className="flex min-w-0 flex-1 flex-wrap items-center gap-1.5">
+      <ul className="flex max-h-20 w-full flex-none flex-wrap content-start items-center gap-1.5 overflow-y-auto pr-1 sm:max-h-none sm:w-auto sm:min-w-0 sm:flex-1 sm:pr-0">
         {cabins.map((cabin) => (
           <li key={cabin.code}>
             <span className="inline-flex items-center gap-1 rounded-full border border-blue-600 bg-blue-50 py-0.5 pl-2.5 pr-1 text-[11px] font-semibold text-blue-700 dark:border-blue-400/50 dark:bg-blue-500/10 dark:text-blue-200">
@@ -59,7 +59,7 @@ const SelectionBar = ({ cabins, onRemove, onClear, onOnboard }) => {
         ))}
       </ul>
 
-      <div className="flex shrink-0 items-center gap-2">
+      <div className="flex shrink-0 items-center justify-end gap-2">
         <Button size="sm" variant="ghost" onClick={onClear}>
           Clear
         </Button>

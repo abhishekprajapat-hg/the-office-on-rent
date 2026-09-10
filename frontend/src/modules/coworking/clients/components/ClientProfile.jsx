@@ -14,7 +14,7 @@ import {
 import { Button, cn } from "../../../../components/ui";
 import { formatCurrency, formatDate } from "../../../../utils/format";
 import DocumentChecklist from "../../booking/components/DocumentChecklist";
-import { STATUS_META } from "../../booking/floorPlanData";
+import { STATUS_META } from "../../booking/cabinData";
 import { CLIENT_KINDS, kycStatusOf } from "../../booking/kycDocuments";
 
 /*
@@ -271,7 +271,7 @@ const ClientProfile = ({ client, onOpenCabin, onRecordPayment, onDocumentsChange
           </>
         ) : (
           <p className="text-[12.5px] text-slate-500 dark:text-slate-400">
-            This is their first tenancy on the floor.
+            This is their first tenancy in this coworking space.
           </p>
         )}
       </Section>

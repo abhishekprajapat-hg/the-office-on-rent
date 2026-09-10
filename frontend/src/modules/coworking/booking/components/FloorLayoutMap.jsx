@@ -13,7 +13,7 @@ import {
 } from "lucide-react";
 import { Button, cn } from "../../../../components/ui";
 import { FLOOR_PLAN_ROOMS } from "../../../../constants/coworkingFloorPlan";
-import { PASSAGE_BAND, SHARED_ROOMS, STATUS_META, STATUS_ORDER } from "../floorPlanData";
+import { PASSAGE_BAND, SHARED_ROOMS, STATUS_META, STATUS_ORDER } from "../cabinData";
 import CabinTile from "./CabinTile";
 import FloorPlanArchitecture from "./FloorPlanArchitecture";
 

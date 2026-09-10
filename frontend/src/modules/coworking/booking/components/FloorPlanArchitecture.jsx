@@ -1,6 +1,6 @@
 import React from "react";
 import { FLOOR_PLAN_ROOMS } from "../../../../constants/coworkingFloorPlan";
-import { PASSAGE_BAND, PLANTS, SHARED_ROOMS } from "../floorPlanData";
+import { PASSAGE_BAND, PLANTS, SHARED_ROOMS } from "../cabinData";
 
 /*
  * The building itself: slab, walls, doors and fittings, drawn under the cabin

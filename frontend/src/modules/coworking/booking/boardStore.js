@@ -1,5 +1,5 @@
 import { useEffect, useReducer } from "react";
-import { SAMPLE_CABINS } from "./sampleFloor";
+import { CABIN_SEATS } from "./cabinData";
 
 /*
  * The board's single source of truth.
@@ -20,9 +20,32 @@ import { SAMPLE_CABINS } from "./sampleFloor";
  * wiring, or the two will disagree about what "booked" means.
  */
 
-const STORAGE_KEY = "oor.coworking.board.v1";
+const STORAGE_KEY = "oor.coworking.board.v3";
+const LEGACY_DEMO_STORAGE_KEY = "oor.coworking.board.v1";
+const RETIRED_DEMO_STORAGE_KEY = "oor.coworking.board.v2";
 const DAY = 24 * 60 * 60 * 1000;
 const UNDO_DEPTH = 15;
+
+// Physical cabin inventory is part of the coworking layout, not demo data.
+// Keep it visible without inventing tenant names, agreements, rents, or dues.
+const emptyInventory = () =>
+  Object.entries(CABIN_SEATS).map(([code, seats]) => ({
+    code,
+    label: `${code[0]}-${code.slice(1)}`,
+    wing: code[0],
+    seats,
+    status: "VACANT",
+    client: null,
+    contract: null,
+    holdExpiresAt: null,
+    unavailableReason: "",
+    vacantSince: null,
+    monthlyRent: 0,
+    deposit: 0,
+    amenities: [],
+    previousClients: [],
+    previousClientCount: 0,
+  }));
 
 const daysBetween = (from, to) => Math.round((new Date(to) - new Date(from)) / DAY);
 const addMonths = (iso, months) => {
@@ -372,16 +395,18 @@ const expireHolds = (state) => {
 };
 
 export const loadBoard = () => {
-  let base = { cabins: SAMPLE_CABINS, activity: [] };
+  let base = { cabins: emptyInventory(), activity: [] };
   try {
+    window.localStorage.removeItem(LEGACY_DEMO_STORAGE_KEY);
+    window.localStorage.removeItem(RETIRED_DEMO_STORAGE_KEY);
     const saved = window.localStorage.getItem(STORAGE_KEY);
     if (saved) {
       const parsed = JSON.parse(saved);
       if (Array.isArray(parsed?.cabins) && parsed.cabins.length) base = parsed;
     }
   } catch {
-    // Private mode, cleared storage, or a shape from an older build. Seeding
-    // from the sample floor is always a valid board, so never fail the screen.
+    // Private mode or cleared storage: the board starts empty until real
+    // coworking inventory is connected.
   }
   const swept = expireHolds(base);
   return { cabins: decorate(swept.cabins), activity: swept.activity, undoStack: [] };
@@ -404,7 +429,7 @@ export const resetBoard = () => {
   } catch {
     // ignore
   }
-  return { cabins: decorate(SAMPLE_CABINS), activity: [], undoStack: [] };
+  return { cabins: decorate(emptyInventory()), activity: [], undoStack: [] };
 };
 
 /** Reducer wrapper that keeps an undo stack and re-derives the day counts. */

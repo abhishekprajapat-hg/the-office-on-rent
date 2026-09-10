@@ -5,6 +5,7 @@ import ErrorBoundary from "./components/ErrorBoundary";
 import { ChatNotificationProvider } from "./context/chatNotificationProvider";
 import PermissionProvider from "./context/PermissionProvider";
 import CoworkingPermissionGate from "./components/coworking/CoworkingPermissionGate";
+import PageAccessGate from "./components/auth/PageAccessGate";
 import { updateMyLiveLocation } from "./services/userService";
 import BackToTopButton from "./components/layout/BackToTopButton";
 import Loader from "./components/layout/Loader";
@@ -31,6 +32,8 @@ const TeamManager = lazy(() => import("./modules/admin/TeamManager"));
 const UserDetailsEditor = lazy(() => import("./modules/admin/UserDetailsEditor"));
 const AdminNotifications = lazy(() => import("./modules/admin/AdminNotifications"));
 const AdminCommandConsole = lazy(() => import("./modules/admin/AdminCommandConsole"));
+const RoleTypesManager = lazy(() => import("./modules/admin/RoleTypesManager"));
+const RoleTypeDetail = lazy(() => import("./modules/admin/RoleTypeDetail"));
 const AdminMetaAdsPanel = lazy(() => import("./modules/admin/AdminMetaAdsPanel"));
 const TeamChat = lazy(() => import("./modules/chat/TeamChat"));
 const ChatMessageAlertToast = lazy(() => import("./components/layout/ChatMessageAlertToast"));
@@ -651,6 +654,20 @@ export default function App() {
     [userRole],
   );
 
+  // One gate, two regimes (see PageAccessGate): a role with configured page
+  // access is decided entirely by that configuration, so an Admin can grant a
+  // page as well as take one away. A role without it falls back to the built-in
+  // `allowedRoles` list passed here, which is the behaviour that always applied.
+  //
+  // Admin and Settings routes pass no allowedRoles - they keep their own role
+  // check below, so page access can narrow them but never widen them.
+  const withPageAccess = useCallback(
+    (page, element, allowedRoles) => (
+      <PageAccessGate page={page} allowedRoles={allowedRoles}>{element}</PageAccessGate>
+    ),
+    [],
+  );
+
   const toggleTheme = useCallback(() => {
     setTheme((prev) => (prev === "dark" ? "light" : "dark"));
   }, []);
@@ -668,133 +685,142 @@ export default function App() {
       <Route path="/dashboard" element={DashboardByRole} />
       <Route
         path="/leads"
-        element={canAccess(["ADMIN", ...MANAGEMENT_ROLES, "EXECUTIVE", "FIELD_EXECUTIVE", "CHANNEL_PARTNER"]) ? <LeadsMatrix /> : <Navigate to="/" />}
+        element={withPageAccess("leads", <LeadsMatrix />, ["ADMIN", ...MANAGEMENT_ROLES, "EXECUTIVE", "FIELD_EXECUTIVE", "CHANNEL_PARTNER"])}
       />
       <Route
         path="/leads/:leadId"
-        element={canAccess(["ADMIN", ...MANAGEMENT_ROLES, "EXECUTIVE", "FIELD_EXECUTIVE", "CHANNEL_PARTNER"]) ? <LeadsMatrix /> : <Navigate to="/" />}
+        element={withPageAccess("leads", <LeadsMatrix />, ["ADMIN", ...MANAGEMENT_ROLES, "EXECUTIVE", "FIELD_EXECUTIVE", "CHANNEL_PARTNER"])}
       />
       <Route
         path="/my-leads"
         element={
-          canAccess(["EXECUTIVE", "FIELD_EXECUTIVE"]) ? <LeadsMatrix /> : <Navigate to="/" />
+          withPageAccess("my_leads", <LeadsMatrix />, ["EXECUTIVE", "FIELD_EXECUTIVE"])
         }
       />
       <Route
         path="/my-leads/:leadId"
-        element={canAccess(["EXECUTIVE", "FIELD_EXECUTIVE"]) ? <LeadsMatrix /> : <Navigate to="/" />}
+        element={withPageAccess("my_leads", <LeadsMatrix />, ["EXECUTIVE", "FIELD_EXECUTIVE"])}
       />
       <Route
         path="/inventory"
-        element={(
-          canAccess(["ADMIN", ...MANAGEMENT_ROLES, "EXECUTIVE", "FIELD_EXECUTIVE", "CHANNEL_PARTNER"])
-          && (userRole !== "CHANNEL_PARTNER" || canChannelPartnerViewInventory)
-        ) ? <AssetVault /> : <Navigate to="/" />}
+        element={(userRole !== "CHANNEL_PARTNER" || canChannelPartnerViewInventory)
+          ? withPageAccess("inventory", <AssetVault />, ["ADMIN", ...MANAGEMENT_ROLES, "EXECUTIVE", "FIELD_EXECUTIVE", "CHANNEL_PARTNER"])
+          : <Navigate to="/" />}
       />
       <Route
         path="/inventory/:id"
-        element={(
-          canAccess(["ADMIN", ...MANAGEMENT_ROLES, "EXECUTIVE", "FIELD_EXECUTIVE", "CHANNEL_PARTNER"])
-          && (userRole !== "CHANNEL_PARTNER" || canChannelPartnerViewInventory)
-        ) ? <InventoryDetails /> : <Navigate to="/" />}
+        element={(userRole !== "CHANNEL_PARTNER" || canChannelPartnerViewInventory)
+          ? withPageAccess("inventory", <InventoryDetails />, ["ADMIN", ...MANAGEMENT_ROLES, "EXECUTIVE", "FIELD_EXECUTIVE", "CHANNEL_PARTNER"])
+          : <Navigate to="/" />}
       />
       <Route
         path="/projects"
-        element={(
-          canAccess(["ADMIN", ...MANAGEMENT_ROLES, "EXECUTIVE", "FIELD_EXECUTIVE", "CHANNEL_PARTNER"])
-          && (userRole !== "CHANNEL_PARTNER" || canChannelPartnerViewInventory)
-        ) ? <Projects /> : <Navigate to="/" />}
+        element={(userRole !== "CHANNEL_PARTNER" || canChannelPartnerViewInventory)
+          ? withPageAccess("projects", <Projects />, ["ADMIN", ...MANAGEMENT_ROLES, "EXECUTIVE", "FIELD_EXECUTIVE", "CHANNEL_PARTNER"])
+          : <Navigate to="/" />}
       />
       <Route
         path="/projects/:id"
-        element={(
-          canAccess(["ADMIN", ...MANAGEMENT_ROLES, "EXECUTIVE", "FIELD_EXECUTIVE", "CHANNEL_PARTNER"])
-          && (userRole !== "CHANNEL_PARTNER" || canChannelPartnerViewInventory)
-        ) ? <ProjectDetails /> : <Navigate to="/" />}
+        element={(userRole !== "CHANNEL_PARTNER" || canChannelPartnerViewInventory)
+          ? withPageAccess("projects", <ProjectDetails />, ["ADMIN", ...MANAGEMENT_ROLES, "EXECUTIVE", "FIELD_EXECUTIVE", "CHANNEL_PARTNER"])
+          : <Navigate to="/" />}
       />
       <Route
         path="/finance"
-        element={canAccess([
+        element={withPageAccess("finance", <FinancialCore />, [
           ...MANAGEMENT_ROLES,
           "EXECUTIVE",
           "FIELD_EXECUTIVE",
           "CHANNEL_PARTNER",
-        ]) ? <FinancialCore /> : <Navigate to="/" />}
+        ])}
       />
       <Route
         path="/map"
-        element={canAccess(["ADMIN", ...MANAGEMENT_ROLES, "FIELD_EXECUTIVE"]) ? <FieldOps /> : <Navigate to="/" />}
+        element={withPageAccess("field_ops", <FieldOps />, ["ADMIN", ...MANAGEMENT_ROLES, "FIELD_EXECUTIVE"])}
       />
       <Route
         path="/reports"
-        element={canAccess(["ADMIN", "MANAGER"]) ? <IntelligenceReports /> : <Navigate to="/" />}
+        element={withPageAccess("reports", <IntelligenceReports />, ["ADMIN", "MANAGER"])}
       />
       <Route
         path="/leaderboard"
-        element={canAccess(["ADMIN", ...MANAGEMENT_ROLES, "EXECUTIVE", "FIELD_EXECUTIVE", "CHANNEL_PARTNER"]) ? <RoleLeaderboard /> : <Navigate to="/" />}
+        element={withPageAccess("leaderboard", <RoleLeaderboard />, ["ADMIN", ...MANAGEMENT_ROLES, "EXECUTIVE", "FIELD_EXECUTIVE", "CHANNEL_PARTNER"])}
       />
       <Route
         path="/calendar"
-        element={canAccess(["ADMIN", ...MANAGEMENT_ROLES, "EXECUTIVE", "FIELD_EXECUTIVE"]) ? <MasterSchedule /> : <Navigate to="/" />}
+        element={withPageAccess("calendar", <MasterSchedule />, ["ADMIN", ...MANAGEMENT_ROLES, "EXECUTIVE", "FIELD_EXECUTIVE"])}
       />
       <Route
         path="/tasks"
         element={
-          canAccess(["ADMIN", ...MANAGEMENT_ROLES, "EXECUTIVE", "FIELD_EXECUTIVE", ...PRODUCTION_ROLES])
-            ? <TaskManager theme={theme} />
-            : <Navigate to="/" />
+          withPageAccess(
+            "tasks",
+            <TaskManager theme={theme} />,
+            ["ADMIN", ...MANAGEMENT_ROLES, "EXECUTIVE", "FIELD_EXECUTIVE", ...PRODUCTION_ROLES],
+          )
         }
       />
       <Route
         path="/attendance"
-        element={canAccess(["ADMIN", ...MANAGEMENT_ROLES, "EXECUTIVE", "FIELD_EXECUTIVE", ...PRODUCTION_ROLES, "CHANNEL_PARTNER"]) ? <AttendanceHub /> : <Navigate to="/" />}
+        element={withPageAccess("attendance", <AttendanceHub />, ["ADMIN", ...MANAGEMENT_ROLES, "EXECUTIVE", "FIELD_EXECUTIVE", ...PRODUCTION_ROLES, "CHANNEL_PARTNER"])}
       />
       <Route
         path="/admin/notifications"
-        element={["ADMIN", "MANAGER"].includes(userRole) ? <AdminNotifications /> : <Navigate to="/" />}
+        element={["ADMIN", "MANAGER"].includes(userRole) ? withPageAccess("admin_notifications", <AdminNotifications />) : <Navigate to="/" />}
       />
       <Route
         path="/admin/users"
-        element={canAccess(["ADMIN", ...MANAGEMENT_ROLES]) ? <TeamManager theme={theme} /> : <Navigate to="/" />}
+        element={canAccess(["ADMIN", ...MANAGEMENT_ROLES]) ? withPageAccess("admin_team", <TeamManager theme={theme} />) : <Navigate to="/" />}
       />
       <Route
         path="/admin/users/:userId"
-        element={["ADMIN", "MANAGER"].includes(userRole) ? <UserDetailsEditor theme={theme} /> : <Navigate to="/" />}
+        element={["ADMIN", "MANAGER"].includes(userRole) ? withPageAccess("admin_team", <UserDetailsEditor theme={theme} />) : <Navigate to="/" />}
       />
       <Route
+        path="/admin/role-types"
+        element={canAccess(["ADMIN", ...MANAGEMENT_ROLES])
+          ? withPageAccess("admin_role_types", <RoleTypesManager theme={theme} />)
+          : <Navigate to="/" />}
+      />
+      <Route path="/admin/role-types/:roleTypeId" element={canAccess(["ADMIN", ...MANAGEMENT_ROLES]) ? withPageAccess("admin_role_types", <RoleTypeDetail />) : <Navigate to="/" />} />
+      <Route
         path="/admin/console"
-        element={["ADMIN", "MANAGER"].includes(userRole) ? <AdminCommandConsole /> : <Navigate to="/" />}
+        element={["ADMIN", "MANAGER"].includes(userRole) ? withPageAccess("admin_console", <AdminCommandConsole />) : <Navigate to="/" />}
       />
       <Route
         path="/admin/meta-ads"
-        element={["ADMIN", "MANAGER"].includes(userRole) ? <AdminMetaAdsPanel theme={theme} /> : <Navigate to="/" />}
+        element={["ADMIN", "MANAGER"].includes(userRole) ? withPageAccess("admin_meta_ads", <AdminMetaAdsPanel theme={theme} />) : <Navigate to="/" />}
       />
       <Route
         path="/settings"
-        element={canAccess(["ADMIN", "MANAGER"]) ? <SystemSettings /> : <Navigate to="/" />}
+        element={canAccess(["ADMIN", "MANAGER"]) ? withPageAccess("settings", <SystemSettings />) : <Navigate to="/" />}
       />
       <Route
         path="/targets"
         element={
           isProductionRole(userRole)
-            ? <ProductionExecutiveDashboard mode="performance" />
-            : canAccess(["ADMIN", ...MANAGEMENT_ROLES, "EXECUTIVE", "FIELD_EXECUTIVE"])
-              ? <Performance />
-              : <Navigate to="/" />
+            ? withPageAccess("targets", <ProductionExecutiveDashboard mode="performance" />)
+            : withPageAccess(
+              "targets",
+              <Performance />,
+              ["ADMIN", ...MANAGEMENT_ROLES, "EXECUTIVE", "FIELD_EXECUTIVE"],
+            )
         }
       />
       <Route
         path="/chat"
         element={
-          canAccess(["ADMIN", ...MANAGEMENT_ROLES, "EXECUTIVE", "FIELD_EXECUTIVE", ...PRODUCTION_ROLES])
-            ? <TeamChat theme={theme} />
-            : <Navigate to="/" />
+          withPageAccess(
+            "chat",
+            <TeamChat theme={theme} />,
+            ["ADMIN", ...MANAGEMENT_ROLES, "EXECUTIVE", "FIELD_EXECUTIVE", ...PRODUCTION_ROLES],
+          )
         }
       />
       <Route
         path="/profile"
         element={
-          canAccess([
+          withPageAccess("profile", <UserProfile />, [
             "ADMIN",
             ...MANAGEMENT_ROLES,
             "EXECUTIVE",
@@ -802,8 +828,6 @@ export default function App() {
             ...PRODUCTION_ROLES,
             "CHANNEL_PARTNER",
           ])
-            ? <UserProfile />
-            : <Navigate to="/" />
         }
       />
       <Route
@@ -812,15 +836,19 @@ export default function App() {
       />
       <Route
         path="/coworking/booking-board"
-        element={canAccess(COWORKING_ROLES) ? (
-          <CoworkingPermissionGate permission="cabins.view"><CoworkingBookingBoard /></CoworkingPermissionGate>
-        ) : <Navigate to="/" />}
+        element={withPageAccess(
+          "coworking_booking",
+          <CoworkingPermissionGate permission="cabins.view"><CoworkingBookingBoard /></CoworkingPermissionGate>,
+          COWORKING_ROLES,
+        )}
       />
       <Route
         path="/coworking/clients"
-        element={canAccess(COWORKING_ROLES) ? (
-          <CoworkingPermissionGate permission="clients.view"><CoworkingClients /></CoworkingPermissionGate>
-        ) : <Navigate to="/" />}
+        element={withPageAccess(
+          "coworking_clients",
+          <CoworkingPermissionGate permission="clients.view"><CoworkingClients /></CoworkingPermissionGate>,
+          COWORKING_ROLES,
+        )}
       />
       <Route path="/privacy-policy" element={<DataUseNotice />} />
       <Route path="/terms-and-conditions" element={<ServiceTermsNotice />} />
@@ -832,6 +860,7 @@ export default function App() {
   ), [
     DashboardByRole,
     canAccess,
+    withPageAccess,
     canChannelPartnerViewInventory,
     theme,
     userRole,

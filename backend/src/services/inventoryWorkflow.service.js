@@ -7,6 +7,7 @@ const Lead = require("../models/Lead");
 const LeadDiary = require("../models/leadDiary.model");
 const LeadActivity = require("../models/leadActivity.model");
 const User = require("../models/User");
+const { resolveAccessProfile } = require("./access.service");
 const {
   USER_ROLES,
   EXECUTIVE_ROLES,
@@ -1412,7 +1413,7 @@ const sanitizeInventoryPayload = ({
   return safePayload;
 };
 
-const getInventoryScopeQueryForUser = (user) => {
+const getInventoryScopeQueryForUser = async (user) => {
   if (user.role === USER_ROLES.ADMIN) {
     return { companyId: getCompanyIdForUser(user) };
   }
@@ -1425,6 +1426,17 @@ const getInventoryScopeQueryForUser = (user) => {
       USER_ROLES.CHANNEL_PARTNER,
     ].includes(user.role)
   ) {
+    return {
+      companyId: getCompanyIdForUser(user),
+      ...(normalizeUserRoleType(user) === "BOTH" ? {} : { inventoryType: normalizeUserRoleType(user) }),
+    };
+  }
+
+  // A role outside the built-in inventory list reaches inventory only when an
+  // Admin has explicitly granted its role the Inventory page. Without that
+  // grant this still throws, so nothing changes for accounts never given it.
+  const access = await resolveAccessProfile(user);
+  if (access.enforcePageAccess && access.permissions.includes("page.inventory.view")) {
     return {
       companyId: getCompanyIdForUser(user),
       ...(normalizeUserRoleType(user) === "BOTH" ? {} : { inventoryType: normalizeUserRoleType(user) }),
@@ -1481,7 +1493,7 @@ const getInventoryList = async ({
   pagination = null,
   selectFields = "",
 }) => {
-  const scope = getInventoryScopeQueryForUser(user);
+  const scope = await getInventoryScopeQueryForUser(user);
   const query = { ...scope };
 
   if (filters.status && INVENTORY_STATUSES.includes(filters.status)) {
@@ -1716,7 +1728,7 @@ const getInventoryById = async ({ user, inventoryId }) => {
     throw createHttpError(400, "Invalid inventory id");
   }
 
-  const scope = getInventoryScopeQueryForUser(user);
+  const scope = await getInventoryScopeQueryForUser(user);
   const row = await applyInventoryPopulates(
     Inventory.findOne({
       _id: inventoryId,
@@ -1793,7 +1805,7 @@ const updateInventoryDirect = async ({ user, inventoryId, payload }) => {
   }
 
   const companyId = getCompanyIdForUser(user);
-  const scope = getInventoryScopeQueryForUser(user);
+  const scope = await getInventoryScopeQueryForUser(user);
   const inventory = await Inventory.findOne({
     _id: inventoryId,
     ...scope,
@@ -2039,7 +2051,7 @@ const createInventoryUpdateRequest = async ({
   }
 
   const companyId = getCompanyIdForUser(user);
-  const scope = getInventoryScopeQueryForUser(user);
+  const scope = await getInventoryScopeQueryForUser(user);
   const inventory = await Inventory.findOne({
     _id: inventoryId,
     ...scope,
@@ -2177,7 +2189,7 @@ const createInventoryDeleteRequest = async ({
   }
 
   const companyId = getCompanyIdForUser(user);
-  const scope = getInventoryScopeQueryForUser(user);
+  const scope = await getInventoryScopeQueryForUser(user);
   const inventory = await Inventory.findOne({
     _id: inventoryId,
     ...scope,
@@ -2348,7 +2360,7 @@ const approveRequest = async ({ user, requestId, io }) => {
 
     inventory = await Inventory.findOne({
       _id: request.inventoryId,
-      ...getInventoryScopeQueryForUser(user),
+      ...(await getInventoryScopeQueryForUser(user)),
     });
 
     if (!inventory) {
@@ -2424,7 +2436,7 @@ const approveRequest = async ({ user, requestId, io }) => {
 
     inventory = await Inventory.findOne({
       _id: request.inventoryId,
-      ...getInventoryScopeQueryForUser(user),
+      ...(await getInventoryScopeQueryForUser(user)),
     });
 
     if (!inventory) {

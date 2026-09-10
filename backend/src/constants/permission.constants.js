@@ -1,4 +1,5 @@
 const { USER_ROLES } = require("./role.constants");
+const { CRM_PAGES, toPagePermission } = require("./page.constants");
 
 // Canonical list of granular permissions for the coworking module.
 // Format: "<module>.<action>" — enforced on both the API (permission.middleware)
@@ -61,6 +62,17 @@ const PERMISSIONS = Object.freeze([
   "roles.view",
   "roles.manage",
 
+  // Role Type management is deliberately its own permission family, separate
+  // from "roles.*": an Admin can let a Manager edit roles without also handing
+  // over the ability to invent or delete Role Types (see MANAGER defaults and
+  // ADMIN_PROTECTED_PERMISSIONS below).
+  "role_types.view",
+  "role_types.create",
+  "role_types.update",
+  "role_types.status",
+  "role_types.delete",
+  "role_types.manage_roles",
+
   "audit_logs.view",
 ]);
 
@@ -79,18 +91,64 @@ const PERMISSION_GROUPS = Object.freeze({
   reports: ["reports.view", "reports.export"],
   users: ["users.view", "users.create", "users.update", "users.delete"],
   roles: ["roles.view", "roles.manage"],
+  role_types: [
+    "role_types.view",
+    "role_types.create",
+    "role_types.update",
+    "role_types.status",
+    "role_types.delete",
+    "role_types.manage_roles",
+  ],
   audit_logs: ["audit_logs.view"],
 });
 
 const PERMISSION_SET = new Set(PERMISSIONS);
-const isValidPermission = (permission) => PERMISSION_SET.has(permission);
+
+// Page access permissions ("page.<pageKey>.<action>") are generated from the
+// page catalogue rather than listed above, because the catalogue is the single
+// source of truth for which pages and actions exist.
+const PAGE_PERMISSIONS = Object.freeze(
+  CRM_PAGES.flatMap((page) => [
+    toPagePermission(page.key, "view"),
+    ...page.actions.map((action) => toPagePermission(page.key, action)),
+  ]),
+);
+const PAGE_PERMISSION_SET = new Set(PAGE_PERMISSIONS);
+
+const isValidPermission = (permission) =>
+  PERMISSION_SET.has(permission) || PAGE_PERMISSION_SET.has(permission);
+
+// Permissions only an ADMIN may hand out. A Manager who happens to hold one of
+// these still cannot grant it onward, which is what stops a Manager with
+// role-editing rights from minting an admin-equivalent role.
+const ADMIN_PROTECTED_PERMISSIONS = Object.freeze([
+  "role_types.create",
+  "role_types.update",
+  "role_types.status",
+  "role_types.delete",
+  "role_types.manage_roles",
+  "roles.manage",
+  "users.delete",
+]);
+
+const ADMIN_PROTECTED_PERMISSION_SET = new Set(ADMIN_PROTECTED_PERMISSIONS);
+const isAdminProtectedPermission = (permission) =>
+  ADMIN_PROTECTED_PERMISSION_SET.has(permission);
+
+// Role Type management is NOT part of the Manager default grant: per the access
+// spec a Manager receives it only when an Admin explicitly assigns it.
+const MANAGER_DEFAULT_PERMISSIONS = Object.freeze(
+  PERMISSIONS.filter((permission) => !permission.startsWith("role_types.")),
+);
 
 // ADMIN is not listed here — it always bypasses permission checks entirely
 // (mirrors the existing `canAccess` auto-grant convention on the frontend
 // and the ADMIN-is-company-root convention on the backend).
 const DEFAULT_ROLE_PERMISSIONS = Object.freeze({
-  [USER_ROLES.COWORKING_ADMIN]: [...PERMISSIONS],
-  [USER_ROLES.MANAGER]: [...PERMISSIONS],
+  [USER_ROLES.COWORKING_ADMIN]: [
+    ...PERMISSIONS.filter((permission) => !permission.startsWith("role_types.")),
+  ],
+  [USER_ROLES.MANAGER]: [...MANAGER_DEFAULT_PERMISSIONS],
 });
 
 const getDefaultPermissionsForRole = (role) => DEFAULT_ROLE_PERMISSIONS[role] || [];
@@ -98,7 +156,11 @@ const getDefaultPermissionsForRole = (role) => DEFAULT_ROLE_PERMISSIONS[role] ||
 module.exports = {
   PERMISSIONS,
   PERMISSION_GROUPS,
+  PAGE_PERMISSIONS,
   DEFAULT_ROLE_PERMISSIONS,
+  ADMIN_PROTECTED_PERMISSIONS,
+  MANAGER_DEFAULT_PERMISSIONS,
   isValidPermission,
+  isAdminProtectedPermission,
   getDefaultPermissionsForRole,
 };

@@ -1,7 +1,7 @@
 import React from "react";
-import { RefreshCw } from "lucide-react";
+import { ArrowUpDown, RefreshCw } from "lucide-react";
 import { FilterChips } from "../../../components/crm";
-import { Button, SearchInput, Tabs, TabButton, cn } from "../../../components/ui";
+import { Button, SearchInput, Select, Tabs, TabButton, cn } from "../../../components/ui";
 import { PIPELINE_VIEWS } from "./pipelineViews";
 
 /**
@@ -91,7 +91,27 @@ const PipelineToolbar = ({
 
         <FilterChips filters={filters} onToggle={onToggleFilter} onRemove={onRemoveFilter} />
 
-        <div className="ml-auto flex items-center gap-2">
+        {/*
+          Three sort tabs cost more width than a phone can spare next to the
+          filters, so below `sm` the same choice collapses into one control.
+        */}
+        <label className="flex items-center gap-2 sm:hidden">
+          <span className="sr-only">Sort leads by</span>
+          <ArrowUpDown aria-hidden="true" size={14} className="shrink-0 text-slate-500 dark:text-slate-400" />
+          <Select
+            className="h-8 w-auto py-0 text-[12px]"
+            value={sortBy}
+            onChange={(event) => onSortByChange?.(event.target.value)}
+          >
+            {sortOptions.map((option) => (
+              <option key={option.value} value={option.value}>
+                {option.label}
+              </option>
+            ))}
+          </Select>
+        </label>
+
+        <div className="ml-auto hidden items-center gap-2 sm:flex">
           <span className="text-[11.5px] text-slate-500 dark:text-slate-400">Sort</span>
           <Tabs className="border-b-0">
             {sortOptions.map((option) => (

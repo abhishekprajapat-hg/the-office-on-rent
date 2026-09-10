@@ -5,6 +5,7 @@ const LeadActivity = require("../models/leadActivity.model");
 const LeadDiary = require("../models/leadDiary.model");
 const LeadStatusRequest = require("../models/LeadStatusRequest");
 const logger = require("../config/logger");
+const { resolveAccessProfile } = require("../services/access.service");
 const { isDeepStrictEqual } = require("util");
 const {
   autoAssignLead,
@@ -1594,6 +1595,32 @@ const buildLeadQueryForUser = async (user) => {
 
   if (user.role === USER_ROLES.CHANNEL_PARTNER) {
     return addLeadRoleTypeScope({ ...companyScope, createdBy: user._id }, user);
+  }
+
+  // A role outside the built-in lead hierarchy (Production Executive, Community
+  // Manager, Coworking admin, or any custom role built on them) reaches leads
+  // only when an Admin has explicitly granted its role the Leads page. Without
+  // that grant this still returns null, and the callers still answer 403 — so
+  // nothing changes for accounts that were never given the page.
+  const access = await resolveAccessProfile(user);
+  const hasLeadsPage =
+    access.enforcePageAccess
+    && (access.permissions.includes("page.leads.view")
+      || access.permissions.includes("page.my_leads.view"));
+
+  if (hasLeadsPage) {
+    // Only an Admin can set a role's data scope, so an explicit "ALL" is an
+    // instruction to honour. Every other scope collapses to the same
+    // least-privilege answer here: these roles sit outside the lead hierarchy,
+    // so they have no team beneath them to widen to.
+    if (access.dataScope === "ALL") {
+      return addLeadRoleTypeScope({ ...companyScope }, user);
+    }
+
+    return addLeadRoleTypeScope({
+      ...companyScope,
+      $or: [{ assignedTo: user._id }, { createdBy: user._id }],
+    }, user);
   }
 
   return null;

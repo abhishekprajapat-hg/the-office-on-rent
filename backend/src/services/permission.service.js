@@ -8,6 +8,12 @@ const {
 } = require("../constants/permission.constants");
 const { createHttpError } = require("../utils/httpError");
 const { writeAuditLog } = require("./auditLog.service");
+const {
+  resolveEffectivePermissions,
+  hasPermission,
+  assertGrantablePermissions,
+  invalidateAccessCache,
+} = require("./access.service");
 
 const isValidObjectId = (value) => mongoose.Types.ObjectId.isValid(value);
 
@@ -22,23 +28,11 @@ const getCompanyIdForUser = (user) => {
 // ADMIN always has every permission — mirrors the ADMIN auto-grant
 // convention used by canAccess() on the frontend and by resolveCompanyContext
 // on the backend (ADMIN is the tenant root).
+//
+// Permission resolution itself now lives in access.service.js, which unions the
+// legacy role defaults / overrides read here with the dynamic Role document a
+// user may be assigned to.
 const isAdminRole = (role) => role === USER_ROLES.ADMIN;
-
-const resolveEffectivePermissions = async ({ companyId, role }) => {
-  if (isAdminRole(role)) return [...PERMISSIONS];
-
-  const override = await RolePermission.findOne({ companyId, role }).select("permissions").lean();
-  if (override) return override.permissions;
-
-  return getDefaultPermissionsForRole(role);
-};
-
-const hasPermission = async (user, permission) => {
-  if (isAdminRole(user?.role)) return true;
-  const companyId = getCompanyIdForUser(user);
-  const permissions = await resolveEffectivePermissions({ companyId, role: user.role });
-  return permissions.includes(permission);
-};
 
 const listRolesWithPermissions = async (companyId) => {
   const overrides = await RolePermission.find({ companyId }).select("role permissions updatedAt").lean();
@@ -71,6 +65,11 @@ const updateRolePermissions = async ({ companyId, role, permissions, actingUser,
   }
 
   const uniquePermissions = [...new Set(permissions)];
+
+  // A non-admin editor may only hand out what they hold themselves, and never
+  // an admin-protected permission.
+  await assertGrantablePermissions({ actor: actingUser, permissions: uniquePermissions });
+
   const previous = await RolePermission.findOne({ companyId, role }).lean();
 
   const updated = await RolePermission.findOneAndUpdate(
@@ -78,6 +77,8 @@ const updateRolePermissions = async ({ companyId, role, permissions, actingUser,
     { $set: { permissions: uniquePermissions, updatedBy: actingUser._id } },
     { new: true, upsert: true, setDefaultsOnInsert: true },
   ).lean();
+
+  invalidateAccessCache();
 
   await writeAuditLog({
     companyId,

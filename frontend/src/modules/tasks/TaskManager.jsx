@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useCallback, useMemo, useRef } from "react";
+import "./tasks-reference.css";
 import { useNavigate } from "react-router-dom";
 import { motion as Motion, AnimatePresence } from "framer-motion";
 import {
@@ -25,7 +26,12 @@ import {
   Users,
   Flag,
   Tag,
-  AlignLeft
+  AlignLeft,
+  MoreVertical,
+  Lightbulb,
+  FileText,
+  BarChart3,
+  CheckCircle2
 } from "lucide-react";
 import {
   getTasks,
@@ -45,6 +51,40 @@ const STATUS_COLUMNS = [
   { id: "TODO", label: "To Do", color: "text-sky-400 border-sky-400 bg-sky-400/5" },
   { id: "IN_PROGRESS", label: "In Progress", color: "text-amber-400 border-amber-400 bg-amber-400/5" },
   { id: "COMPLETED", label: "Completed", color: "text-emerald-400 border-emerald-400 bg-emerald-400/5" }
+];
+
+// Workload buckets shown on the Team Tasks roster. Derived from each member's open
+// task load because the API exposes no live presence signal.
+const WORKLOAD_STATUSES = [
+  { id: "busy", label: "Busy", dot: "bg-rose-500", bar: "bg-rose-500", text: "text-rose-500" },
+  { id: "balanced", label: "Balanced", dot: "bg-blue-500", bar: "bg-blue-500", text: "text-blue-500" },
+  { id: "available", label: "Available", dot: "bg-emerald-500", bar: "bg-emerald-500", text: "text-emerald-500" },
+  { id: "offline", label: "Offline", dot: "bg-slate-400", bar: "bg-slate-400", text: "text-slate-400" }
+];
+
+const workloadStatusFor = (stat) => {
+  const total = stat?.total || 0;
+  if (total === 0) return "offline";
+  const open = total - (stat.COMPLETED || 0);
+  if ((stat.overdue || 0) > 0 || open >= 5) return "busy";
+  if (open >= 3) return "balanced";
+  return "available";
+};
+
+const STATUS_DOTS = {
+  BACKLOG: "bg-slate-400",
+  TODO: "bg-slate-400",
+  IN_PROGRESS: "bg-sky-500",
+  COMPLETED: "bg-emerald-500"
+};
+
+const PRIORITY_DOTS = { LOW: "bg-blue-500", MEDIUM: "bg-amber-500", HIGH: "bg-rose-500" };
+
+const ROSTER_SORTS = [
+  { id: "overdue", label: "Most overdue" },
+  { id: "tasks", label: "Most tasks" },
+  { id: "progress", label: "Least progress" },
+  { id: "name", label: "Name (A-Z)" }
 ];
 
 const AVATAR_COLORS = [
@@ -73,6 +113,10 @@ export default function TaskManager({ theme = "light" }) {
   const canViewRoster = ["ADMIN", "MANAGER"].includes(currentRole);
   const currentUserId = (() => {
     try { const user = JSON.parse(localStorage.getItem("user") || "{}"); return String(user.id || user._id || ""); }
+    catch { return ""; }
+  })();
+  const currentUserName = (() => {
+    try { const user = JSON.parse(localStorage.getItem("user") || "{}"); return String(user.name || "").trim(); }
     catch { return ""; }
   })();
   const taskReferenceId = (value) => String(value?._id || value || "");
@@ -107,7 +151,6 @@ export default function TaskManager({ theme = "light" }) {
   const [priorityFilter, setPriorityFilter] = useState("");
   const [assigneeFilter, setAssigneeFilter] = useState("");
   const [taskScope, setTaskScope] = useState(canViewRoster ? "all" : "mine");
-  const [statusUpdating, setStatusUpdating] = useState("");
   const [leadFilter, setLeadFilter] = useState("");
   const [tagFilter, setTagFilter] = useState("");
 
@@ -138,6 +181,8 @@ export default function TaskManager({ theme = "light" }) {
 
   // Subtask & Tag inputs inside form
   const [newSubtaskTitle, setNewSubtaskTitle] = useState("");
+  const [formSubtaskEditIndex, setFormSubtaskEditIndex] = useState(null);
+  const [formSubtaskEditValue, setFormSubtaskEditValue] = useState("");
   const [newTagInput, setNewTagInput] = useState("");
 
   // Drag states
@@ -149,20 +194,31 @@ export default function TaskManager({ theme = "light" }) {
   const [selectedUserObj, setSelectedUserObj] = useState(null);
   const [userStatsMap, setUserStatsMap] = useState({});
   const [rosterLoading, setRosterLoading] = useState(false);
+  const [rosterSearch, setRosterSearch] = useState("");
+  const [rosterRoleFilter, setRosterRoleFilter] = useState("");
+  const [rosterWorkloadFilter, setRosterWorkloadFilter] = useState("");
+  const [rosterSort, setRosterSort] = useState("overdue");
+  const [showRosterFilters, setShowRosterFilters] = useState(true);
+  const [openMemberMenuId, setOpenMemberMenuId] = useState(null);
 
   // Google Tasks-style flat list: quick add, inline expand, collapsible completed section
-  const [expandedTaskId, setExpandedTaskId] = useState(null);
   const [quickAddTitle, setQuickAddTitle] = useState("");
   const [quickAddSubmitting, setQuickAddSubmitting] = useState(false);
-  const [showCompleted, setShowCompleted] = useState(false);
   const [showFilters, setShowFilters] = useState(false);
+  const [selectedTaskId, setSelectedTaskId] = useState(null);
+  const [mobileTaskDetailsOpen, setMobileTaskDetailsOpen] = useState(false);
+  const [workloadExpanded, setWorkloadExpanded] = useState(true);
+  const [openTaskMenuId, setOpenTaskMenuId] = useState(null);
   const [inlineSubtaskInput, setInlineSubtaskInput] = useState("");
+  // Subtask being renamed on a saved task, keyed as `${taskId}:${index}`
+  const [subtaskEditKey, setSubtaskEditKey] = useState(null);
+  const [subtaskEditValue, setSubtaskEditValue] = useState("");
 
   // Fetch initial data
   const fetchSequence = useRef(0);
-  const fetchData = useCallback(async () => {
+  const fetchData = useCallback(async ({ silent = false } = {}) => {
     const sequence = ++fetchSequence.current;
-    setLoading(true);
+    if (!silent) setLoading(true);
     setError("");
     try {
       const filters = {};
@@ -193,9 +249,9 @@ export default function TaskManager({ theme = "light" }) {
       if (leadsData) setLeads(leadsData);
     } catch (err) {
       console.error(err);
-      if (sequence === fetchSequence.current) setError("Failed to retrieve task details");
+      if (sequence === fetchSequence.current && !silent) setError("Failed to retrieve task details");
     } finally {
-      if (sequence === fetchSequence.current) setLoading(false);
+      if (sequence === fetchSequence.current && !silent) setLoading(false);
     }
   }, [statusFilter, priorityFilter, assigneeFilter, leadFilter, searchQuery, tagFilter, isProductionExecutive, taskScope]);
 
@@ -238,6 +294,27 @@ export default function TaskManager({ theme = "light" }) {
     setViewLevel("board");
   };
 
+  // Roster card menu: start a new task with this member pre-selected as the assignee
+  const handleAssignTaskToMember = (user) => {
+    setOpenMemberMenuId(null);
+    setEditingTask(null);
+    setFormData({
+      title: "",
+      description: "",
+      status: "TODO",
+      priority: "MEDIUM",
+      dueDate: "",
+      assignedTo: user._id,
+      leadId: "",
+      subtasks: [],
+      tags: []
+    });
+    setNewSubtaskTitle("");
+    handleCancelFormSubtaskEdit();
+    setNewTagInput("");
+    setIsModalOpen(true);
+  };
+
   const handleBackToRoster = () => {
     setViewLevel("roster");
     setSelectedUserObj(null);
@@ -274,6 +351,7 @@ export default function TaskManager({ theme = "light" }) {
       tags: []
     });
     setNewSubtaskTitle("");
+    handleCancelFormSubtaskEdit();
     setNewTagInput("");
     setIsModalOpen(true);
   };
@@ -293,6 +371,7 @@ export default function TaskManager({ theme = "light" }) {
       tags: task.tags || []
     });
     setNewSubtaskTitle("");
+    handleCancelFormSubtaskEdit();
     setNewTagInput("");
     setIsModalOpen(true);
   };
@@ -349,17 +428,9 @@ export default function TaskManager({ theme = "light" }) {
       } else {
         const created = await createTask(payload);
         if (created) {
-          setSuccess("Task created successfully");
+          const assigneeName = assignableUsers.find(u => String(u._id) === String(formData.assignedTo))?.name;
+          setSuccess(assigneeName ? `Task created and assigned to ${assigneeName}` : "Task created successfully");
           setIsModalOpen(false);
-          setTaskScope("assigned");
-          setAssigneeFilter("");
-          setStatusFilter("");
-          setPriorityFilter("");
-          setLeadFilter("");
-          setTagFilter("");
-          setSearchQuery("");
-          setSelectedUserObj(null);
-          setViewLevel("board");
           fetchData();
         }
       }
@@ -385,20 +456,26 @@ export default function TaskManager({ theme = "light" }) {
   };
 
   const handleUpdateStatus = async (taskId, newStatus) => {
-    if (statusUpdating) return;
-    setStatusUpdating(taskId);
+    const previousTasks = tasks;
+    const previousDetails = detailsTask;
+
+    // Optimistic: paint the new status right away, no spinner, no refetch flash
+    setTasks(prev => prev.map(t => (t._id === taskId ? { ...t, status: newStatus } : t)));
+    setDetailsTask(prev => (prev?._id === taskId ? { ...prev, status: newStatus } : prev));
+
     try {
       const updated = await updateTask(taskId, { status: newStatus });
       if (updated) {
         setSuccess("Status updated");
-        setDetailsTask(prev => prev?._id === taskId ? updated : prev);
-        fetchData();
+        setTasks(prev => prev.map(t => (t._id === taskId ? updated : t)));
+        setDetailsTask(prev => (prev?._id === taskId ? updated : prev));
       }
+      fetchData({ silent: true });
     } catch (err) {
       console.error(err);
+      setTasks(previousTasks);
+      setDetailsTask(previousDetails);
       setError("Failed to update status");
-    } finally {
-      setStatusUpdating("");
     }
   };
 
@@ -439,18 +516,26 @@ export default function TaskManager({ theme = "light" }) {
 
   const handleInlineUpdate = async (taskId, patch) => {
     if (!canEditTask(tasks.find(task => task._id === taskId))) return;
+    const previousTasks = tasks;
+
+    // assignedTo travels as an id but renders as a populated user, so swap it locally
+    const localPatch = { ...patch };
+    if ("assignedTo" in patch) {
+      const assignee = teamUsers.find(u => String(u._id) === String(patch.assignedTo));
+      localPatch.assignedTo = assignee
+        ? { _id: assignee._id, name: assignee.name, role: assignee.role, profileImageUrl: assignee.profileImageUrl }
+        : null;
+    }
+    setTasks(prev => prev.map(t => (t._id === taskId ? { ...t, ...localPatch } : t)));
+
     try {
       await updateTask(taskId, patch);
-      fetchData();
+      fetchData({ silent: true });
     } catch (err) {
       console.error(err);
+      setTasks(previousTasks);
       setError("Failed to update task");
     }
-  };
-
-  const handleToggleRowExpand = (taskId) => {
-    setExpandedTaskId((prev) => (prev === taskId ? null : taskId));
-    setInlineSubtaskInput("");
   };
 
   const handleInlineAddSubtask = (task) => {
@@ -462,7 +547,58 @@ export default function TaskManager({ theme = "light" }) {
 
   const handleInlineToggleSubtask = (task, index) => {
     const updatedSubtasks = (task.subtasks || []).map((s, i) => (i === index ? { ...s, isCompleted: !s.isCompleted } : s));
-    handleInlineUpdate(task._id, { subtasks: updatedSubtasks });
+    persistSubtasks(task, updatedSubtasks);
+  };
+
+  // Subtask edit / delete on an already saved task (expanded row + details modal)
+  const persistSubtasks = async (task, nextSubtasks) => {
+    if (!task || !canEditTask(task)) return;
+    const previousTasks = tasks;
+    const previousDetails = detailsTask;
+
+    setTasks(prev => prev.map(t => (t._id === task._id ? { ...t, subtasks: nextSubtasks } : t)));
+    setDetailsTask(prev => (prev?._id === task._id ? { ...prev, subtasks: nextSubtasks } : prev));
+
+    try {
+      const updated = await updateTask(task._id, { subtasks: nextSubtasks });
+      if (updated) {
+        setTasks(prev => prev.map(t => (t._id === task._id ? updated : t)));
+        setDetailsTask(prev => (prev?._id === task._id ? updated : prev));
+      }
+      fetchData({ silent: true });
+    } catch (err) {
+      console.error(err);
+      setTasks(previousTasks);
+      setDetailsTask(previousDetails);
+      setError(err.response?.data?.message || "Failed to update checklist");
+    }
+  };
+
+  const handleStartSubtaskEdit = (task, index, title) => {
+    if (!canEditTask(task)) return;
+    setSubtaskEditKey(`${task._id}:${index}`);
+    setSubtaskEditValue(title || "");
+  };
+
+  const handleCancelSubtaskEdit = () => {
+    setSubtaskEditKey(null);
+    setSubtaskEditValue("");
+  };
+
+  const handleSaveSubtaskEdit = async (task, index) => {
+    const title = subtaskEditValue.trim();
+    if (!title) return;
+    const nextSubtasks = (task.subtasks || []).map((s, i) => (i === index ? { ...s, title } : s));
+    handleCancelSubtaskEdit();
+    await persistSubtasks(task, nextSubtasks);
+  };
+
+  const handleDeleteSubtask = async (task, index) => {
+    if (!canEditTask(task)) return;
+    if (!window.confirm("Delete this subtask?")) return;
+    const nextSubtasks = (task.subtasks || []).filter((_, i) => i !== index);
+    handleCancelSubtaskEdit();
+    await persistSubtasks(task, nextSubtasks);
   };
 
   // Drag and Drop (Native HTML5)
@@ -561,6 +697,27 @@ export default function TaskManager({ theme = "light" }) {
       ...prev,
       subtasks: (prev.subtasks || []).filter((_, i) => i !== index)
     }));
+    handleCancelFormSubtaskEdit();
+  };
+
+  const handleStartFormSubtaskEdit = (index, title) => {
+    setFormSubtaskEditIndex(index);
+    setFormSubtaskEditValue(title || "");
+  };
+
+  const handleCancelFormSubtaskEdit = () => {
+    setFormSubtaskEditIndex(null);
+    setFormSubtaskEditValue("");
+  };
+
+  const handleSaveFormSubtaskEdit = () => {
+    const title = formSubtaskEditValue.trim();
+    if (!title || formSubtaskEditIndex === null) return;
+    setFormData(prev => ({
+      ...prev,
+      subtasks: (prev.subtasks || []).map((s, i) => (i === formSubtaskEditIndex ? { ...s, title } : s))
+    }));
+    handleCancelFormSubtaskEdit();
   };
 
   const handleToggleSubtaskInForm = (index) => {
@@ -696,194 +853,111 @@ export default function TaskManager({ theme = "light" }) {
     return new Date(task.dueDate) < new Date().setHours(0,0,0,0);
   };
 
-  // Google Tasks-style row: checkbox + title + meta line, expands in place for full details
-  const renderTaskRow = (task) => {
-    const priority = PRIORITIES.find(p => p.value === task.priority) || PRIORITIES[1];
-    const expired = isOverdue(task);
-    const progress = getSubtasksProgress(task);
-    const isExpanded = expandedTaskId === task._id;
-    const isDone = task.status === "COMPLETED";
-    const priorityDot = priority.value === "HIGH" ? "bg-rose-500" : priority.value === "MEDIUM" ? "bg-amber-500" : "bg-blue-500";
+  // Task shown in the side detail panel: the clicked one, falling back to the first row
+  const panelTask = useMemo(
+    () => sortedTasks.find(t => t._id === selectedTaskId) || sortedTasks[0] || null,
+    [sortedTasks, selectedTaskId]
+  );
 
-    return (
-      <div key={task._id} className={isExpanded ? (isDark ? "bg-slate-900/40" : "bg-slate-50") : ""}>
-        <div className="group flex items-start gap-3 p-3">
-          <button
-            type="button"
-            onClick={(e) => { e.stopPropagation(); handleToggleComplete(task); }}
-            disabled={Boolean(statusUpdating)}
-            aria-label={isDone ? `Reopen ${task.title}` : `Mark ${task.title} completed`}
-            title={isDone ? "Mark as not done" : "Mark as done"}
-            className={`mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-full border-2 transition-colors ${
-              isDone
-                ? "border-emerald-500 bg-emerald-500 text-white"
-                : isDark ? "border-slate-600 hover:border-sky-400" : "border-slate-300 hover:border-sky-500"
-            }`}
-          >
-            {isDone && <Check size={12} strokeWidth={3} />}
-          </button>
-
-          <div className="min-w-0 flex-1 cursor-pointer" onClick={() => handleToggleRowExpand(task._id)}>
-            <div className="flex items-center gap-2">
-              <p className={`truncate text-sm font-semibold ${isDone ? `line-through ${styles.label}` : styles.title}`}>
-                {task.title}
-              </p>
-              {!isDone && <span className={`h-1.5 w-1.5 shrink-0 rounded-full ${priorityDot}`} title={`${priority.label} priority`} />}
-            </div>
-            {(task.dueDate || (task.assignedTo && !selectedUserObj) || progress || (task.tags && task.tags.length > 0)) && (
-              <div className="mt-0.5 flex flex-wrap items-center gap-x-3 gap-y-1 text-[11px]">
-                {task.dueDate && (
-                  <span className={`flex items-center gap-1 ${expired && !isDone ? "font-bold text-rose-500" : styles.label}`}>
-                    <Calendar size={10} /> {formatDate(task.dueDate)}
-                  </span>
-                )}
-                {task.assignedTo && !selectedUserObj && (
-                  <span className={`flex items-center gap-1 ${styles.label}`}>
-                    <User size={10} /> {task.assignedTo.name}
-                  </span>
-                )}
-                {progress && (
-                  <span className={`flex items-center gap-1 ${styles.label}`}>
-                    <CheckSquare size={10} /> {progress.completed}/{progress.total}
-                  </span>
-                )}
-                {task.tags?.slice(0, 2).map((t) => (
-                  <span key={t} className={`rounded px-1.5 py-0.5 text-[9px] font-bold border ${TAG_COLORS[t] || "bg-sky-500/10 text-sky-400 border-sky-500/20"}`}>
-                    {t}
-                  </span>
-                ))}
-              </div>
-            )}
-          </div>
-
-          <select
-            aria-label={`Status for ${task.title}`}
-            value={task.status}
-            disabled={Boolean(statusUpdating)}
-            onChange={(event) => handleUpdateStatus(task._id, event.target.value)}
-            className={`h-8 max-w-32 rounded-lg border px-2 text-xs font-semibold ${styles.input}`}
-          >
-            {STATUS_COLUMNS.map(option => <option key={option.id} value={option.id}>{option.label}</option>)}
-          </select>
-          <ChevronRight
-            size={16}
-            onClick={() => handleToggleRowExpand(task._id)}
-            className={`mt-1 shrink-0 cursor-pointer transition-transform ${styles.label} ${isExpanded ? "rotate-90" : ""}`}
-          />
-        </div>
-
-        {isExpanded && (
-          <div className={`space-y-3 border-t px-4 pb-4 pt-3 ${isDark ? "border-white/5" : "border-slate-100"}`}>
-            {task.description && <p className={`text-xs ${styles.label}`}>{task.description}</p>}
-
-            <div className="flex flex-wrap items-center gap-2">
-              <input
-                type="date"
-                disabled={!canEditTask(task)}
-                value={task.dueDate ? new Date(task.dueDate).toISOString().split("T")[0] : ""}
-                onChange={(e) => handleInlineUpdate(task._id, { dueDate: e.target.value || null })}
-                className={`h-8 rounded-lg border px-2 text-xs ${styles.input}`}
-              />
-              <select
-                value={task.priority}
-                disabled={!canEditTask(task)}
-                onChange={(e) => handleInlineUpdate(task._id, { priority: e.target.value })}
-                className={`h-8 rounded-lg border px-2 text-xs font-semibold ${styles.input}`}
-              >
-                {PRIORITIES.map(p => <option key={p.value} value={p.value}>{p.label}</option>)}
-              </select>
-              <select
-                value={task.status}
-                aria-label={`Update status for ${task.title}`}
-                disabled={Boolean(statusUpdating)}
-                onChange={(e) => handleUpdateStatus(task._id, e.target.value)}
-                className={`h-8 rounded-lg border px-2 text-xs font-semibold ${styles.input}`}
-              >
-                {STATUS_COLUMNS.map(c => <option key={c.id} value={c.id}>{c.label}</option>)}
-              </select>
-            </div>
-
-            {task.leadId && !isProductionExecutive && (
-              <div className={`flex items-center gap-1 text-xs ${styles.label}`}>
-                <LinkIcon size={11} /> Linked lead: {task.leadId.name}
-              </div>
-            )}
-
-            {selectedUserObj && task.assignedTo && (
-              <div className={`flex items-center gap-1 text-xs ${styles.label}`}>
-                <User size={11} /> Assigned to {task.assignedTo.name}
-              </div>
-            )}
-
-            {/* Subtasks checklist */}
-            <div className="space-y-1.5">
-              {(task.subtasks || []).map((s, i) => (
-                <label key={i} className="flex items-center gap-2 text-xs">
-                  <input
-                    type="checkbox"
-                    checked={s.isCompleted}
-                    disabled={!canEditTask(task)}
-                    onChange={() => handleInlineToggleSubtask(task, i)}
-                    className="h-3.5 w-3.5 rounded"
-                  />
-                  <span className={s.isCompleted ? `line-through ${styles.label}` : styles.title}>{s.title}</span>
-                </label>
-              ))}
-              <div className="flex items-center gap-2">
-                <input
-                  type="text"
-                  value={inlineSubtaskInput}
-                  disabled={!canEditTask(task)}
-                  onChange={(e) => setInlineSubtaskInput(e.target.value)}
-                  onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); handleInlineAddSubtask(task); } }}
-                  placeholder="Add a subtask..."
-                  className={`h-8 flex-1 rounded-lg border px-2 text-xs ${styles.input}`}
-                />
-                <button
-                  type="button"
-                  onClick={() => handleInlineAddSubtask(task)}
-                  disabled={!canEditTask(task)}
-                  className={`h-8 rounded-lg border px-2.5 text-xs font-bold ${styles.button}`}
-                >
-                  Add
-                </button>
-              </div>
-            </div>
-
-            {task.tags && task.tags.length > 0 && (
-              <div className="flex flex-wrap gap-1">
-                {task.tags.map((t) => (
-                  <span key={t} className={`rounded px-1.5 py-0.5 text-[9px] font-bold border ${TAG_COLORS[t] || "bg-sky-500/10 text-sky-400 border-sky-500/20"}`}>
-                    {t}
-                  </span>
-                ))}
-              </div>
-            )}
-
-            <div className="flex items-center justify-between pt-1">
-              <span className={`text-[10px] ${styles.label}`}>Created by {task.createdBy?.name || "System"}</span>
-              <div className="flex items-center gap-1.5">
-                <button
-                  onClick={() => handleOpenEditModal(task)}
-                  disabled={!canEditTask(task)}
-                  className={`flex h-8 items-center gap-1 rounded-lg border px-2.5 text-xs font-semibold ${styles.button}`}
-                >
-                  <Edit2 size={12} /> Edit
-                </button>
-                <button
-                  onClick={() => handleDeleteTask(task._id)}
-                  disabled={!canDeleteTask(task)}
-                  className="flex h-8 items-center gap-1 rounded-lg border border-rose-500/20 px-2.5 text-xs font-semibold text-rose-500 hover:bg-rose-500/10"
-                >
-                  <Trash2 size={12} /> Delete
-                </button>
-              </div>
-            </div>
-          </div>
-        )}
-      </div>
-    );
+  const formatDateTime = (value) => {
+    if (!value) return "";
+    return new Date(value).toLocaleString("en-IN", {
+      day: "numeric", month: "short", year: "numeric", hour: "numeric", minute: "2-digit"
+    });
   };
+
+  const boardCompletion = stats.total > 0 ? Math.round(((stats.COMPLETED || 0) / stats.total) * 100) : 0;
+  const memberStatus = WORKLOAD_STATUSES.find(w => w.id === workloadStatusFor(stats)) || WORKLOAD_STATUSES[3];
+
+  // Roster: per-member rows (stats + workload bucket), filtered and sorted for the grid
+  const rosterRows = useMemo(() => {
+    return teamUsers.map((user) => {
+      const stat = userStatsMap[user._id] || {};
+      const total = stat.total || 0;
+      const done = stat.COMPLETED || 0;
+      const overdue = stat.overdue || 0;
+      return {
+        user,
+        total,
+        done,
+        overdue,
+        progress: total > 0 ? Math.round((done / total) * 100) : 0,
+        status: WORKLOAD_STATUSES.find(w => w.id === workloadStatusFor(stat)) || WORKLOAD_STATUSES[3]
+      };
+    });
+  }, [teamUsers, userStatsMap]);
+
+  const rosterRoles = useMemo(
+    () => [...new Set(teamUsers.map(u => u.role).filter(Boolean))].sort(),
+    [teamUsers]
+  );
+
+  const visibleRosterRows = useMemo(() => {
+    const term = rosterSearch.trim().toLowerCase();
+    const rows = rosterRows.filter(row => {
+      if (term && !`${row.user.name || ""} ${row.user.email || ""}`.toLowerCase().includes(term)) return false;
+      if (rosterRoleFilter && row.user.role !== rosterRoleFilter) return false;
+      if (rosterWorkloadFilter && row.status.id !== rosterWorkloadFilter) return false;
+      return true;
+    });
+
+    const byName = (a, b) => String(a.user.name || "").localeCompare(String(b.user.name || ""));
+    return [...rows].sort((a, b) => {
+      if (rosterSort === "name") return byName(a, b);
+      if (rosterSort === "tasks") return b.total - a.total || byName(a, b);
+      if (rosterSort === "progress") return a.progress - b.progress || byName(a, b);
+      return b.overdue - a.overdue || b.total - a.total || byName(a, b);
+    });
+  }, [rosterRows, rosterSearch, rosterRoleFilter, rosterWorkloadFilter, rosterSort]);
+
+  const rosterSummary = useMemo(() => {
+    const totals = rosterRows.reduce((acc, row) => ({
+      total: acc.total + row.total,
+      done: acc.done + row.done,
+      overdue: acc.overdue + row.overdue
+    }), { total: 0, done: 0, overdue: 0 });
+
+    const members = rosterRows.length;
+    const workload = WORKLOAD_STATUSES.map(status => {
+      const count = rosterRows.filter(row => row.status.id === status.id).length;
+      return { ...status, count, pct: members > 0 ? Math.round((count / members) * 100) : 0 };
+    });
+    const membersWithOverdue = rosterRows.filter(row => row.overdue > 0).length;
+
+    return {
+      members,
+      ...totals,
+      completionRate: totals.total > 0 ? Math.round((totals.done / totals.total) * 100) : 0,
+      workload,
+      membersWithOverdue,
+      overduePct: members > 0 ? Math.round((membersWithOverdue / members) * 100) : 0,
+      overdueRows: rosterRows.filter(row => row.overdue > 0).sort((a, b) => b.overdue - a.overdue)
+    };
+  }, [rosterRows]);
+
+  // Assignee options for the task form. The current user is always present so anyone
+  // — admins included — can assign a task to themselves, and the assignee of the task
+  // being edited is kept even if they are no longer on the active roster.
+  const assignableUsers = useMemo(() => {
+    const list = [...teamUsers];
+    const has = (id) => list.some(u => String(u._id) === String(id));
+
+    if (currentUserId && !has(currentUserId)) {
+      list.push({ _id: currentUserId, name: currentUserName || "Me", role: currentRole });
+    }
+
+    const editingAssignee = editingTask?.assignedTo;
+    if (editingAssignee?._id && !has(editingAssignee._id)) {
+      list.push({ _id: editingAssignee._id, name: editingAssignee.name || "Unknown user", role: editingAssignee.role });
+    }
+
+    return list.sort((a, b) => {
+      const aSelf = String(a._id) === currentUserId ? 0 : 1;
+      const bSelf = String(b._id) === currentUserId ? 0 : 1;
+      if (aSelf !== bSelf) return aSelf - bSelf;
+      return String(a.name || "").localeCompare(String(b.name || ""));
+    });
+  }, [teamUsers, editingTask, currentUserId, currentUserName, currentRole]);
 
   // Styles mapping
   const styles = useMemo(() => {
@@ -913,312 +987,640 @@ export default function TaskManager({ theme = "light" }) {
     };
   }, [theme]);
 
+  const renderScopeTabs = () => (
+    <nav aria-label="Task lists" className="tasks-scope-tabs flex items-center gap-2">
+      <div className={`inline-flex flex-wrap items-center gap-1 rounded-xl border p-1 ${
+        isDark ? "border-slate-800 bg-slate-900" : "border-slate-200 bg-white"
+      }`}>
+        {[["mine", "My Tasks"], ["assigned", "Assigned by Me"], ["all", "All Tasks"]].map(([scope, label]) => {
+          const isActiveScope = taskScope === scope && viewLevel === "board" && !selectedUserObj;
+          return (
+            <button
+              key={scope}
+              type="button"
+              aria-pressed={isActiveScope}
+              className={`rounded-lg px-3.5 py-2 text-sm font-semibold transition-colors ${
+                isActiveScope
+                  ? (isDark ? "bg-sky-500/15 text-sky-300" : "bg-sky-100 text-sky-700")
+                  : `${styles.label} hover:bg-slate-500/10`
+              }`}
+              onClick={() => {
+                setTaskScope(scope); setViewLevel("board"); setSelectedUserObj(null);
+                setAssigneeFilter(""); setStatusFilter(""); setPriorityFilter("");
+                setLeadFilter(""); setTagFilter(""); setSearchQuery("");
+              }}
+            >
+              {label}
+            </button>
+          );
+        })}
+        {canViewRoster && (
+          <button
+            type="button"
+            aria-pressed={viewLevel === "roster"}
+            onClick={handleBackToRoster}
+            className={`rounded-lg px-3.5 py-2 text-sm font-semibold transition-colors ${
+              viewLevel === "roster"
+                ? (isDark ? "bg-sky-500/15 text-sky-300" : "bg-sky-100 text-sky-700")
+                : `${styles.label} hover:bg-slate-500/10`
+            }`}
+          >
+            Team Tasks
+          </button>
+        )}
+      </div>
+      {selectedUserObj && (
+        <span
+          className={`flex items-center gap-2 rounded-xl border px-3 py-2 text-sm font-semibold ${
+            isDark ? "border-sky-500/40 bg-sky-500/10 text-sky-300" : "border-sky-500 bg-sky-50 text-sky-700"
+          }`}
+        >
+          <User size={14} />
+          {selectedUserObj.name.split(" ")[0]}&rsquo;s Tasks
+        </span>
+      )}
+    </nav>
+  );
+
   return (
-    <div className={`flex flex-col h-full w-full overflow-hidden ${isDark ? "bg-slate-950" : "bg-slate-50/50"}`}>
+    <div className={`tasks-reference-page flex flex-col h-full w-full overflow-hidden ${isDark ? "bg-slate-950" : "bg-slate-50/50"}`}>
       <ToastNotice message={success} type="success" />
       <ToastNotice message={error} type="error" />
-      <nav aria-label="Task lists" className="flex flex-wrap gap-2 px-4 pt-3">
-        {[["mine", "My Tasks"], ["assigned", "Assigned by Me"], ["all", "All Accessible Tasks"]].map(([scope, label]) => (
-          <button key={scope} type="button" aria-pressed={taskScope === scope && viewLevel === "board"}
-            className={`rounded-lg border px-3 py-2 text-sm font-semibold ${taskScope === scope && viewLevel === "board" ? "border-sky-500 bg-sky-100 text-sky-800" : styles.button}`}
-            onClick={() => {
-              setTaskScope(scope); setViewLevel("board"); setSelectedUserObj(null);
-              setAssigneeFilter(""); setStatusFilter(""); setPriorityFilter("");
-              setLeadFilter(""); setTagFilter(""); setSearchQuery("");
-            }}>{label}</button>
-        ))}
-        {canViewRoster && <button type="button" onClick={handleBackToRoster} className={`rounded-lg border px-3 py-2 text-sm font-semibold ${styles.button}`}>Team Tasks</button>}
-      </nav>
 
       {/* Main Container */}
-      <div className="mx-auto flex min-h-0 w-full flex-1 flex-col space-y-3 p-3 sm:space-y-4 sm:p-4 lg:p-6">
+      <div className="tasks-scroll custom-scrollbar mx-auto flex min-h-0 w-full flex-1 flex-col space-y-3 overflow-y-auto overscroll-contain p-3 sm:space-y-4 sm:p-4 lg:p-6">
         {viewLevel === "roster" && canViewRoster ? (
-          <div className="flex min-h-0 flex-1 flex-col space-y-4 overflow-y-auto">
-            <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-              <div className="flex items-center gap-3">
-                <div className={`flex h-10 w-10 items-center justify-center rounded-xl ${isDark ? "bg-slate-800 text-slate-300" : "bg-slate-100 text-slate-700"}`}>
-                  <Users size={20} />
-                </div>
-                <div>
-                  <h2 className={`text-lg font-black sm:text-xl ${styles.title}`}>Team Tasks</h2>
-                  <p className={`text-xs ${styles.label}`}>Pick a team member to view and manage their tasks</p>
-                </div>
+          <div className="tasks-roster flex flex-none flex-col gap-4 pb-2">
+            {/* Page header */}
+            <div className="tasks-roster-heading flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
+              <div className="min-w-0">
+                <h1 className={`text-2xl font-black tracking-tight sm:text-3xl ${styles.title}`}>Team Tasks</h1>
+                <p className={`mt-1 text-sm ${styles.label}`}>Monitor workload and progress</p>
               </div>
-              <button
-                onClick={handleViewAllTasks}
-                className={`flex h-9 w-fit items-center gap-1.5 rounded-xl border px-4 text-xs font-bold uppercase tracking-wider ${styles.button}`}
-              >
-                <ListTodo size={14} />
-                View All Tasks
-              </button>
+              <div className="flex flex-wrap items-center gap-2">
+                <div className="relative min-w-[180px] flex-1 sm:max-w-[220px]">
+                  <Search className={`pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 ${styles.label}`} />
+                  <input
+                    type="text"
+                    value={rosterSearch}
+                    onChange={(e) => setRosterSearch(e.target.value)}
+                    placeholder="Search..."
+                    className={`h-10 w-full rounded-xl border pl-9 pr-3 text-sm ${styles.input}`}
+                  />
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setShowRosterFilters(v => !v)}
+                  aria-pressed={showRosterFilters}
+                  className={`flex h-10 shrink-0 items-center gap-2 rounded-xl border px-3.5 text-sm font-semibold ${
+                    showRosterFilters
+                      ? (isDark ? "border-sky-500/40 bg-sky-500/10 text-sky-300" : "border-sky-500 bg-sky-50 text-sky-700")
+                      : styles.button
+                  }`}
+                >
+                  <SlidersHorizontal size={15} /> Filters
+                </button>
+                <button
+                  type="button"
+                  onClick={handleViewAllTasks}
+                  className={`flex h-10 shrink-0 items-center gap-2 rounded-xl border px-3.5 text-sm font-semibold ${styles.button}`}
+                >
+                  <ListTodo size={15} /> View all tasks
+                </button>
+                <button
+                  type="button"
+                  onClick={handleOpenCreateModal}
+                  className={`flex h-10 shrink-0 items-center gap-2 rounded-xl px-4 text-sm font-bold ${styles.primaryButton}`}
+                >
+                    <Plus size={16} /> Create
+                </button>
+              </div>
             </div>
 
-            {rosterLoading ? (
-              <div className={`flex items-center justify-center rounded-2xl p-10 ${styles.card}`}>
-                <p className={`text-sm ${styles.label}`}>Loading team...</p>
-              </div>
-            ) : (
-              <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
-                {teamUsers.map((u) => {
-                  const s = userStatsMap[u._id] || { total: 0, COMPLETED: 0, overdue: 0 };
-                  const hasOverdue = (s.overdue || 0) > 0;
-                  const completionPct = s.total > 0 ? Math.round(((s.COMPLETED || 0) / s.total) * 100) : 0;
-                  const avatarColor = AVATAR_COLORS[(u.name || "?").charCodeAt(0) % AVATAR_COLORS.length];
-                  return (
-                    <button
-                      key={u._id}
-                      onClick={() => handleSelectRosterUser(u)}
-                      className={`flex flex-col gap-3 rounded-2xl p-4 text-left transition-all hover:-translate-y-0.5 hover:shadow-lg ${styles.card} ${
-                        hasOverdue ? (isDark ? "ring-1 ring-rose-500/30" : "ring-1 ring-rose-200") : ""
-                      }`}
-                    >
+            {renderScopeTabs()}
+
+            <div className="grid min-h-0 gap-4 xl:grid-cols-[minmax(0,1fr)_330px]">
+              {/* Left: summary tiles, filters, member grid */}
+              <div className="min-w-0 space-y-4">
+                <div className="tasks-metrics grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-5">
+                  {[
+                    { key: "members", label: "Team Members", value: rosterSummary.members, icon: Users, tone: isDark ? "bg-sky-500/10 text-sky-400" : "bg-sky-50 text-sky-600", valueTone: styles.title },
+                    { key: "total", label: "Total Tasks", value: rosterSummary.total, icon: FileText, tone: isDark ? "bg-indigo-500/10 text-indigo-400" : "bg-indigo-50 text-indigo-600", valueTone: styles.title },
+                    { key: "done", label: "Completed", value: rosterSummary.done, icon: CheckCircle2, tone: isDark ? "bg-emerald-500/10 text-emerald-400" : "bg-emerald-50 text-emerald-600", valueTone: isDark ? "text-emerald-400" : "text-emerald-600" },
+                    { key: "overdue", label: "Overdue", value: rosterSummary.overdue, icon: AlertCircle, tone: isDark ? "bg-rose-500/10 text-rose-400" : "bg-rose-50 text-rose-600", valueTone: isDark ? "text-rose-400" : "text-rose-600" },
+                    { key: "rate", label: "Completion Rate", value: `${rosterSummary.completionRate}%`, icon: BarChart3, tone: isDark ? "bg-violet-500/10 text-violet-400" : "bg-violet-50 text-violet-600", valueTone: styles.title }
+                  ].map(card => (
+                    <div key={card.key} className={`rounded-2xl border p-3.5 ${styles.card}`}>
                       <div className="flex items-center gap-3">
-                        <div className="relative shrink-0">
-                          {u.profileImageUrl ? (
-                            <img
-                              src={u.profileImageUrl}
-                              alt={u.name}
-                              className={`h-14 w-14 rounded-full object-cover ring-2 ${isDark ? "ring-slate-800" : "ring-white"} shadow-sm`}
-                            />
-                          ) : (
-                            <div className={`flex h-14 w-14 items-center justify-center rounded-full text-lg font-black uppercase ring-2 shadow-sm ${avatarColor} ${isDark ? "ring-slate-800" : "ring-white"}`}>
-                              {(u.name || "?").slice(0, 2)}
+                        <div className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-xl ${card.tone}`}>
+                          <card.icon size={18} />
+                        </div>
+                        <div className="min-w-0">
+                          <p className={`truncate text-[11px] font-semibold ${styles.label}`}>{card.label}</p>
+                          <p className={`text-xl font-black ${card.valueTone}`}>{card.value}</p>
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+
+                {showRosterFilters && (
+                  <div className={`tasks-roster-filters flex flex-col gap-2 rounded-2xl border p-3 sm:flex-row sm:items-center ${styles.card}`}>
+                    <div className="relative min-w-0 flex-1">
+                      <Search className={`pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 ${styles.label}`} />
+                      <input
+                        type="text"
+                        value={rosterSearch}
+                        onChange={(e) => setRosterSearch(e.target.value)}
+                        placeholder="Search team member..."
+                        className={`h-10 w-full rounded-xl border pl-9 pr-3 text-sm ${styles.input}`}
+                      />
+                    </div>
+                    <select
+                      value={rosterRoleFilter}
+                      onChange={(e) => setRosterRoleFilter(e.target.value)}
+                      aria-label="Filter by role"
+                      className={`h-10 rounded-xl border px-3 text-sm font-semibold sm:w-40 ${styles.input}`}
+                    >
+                      <option value="">All Roles</option>
+                      {rosterRoles.map(role => <option key={role} value={role}>{role}</option>)}
+                    </select>
+                    <select
+                      value={rosterWorkloadFilter}
+                      onChange={(e) => setRosterWorkloadFilter(e.target.value)}
+                      aria-label="Filter by workload"
+                      className={`h-10 rounded-xl border px-3 text-sm font-semibold sm:w-40 ${styles.input}`}
+                    >
+                      <option value="">All Workload</option>
+                      {WORKLOAD_STATUSES.map(w => <option key={w.id} value={w.id}>{w.label}</option>)}
+                    </select>
+                    <div className="flex items-center gap-2 sm:ml-auto">
+                      <span className={`shrink-0 text-xs font-semibold ${styles.label}`}>Sort by:</span>
+                      <select
+                        value={rosterSort}
+                        onChange={(e) => setRosterSort(e.target.value)}
+                        aria-label="Sort team members"
+                        className={`h-10 min-w-0 flex-1 rounded-xl border px-3 text-sm font-semibold sm:w-40 sm:flex-none ${styles.input}`}
+                      >
+                        {ROSTER_SORTS.map(o => <option key={o.id} value={o.id}>{o.label}</option>)}
+                      </select>
+                    </div>
+                  </div>
+                )}
+
+                {rosterLoading ? (
+                  <div className={`flex items-center justify-center rounded-2xl border p-10 ${styles.card}`}>
+                    <p className={`text-sm ${styles.label}`}>Loading team...</p>
+                  </div>
+                ) : (
+                  <div className="grid grid-cols-1 gap-3 md:grid-cols-2 2xl:grid-cols-3">
+                    {visibleRosterRows.map(({ user: u, total, done, overdue, progress, status }) => {
+                      const needsAttention = overdue > 0;
+                      const avatarColor = AVATAR_COLORS[(u.name || "?").charCodeAt(0) % AVATAR_COLORS.length];
+                      return (
+                        <div
+                          key={u._id}
+                          role="button"
+                          tabIndex={0}
+                          onClick={() => handleSelectRosterUser(u)}
+                          onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); handleSelectRosterUser(u); } }}
+                          aria-label={`Open tasks for ${u.name}`}
+                          className={`tasks-member-card relative cursor-pointer rounded-2xl border p-4 transition-all hover:-translate-y-0.5 hover:shadow-lg ${styles.card} ${
+                            needsAttention ? "border-l-4 border-l-rose-500" : ""
+                          }`}
+                        >
+                          <div className="flex items-start gap-3">
+                            {u.profileImageUrl ? (
+                              <img src={u.profileImageUrl} alt={u.name} className="h-11 w-11 shrink-0 rounded-full object-cover" />
+                            ) : (
+                              <div className={`flex h-11 w-11 shrink-0 items-center justify-center rounded-full text-sm font-black uppercase ${avatarColor}`}>
+                                {(u.name || "?").slice(0, 2)}
+                              </div>
+                            )}
+
+                            <div className="min-w-0 flex-1">
+                              <div className="flex items-start justify-between gap-2">
+                                <p className={`truncate text-sm font-black ${styles.title}`}>{u.name}</p>
+                                <div className="flex shrink-0 items-center gap-1">
+                                  {needsAttention && (
+                                    <span className={`rounded-md px-2 py-0.5 text-[10px] font-bold ${
+                                      isDark ? "bg-rose-500/15 text-rose-300" : "bg-rose-50 text-rose-600"
+                                    }`}>
+                                      Needs attention
+                                    </span>
+                                  )}
+                                  <div className="relative">
+                                    <button
+                                      type="button"
+                                      onClick={(e) => { e.stopPropagation(); setOpenMemberMenuId(prev => (prev === u._id ? null : u._id)); }}
+                                      aria-label={`Actions for ${u.name}`}
+                                      className={`rounded-lg p-1 ${styles.label} hover:bg-slate-500/10`}
+                                    >
+                                      <MoreVertical size={15} />
+                                    </button>
+                                    {openMemberMenuId === u._id && (
+                                      <>
+                                        <button
+                                          type="button"
+                                          aria-label="Close menu"
+                                          onClick={(e) => { e.stopPropagation(); setOpenMemberMenuId(null); }}
+                                          className="fixed inset-0 z-20 cursor-default"
+                                        />
+                                        <div className={`absolute right-0 top-8 z-30 w-40 overflow-hidden rounded-xl border py-1 shadow-xl ${
+                                          isDark ? "border-slate-800 bg-slate-900" : "border-slate-200 bg-white"
+                                        }`}>
+                                          <button
+                                            type="button"
+                                            onClick={(e) => { e.stopPropagation(); setOpenMemberMenuId(null); handleSelectRosterUser(u); }}
+                                            className={`block w-full px-3 py-2 text-left text-xs font-semibold ${styles.title} hover:bg-slate-500/10`}
+                                          >
+                                            View tasks
+                                          </button>
+                                          <button
+                                            type="button"
+                                            onClick={(e) => { e.stopPropagation(); handleAssignTaskToMember(u); }}
+                                            className={`block w-full px-3 py-2 text-left text-xs font-semibold ${styles.title} hover:bg-slate-500/10`}
+                                          >
+                                            Assign task
+                                          </button>
+                                          {canViewProfiles && (
+                                            <button
+                                              type="button"
+                                              onClick={(e) => { e.stopPropagation(); setOpenMemberMenuId(null); navigate(`/admin/users/${u._id}`); }}
+                                              className={`block w-full px-3 py-2 text-left text-xs font-semibold ${styles.title} hover:bg-slate-500/10`}
+                                            >
+                                              View profile
+                                            </button>
+                                          )}
+                                        </div>
+                                      </>
+                                    )}
+                                  </div>
+                                </div>
+                              </div>
+
+                              <div className="mt-1.5 flex flex-wrap items-center gap-2">
+                                <span className={`rounded-md px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider ${
+                                  isDark ? "bg-slate-800 text-slate-300" : "bg-slate-100 text-slate-600"
+                                }`}>
+                                  {u.role}
+                                </span>
+                                <span className={`flex items-center gap-1.5 text-[11px] font-semibold ${styles.label}`}>
+                                  <span className={`h-2 w-2 rounded-full ${status.dot}`} />
+                                  {status.label}
+                                </span>
+                              </div>
                             </div>
-                          )}
-                          {hasOverdue && (
-                            <span className="absolute -right-0.5 -top-0.5 flex h-4 w-4 items-center justify-center rounded-full border-2 border-white bg-rose-500 text-[8px] font-black text-white dark:border-slate-900">
-                              {s.overdue > 9 ? "9+" : s.overdue}
-                            </span>
-                          )}
-                        </div>
-                        <div className="min-w-0 flex-1">
-                          <p className={`truncate text-sm font-bold ${styles.title}`}>{u.name}</p>
-                          <p className={`truncate text-[10px] font-semibold uppercase tracking-wider ${styles.label}`}>{u.role}</p>
-                        </div>
-                        <ChevronRight size={16} className={styles.label} />
-                      </div>
+                          </div>
 
-                      {s.total > 0 && (
-                        <div className={`h-1.5 w-full overflow-hidden rounded-full ${isDark ? "bg-slate-800" : "bg-slate-100"}`}>
-                          <div
-                            className={`h-full rounded-full transition-all ${isDark ? "bg-emerald-500" : "bg-emerald-500"}`}
-                            style={{ width: `${completionPct}%` }}
-                          />
-                        </div>
-                      )}
+                          <div className="mt-3 flex items-center gap-2">
+                            <div className={`h-1.5 min-w-0 flex-1 overflow-hidden rounded-full ${isDark ? "bg-slate-800" : "bg-slate-100"}`}>
+                              <div className="h-full rounded-full bg-emerald-500 transition-all" style={{ width: `${progress}%` }} />
+                            </div>
+                            <span className={`shrink-0 text-[11px] font-bold ${styles.label}`}>{progress}%</span>
+                          </div>
 
-                      <div className={`grid grid-cols-3 gap-2 border-t pt-3 ${isDark ? "border-white/5" : "border-slate-100"}`}>
-                        <div>
-                          <p className={`text-base font-black ${styles.title}`}>{s.total || 0}</p>
-                          <p className={`text-[9px] font-bold uppercase tracking-wider ${styles.label}`}>Total</p>
+                          <div className="mt-3">
+                            <div className="grid grid-cols-3 gap-1">
+                              <div>
+                                <p className={`text-base font-black ${styles.title}`}>{total}</p>
+                                <p className={`text-[10px] font-semibold ${styles.label}`}>Total</p>
+                              </div>
+                              <div>
+                                <p className={`text-base font-black ${isDark ? "text-emerald-400" : "text-emerald-600"}`}>{done}</p>
+                                <p className={`text-[10px] font-semibold ${styles.label}`}>Done</p>
+                              </div>
+                              <div>
+                                <p className={`text-base font-black ${overdue > 0 ? (isDark ? "text-rose-400" : "text-rose-600") : styles.title}`}>{overdue}</p>
+                                <p className={`text-[10px] font-semibold ${styles.label}`}>Overdue</p>
+                              </div>
+                            </div>
+                          </div>
                         </div>
-                        <div>
-                          <p className={`text-base font-black ${isDark ? "text-emerald-400" : "text-emerald-600"}`}>{s.COMPLETED || 0}</p>
-                          <p className={`text-[9px] font-bold uppercase tracking-wider ${styles.label}`}>Done</p>
-                        </div>
-                        <div>
-                          <p className={`text-base font-black ${hasOverdue ? (isDark ? "text-rose-400" : "text-rose-600") : styles.title}`}>{s.overdue || 0}</p>
-                          <p className={`text-[9px] font-bold uppercase tracking-wider ${styles.label}`}>Overdue</p>
-                        </div>
+                      );
+                    })}
+                    {visibleRosterRows.length === 0 && (
+                      <div className={`col-span-full flex items-center justify-center rounded-2xl border p-10 ${styles.card}`}>
+                        <p className={`text-sm ${styles.label}`}>
+                          {rosterRows.length === 0 ? "No team members found" : "No team members match these filters"}
+                        </p>
                       </div>
-                    </button>
-                  );
-                })}
-                {teamUsers.length === 0 && (
-                  <div className={`col-span-full flex items-center justify-center rounded-2xl p-10 ${styles.card}`}>
-                    <p className={`text-sm ${styles.label}`}>No team members found</p>
+                    )}
                   </div>
                 )}
               </div>
-            )}
+
+              {/* Right: workload, overdue queue, insight */}
+              <aside className="tasks-workload min-w-0 space-y-4">
+                <div className={`rounded-2xl border p-4 ${styles.card}`}>
+                  <div className="flex items-center gap-3">
+                    <div className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-xl ${isDark ? "bg-sky-500/10 text-sky-400" : "bg-sky-50 text-sky-600"}`}>
+                      <Users size={18} />
+                    </div>
+                    <div className="min-w-0">
+                      <button type="button" aria-expanded={workloadExpanded} onClick={() => setWorkloadExpanded(value => !value)} className={`flex items-center gap-3 text-sm font-black ${styles.title}`}>Team workload <ChevronRight size={16} className={workloadExpanded ? "-rotate-90" : "rotate-90"} /></button>
+                      <p className={`text-xs ${styles.label}`}>{rosterSummary.members} members</p>
+                    </div>
+                  </div>
+                  <div hidden={!workloadExpanded} className="mt-4 space-y-2.5">
+                    {rosterSummary.workload.map(w => (
+                      <div key={w.id} className="flex items-center gap-2">
+                        <span className={`h-2 w-2 shrink-0 rounded-full ${w.dot}`} />
+                        <span className={`w-16 shrink-0 text-xs font-semibold ${styles.title}`}>{w.label}</span>
+                        <span className={`w-4 shrink-0 text-xs font-bold ${styles.label}`}>{w.count}</span>
+                        <div className={`h-1.5 min-w-0 flex-1 overflow-hidden rounded-full ${isDark ? "bg-slate-800" : "bg-slate-100"}`}>
+                          <div className={`h-full rounded-full ${w.bar}`} style={{ width: `${w.pct}%` }} />
+                        </div>
+                        <span className={`w-9 shrink-0 text-right text-[11px] font-semibold ${styles.label}`}>{w.pct}%</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+
+                <div className={`rounded-2xl border p-4 ${styles.card}`}>
+                  <div className="flex items-center gap-3">
+                    <div className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-xl ${isDark ? "bg-rose-500/10 text-rose-400" : "bg-rose-50 text-rose-600"}`}>
+                      <AlertCircle size={18} />
+                    </div>
+                    <p className={`min-w-0 flex-1 text-sm font-black ${styles.title}`}>Overdue tasks</p>
+                    <span className={`text-sm font-black ${styles.label}`}>{rosterSummary.overdue}</span>
+                  </div>
+                  <div className="mt-3 space-y-1">
+                    {rosterSummary.overdueRows.map(({ user: u, overdue }) => {
+                      const avatarColor = AVATAR_COLORS[(u.name || "?").charCodeAt(0) % AVATAR_COLORS.length];
+                      return (
+                        <button
+                          key={u._id}
+                          type="button"
+                          onClick={() => handleSelectRosterUser(u)}
+                          className="flex w-full items-center gap-2.5 rounded-xl p-2 text-left transition-colors hover:bg-slate-500/10"
+                        >
+                          {u.profileImageUrl ? (
+                            <img src={u.profileImageUrl} alt={u.name} className="h-8 w-8 shrink-0 rounded-full object-cover" />
+                          ) : (
+                            <div className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-[10px] font-black uppercase ${avatarColor}`}>
+                              {(u.name || "?").slice(0, 2)}
+                            </div>
+                          )}
+                          <div className="min-w-0 flex-1">
+                            <p className={`truncate text-xs font-bold ${styles.title}`}>{u.name}</p>
+                            <p className={`truncate text-[10px] font-semibold uppercase tracking-wider ${styles.label}`}>{u.role}</p>
+                          </div>
+                          <span className={`shrink-0 text-[11px] font-bold ${isDark ? "text-rose-400" : "text-rose-600"}`}>
+                            {overdue} overdue
+                          </span>
+                          <ChevronRight size={14} className={`shrink-0 ${styles.label}`} />
+                        </button>
+                      );
+                    })}
+                    {rosterSummary.overdueRows.length === 0 && (
+                      <p className={`px-2 py-3 text-xs ${styles.label}`}>Nothing overdue. The team is on track.</p>
+                    )}
+                  </div>
+                </div>
+
+                <div className={`rounded-2xl border p-4 ${
+                  isDark ? "border-sky-500/20 bg-sky-500/10" : "border-sky-100 bg-sky-50"
+                }`}>
+                  <div className="flex items-start gap-2.5">
+                    <Lightbulb size={16} className={`mt-0.5 shrink-0 ${isDark ? "text-amber-300" : "text-amber-500"}`} />
+                    <div className="min-w-0">
+                      <p className={`text-sm font-black ${isDark ? "text-sky-300" : "text-sky-700"}`}>Quick insight</p>
+                      <p className={`mt-1 text-xs leading-relaxed ${isDark ? "text-sky-200/80" : "text-sky-700/80"}`}>
+                        {rosterSummary.membersWithOverdue > 0
+                          ? `${rosterSummary.overduePct}% of your team members have overdue tasks. Follow up to keep work on track.`
+                          : "No overdue work across the team. Keep the momentum going."}
+                      </p>
+                    </div>
+                  </div>
+                </div>
+              </aside>
+            </div>
           </div>
         ) : (
         <>
-        {/* Header: breadcrumb + compact summary */}
-        <div className="flex flex-wrap items-center justify-between gap-2">
-          <div className="flex items-center gap-2">
-            {canViewRoster ? (
+        {/* Member / scope header */}
+        <div className={`tasks-member-summary flex flex-col gap-4 rounded-2xl border p-4 xl:flex-row xl:items-center ${styles.card}`}>
+          <div className="flex min-w-0 flex-1 items-center gap-3">
+            {canViewRoster && (
               <button
                 onClick={handleBackToRoster}
-                className={`flex items-center gap-1.5 rounded-lg border px-3 py-1.5 text-xs font-bold ${styles.button}`}
+                className={`flex shrink-0 items-center gap-1.5 rounded-xl border px-3 py-2 text-xs font-bold ${styles.button}`}
               >
                 <ArrowLeft size={14} />
-                Back to Team Tasks
+                <span className="hidden sm:inline">Back to </span>Team Tasks
               </button>
+            )}
+
+            {selectedUserObj ? (
+              <>
+                {selectedUserObj.profileImageUrl ? (
+                  <img src={selectedUserObj.profileImageUrl} alt={selectedUserObj.name} className="h-14 w-14 shrink-0 rounded-full object-cover" />
+                ) : (
+                  <div className={`flex h-14 w-14 shrink-0 items-center justify-center rounded-full text-lg font-black uppercase ${
+                    AVATAR_COLORS[(selectedUserObj.name || "?").charCodeAt(0) % AVATAR_COLORS.length]
+                  }`}>
+                    {(selectedUserObj.name || "?").slice(0, 2)}
+                  </div>
+                )}
+                <div className="min-w-0">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <h2 className={`truncate text-xl font-black ${styles.title}`}>{selectedUserObj.name}</h2>
+                    <span className={`flex shrink-0 items-center gap-1.5 rounded-full px-2.5 py-1 text-[11px] font-bold ${
+                      isDark ? "bg-slate-800 text-slate-300" : "bg-slate-100 text-slate-600"
+                    }`}>
+                      <span className={`h-2 w-2 rounded-full ${memberStatus.dot}`} />
+                      {memberStatus.label}
+                    </span>
+                  </div>
+                  <span className={`mt-1 inline-block rounded-md px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider ${
+                    isDark ? "bg-slate-800 text-slate-300" : "bg-slate-100 text-slate-600"
+                  }`}>
+                    {selectedUserObj.role}
+                  </span>
+                </div>
+              </>
             ) : (
-              <h2 className={`text-lg font-black ${styles.title}`}>{taskScope === "mine" ? "My Tasks" : taskScope === "assigned" ? "Assigned by Me" : "All Accessible Tasks"}</h2>
+              <h2 className={`truncate text-xl font-black ${styles.title}`}>
+                {taskScope === "mine" ? "My Tasks" : taskScope === "assigned" ? "Assigned by Me" : "All Accessible Tasks"}
+              </h2>
             )}
           </div>
-          <div className={`flex items-center gap-3 text-xs font-semibold ${styles.label}`}>
-            <span>{stats.total} total</span>
-            <span>&middot;</span>
-            <span>{stats.pending} pending</span>
-            {stats.overdue > 0 && (
-              <>
-                <span>&middot;</span>
-                <span className={isDark ? "text-rose-400" : "text-rose-600"}>{stats.overdue} overdue</span>
-              </>
-            )}
+
+          <div className="grid grid-cols-4 gap-1 xl:w-[380px]">
+            {[
+              { label: "Total", value: stats.total || 0, tone: styles.title },
+              { label: "Completed", value: stats.COMPLETED || 0, tone: (stats.COMPLETED || 0) > 0 ? (isDark ? "text-emerald-400" : "text-emerald-600") : styles.title },
+              { label: "Pending", value: stats.pending || 0, tone: (stats.pending || 0) > 0 ? (isDark ? "text-rose-400" : "text-rose-600") : styles.title },
+              { label: "Overdue", value: stats.overdue || 0, tone: (stats.overdue || 0) > 0 ? (isDark ? "text-rose-400" : "text-rose-600") : styles.title }
+            ].map((metric, i) => (
+              <div key={metric.label} className={`px-2 text-center ${i > 0 ? (isDark ? "border-l border-white/5" : "border-l border-slate-200") : ""}`}>
+                <p className={`text-xl font-black ${metric.tone}`}>{metric.value}</p>
+                <p className={`truncate text-[11px] font-semibold ${styles.label}`}>{metric.label}</p>
+              </div>
+            ))}
+          </div>
+
+          <div className="min-w-0 xl:w-64">
+            <div className="flex items-center justify-between gap-2">
+              <span className={`text-xs font-semibold ${styles.title}`}>Completion</span>
+              <span className={`text-xs font-bold ${styles.label}`}>{boardCompletion}%</span>
+            </div>
+            <div className={`mt-2 h-2 overflow-hidden rounded-full ${isDark ? "bg-slate-800" : "bg-slate-100"}`}>
+              <div className="h-full rounded-full bg-sky-500 transition-all" style={{ width: `${boardCompletion}%` }} />
+            </div>
           </div>
         </div>
 
         {/* Toolbar */}
-        <div className={`space-y-3 rounded-2xl p-3 sm:p-4 ${styles.card}`}>
-          <div className="flex flex-col md:flex-row gap-3 items-stretch md:items-center justify-between">
-            {/* Search */}
-            <div className="relative flex-1">
-              <Search className={`absolute left-3 top-2.5 h-4 w-4 ${styles.label}`} />
-              <input
-                type="text"
-                placeholder="Search tasks by title or description..."
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-                className={`w-full h-9 pl-9 pr-4 rounded-xl border text-sm ${styles.input}`}
-              />
-            </div>
-
-            {/* Toggle View + Create button */}
-            <div className="grid grid-cols-1 gap-2 sm:flex sm:items-center">
-              {/* Group By (Board view only) & Sort By */}
-              <div className="grid grid-cols-2 gap-1.5 sm:mr-2 sm:flex sm:items-center">
-                {viewMode === "kanban" && (
-                  <select
-                    value={groupBy}
-                    onChange={(e) => setGroupBy(e.target.value)}
-                    className={`h-10 rounded-xl border px-2 text-xs font-semibold sm:h-9 ${styles.input}`}
-                    title="Group By"
-                  >
-                    <option value="status">Group: Status</option>
-                    <option value="priority">Group: Priority</option>
-                    <option value="assignee">Group: Assignee</option>
-                  </select>
-                )}
-
-                <select
-                  value={sortBy}
-                  onChange={(e) => setSortBy(e.target.value)}
-                  className={`h-10 rounded-xl border px-2 text-xs font-semibold sm:h-9 ${styles.input}`}
-                  title="Sort By"
-                >
-                  <option value="createdNewest">Newest</option>
-                  <option value="dueDate">Due Date</option>
-                  <option value="priority">Priority</option>
-                  <option value="title">Title (A-Z)</option>
-                </select>
-              </div>
-
-              <div className={`grid grid-cols-2 rounded-xl border p-0.5 sm:flex sm:items-center ${isDark ? "border-slate-800 bg-slate-950" : "border-slate-200 bg-slate-100"}`}>
-                <button
-                  onClick={() => setViewMode("kanban")}
-                  className={`p-1.5 rounded-lg flex items-center gap-1.5 text-xs font-semibold transition-all ${
-                    viewMode === "kanban"
-                      ? isDark ? "bg-slate-800 text-white shadow" : "bg-white text-slate-950 shadow"
-                      : "text-slate-400 hover:text-slate-300"
-                  }`}
-                  title="Board View"
-                >
-                  <KanbanSquare size={14} />
-                  <span className="hidden sm:inline">Board</span>
-                </button>
-                <button
-                  onClick={() => setViewMode("list")}
-                  className={`p-1.5 rounded-lg flex items-center gap-1.5 text-xs font-semibold transition-all ${
-                    viewMode === "list"
-                      ? isDark ? "bg-slate-800 text-white shadow" : "bg-white text-slate-950 shadow"
-                      : "text-slate-400 hover:text-slate-300"
-                  }`}
-                  title="List View"
-                >
-                  <List size={14} />
-                  <span className="hidden sm:inline">List</span>
-                </button>
-              </div>
-
-              <button
-                onClick={() => setShowFilters((v) => !v)}
-                className={`flex h-10 items-center justify-center gap-1.5 rounded-xl border px-3 text-xs font-bold sm:h-9 ${
-                  showFilters || statusFilter || priorityFilter || assigneeFilter || leadFilter || tagFilter
-                    ? isDark ? "border-sky-500/40 bg-sky-500/10 text-sky-400" : "border-sky-300 bg-sky-50 text-sky-700"
-                    : styles.button
-                }`}
-                title="Filters"
-              >
-                <SlidersHorizontal size={14} />
-                <span className="hidden sm:inline">Filters</span>
-              </button>
-
-              <button
-                onClick={handleOpenCreateModal}
-                className={`flex h-10 items-center justify-center gap-1.5 rounded-xl px-4 text-xs font-bold uppercase tracking-wider sm:h-9 ${styles.primaryButton}`}
-              >
-                <Plus size={14} />
-                New Task
-              </button>
-            </div>
+        {renderScopeTabs()}
+        <div className={`tasks-toolbar flex flex-col gap-2 rounded-2xl border p-3 xl:flex-row xl:items-center ${styles.card}`}>
+          <div className="relative min-w-0 flex-1">
+            <Search className={`pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 ${styles.label}`} />
+            <input
+              type="text"
+              placeholder="Search tasks by title or description..."
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              className={`h-10 w-full rounded-xl border pl-9 pr-3 text-sm ${styles.input}`}
+            />
           </div>
 
-          {/* Filters Row (collapsible) */}
-          {showFilters && (
-          <div className="grid grid-cols-2 gap-2 border-t border-slate-800/10 pt-3 dark:border-white/5 sm:flex sm:flex-wrap sm:items-center">
+          <div className="grid grid-cols-2 gap-2 sm:flex sm:flex-wrap sm:items-center">
             <select
               value={statusFilter}
               onChange={(e) => setStatusFilter(e.target.value)}
-              className={`h-10 rounded-lg border px-2 text-xs font-medium sm:h-8 ${styles.input}`}
+              aria-label="Filter by status"
+              className={`h-10 rounded-xl border px-3 text-sm font-semibold ${styles.input}`}
             >
-              <option value="">All Statuses</option>
-              {STATUS_COLUMNS.map(col => (
-                <option key={col.id} value={col.id}>{col.label}</option>
-              ))}
+              <option value="">Status</option>
+              {STATUS_COLUMNS.map(col => <option key={col.id} value={col.id}>{col.label}</option>)}
             </select>
 
             <select
               value={priorityFilter}
               onChange={(e) => setPriorityFilter(e.target.value)}
-              className={`h-10 rounded-lg border px-2 text-xs font-medium sm:h-8 ${styles.input}`}
+              aria-label="Filter by priority"
+              className={`h-10 rounded-xl border px-3 text-sm font-semibold ${styles.input}`}
             >
-              <option value="">All Priorities</option>
-              {PRIORITIES.map(p => (
-                <option key={p.value} value={p.value}>{p.label}</option>
-              ))}
+              <option value="">Priority</option>
+              {PRIORITIES.map(pr => <option key={pr.value} value={pr.value}>{pr.label}</option>)}
             </select>
 
             <select
               value={assigneeFilter}
               onChange={(e) => setAssigneeFilter(e.target.value)}
-              className={`h-10 rounded-lg border px-2 text-xs font-medium sm:h-8 ${styles.input} sm:max-w-[150px]`}
+              aria-label="Filter by assignee"
+              className={`h-10 max-w-[160px] rounded-xl border px-3 text-sm font-semibold ${styles.input}`}
             >
-              <option value="">All Assignees</option>
-              {teamUsers.map(u => (
-                <option key={u._id} value={u._id}>{u.name}</option>
-              ))}
+              <option value="">Assignee</option>
+              {teamUsers.map(u => <option key={u._id} value={u._id}>{u.name}</option>)}
             </select>
 
+            <select
+              value={sortBy}
+              onChange={(e) => setSortBy(e.target.value)}
+              aria-label="Sort tasks"
+              className={`h-10 rounded-xl border px-3 text-sm font-semibold ${styles.input}`}
+            >
+              <option value="createdNewest">Newest</option>
+              <option value="dueDate">Due Date</option>
+              <option value="priority">Priority</option>
+              <option value="title">Title (A-Z)</option>
+            </select>
+
+            {viewMode === "kanban" && (
+              <select
+                value={groupBy}
+                onChange={(e) => setGroupBy(e.target.value)}
+                aria-label="Group board by"
+                className={`h-10 rounded-xl border px-3 text-sm font-semibold ${styles.input}`}
+              >
+                <option value="status">Group: Status</option>
+                <option value="priority">Group: Priority</option>
+                <option value="assignee">Group: Assignee</option>
+              </select>
+            )}
+
+            <button
+              type="button"
+              onClick={() => setShowFilters(v => !v)}
+              title="More filters"
+              aria-label="More filters"
+              aria-pressed={showFilters}
+              className={`flex h-10 w-10 items-center justify-center rounded-xl border ${
+                showFilters || leadFilter || tagFilter
+                  ? (isDark ? "border-sky-500/40 bg-sky-500/10 text-sky-300" : "border-sky-500 bg-sky-50 text-sky-700")
+                  : styles.button
+              }`}
+            >
+              <SlidersHorizontal size={15} />
+            </button>
+
+            <div className={`flex items-center gap-1 rounded-xl border p-1 ${isDark ? "border-slate-800 bg-slate-950" : "border-slate-200 bg-white"}`}>
+              <button
+                type="button"
+                onClick={() => setViewMode("kanban")}
+                aria-pressed={viewMode === "kanban"}
+                className={`flex h-8 items-center gap-1.5 rounded-lg px-3 text-sm font-semibold transition-colors ${
+                  viewMode === "kanban"
+                    ? (isDark ? "bg-sky-500/15 text-sky-300" : "bg-sky-50 text-sky-700")
+                    : `${styles.label} hover:bg-slate-500/10`
+                }`}
+              >
+                <KanbanSquare size={15} /> <span className="hidden sm:inline">Board</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => setViewMode("list")}
+                aria-pressed={viewMode === "list"}
+                className={`flex h-8 items-center gap-1.5 rounded-lg px-3 text-sm font-semibold transition-colors ${
+                  viewMode === "list"
+                    ? (isDark ? "bg-sky-500/15 text-sky-300" : "bg-sky-50 text-sky-700")
+                    : `${styles.label} hover:bg-slate-500/10`
+                }`}
+              >
+                <List size={15} /> <span className="hidden sm:inline">List</span>
+              </button>
+            </div>
+
+            <button
+              type="button"
+              onClick={handleOpenCreateModal}
+              className={`flex h-10 items-center justify-center gap-1.5 rounded-xl px-4 text-sm font-bold ${styles.primaryButton}`}
+            >
+              <Plus size={16} /> New Task
+            </button>
+          </div>
+        </div>
+
+        {showFilters && (
+          <div className={`flex flex-wrap items-center gap-2 rounded-2xl border p-3 ${styles.card}`}>
             {!isProductionExecutive && (
               <select
                 value={leadFilter}
                 onChange={(e) => setLeadFilter(e.target.value)}
-                className={`h-10 rounded-lg border px-2 text-xs font-medium sm:h-8 ${styles.input} sm:max-w-[150px]`}
+                aria-label="Filter by lead"
+                className={`h-9 max-w-[180px] rounded-xl border px-3 text-xs font-semibold ${styles.input}`}
               >
                 <option value="">All Leads</option>
-                {leads.map(l => (
-                  <option key={l._id} value={l._id}>{l.name}</option>
-                ))}
+                {leads.map(l => <option key={l._id} value={l._id}>{l.name}</option>)}
               </select>
             )}
-
             <select
               value={tagFilter}
               onChange={(e) => setTagFilter(e.target.value)}
-              className={`h-10 rounded-lg border px-2 text-xs font-medium sm:h-8 ${styles.input}`}
+              aria-label="Filter by tag"
+              className={`h-9 rounded-xl border px-3 text-xs font-semibold ${styles.input}`}
             >
               <option value="">All Tags</option>
               {["Call", "Meeting", "Document", "Site Visit", "Urgent", "Follow-up"].map(tagOpt => (
                 <option key={tagOpt} value={tagOpt}>{tagOpt}</option>
               ))}
             </select>
-
             {(statusFilter || priorityFilter || assigneeFilter || (!isProductionExecutive && leadFilter) || searchQuery || tagFilter) && (
               <button
+                type="button"
                 onClick={() => {
                   setStatusFilter("");
                   setPriorityFilter("");
@@ -1227,7 +1629,7 @@ export default function TaskManager({ theme = "light" }) {
                   setSearchQuery("");
                   setTagFilter("");
                 }}
-                className={`h-10 rounded-lg border px-2.5 text-xs font-medium transition-colors sm:h-8 ${
+                className={`h-9 rounded-xl border px-3 text-xs font-semibold ${
                   isDark ? "border-slate-800 text-rose-400 hover:bg-rose-950/20" : "border-slate-200 text-rose-600 hover:bg-rose-50"
                 }`}
               >
@@ -1235,8 +1637,7 @@ export default function TaskManager({ theme = "light" }) {
               </button>
             )}
           </div>
-          )}
-        </div>
+        )}
 
         {/* Content Body */}
         {loading ? (
@@ -1265,7 +1666,7 @@ export default function TaskManager({ theme = "light" }) {
           /* ========================================================
              KANBAN BOARD VIEW (HTML5 Drag & Drop)
              ======================================================== */
-          <div className="custom-scrollbar grid min-h-0 flex-1 grid-cols-1 gap-3 pb-4 sm:flex sm:gap-4 sm:overflow-x-auto">
+          <div className="scrollbar-hide grid min-h-0 flex-1 grid-cols-1 gap-3 pb-4 sm:flex sm:gap-4 sm:overflow-x-auto">
             {boardColumns.map((col) => {
               const columnTasks = getColumnTasks(col.id);
               const isOver = activeDragCol === col.id;
@@ -1292,7 +1693,7 @@ export default function TaskManager({ theme = "light" }) {
                   </div>
 
                   {/* Task Card List */}
-                  <div className="custom-scrollbar min-h-[120px] flex-1 space-y-2.5 p-2 sm:overflow-y-auto">
+                  <div className="scrollbar-hide min-h-[120px] flex-1 space-y-2.5 p-2 sm:overflow-y-auto">
                     <AnimatePresence initial={false}>
                       {columnTasks.map((task) => {
                         const priority = PRIORITIES.find(p => p.value === task.priority) || PRIORITIES[1];
@@ -1466,60 +1867,419 @@ export default function TaskManager({ theme = "light" }) {
           </div>
         ) : (
           /* ========================================================
-             GOOGLE TASKS-STYLE FLAT LIST VIEW
+             TASK LIST + LIVE DETAIL PANEL
              ======================================================== */
-          <div className={`flex min-h-0 flex-1 flex-col overflow-y-auto rounded-2xl border ${styles.card}`}>
-            {/* Quick Add */}
-            <form onSubmit={handleQuickAddTask} className={`flex items-center gap-2 border-b p-3 ${isDark ? "border-white/5" : "border-slate-100"}`}>
-              <Plus size={16} className={isDark ? "text-sky-400" : "text-sky-600"} />
-              <input
-                type="text"
-                value={quickAddTitle}
-                onChange={(e) => setQuickAddTitle(e.target.value)}
-                placeholder={selectedUserObj ? `Add a task for ${selectedUserObj.name}...` : "Add a task..."}
-                disabled={quickAddSubmitting}
-                className={`h-9 flex-1 bg-transparent text-sm focus:outline-none ${styles.title}`}
-              />
-              {quickAddTitle.trim() && (
-                <button
-                  type="submit"
+          <div className="grid flex-none gap-4 xl:min-h-0 xl:flex-1 xl:grid-cols-[minmax(0,1fr)_400px] 2xl:grid-cols-[minmax(0,1fr)_440px]">
+            {/* Task list */}
+            <div className={`tasks-list scrollbar-hide flex flex-col gap-3 rounded-2xl border p-4 xl:min-h-0 xl:overflow-y-auto ${styles.card}`}>
+              <h3 className={`text-lg font-black ${styles.title}`}>Tasks</h3>
+
+              <div className="flex flex-wrap gap-2">
+                {[
+                  { id: "", label: "All", count: stats.total || 0 },
+                  { id: "TODO", label: "To Do", count: stats.TODO || 0 },
+                  { id: "IN_PROGRESS", label: "In Progress", count: stats.IN_PROGRESS || 0 },
+                  { id: "COMPLETED", label: "Completed", count: stats.COMPLETED || 0 }
+                ].map(tab => {
+                  const isActiveTab = statusFilter === tab.id;
+                  return (
+                    <button
+                      key={tab.id || "all"}
+                      type="button"
+                      onClick={() => setStatusFilter(tab.id)}
+                      aria-pressed={isActiveTab}
+                      className={`flex items-center gap-2 rounded-xl border px-3 py-1.5 text-xs font-bold transition-colors ${
+                        isActiveTab
+                          ? (isDark ? "border-sky-500/40 bg-sky-500/10 text-sky-300" : "border-sky-500 bg-sky-50 text-sky-700")
+                          : styles.button
+                      }`}
+                    >
+                      {tab.label}
+                      <span className={`rounded-md px-1.5 py-0.5 text-[10px] font-black ${
+                        isActiveTab
+                          ? (isDark ? "bg-sky-500/20 text-sky-200" : "bg-sky-100 text-sky-700")
+                          : (isDark ? "bg-slate-800 text-slate-300" : "bg-slate-100 text-slate-600")
+                      }`}>
+                        {tab.count}
+                      </span>
+                    </button>
+                  );
+                })}
+              </div>
+
+              <form
+                onSubmit={handleQuickAddTask}
+                className={`flex items-center gap-2 rounded-xl border border-dashed px-3 py-2.5 ${isDark ? "border-slate-800" : "border-slate-200"}`}
+              >
+                <Plus size={16} className={isDark ? "text-sky-400" : "text-sky-600"} />
+                <input
+                  type="text"
+                  value={quickAddTitle}
+                  onChange={(e) => setQuickAddTitle(e.target.value)}
+                  placeholder={selectedUserObj ? `Add a task for ${selectedUserObj.name}...` : "Add a task..."}
                   disabled={quickAddSubmitting}
-                  className={`h-8 shrink-0 rounded-lg px-3 text-xs font-bold uppercase tracking-wider disabled:opacity-60 ${styles.primaryButton}`}
-                >
-                  Add
-                </button>
-              )}
-            </form>
-
-            {/* Active Tasks */}
-            {sortedTasks.filter(t => t.status !== "COMPLETED").length === 0 ? (
-              <div className="flex flex-1 flex-col items-center justify-center gap-2 p-10 text-center">
-                <CheckSquare size={32} className={isDark ? "text-slate-700" : "text-slate-300"} />
-                <p className={`text-sm font-semibold ${styles.label}`}>No active tasks. You're all caught up.</p>
-              </div>
-            ) : (
-              <div className={`divide-y ${isDark ? "divide-white/5" : "divide-slate-100"}`}>
-                {sortedTasks.filter(t => t.status !== "COMPLETED").map(renderTaskRow)}
-              </div>
-            )}
-
-            {/* Completed (collapsible) */}
-            {sortedTasks.some(t => t.status === "COMPLETED") && (
-              <div className={`border-t ${isDark ? "border-white/5" : "border-slate-100"}`}>
-                <button
-                  onClick={() => setShowCompleted((v) => !v)}
-                  className={`flex w-full items-center gap-2 px-4 py-3 text-xs font-bold uppercase tracking-wider ${styles.label}`}
-                >
-                  <ChevronRight size={14} className={`transition-transform ${showCompleted ? "rotate-90" : ""}`} />
-                  Completed ({sortedTasks.filter(t => t.status === "COMPLETED").length})
-                </button>
-                {showCompleted && (
-                  <div className={`divide-y ${isDark ? "divide-white/5" : "divide-slate-100"}`}>
-                    {sortedTasks.filter(t => t.status === "COMPLETED").map(renderTaskRow)}
-                  </div>
+                  className={`h-6 min-w-0 flex-1 bg-transparent text-sm focus:outline-none ${styles.title}`}
+                />
+                {quickAddTitle.trim() && (
+                  <button
+                    type="submit"
+                    disabled={quickAddSubmitting}
+                    className={`h-8 shrink-0 rounded-lg px-3 text-xs font-bold disabled:opacity-60 ${styles.primaryButton}`}
+                  >
+                    Add
+                  </button>
                 )}
+              </form>
+
+              <div className="space-y-2">
+                {sortedTasks.map(task => {
+                  const priority = PRIORITIES.find(pr => pr.value === task.priority) || PRIORITIES[1];
+                  const statusCol = STATUS_COLUMNS.find(col => col.id === task.status) || STATUS_COLUMNS[1];
+                  const isSelected = panelTask?._id === task._id;
+                  const isDone = task.status === "COMPLETED";
+                  const expired = isOverdue(task);
+                  const subtasks = task.subtasks || [];
+                  return (
+                    <div
+                      key={task._id}
+                      role="button"
+                      tabIndex={0}
+                      onClick={() => { setSelectedTaskId(task._id); setMobileTaskDetailsOpen(true); }}
+                      onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); setSelectedTaskId(task._id); setMobileTaskDetailsOpen(true); } }}
+                      className={`tasks-task-card cursor-pointer rounded-2xl border p-3.5 transition-all ${
+                        isSelected
+                          ? (isDark ? "border-sky-500/60 bg-sky-500/5 ring-1 ring-sky-500/40" : "border-sky-500 bg-sky-50/40 ring-1 ring-sky-500/30")
+                          : (isDark ? "border-slate-800 hover:border-slate-700" : "border-slate-200 hover:border-slate-300")
+                      }`}
+                    >
+                      <div className="flex items-start gap-3">
+                        <button
+                          type="button"
+                          onClick={(e) => { e.stopPropagation(); handleToggleComplete(task); }}
+                          aria-label={isDone ? `Reopen ${task.title}` : `Mark ${task.title} completed`}
+                          className={`mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-full border-2 transition-colors ${
+                            isDone
+                              ? "border-emerald-500 bg-emerald-500 text-white"
+                              : isDark ? "border-slate-700 hover:border-sky-400" : "border-slate-300 hover:border-sky-500"
+                          }`}
+                        >
+                          {isDone && <Check size={12} />}
+                        </button>
+
+                        <div className="min-w-0 flex-1">
+                          <p className={`truncate text-sm font-bold ${styles.title}`}>{task.title}</p>
+                          <p className={`truncate text-xs ${styles.label}`}>{task.description?.trim() || "No description"}</p>
+
+                          <div className="mt-2 flex flex-wrap items-center gap-2 text-[11px]">
+                            <span className={`flex items-center gap-1.5 rounded-md px-2 py-0.5 font-semibold ${
+                              isDark ? "bg-slate-800 text-slate-300" : "bg-slate-100 text-slate-600"
+                            }`}>
+                              <span className={`h-2 w-2 rounded-full ${PRIORITY_DOTS[task.priority] || PRIORITY_DOTS.MEDIUM}`} />
+                              {priority.label}
+                            </span>
+                            <span className={`flex items-center gap-1.5 rounded-md px-2 py-0.5 font-semibold ${
+                              isDark ? "bg-slate-800 text-slate-300" : "bg-slate-100 text-slate-600"
+                            }`}>
+                              <span className={`h-2 w-2 rounded-full ${STATUS_DOTS[task.status] || STATUS_DOTS.TODO}`} />
+                              {statusCol.label}
+                            </span>
+                            <span className={`flex items-center gap-1 ${expired ? (isDark ? "text-rose-400" : "text-rose-600") : styles.label}`}>
+                              <Calendar size={12} /> {task.dueDate ? formatDate(task.dueDate) : "Not set"}
+                            </span>
+                            <span className={`flex min-w-0 items-center gap-1 ${styles.label}`}>
+                              <User size={12} />
+                              <span className="truncate">{task.assignedTo ? `Assigned to ${task.assignedTo.name}` : "Unassigned"}</span>
+                            </span>
+                          </div>
+
+                          <div className={`mt-1.5 flex flex-wrap items-center gap-3 text-[11px] ${styles.label}`}>
+                            <span className="flex items-center gap-1">
+                              <List size={12} /> {subtasks.filter(st => st.isCompleted).length} of {subtasks.length} subtasks
+                            </span>
+                            <span className="truncate">Created by {task.createdBy?.name || "System"}</span>
+                          </div>
+                        </div>
+
+                        <div className="relative shrink-0">
+                          <button
+                            type="button"
+                            onClick={(e) => { e.stopPropagation(); setOpenTaskMenuId(prev => (prev === task._id ? null : task._id)); }}
+                            aria-label={`Actions for ${task.title}`}
+                            className={`rounded-lg p-1 ${styles.label} hover:bg-slate-500/10`}
+                          >
+                            <MoreVertical size={15} />
+                          </button>
+                          {openTaskMenuId === task._id && (
+                            <>
+                              <button
+                                type="button"
+                                aria-label="Close menu"
+                                onClick={(e) => { e.stopPropagation(); setOpenTaskMenuId(null); }}
+                                className="fixed inset-0 z-20 cursor-default"
+                              />
+                              <div className={`absolute right-0 top-8 z-30 w-36 overflow-hidden rounded-xl border py-1 shadow-xl ${
+                                isDark ? "border-slate-800 bg-slate-900" : "border-slate-200 bg-white"
+                              }`}>
+                                <button
+                                  type="button"
+                                  disabled={!canEditTask(task)}
+                                  onClick={(e) => { e.stopPropagation(); setOpenTaskMenuId(null); handleOpenEditModal(task); }}
+                                  className={`block w-full px-3 py-2 text-left text-xs font-semibold disabled:opacity-40 ${styles.title} hover:bg-slate-500/10`}
+                                >
+                                  Edit task
+                                </button>
+                                <button
+                                  type="button"
+                                  disabled={!canDeleteTask(task)}
+                                  onClick={(e) => { e.stopPropagation(); setOpenTaskMenuId(null); handleDeleteTask(task._id); }}
+                                  className="block w-full px-3 py-2 text-left text-xs font-semibold text-rose-500 disabled:opacity-40 hover:bg-rose-500/10"
+                                >
+                                  Delete task
+                                </button>
+                              </div>
+                            </>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })}
               </div>
-            )}
+
+              <div className={`flex flex-col items-center justify-center gap-1 rounded-2xl border border-dashed p-8 text-center ${
+                isDark ? "border-slate-800" : "border-slate-200"
+              }`}>
+                <CheckCircle2 size={28} className={isDark ? "text-slate-700" : "text-slate-300"} />
+                <p className={`text-sm font-bold ${styles.title}`}>No more tasks</p>
+                <p className={`text-xs ${styles.label}`}>
+                  {selectedUserObj ? `All tasks for ${selectedUserObj.name} are shown here.` : "All matching tasks are shown here."}
+                </p>
+              </div>
+            </div>
+
+            {/* Task detail panel */}
+            <aside aria-label="Task details" className={`tasks-detail-panel ${mobileTaskDetailsOpen ? "tasks-detail-open" : ""} scrollbar-hide flex flex-col rounded-2xl border p-4 xl:min-h-0 xl:overflow-y-auto ${styles.card}`}>
+              <button type="button" onClick={() => setMobileTaskDetailsOpen(false)} aria-label="Close task details" className="tasks-detail-close self-end rounded-lg p-2 xl:hidden"><X size={20} /></button>
+              {panelTask ? (
+                <>
+                  <div className="flex items-center justify-between gap-2">
+                    <h3 className={`text-lg font-black ${styles.title}`}>Task details</h3>
+                    <div className="flex shrink-0 items-center gap-1.5">
+                      <button
+                        type="button"
+                        onClick={() => handleOpenEditModal(panelTask)}
+                        disabled={!canEditTask(panelTask)}
+                        className={`flex h-9 items-center gap-1.5 rounded-xl border px-3 text-xs font-bold disabled:opacity-40 ${styles.button}`}
+                      >
+                        <Edit2 size={13} /> Edit task
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => handleDeleteTask(panelTask._id)}
+                        disabled={!canDeleteTask(panelTask)}
+                        title="Delete task"
+                        aria-label="Delete task"
+                        className={`rounded-xl border p-2 text-rose-500 disabled:opacity-40 ${
+                          isDark ? "border-slate-800 hover:bg-rose-500/10" : "border-slate-200 hover:bg-rose-50"
+                        }`}
+                      >
+                        <Trash2 size={14} />
+                      </button>
+                    </div>
+                  </div>
+
+                  <div className="mt-4">
+                    <p className={`text-base font-black ${styles.title}`}>{panelTask.title}</p>
+                    <p className={`mt-1 text-xs ${styles.label}`}>{panelTask.description?.trim() || "No description"}</p>
+                  </div>
+
+                  <div className="mt-4 grid grid-cols-1 gap-3 sm:grid-cols-2">
+                    <div className="min-w-0">
+                      <span className={`mb-1 block text-xs font-semibold ${styles.label}`}>Status</span>
+                      <select
+                        value={panelTask.status}
+                        onChange={(e) => handleUpdateStatus(panelTask._id, e.target.value)}
+                        aria-label="Task status"
+                        className={`h-9 w-full rounded-xl border px-2 text-xs font-semibold ${styles.input}`}
+                      >
+                        {STATUS_COLUMNS.map(col => <option key={col.id} value={col.id}>{col.label}</option>)}
+                      </select>
+                    </div>
+
+                    <div className="min-w-0">
+                      <span className={`mb-1 block text-xs font-semibold ${styles.label}`}>Priority</span>
+                      <select
+                        value={panelTask.priority}
+                        disabled={!canEditTask(panelTask)}
+                        onChange={(e) => handleInlineUpdate(panelTask._id, { priority: e.target.value })}
+                        aria-label="Task priority"
+                        className={`h-9 w-full rounded-xl border px-2 text-xs font-semibold ${styles.input}`}
+                      >
+                        {PRIORITIES.map(pr => <option key={pr.value} value={pr.value}>{pr.label}</option>)}
+                      </select>
+                    </div>
+
+                    <div className="min-w-0">
+                      <span className={`mb-1 block text-xs font-semibold ${styles.label}`}>Assignee</span>
+                      <select
+                        value={panelTask.assignedTo?._id || panelTask.assignedTo || ""}
+                        disabled={!canEditTask(panelTask)}
+                        onChange={(e) => handleInlineUpdate(panelTask._id, { assignedTo: e.target.value || null })}
+                        aria-label="Task assignee"
+                        className={`h-9 w-full rounded-xl border px-2 text-xs font-semibold ${styles.input}`}
+                      >
+                        <option value="">Unassigned</option>
+                        {assignableUsers.map(u => (
+                          <option key={u._id} value={u._id}>
+                            {String(u._id) === currentUserId ? `${u.name} (Me)` : u.name}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+
+                    <div className="min-w-0">
+                      <span className={`mb-1 block text-xs font-semibold ${styles.label}`}>Due date</span>
+                      <input
+                        type="date"
+                        value={panelTask.dueDate ? new Date(panelTask.dueDate).toISOString().split("T")[0] : ""}
+                        disabled={!canEditTask(panelTask)}
+                        onChange={(e) => handleInlineUpdate(panelTask._id, { dueDate: e.target.value || null })}
+                        aria-label="Task due date"
+                        className={`h-9 w-full rounded-xl border px-2 text-xs font-semibold ${styles.input}`}
+                      />
+                    </div>
+                  </div>
+
+                  <div className="mt-5">
+                    <p className={`text-sm font-black ${styles.title}`}>
+                      Subtasks ({(panelTask.subtasks || []).filter(st => st.isCompleted).length} of {(panelTask.subtasks || []).length})
+                    </p>
+                    <div className="mt-2 space-y-1.5">
+                      {(panelTask.subtasks || []).map((st, idx) => {
+                        const isEditingSubtask = subtaskEditKey === `${panelTask._id}:${idx}`;
+                        return (
+                          <div key={idx} className="flex items-center gap-2 text-xs">
+                            {isEditingSubtask ? (
+                              <>
+                                <input
+                                  type="text"
+                                  autoFocus
+                                  value={subtaskEditValue}
+                                  onChange={(e) => setSubtaskEditValue(e.target.value)}
+                                  onKeyDown={(e) => {
+                                    if (e.key === "Enter") { e.preventDefault(); handleSaveSubtaskEdit(panelTask, idx); }
+                                    if (e.key === "Escape") { e.preventDefault(); handleCancelSubtaskEdit(); }
+                                  }}
+                                  className={`h-8 min-w-0 flex-1 rounded-lg border px-2 text-xs ${styles.input}`}
+                                />
+                                <button type="button" onClick={() => handleSaveSubtaskEdit(panelTask, idx)} title="Save subtask" aria-label="Save subtask" className="rounded p-1 text-emerald-500 hover:bg-emerald-500/10">
+                                  <Check size={13} />
+                                </button>
+                                <button type="button" onClick={handleCancelSubtaskEdit} title="Cancel" aria-label="Cancel subtask edit" className={`rounded p-1 ${styles.label} hover:bg-slate-500/10`}>
+                                  <X size={13} />
+                                </button>
+                              </>
+                            ) : (
+                              <>
+                                <input
+                                  type="checkbox"
+                                  checked={st.isCompleted}
+                                  aria-label={st.title}
+                                  disabled={!canEditTask(panelTask)}
+                                  onChange={() => handleInlineToggleSubtask(panelTask, idx)}
+                                  className="h-3.5 w-3.5 shrink-0 rounded"
+                                />
+                                <span className={`min-w-0 flex-1 truncate ${st.isCompleted ? `line-through ${styles.label}` : styles.title}`}>{st.title}</span>
+                                <button
+                                  type="button"
+                                  onClick={() => handleStartSubtaskEdit(panelTask, idx, st.title)}
+                                  disabled={!canEditTask(panelTask)}
+                                  title="Edit subtask"
+                                  aria-label={`Edit subtask ${st.title}`}
+                                  className={`rounded p-1 ${styles.label} hover:bg-slate-500/10 disabled:opacity-40`}
+                                >
+                                  <Edit2 size={12} />
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => handleDeleteSubtask(panelTask, idx)}
+                                  disabled={!canEditTask(panelTask)}
+                                  title="Delete subtask"
+                                  aria-label={`Delete subtask ${st.title}`}
+                                  className="rounded p-1 text-rose-500 hover:bg-rose-500/10 disabled:opacity-40"
+                                >
+                                  <Trash2 size={12} />
+                                </button>
+                              </>
+                            )}
+                          </div>
+                        );
+                      })}
+                    </div>
+                    <div className={`mt-2 flex items-center gap-2 rounded-xl border border-dashed px-3 py-2 ${isDark ? "border-slate-800" : "border-slate-200"}`}>
+                      <Plus size={14} className={styles.label} />
+                      <input
+                        type="text"
+                        value={inlineSubtaskInput}
+                        disabled={!canEditTask(panelTask)}
+                        onChange={(e) => setInlineSubtaskInput(e.target.value)}
+                        onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); handleInlineAddSubtask(panelTask); } }}
+                        placeholder="Add a subtask..."
+                        className={`h-6 min-w-0 flex-1 bg-transparent text-xs focus:outline-none ${styles.title}`}
+                      />
+                    </div>
+                  </div>
+
+                  <div className={`mt-5 flex items-center gap-3 border-t pt-4 ${isDark ? "border-white/5" : "border-slate-100"}`}>
+                    <span className={`text-xs font-semibold ${styles.label}`}>Created by</span>
+                    <div className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-[10px] font-black uppercase ${
+                      AVATAR_COLORS[(panelTask.createdBy?.name || "?").charCodeAt(0) % AVATAR_COLORS.length]
+                    }`}>
+                      {(panelTask.createdBy?.name || "?").slice(0, 2)}
+                    </div>
+                    <div className="min-w-0">
+                      <p className={`truncate text-xs font-bold ${styles.title}`}>{panelTask.createdBy?.name || "System"}</p>
+                      <p className={`text-[11px] ${styles.label}`}>{formatDate(panelTask.createdAt)}</p>
+                    </div>
+                  </div>
+
+                  <div className={`mt-5 border-t pt-4 ${isDark ? "border-white/5" : "border-slate-100"}`}>
+                    <p className={`text-sm font-black ${styles.title}`}>Activity</p>
+                    <div className="mt-3 space-y-3">
+                      {panelTask.status === "COMPLETED" && (
+                        <div className="flex items-start gap-3">
+                          <span className="mt-1 h-3 w-3 shrink-0 rounded-full border-2 border-emerald-500 bg-emerald-500/30" />
+                          <div className="flex min-w-0 flex-1 flex-wrap items-start justify-between gap-2">
+                            <div className="min-w-0">
+                              <p className={`text-xs font-bold ${styles.title}`}>Task completed</p>
+                              <p className={`text-[11px] ${styles.label}`}>Marked completed</p>
+                            </div>
+                            <span className={`text-[11px] ${styles.label}`}>{formatDateTime(panelTask.updatedAt)}</span>
+                          </div>
+                        </div>
+                      )}
+                      <div className="flex items-start gap-3">
+                        <span className="mt-1 h-3 w-3 shrink-0 rounded-full border-2 border-sky-500 bg-sky-500/30" />
+                        <div className="flex min-w-0 flex-1 flex-wrap items-start justify-between gap-2">
+                          <div className="min-w-0">
+                            <p className={`text-xs font-bold ${styles.title}`}>Task created</p>
+                            <p className={`truncate text-[11px] ${styles.label}`}>
+                              {panelTask.createdBy?.name || "System"} created this task
+                            </p>
+                          </div>
+                          <span className={`text-[11px] ${styles.label}`}>{formatDateTime(panelTask.createdAt)}</span>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                </>
+              ) : (
+                <div className="flex flex-1 flex-col items-center justify-center gap-2 p-6 text-center">
+                  <ListTodo size={28} className={isDark ? "text-slate-700" : "text-slate-300"} />
+                  <p className={`text-sm font-semibold ${styles.label}`}>Select a task to see its details</p>
+                </div>
+              )}
+            </aside>
           </div>
         )}
         </>
@@ -1542,7 +2302,7 @@ export default function TaskManager({ theme = "light" }) {
               initial={{ opacity: 0, scale: 0.95, y: 10 }}
               animate={{ opacity: 1, scale: 1, y: 0 }}
               exit={{ opacity: 0, scale: 0.95, y: 10 }}
-              className={`mobile-fullscreen-panel relative z-10 flex w-full max-w-lg flex-col overflow-hidden rounded-[22px] border p-4 sm:p-6 ${
+              className={`mobile-fullscreen-panel relative z-10 flex max-h-[100dvh] w-full max-w-lg flex-col overflow-hidden rounded-[22px] border p-4 sm:max-h-[calc(100dvh-2rem)] sm:p-6 ${
                 isDark ? "border-slate-800 bg-slate-900" : "border-slate-200 bg-white"
               }`}
             >
@@ -1564,7 +2324,7 @@ export default function TaskManager({ theme = "light" }) {
                   <div className="h-8 w-8 animate-spin rounded-full border-2 border-sky-500 border-t-transparent" />
                 </div>
               ) : (
-                <div className="mobile-modal-scroll flex-1 space-y-4">
+                <div className="mobile-modal-scroll scrollbar-hide flex-1 space-y-4">
                   {/* Title & Priority */}
                   <div className="flex items-start justify-between gap-2">
                     <h4 className={`text-lg font-bold leading-snug break-words ${styles.title}`}>
@@ -1585,7 +2345,6 @@ export default function TaskManager({ theme = "light" }) {
                     <span className={`text-[10px] font-bold uppercase tracking-wider ${styles.label}`}>Status:</span>
                     <select
                       aria-label="Task status"
-                      disabled={Boolean(statusUpdating)}
                       value={detailsTask.status}
                       onChange={(e) => handleUpdateStatus(detailsTask._id, e.target.value)}
                       className={`h-8 rounded-lg border px-2 text-xs font-semibold ${styles.input}`}
@@ -1606,8 +2365,8 @@ export default function TaskManager({ theme = "light" }) {
                     <p className={`text-sm ${styles.text}`}>{detailsTask.status === "COMPLETED" ? "Completed. No further action is required unless the task needs to be reopened." : "Review the requirement below, mark the task In Progress when you start, and mark Completed when finished."}</p>
                     <div className="flex flex-wrap gap-2">
                       {detailsTask.status !== "COMPLETED" && <>
-                        <button type="button" disabled={Boolean(statusUpdating) || detailsTask.status === "IN_PROGRESS"} onClick={() => handleUpdateStatus(detailsTask._id, "IN_PROGRESS")} className={`rounded-lg border px-3 py-2 text-sm font-semibold disabled:opacity-50 ${styles.button}`}>In Progress / Ongoing</button>
-                        <button type="button" disabled={Boolean(statusUpdating)} onClick={() => handleUpdateStatus(detailsTask._id, "COMPLETED")} className="rounded-lg bg-emerald-600 px-3 py-2 text-sm font-semibold text-white disabled:opacity-50">Mark Completed</button>
+                        <button type="button" disabled={detailsTask.status === "IN_PROGRESS"} onClick={() => handleUpdateStatus(detailsTask._id, "IN_PROGRESS")} className={`rounded-lg border px-3 py-2 text-sm font-semibold disabled:opacity-50 ${styles.button}`}>In Progress / Ongoing</button>
+                        <button type="button" disabled={detailsTask.status === "COMPLETED"} onClick={() => handleUpdateStatus(detailsTask._id, "COMPLETED")} className="rounded-lg bg-emerald-600 px-3 py-2 text-sm font-semibold text-white disabled:opacity-50">Mark Completed</button>
                       </>}
                       <button type="button" onClick={handleCloseDetails} className={`rounded-lg border px-3 py-2 text-sm font-semibold ${styles.button}`}>Back to task list</button>
                     </div>
@@ -1682,22 +2441,73 @@ export default function TaskManager({ theme = "light" }) {
                       <div className={`rounded-xl border p-2 space-y-1.5 ${isDark ? "border-slate-850 bg-slate-950/40" : "border-slate-150 bg-slate-50/50"}`}>
                         {detailsTask.subtasks.map((st, idx) => (
                           <div key={idx} className="flex items-center gap-2 text-xs py-0.5">
-                            <input type="checkbox" aria-label={st.title} checked={st.isCompleted} disabled={Boolean(statusUpdating) || !canEditTask(detailsTask)} onChange={async () => {
-                              if (statusUpdating || !canEditTask(detailsTask)) return;
-                              setStatusUpdating(detailsTask._id);
-                              try {
-                                const updated = await updateTask(detailsTask._id, { subtasks: detailsTask.subtasks.map((item, i) => i === idx ? { ...item, isCompleted: !item.isCompleted } : item) });
-                                setDetailsTask(updated);
-                                fetchData();
-                              } catch (err) {
-                                setError(err.response?.data?.message || "Failed to update checklist");
-                              } finally {
-                                setStatusUpdating("");
-                              }
-                            }} className="h-3.5 w-3.5 shrink-0 rounded" />
-                            <span className={`truncate ${st.isCompleted ? "line-through text-slate-500" : styles.text}`}>
+                            {subtaskEditKey === `${detailsTask._id}:${idx}` ? (
+                              <>
+                                <input
+                                  type="text"
+                                  autoFocus
+                                  value={subtaskEditValue}
+                                  onChange={(e) => setSubtaskEditValue(e.target.value)}
+                                  onKeyDown={(e) => {
+                                    if (e.key === "Enter") { e.preventDefault(); handleSaveSubtaskEdit(detailsTask, idx); }
+                                    if (e.key === "Escape") { e.preventDefault(); handleCancelSubtaskEdit(); }
+                                  }}
+                                  className={`h-8 min-w-0 flex-1 rounded-lg border px-2 text-xs ${styles.input}`}
+                                />
+                                <button
+                                  type="button"
+                                  onClick={() => handleSaveSubtaskEdit(detailsTask, idx)}
+                                  title="Save subtask"
+                                  aria-label="Save subtask"
+                                  className="rounded p-1 text-emerald-500 hover:bg-emerald-500/10"
+                                >
+                                  <Check size={13} />
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={handleCancelSubtaskEdit}
+                                  title="Cancel"
+                                  aria-label="Cancel subtask edit"
+                                  className={`rounded p-1 ${styles.label} hover:bg-slate-500/10`}
+                                >
+                                  <X size={13} />
+                                </button>
+                              </>
+                            ) : (
+                            <>
+                            <input
+                              type="checkbox"
+                              aria-label={st.title}
+                              checked={st.isCompleted}
+                              disabled={!canEditTask(detailsTask)}
+                              onChange={() => handleInlineToggleSubtask(detailsTask, idx)}
+                              className="h-3.5 w-3.5 shrink-0 rounded"
+                            />
+                            <span className={`min-w-0 flex-1 truncate ${st.isCompleted ? "line-through text-slate-500" : styles.text}`}>
                               {st.title}
                             </span>
+                            <button
+                              type="button"
+                              onClick={() => handleStartSubtaskEdit(detailsTask, idx, st.title)}
+                              disabled={!canEditTask(detailsTask)}
+                              title="Edit subtask"
+                              aria-label={`Edit subtask ${st.title}`}
+                              className={`rounded p-1 ${styles.label} hover:bg-slate-500/10 disabled:opacity-40`}
+                            >
+                              <Edit2 size={13} />
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => handleDeleteSubtask(detailsTask, idx)}
+                              disabled={!canEditTask(detailsTask)}
+                              title="Delete subtask"
+                              aria-label={`Delete subtask ${st.title}`}
+                              className="rounded p-1 text-rose-500 hover:bg-rose-500/10 disabled:opacity-40"
+                            >
+                              <Trash2 size={13} />
+                            </button>
+                            </>
+                            )}
                           </div>
                         ))}
                       </div>
@@ -1706,7 +2516,9 @@ export default function TaskManager({ theme = "light" }) {
 
                   {/* Actions */}
                   {isTaskReceiver(detailsTask) && <p className={`text-sm ${styles.label}`}>You can only change the status of this assigned task. Contact the task creator for other changes.</p>}
-                  <div className="mobile-safe-footer -mx-4 flex items-center justify-end gap-2 border-t border-slate-200 bg-inherit px-4 pt-3 sm:mx-0 sm:border-t-0 sm:px-0 sm:pt-2">
+                  <div className={`mobile-safe-footer sticky bottom-0 z-10 -mx-4 flex flex-wrap items-center justify-end gap-2 border-t px-4 pb-1 pt-3 sm:mx-0 sm:px-0 ${
+                    isDark ? "border-white/5 bg-slate-900" : "border-slate-200 bg-white"
+                  }`}>
                     <button
                       disabled={!canDeleteTask(detailsTask)}
                       onClick={() => {
@@ -1753,7 +2565,7 @@ export default function TaskManager({ theme = "light" }) {
               initial={{ opacity: 0, scale: 0.95, y: 10 }}
               animate={{ opacity: 1, scale: 1, y: 0 }}
               exit={{ opacity: 0, scale: 0.95, y: 10 }}
-              className={`mobile-fullscreen-panel relative z-10 flex w-full max-w-2xl flex-col overflow-hidden rounded-[22px] border p-4 sm:p-6 ${
+              className={`mobile-fullscreen-panel relative z-10 flex max-h-[100dvh] w-full max-w-2xl flex-col overflow-hidden rounded-[22px] border p-4 sm:max-h-[calc(100dvh-2rem)] sm:p-6 ${
                 isDark ? "border-slate-800 bg-slate-900" : "border-slate-200 bg-white"
               }`}
             >
@@ -1782,7 +2594,7 @@ export default function TaskManager({ theme = "light" }) {
               </div>
 
               {/* Form */}
-              <form onSubmit={handleSubmit} className="mobile-modal-scroll flex-1 space-y-4">
+              <form onSubmit={handleSubmit} className="tasks-edit-form mobile-modal-scroll scrollbar-hide flex-1 space-y-4">
                 {/* Title - the focal point: bigger and bolder than every other field, not boxless */}
                 <div>
                   <input
@@ -1810,13 +2622,13 @@ export default function TaskManager({ theme = "light" }) {
                 </div>
 
                 {/* Details card: priority, status, due date, assignee, lead — icon rows */}
-                <div className={`divide-y overflow-hidden rounded-xl border ${isDark ? "divide-white/5 border-slate-800" : "divide-slate-100 border-slate-200"}`}>
+                <div className={`tasks-edit-fields divide-y overflow-hidden rounded-xl border ${isDark ? "divide-white/5 border-slate-800" : "divide-slate-100 border-slate-200"}`}>
                   {/* Priority */}
                   <div className="flex flex-wrap items-center gap-2 p-2.5">
-                    <div className={`flex w-28 shrink-0 items-center gap-2 text-xs font-semibold ${styles.label}`}>
+                    <div className={`flex w-24 shrink-0 items-center gap-2 text-xs font-semibold sm:w-28 ${styles.label}`}>
                       <Flag size={14} /> Priority
                     </div>
-                    <div className="flex flex-1 gap-1.5">
+                    <div className="flex min-w-0 flex-1 gap-1.5">
                       {PRIORITIES.map(p => (
                         <button
                           type="button"
@@ -1834,16 +2646,16 @@ export default function TaskManager({ theme = "light" }) {
 
                   {/* Status */}
                   <div className="flex flex-wrap items-center gap-2 p-2.5">
-                    <div className={`flex w-28 shrink-0 items-center gap-2 text-xs font-semibold ${styles.label}`}>
+                    <div className={`flex w-24 shrink-0 items-center gap-2 text-xs font-semibold sm:w-28 ${styles.label}`}>
                       <ListTodo size={14} /> Status
                     </div>
-                    <div className="flex flex-1 flex-wrap gap-1.5">
+                    <div className="flex min-w-0 flex-1 flex-wrap gap-1.5">
                       {STATUS_COLUMNS.map(col => (
                         <button
                           type="button"
                           key={col.id}
                           onClick={() => setFormData(prev => ({ ...prev, status: col.id }))}
-                          className={`h-8 flex-1 rounded-lg border px-2 text-xs font-bold transition-all ${
+                          className={`h-8 min-w-[72px] flex-1 rounded-lg border px-2 text-xs font-bold transition-all ${
                             formData.status === col.id ? `${col.color} ring-1 ring-inset ring-current` : styles.button
                           }`}
                         >
@@ -1855,14 +2667,14 @@ export default function TaskManager({ theme = "light" }) {
 
                   {/* Due Date */}
                   <div className="flex items-center gap-2 p-2.5">
-                    <div className={`flex w-28 shrink-0 items-center gap-2 text-xs font-semibold ${styles.label}`}>
+                    <div className={`flex w-24 shrink-0 items-center gap-2 text-xs font-semibold sm:w-28 ${styles.label}`}>
                       <Calendar size={14} /> Due date
                     </div>
                     <input
                       type="date"
                       value={formData.dueDate}
                       onChange={(e) => setFormData(prev => ({ ...prev, dueDate: e.target.value }))}
-                      className={`h-8 flex-1 rounded-lg border px-2 text-xs ${styles.input}`}
+                      className={`h-8 min-w-0 flex-1 rounded-lg border px-2 text-xs ${styles.input}`}
                     />
                     {formData.dueDate && (
                       <button
@@ -1876,16 +2688,47 @@ export default function TaskManager({ theme = "light" }) {
                     )}
                   </div>
 
+                  {/* Assignee */}
+                  <div className="flex items-center gap-2 p-2.5">
+                    <div className={`flex w-24 shrink-0 items-center gap-2 text-xs font-semibold sm:w-28 ${styles.label}`}>
+                      <User size={14} /> Assign to
+                    </div>
+                    <select
+                      value={formData.assignedTo}
+                      onChange={(e) => setFormData(prev => ({ ...prev, assignedTo: e.target.value }))}
+                      className={`h-8 min-w-0 flex-1 rounded-lg border px-2 text-xs ${styles.input}`}
+                    >
+                      <option value="">Unassigned</option>
+                      {assignableUsers.map(u => (
+                        <option key={u._id} value={u._id}>
+                          {String(u._id) === currentUserId
+                            ? `${u.name} (Me)`
+                            : `${u.name}${u.role ? ` — ${u.role}` : ""}`}
+                        </option>
+                      ))}
+                    </select>
+                    {currentUserId && String(formData.assignedTo) !== currentUserId && (
+                      <button
+                        type="button"
+                        onClick={() => setFormData(prev => ({ ...prev, assignedTo: currentUserId }))}
+                        title="Assign this task to me"
+                        className={`h-8 shrink-0 rounded-lg border px-2.5 text-[11px] font-bold ${styles.button}`}
+                      >
+                        Me
+                      </button>
+                    )}
+                  </div>
+
                   {/* Linked Lead */}
                   {!isProductionExecutive && (
                     <div className="flex items-center gap-2 p-2.5">
-                      <div className={`flex w-28 shrink-0 items-center gap-2 text-xs font-semibold ${styles.label}`}>
+                      <div className={`flex w-24 shrink-0 items-center gap-2 text-xs font-semibold sm:w-28 ${styles.label}`}>
                         <LinkIcon size={14} /> Lead
                       </div>
                       <select
                         value={formData.leadId}
                         onChange={(e) => setFormData(prev => ({ ...prev, leadId: e.target.value }))}
-                        className={`h-8 flex-1 rounded-lg border px-2 text-xs ${styles.input}`}
+                        className={`h-8 min-w-0 flex-1 rounded-lg border px-2 text-xs ${styles.input}`}
                       >
                         <option value="">No linked lead</option>
                         {leads.map(l => (
@@ -1921,29 +2764,76 @@ export default function TaskManager({ theme = "light" }) {
                   </div>
 
                   {formData.subtasks && formData.subtasks.length > 0 && (
-                    <div className={`rounded-xl border p-2 space-y-1.5 max-h-32 overflow-y-auto ${
+                    <div className={`scrollbar-hide rounded-xl border p-2 space-y-1.5 max-h-32 overflow-y-auto ${
                       isDark ? "border-slate-850 bg-slate-950/40" : "border-slate-150 bg-slate-50/50"
                     }`}>
                       {formData.subtasks.map((st, idx) => (
-                        <div key={idx} className="flex items-center justify-between text-xs py-0.5">
-                          <label className="flex items-center gap-2 cursor-pointer flex-1 min-w-0 pr-2">
-                            <input
-                              type="checkbox"
-                              checked={st.isCompleted}
-                              onChange={() => handleToggleSubtaskInForm(idx)}
-                              className="rounded border-slate-700 bg-transparent text-sky-500 focus:ring-0 focus:ring-offset-0"
-                            />
-                            <span className={`truncate ${st.isCompleted ? "line-through text-slate-500" : styles.text}`}>
-                              {st.title}
-                            </span>
-                          </label>
-                          <button
-                            type="button"
-                            onClick={() => handleRemoveSubtask(idx)}
-                            className="text-rose-500 hover:text-rose-400 p-1 rounded"
-                          >
-                            <X size={12} />
-                          </button>
+                        <div key={idx} className="flex items-center justify-between gap-1 text-xs py-0.5">
+                          {formSubtaskEditIndex === idx ? (
+                            <>
+                              <input
+                                type="text"
+                                autoFocus
+                                value={formSubtaskEditValue}
+                                onChange={(e) => setFormSubtaskEditValue(e.target.value)}
+                                onKeyDown={(e) => {
+                                  if (e.key === "Enter") { e.preventDefault(); handleSaveFormSubtaskEdit(); }
+                                  if (e.key === "Escape") { e.preventDefault(); handleCancelFormSubtaskEdit(); }
+                                }}
+                                className={`h-8 min-w-0 flex-1 rounded-lg border px-2 text-xs ${styles.input}`}
+                              />
+                              <button
+                                type="button"
+                                onClick={handleSaveFormSubtaskEdit}
+                                title="Save subtask"
+                                aria-label="Save subtask"
+                                className="text-emerald-500 hover:text-emerald-400 p-1 rounded"
+                              >
+                                <Check size={12} />
+                              </button>
+                              <button
+                                type="button"
+                                onClick={handleCancelFormSubtaskEdit}
+                                title="Cancel"
+                                aria-label="Cancel subtask edit"
+                                className="text-slate-400 hover:text-slate-300 p-1 rounded"
+                              >
+                                <X size={12} />
+                              </button>
+                            </>
+                          ) : (
+                            <>
+                              <label className="flex items-center gap-2 cursor-pointer flex-1 min-w-0 pr-2">
+                                <input
+                                  type="checkbox"
+                                  checked={st.isCompleted}
+                                  onChange={() => handleToggleSubtaskInForm(idx)}
+                                  className="rounded border-slate-700 bg-transparent text-sky-500 focus:ring-0 focus:ring-offset-0"
+                                />
+                                <span className={`truncate ${st.isCompleted ? "line-through text-slate-500" : styles.text}`}>
+                                  {st.title}
+                                </span>
+                              </label>
+                              <button
+                                type="button"
+                                onClick={() => handleStartFormSubtaskEdit(idx, st.title)}
+                                title="Edit subtask"
+                                aria-label={`Edit subtask ${st.title}`}
+                                className="text-slate-400 hover:text-sky-400 p-1 rounded"
+                              >
+                                <Edit2 size={12} />
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => handleRemoveSubtask(idx)}
+                                title="Delete subtask"
+                                aria-label={`Delete subtask ${st.title}`}
+                                className="text-rose-500 hover:text-rose-400 p-1 rounded"
+                              >
+                                <Trash2 size={12} />
+                              </button>
+                            </>
+                          )}
                         </div>
                       ))}
                     </div>
@@ -2023,7 +2913,9 @@ export default function TaskManager({ theme = "light" }) {
                 </div>
 
                 {/* Actions */}
-                <div className="mobile-safe-footer -mx-4 flex items-center justify-end gap-2 border-t border-slate-200 bg-inherit px-4 pt-3 dark:border-white/5 sm:mx-0 sm:border-t-0 sm:px-0 sm:pt-2">
+                <div className={`mobile-safe-footer sticky bottom-0 z-10 -mx-4 flex items-center justify-end gap-2 border-t px-4 pb-1 pt-3 sm:mx-0 sm:px-0 ${
+                  isDark ? "border-white/5 bg-slate-900" : "border-slate-200 bg-white"
+                }`}>
                   <button
                     type="button"
                     onClick={() => setIsModalOpen(false)}

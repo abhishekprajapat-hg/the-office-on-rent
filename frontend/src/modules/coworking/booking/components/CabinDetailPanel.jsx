@@ -19,7 +19,7 @@ import {
 } from "lucide-react";
 import { Button, cn } from "../../../../components/ui";
 import { formatCurrency, formatDate } from "../../../../utils/format";
-import { STATUS_META } from "../floorPlanData";
+import { STATUS_META } from "../cabinData";
 
 /*
  * Everything known about one cabin, in the order a manager asks for it:
@@ -209,9 +209,22 @@ const CabinDetailPanel = ({ cabin, onClose, onAction, onOnboard, onHold, onTrans
               <Row label="Monthly rent" value={formatCurrency(contract.monthlyRent)} />
               <Row label="Deposit" value={formatCurrency(contract.deposit)} />
               <Row
-                label="Next invoice"
-                value={`${formatCurrency(contract.nextInvoiceAmount)} on ${formatDate(contract.nextInvoiceDate)}`}
+                label="Payment status"
+                value={
+                  <span
+                    className={cn(
+                      "inline-flex rounded-full border px-2 py-0.5 text-[11px] font-semibold",
+                      contract.duesAmount > 0
+                        ? "border-rose-200 bg-rose-50 text-rose-700 dark:border-rose-500/30 dark:bg-rose-500/10 dark:text-rose-300"
+                        : "border-emerald-200 bg-emerald-50 text-emerald-700 dark:border-emerald-500/30 dark:bg-emerald-500/10 dark:text-emerald-300",
+                    )}
+                  >
+                    {contract.duesAmount > 0 ? "Overdue" : "Paid"}
+                  </span>
+                }
               />
+              <Row label="Next due date" value={formatDate(contract.nextInvoiceDate)} />
+              <Row label="Next invoice" value={formatCurrency(contract.nextInvoiceAmount)} />
             </dl>
 
             {contract.duesAmount > 0 ? (
@@ -232,7 +245,7 @@ const CabinDetailPanel = ({ cabin, onClose, onAction, onOnboard, onHold, onTrans
               </div>
             ) : null}
 
-            <div className="mt-3 grid grid-cols-2 gap-2">
+            <div className="mt-3 grid grid-cols-1 gap-2 sm:grid-cols-2">
               {cabin.status === "BOOKED" ? (
                 <>
                   <Button
@@ -284,7 +297,7 @@ const CabinDetailPanel = ({ cabin, onClose, onAction, onOnboard, onHold, onTrans
 
           <dl className="mt-2">
             <Row label="Deposit" value={`${formatCurrency(cabin.deposit)} (2 months)`} />
-            <Row label="Includes" value={cabin.amenities.join(", ")} />
+            <Row label="Includes" value={(cabin.amenities || []).join(", ") || "Not configured"} />
           </dl>
 
           <Button leftIcon={UserPlus} className="mt-3 w-full" onClick={() => onOnboard([cabin])}>
@@ -293,7 +306,7 @@ const CabinDetailPanel = ({ cabin, onClose, onAction, onOnboard, onHold, onTrans
           <Button size="sm" variant="secondary" className="mt-2 w-full" onClick={() => onHold(cabin)}>
             Hold for a lead
           </Button>
-          <div className="mt-2 grid grid-cols-2 gap-2">
+          <div className="mt-2 grid grid-cols-1 gap-2 sm:grid-cols-2">
             <Button
               size="sm"
               variant="ghost"

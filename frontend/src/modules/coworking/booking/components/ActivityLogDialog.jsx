@@ -43,7 +43,7 @@ const ActivityLogDialog = ({ open, activity, onClose, onOpenCabin }) => (
     onClose={onClose}
     size="lg"
     title="Activity"
-    description={activity.length ? `${activity.length} recorded on this floor` : "Nothing recorded yet"}
+    description={activity.length ? `${activity.length} recorded for this coworking space` : "Nothing recorded yet"}
     footer={<Button onClick={onClose}>Done</Button>}
   >
     {activity.length ? (

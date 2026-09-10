@@ -4,6 +4,12 @@ const router = express.Router();
 const leadController = require("../controllers/lead.controller");
 const authMiddleware = require("../middleware/auth.middleware");
 const { writeLimiter } = require("../middleware/rateLimit.middleware");
+const { requirePageAccess } = require("../middleware/pageAccess.middleware");
+
+// Router-level auth so the page guard can read req.user. The per-route
+// authMiddleware.protect calls below stay as they are and short-circuit.
+router.use(authMiddleware.protect);
+router.use(requirePageAccess("leads", "my_leads"));
 
 // ======================================
 // CREATE LEAD (All logged in users)

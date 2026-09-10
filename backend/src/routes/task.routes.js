@@ -3,9 +3,11 @@ const router = express.Router();
 const taskController = require("../controllers/task.controller");
 const authMiddleware = require("../middleware/auth.middleware");
 const { writeLimiter } = require("../middleware/rateLimit.middleware");
+const { requirePageAccess } = require("../middleware/pageAccess.middleware");
 
 // All routes are protected by JWT authentication
 router.use(authMiddleware.protect);
+router.use(requirePageAccess("tasks"));
 
 router.get("/", taskController.getTasks);
 router.get("/stats", taskController.getTaskStats);

@@ -3,7 +3,6 @@ import { ArrowLeft, ArrowRight, Building2, Check, Search, UserPlus } from "lucid
 import { Button, Input, Modal, Select, cn } from "../../../../components/ui";
 import { formatCurrency, formatDate } from "../../../../utils/format";
 import { CLIENT_KINDS, ENTITY_TYPES, kycStatusOf } from "../kycDocuments";
-import { SAMPLE_CLIENT_BOOK } from "../sampleFloor";
 import DocumentChecklist from "./DocumentChecklist";
 
 /*
@@ -162,15 +161,15 @@ const OnboardClientDialog = ({ open, cabins = [], onClose, onConfirm }) => {
 
   const matchingClients = useMemo(() => {
     const query = clientQuery.trim().toLowerCase();
-    if (!query) return SAMPLE_CLIENT_BOOK;
-    return SAMPLE_CLIENT_BOOK.filter((client) =>
+    if (!query) return [];
+    return [].filter((client) =>
       `${client.name} ${client.contactPerson} ${client.industry}`.toLowerCase().includes(query),
     );
   }, [clientQuery]);
 
   const isCompany = form.kind === "company";
   const kyc = kycStatusOf(form);
-  const selectedClient = SAMPLE_CLIENT_BOOK.find((client) => client.id === existingClientId);
+  const selectedClient = null;
   const clientName = mode === "new" ? form.companyName.trim() : selectedClient?.name || "";
   const canAdvance = step === 0 ? Boolean(clientName) : true;
 
@@ -347,7 +346,7 @@ const OnboardClientDialog = ({ open, cabins = [], onClose, onConfirm }) => {
                     leftIcon={Search}
                     value={clientQuery}
                     onChange={(event) => setClientQuery(event.target.value)}
-                    placeholder="Search clients already on this floor"
+                    placeholder="Search clients already in this coworking space"
                   />
                   <ul className="custom-scrollbar mt-2 max-h-[260px] space-y-1 overflow-y-auto">
                     {matchingClients.map((client) => (

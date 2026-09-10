@@ -11,27 +11,19 @@ import {
   updateChannelPartnerInventoryAccess,
 } from "../../services/userService";
 import { getAllLeads } from "../../services/leadService";
+import {
+  getAssignableRoleTypes,
+  getAssignableRoles,
+} from "../../services/accessService";
 import { toErrorMessage } from "../../utils/errorMessage";
 import ToastNotice from "../../components/ui/ToastNotice";
 import {
   UserFormPanel,
 } from "./components/TeamManagerPanels";
 
-const ROLE_OPTIONS = [
-  { label: "Manager", value: "MANAGER" },
-  { label: "Executive", value: "EXECUTIVE" },
-  { label: "Field Executive", value: "FIELD_EXECUTIVE" },
-  { label: "Production Executive", value: "PRODUCTION_EXECUTIVE" },
-  { label: "Community Manager", value: "COMMUNITY_MANAGER" },
-  { label: "Channel Partner", value: "CHANNEL_PARTNER" },
-  { label: "Coworking admin", value: "COWORKING_ADMIN" },
-];
-
-const ROLE_TYPE_OPTIONS = [
-  { label: "Commercial", value: "COMMERCIAL" },
-  { label: "Residential", value: "RESIDENTIAL" },
-  { label: "Both", value: "BOTH" },
-];
+// Role types and roles for the create-user form are loaded from the backend —
+// see loadRoleTypeOptions / the roleTypeId effect below. Nothing about the
+// catalogue is hardcoded here any more.
 
 const MANAGEMENT_ROLES = ["MANAGER"];
 const EXECUTIVE_ROLES = ["EXECUTIVE", "FIELD_EXECUTIVE"];
@@ -139,15 +131,20 @@ const TeamManager = ({ theme = "light" }) => {
     name: "",
     email: "",
     phone: "",
-    roleType: "COMMERCIAL",
+    roleTypeId: "",
     password: "",
-    role: "MANAGER",
+    roleId: "",
     reportingToId: "",
     canViewInventory: false,
     brokerageMode: "FLAT",
     brokerageValue: String(DEFAULT_BROKERAGE_VALUE),
     brokerageNotes: "",
   });
+  const [roleTypeOptions, setRoleTypeOptions] = useState([]);
+  const [roleOptions, setRoleOptions] = useState([]);
+  const [roleTypesLoading, setRoleTypesLoading] = useState(false);
+  const [rolesLoading, setRolesLoading] = useState(false);
+  const [catalogError, setCatalogError] = useState("");
 
   const currentRole = localStorage.getItem("role");
   const isAdmin = currentRole === "ADMIN";
@@ -157,8 +154,16 @@ const TeamManager = ({ theme = "light" }) => {
   const currentUser = JSON.parse(localStorage.getItem("user") || "{}");
   const currentUserId = currentUser?.id || currentUser?._id || "";
 
+  // The selected role carries a base role; the reporting rules key off that,
+  // exactly as they did when the form posted a raw role string.
+  const selectedRole = useMemo(
+    () => roleOptions.find((role) => String(role._id) === String(formData.roleId)) || null,
+    [roleOptions, formData.roleId],
+  );
+  const selectedBaseRole = selectedRole?.baseRole || "";
+
   const reportingCandidates = useMemo(() => {
-    const allowedParentRoles = REPORTING_PARENT_ROLES[formData.role] || [];
+    const allowedParentRoles = REPORTING_PARENT_ROLES[selectedBaseRole] || [];
     if (!allowedParentRoles.length) return [];
 
     return users.filter(
@@ -166,15 +171,15 @@ const TeamManager = ({ theme = "light" }) => {
         user.isActive &&
         allowedParentRoles.includes(user.role),
     );
-  }, [formData.role, users]);
+  }, [selectedBaseRole, users]);
 
   const reportingLabel = useMemo(() => {
-    const allowedParentRoles = REPORTING_PARENT_ROLES[formData.role] || [];
+    const allowedParentRoles = REPORTING_PARENT_ROLES[selectedBaseRole] || [];
     if (!allowedParentRoles.length) return "";
     return allowedParentRoles
       .map((role) => ROLE_LABELS[role] || role)
       .join(" / ");
-  }, [formData.role]);
+  }, [selectedBaseRole]);
 
   const roleFilterOptions = useMemo(() => {
     const visibleRoleSet = new Set(
@@ -383,6 +388,62 @@ const TeamManager = ({ theme = "light" }) => {
     loadData();
   }, []);
 
+  // Active role types come from the backend the moment the panel opens.
+  useEffect(() => {
+    if (!panelOpen || !canUseAdminTools) return;
+
+    let alive = true;
+    setRoleTypesLoading(true);
+    setCatalogError("");
+
+    getAssignableRoleTypes()
+      .then((rows) => { if (alive) setRoleTypeOptions(rows); })
+      .catch((err) => {
+        if (!alive) return;
+        setRoleTypeOptions([]);
+        setCatalogError(toErrorMessage(err, "Failed to load role types"));
+      })
+      .finally(() => { if (alive) setRoleTypesLoading(false); });
+
+    return () => { alive = false; };
+  }, [panelOpen, canUseAdminTools]);
+
+  // Roles depend on the chosen role type; changing the type drops a role that
+  // no longer belongs to it rather than posting an incompatible pair.
+  useEffect(() => {
+    if (!panelOpen) return undefined;
+
+    if (!formData.roleTypeId) {
+      setRoleOptions([]);
+      setRolesLoading(false);
+      return undefined;
+    }
+
+    let alive = true;
+    setRolesLoading(true);
+
+    getAssignableRoles(formData.roleTypeId)
+      .then((rows) => {
+        if (!alive) return;
+        setRoleOptions(rows);
+        setFormData((prev) => (
+          prev.roleId && !rows.some((role) => String(role._id) === String(prev.roleId))
+            ? { ...prev, roleId: "", reportingToId: "" }
+            : prev
+        ));
+      })
+      .catch((err) => {
+        if (!alive) return;
+        setRoleOptions([]);
+        setCatalogError(toErrorMessage(err, "Failed to load roles"));
+      })
+      .finally(() => { if (alive) setRolesLoading(false); });
+
+    return () => { alive = false; };
+    // Reacts to the role type changing only; the current role id is read
+    // inside the updater, so it is not a dependency.
+  }, [panelOpen, formData.roleTypeId]);
+
   useEffect(() => {
     if (roleFilter === "ALL") return;
     const hasFilterValue = roleFilterOptions.some((option) => option.value === roleFilter);
@@ -396,15 +457,17 @@ const TeamManager = ({ theme = "light" }) => {
       name: "",
       email: "",
       phone: "",
-      roleType: "COMMERCIAL",
+      roleTypeId: "",
       password: "",
-      role: "MANAGER",
+      roleId: "",
       reportingToId: "",
       canViewInventory: false,
       brokerageMode: "FLAT",
       brokerageValue: String(DEFAULT_BROKERAGE_VALUE),
       brokerageNotes: "",
     });
+    setRoleOptions([]);
+    setCatalogError("");
     setFormError("");
   };
 
@@ -417,8 +480,18 @@ const TeamManager = ({ theme = "light" }) => {
   const handleCreateUser = async () => {
     if (!canUseAdminTools) return;
 
-    if (!formData.name || !formData.email || !formData.password || !formData.role) {
-      setFormError("Name, email, password and role are required.");
+    if (!formData.name || !formData.email || !formData.password) {
+      setFormError("Name, email and password are required.");
+      return;
+    }
+
+    if (!formData.roleTypeId) {
+      setFormError("Select a role type.");
+      return;
+    }
+
+    if (!formData.roleId) {
+      setFormError("Select a role.");
       return;
     }
 
@@ -426,16 +499,18 @@ const TeamManager = ({ theme = "light" }) => {
       setSubmitting(true);
       setFormError("");
 
+      // The backend resolves the Role Type / Role pair into the stored role and
+      // vertical, so the form no longer has to know either vocabulary.
       const payload = {
         name: formData.name.trim(),
         email: formData.email.trim(),
         phone: formData.phone.trim(),
-        roleType: formData.roleType,
         password: formData.password,
-        role: formData.role,
+        roleTypeId: formData.roleTypeId,
+        roleId: formData.roleId,
       };
 
-      if (formData.role === "CHANNEL_PARTNER") {
+      if (selectedBaseRole === "CHANNEL_PARTNER") {
         const brokerageMode = normalizeBrokerageMode(formData.brokerageMode);
         const brokerageValue = Number(formData.brokerageValue);
         if (!Number.isFinite(brokerageValue) || brokerageValue < 0) {
@@ -822,10 +897,13 @@ const TeamManager = ({ theme = "light" }) => {
           reportingCandidates={reportingCandidates}
           reportingLabel={reportingLabel}
           submitting={submitting}
-          error={formError}
+          error={formError || catalogError}
           isDarkTheme={isDarkTheme}
-          roleOptions={ROLE_OPTIONS}
-          roleTypeOptions={ROLE_TYPE_OPTIONS}
+          roleOptions={roleOptions}
+          roleTypeOptions={roleTypeOptions}
+          roleTypesLoading={roleTypesLoading}
+          rolesLoading={rolesLoading}
+          selectedBaseRole={selectedBaseRole}
           reportingParentRoles={REPORTING_PARENT_ROLES}
         />
       ) : null}

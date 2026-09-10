@@ -27,6 +27,7 @@ import {
   LeadsMatrixAlerts,
 } from "./components/LeadsMatrixSections";
 import PipelineSelectionBar from "./components/PipelineSelectionBar";
+import PipelineCards from "./components/PipelineCards";
 import PipelineTable from "./components/PipelineTable";
 import PipelineToolbar from "./components/PipelineToolbar";
 import {
@@ -34,7 +35,8 @@ import {
   countNeedsAction,
   matchesView,
 } from "./components/pipelineViews";
-import { Button } from "../../components/ui";
+import { ChevronDown } from "lucide-react";
+import { Button, cn } from "../../components/ui";
 import { LeadDetailsRebuilt } from "./components/LeadDetailsRebuilt";
 import {
   getPropertySubtypeConfig,
@@ -2069,6 +2071,33 @@ const LeadsMatrix = () => {
     navigate(`${currentLeadRouteBase}/${resolvedLeadId}`);
   }, [currentLeadRouteBase, navigate]);
 
+  // Everything both pipeline presentations need. Defined once: the card list
+  // and the table are the same list, and a callback that exists on only one of
+  // them is a bug that only shows up at one screen width.
+  const leadTotalCount =
+    leadPagination?.totalItems ?? leadPagination?.total ?? leadPagination?.totalCount ?? 0;
+
+  const pipelineListProps = {
+    leads: filteredLeads,
+    loading,
+    nowMs,
+    showAssigned: canAssignLead,
+    selectedKeys: selectedLeadKeys,
+    onSelectionChange: setSelectedLeadKeys,
+    onOpenLead: handleOpenLeadDetailsPage,
+    onCall: (lead) => {
+      const href = getDialerHref(lead?.phone);
+      if (href) window.location.href = href;
+    },
+    onWhatsApp: (lead) => {
+      const href = getWhatsAppHref(lead?.phone);
+      if (href) window.open(href, "_blank", "noopener");
+    },
+    // TODO(phase 7): swap for QuickLogPopover once it exists; until then Log
+    // opens the record where the diary already lives.
+    onLog: handleOpenLeadDetailsPage,
+  };
+
   useEffect(() => {
     if (!isRouteDetailsView) {
       return;
@@ -3200,26 +3229,13 @@ const LeadsMatrix = () => {
             <LeadsMatrixAlerts isDark={isDark} error={error} success={success} />
 
             <div className="rounded-xl border border-slate-200 bg-white dark:border-slate-700 dark:bg-slate-900">
-              <PipelineTable
-                leads={filteredLeads}
-                loading={loading}
-                nowMs={nowMs}
-                showAssigned={canAssignLead}
-                selectedKeys={selectedLeadKeys}
-                onSelectionChange={setSelectedLeadKeys}
-                onOpenLead={handleOpenLeadDetailsPage}
-                onCall={(lead) => {
-                  const href = getDialerHref(lead?.phone);
-                  if (href) window.location.href = href;
-                }}
-                onWhatsApp={(lead) => {
-                  const href = getWhatsAppHref(lead?.phone);
-                  if (href) window.open(href, "_blank", "noopener");
-                }}
-                // TODO(phase 7): swap for QuickLogPopover once it exists; until
-                // then Log opens the record where the diary already lives.
-                onLog={handleOpenLeadDetailsPage}
-              />
+              {/*
+                Same data, same callbacks, two presentations: a table needs
+                columns a phone does not have, and cards waste a wide screen.
+                The props are built once so the two can never drift.
+              */}
+              <PipelineCards {...pipelineListProps} className="lg:hidden" />
+              <PipelineTable {...pipelineListProps} className="hidden lg:block" />
               <PipelineSelectionBar
                 count={selectedLeadKeys.length}
                 onClear={() => setSelectedLeadKeys([])}
@@ -3228,7 +3244,7 @@ const LeadsMatrix = () => {
             </div>
 
             {leadPagination?.hasNextPage ? (
-              <div className="flex justify-center px-4 py-5">
+              <div className="px-1 py-4">
                 <button
                   type="button"
                   onClick={() =>
@@ -3238,14 +3254,25 @@ const LeadsMatrix = () => {
                     })
                   }
                   disabled={loadingMoreLeads}
-                  className={`rounded-xl px-4 py-2 text-xs font-bold uppercase tracking-widest transition ${
+                  className={cn(
+                    "flex w-full items-center justify-center gap-1.5 rounded-xl px-4 py-3",
+                    "text-[13px] font-semibold outline-none transition",
+                    "focus-visible:ring-2 focus-visible:ring-blue-500/40",
+                    "disabled:cursor-not-allowed disabled:opacity-60",
                     isDark
-                      ? "border border-slate-700 bg-slate-900 text-slate-200 hover:bg-slate-800"
-                      : "border border-slate-200 bg-white text-slate-700 hover:bg-slate-50"
-                  } disabled:cursor-not-allowed disabled:opacity-60`}
+                      ? "border border-slate-700 bg-slate-900 text-blue-300 hover:bg-slate-800"
+                      : "border border-slate-200 bg-white text-blue-700 hover:bg-slate-50",
+                  )}
                 >
-                  {loadingMoreLeads ? "Loading..." : "Load more leads"}
+                  {loadingMoreLeads ? "Loading…" : "Load more leads"}
+                  <ChevronDown aria-hidden="true" size={15} />
                 </button>
+                <p className="mt-2 text-center text-[11.5px] text-slate-500 dark:text-slate-400">
+                  {/* Only claims a total when the API actually sent one. */}
+                  {leadTotalCount
+                    ? `Showing ${filteredLeads.length} of ${leadTotalCount} leads`
+                    : `Showing ${filteredLeads.length} leads`}
+                </p>
               </div>
             ) : null}
           </>

@@ -23,5 +23,6 @@ router.use("/chat", require("./chat.routes"));
 router.use("/saas", require("./saas.routes"));
 router.use("/tasks", require("./task.routes"));
 router.use("/coworking", require("./coworkingAccess.routes"));
+router.use("/access", require("./accessControl.routes"));
 
 module.exports = router;

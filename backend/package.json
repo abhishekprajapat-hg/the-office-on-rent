@@ -17,6 +17,7 @@
     "seed:inventory": "node src/seeder/seedInventory.cjs",
     "seed:inventory:titles": "node src/seeder/seedInventoryTitles.cjs",
     "migrate:company": "node src/seeder/backfillCompany.cjs",
+    "migrate:role-types": "node src/seeder/migrateRoleTypes.cjs",
     "migrate:cloudinary-uploads": "node src/seeder/migrateCloudinaryUploads.cjs"
   },
   "type": "commonjs",

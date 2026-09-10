@@ -3,8 +3,8 @@
  * (Office_on_Rent_Renamed_Cabins_Reversed): 65 cabins across four wings, plus
  * the shared rooms that give the map its orientation.
  *
- * Cabin boxes come from constants/coworkingFloorPlan.js, which already carries
- * the geometry traced off the same drawing. Only seat counts live here.
+ * This module contains the shared cabin labels, capacities, wing grouping, and
+ * booking statuses used across the coworking experience.
  */
 
 /** Seats printed under each cabin label on the plan. */

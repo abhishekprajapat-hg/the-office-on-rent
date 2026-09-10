@@ -6,11 +6,10 @@ import ToastNotice from "../../../components/ui/ToastNotice";
 import Segmented from "../booking/components/Segmented";
 import { directoryFrom, useBoard } from "../booking/boardStore";
 import { kycStatusOf } from "../booking/kycDocuments";
-import { SAMPLE_PROPERTY } from "../booking/sampleFloor";
 import ClientProfile from "./components/ClientProfile";
 
 /*
- * Clients on this floor, current and former, with the profile beside the list.
+ * Clients in this coworking space, current and former, with the profile beside the list.
  *
  * Two panes rather than a list that navigates away: picking through clients is
  * a scanning job - you compare a few before you settle on one - and a full page
@@ -111,7 +110,7 @@ const ClientsPage = () => {
             </h1>
             <p className="mt-0.5 text-[13px] text-slate-500 dark:text-slate-400">
               {active.length} current · {former.length} former
-            {pendingKyc.length ? ` · ${pendingKyc.length} awaiting documents` : ""} · {SAMPLE_PROPERTY.name}
+            {pendingKyc.length ? ` · ${pendingKyc.length} awaiting documents` : ""}
             </p>
           </div>
           <div className="flex items-center gap-2">

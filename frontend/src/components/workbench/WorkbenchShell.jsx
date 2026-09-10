@@ -19,10 +19,14 @@ const WorkbenchShell = ({
 }) => {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const { adminRequestUnread, unreadTotal } = useChatNotifications();
-  const { permissions, loading: permissionsLoading } = usePermissions();
+  const { permissions, enforcePageAccess, loading: permissionsLoading } = usePermissions();
   const userForNav = useMemo(
-    () => ({ ...(user || {}), permissions: permissionsLoading ? null : permissions }),
-    [user, permissions, permissionsLoading],
+    () => ({
+      ...(user || {}),
+      permissions: permissionsLoading ? null : permissions,
+      enforcePageAccess: permissionsLoading ? false : enforcePageAccess,
+    }),
+    [user, permissions, enforcePageAccess, permissionsLoading],
   );
   const handleOpenMobileMenu = useCallback(() => setMobileMenuOpen(true), []);
   const handleCloseMobileMenu = useCallback(() => setMobileMenuOpen(false), []);
@@ -46,24 +50,15 @@ const WorkbenchShell = ({
       />
 
       <main className="workspace-main app-page-bg relative min-w-0 flex flex-1 flex-col overflow-hidden">
-        {!isChatPage ? (
           <AppTopCommandBar
-            pageHeader={pageHeader}
+            className={isChatPage ? "md:hidden" : undefined}
+            user={user}
+            unreadAlerts={adminRequestUnread}
+            pageHeader={isChatPage ? { title: "Team Chat" } : pageHeader}
             theme={theme}
             onToggleTheme={onToggleTheme}
             onMenuOpen={handleOpenMobileMenu}
           />
-        ) : (
-          // Chat keeps its full-bleed desktop layout; mobile still needs a way
-          // into the navigation drawer, which the old TopNavigation provided.
-          <AppTopCommandBar
-            className="md:hidden"
-            pageHeader={{ title: "Team Chat" }}
-            theme={theme}
-            onToggleTheme={onToggleTheme}
-            onMenuOpen={handleOpenMobileMenu}
-          />
-        )}
         <div
           className={cn(
             "workspace-main-content min-h-0 flex-1 overflow-hidden",

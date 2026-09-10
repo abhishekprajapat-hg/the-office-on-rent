@@ -58,6 +58,13 @@ export const PERMISSIONS = [
   "roles.view",
   "roles.manage",
 
+  "role_types.view",
+  "role_types.create",
+  "role_types.update",
+  "role_types.status",
+  "role_types.delete",
+  "role_types.manage_roles",
+
   "audit_logs.view",
 ];
 
@@ -75,6 +82,14 @@ export const PERMISSION_GROUPS = {
   Reports: ["reports.view", "reports.export"],
   Users: ["users.view", "users.create", "users.update", "users.delete"],
   Roles: ["roles.view", "roles.manage"],
+  "Role Types": [
+    "role_types.view",
+    "role_types.create",
+    "role_types.update",
+    "role_types.status",
+    "role_types.delete",
+    "role_types.manage_roles",
+  ],
   "Audit Logs": ["audit_logs.view"],
 };
 
@@ -85,3 +100,18 @@ export const PERMISSION_LABELS = PERMISSIONS.reduce((labels, permission) => {
     .replace(/\b\w/g, (char) => char.toUpperCase());
   return labels;
 }, {});
+
+// Page access permission strings, mirroring backend/src/constants/page.constants.js.
+// The page catalogue itself is served by GET /api/access/catalog — nothing here
+// hardcodes which pages exist, only how a page grant is spelled.
+export const toPagePermission = (pageKey, action = "view") =>
+  `page.${pageKey}.${action}`;
+
+export const ROLE_TYPE_PERMISSIONS = {
+  view: "role_types.view",
+  create: "role_types.create",
+  update: "role_types.update",
+  status: "role_types.status",
+  delete: "role_types.delete",
+  manageRoles: "role_types.manage_roles",
+};

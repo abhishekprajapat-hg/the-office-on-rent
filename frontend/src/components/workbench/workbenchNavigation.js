@@ -110,9 +110,9 @@ export const WORKBENCH_MENU = {
     {
       group: "Workspace",
       items: [
-        { label: "Home", path: "/dashboard", icon: Home, roles: [...SALES_ROLES, ...PRODUCTION_ROLES, ...PARTNER_ROLES] },
-        { label: "Tasks", path: "/tasks", icon: CheckSquare, roles: [...SALES_ROLES, ...PRODUCTION_ROLES] },
-        { label: "Attendance", path: "/attendance", icon: UserCheck, roles: [...SALES_ROLES, ...PRODUCTION_ROLES, ...PARTNER_ROLES] },
+        { label: "Home", path: "/dashboard", icon: Home, page: "dashboard", roles: [...SALES_ROLES, ...PRODUCTION_ROLES, ...PARTNER_ROLES] },
+        { label: "Tasks", path: "/tasks", icon: CheckSquare, page: "tasks", roles: [...SALES_ROLES, ...PRODUCTION_ROLES] },
+        { label: "Attendance", path: "/attendance", icon: UserCheck, page: "attendance", roles: [...SALES_ROLES, ...PRODUCTION_ROLES, ...PARTNER_ROLES] },
       ],
     },
   ],
@@ -120,8 +120,8 @@ export const WORKBENCH_MENU = {
     {
       group: "Pipeline",
       items: [
-        { label: "Pipeline", path: "/leads", icon: Users, roles: ["ADMIN", "MANAGER", "CHANNEL_PARTNER"] },
-        { label: "My Leads", path: "/my-leads", icon: Briefcase, roles: ["EXECUTIVE", "FIELD_EXECUTIVE"] },
+        { label: "Pipeline", path: "/leads", icon: Users, page: "leads", roles: ["ADMIN", "MANAGER", "CHANNEL_PARTNER"] },
+        { label: "My Leads", path: "/my-leads", icon: Briefcase, page: "my_leads", roles: ["EXECUTIVE", "FIELD_EXECUTIVE"] },
       ],
     },
   ],
@@ -129,9 +129,9 @@ export const WORKBENCH_MENU = {
     {
       group: "Assets",
       items: [
-        { label: "Inventory", path: "/inventory", icon: Building2, roles: [...SALES_ROLES, ...PARTNER_ROLES], requiresInventoryAccessForPartner: true },
-        { label: "Projects", path: "/projects", icon: Briefcase, roles: [...SALES_ROLES, ...PARTNER_ROLES], requiresInventoryAccessForPartner: true },
-        { label: "Field Ops", path: "/map", icon: Map, roles: ["ADMIN", "MANAGER", "FIELD_EXECUTIVE"] },
+        { label: "Inventory", path: "/inventory", icon: Building2, page: "inventory", roles: [...SALES_ROLES, ...PARTNER_ROLES], requiresInventoryAccessForPartner: true },
+        { label: "Projects", path: "/projects", icon: Briefcase, page: "projects", roles: [...SALES_ROLES, ...PARTNER_ROLES], requiresInventoryAccessForPartner: true },
+        { label: "Field Ops", path: "/map", icon: Map, page: "field_ops", roles: ["ADMIN", "MANAGER", "FIELD_EXECUTIVE"] },
       ],
     },
   ],
@@ -139,7 +139,7 @@ export const WORKBENCH_MENU = {
     {
       group: "Money",
       items: [
-        { label: "Finance", path: "/finance", icon: PieChart, roles: ["ADMIN", "MANAGER", "EXECUTIVE", "FIELD_EXECUTIVE", "CHANNEL_PARTNER"] },
+        { label: "Finance", path: "/finance", icon: PieChart, page: "finance", roles: ["ADMIN", "MANAGER", "EXECUTIVE", "FIELD_EXECUTIVE", "CHANNEL_PARTNER"] },
       ],
     },
   ],
@@ -147,10 +147,10 @@ export const WORKBENCH_MENU = {
     {
       group: "Intelligence",
       items: [
-        { label: "Reports", path: "/reports", icon: BarChart3, roles: MANAGEMENT_ROLES },
-        { label: "Leaderboard", path: "/leaderboard", icon: Trophy, roles: [...SALES_ROLES, ...PARTNER_ROLES] },
-        { label: "Targets", path: "/targets", icon: Target, roles: SALES_ROLES },
-        { label: "Performance", path: "/targets", icon: Target, roles: PRODUCTION_ROLES },
+        { label: "Reports", path: "/reports", icon: BarChart3, page: "reports", roles: MANAGEMENT_ROLES },
+        { label: "Leaderboard", path: "/leaderboard", icon: Trophy, page: "leaderboard", roles: [...SALES_ROLES, ...PARTNER_ROLES] },
+        { label: "Targets", path: "/targets", icon: Target, page: "targets", roles: SALES_ROLES },
+        { label: "Performance", path: "/targets", icon: Target, page: "targets", roles: PRODUCTION_ROLES },
       ],
     },
   ],
@@ -158,7 +158,7 @@ export const WORKBENCH_MENU = {
     {
       group: "Schedule",
       items: [
-        { label: "Calendar", path: "/calendar", icon: Calendar, roles: SALES_ROLES },
+        { label: "Calendar", path: "/calendar", icon: Calendar, page: "calendar", roles: SALES_ROLES },
       ],
     },
   ],
@@ -166,7 +166,7 @@ export const WORKBENCH_MENU = {
     {
       group: "Collaboration",
       items: [
-        { label: "Team Chat", path: "/chat", icon: MessageSquare, roles: [...SALES_ROLES, ...PRODUCTION_ROLES] },
+        { label: "Team Chat", path: "/chat", icon: MessageSquare, page: "chat", roles: [...SALES_ROLES, ...PRODUCTION_ROLES] },
       ],
     },
   ],
@@ -174,8 +174,8 @@ export const WORKBENCH_MENU = {
     {
       group: "Spaces",
       items: [
-        { label: "Booking Board", path: "/coworking/booking-board", icon: LayoutGrid, roles: COWORKING_ROLES, permission: "cabins.view" },
-        { label: "Clients", path: "/coworking/clients", icon: Users, roles: COWORKING_ROLES, permission: "clients.view" },
+        { label: "Booking Board", path: "/coworking/booking-board", icon: LayoutGrid, page: "coworking_booking", roles: COWORKING_ROLES, permission: "cabins.view" },
+        { label: "Clients", path: "/coworking/clients", icon: Users, page: "coworking_clients", roles: COWORKING_ROLES, permission: "clients.view" },
       ],
     },
   ],
@@ -183,10 +183,11 @@ export const WORKBENCH_MENU = {
     {
       group: "Admin",
       items: [
-        { label: "Alerts", path: "/admin/notifications", icon: Bell, roles: MANAGEMENT_ROLES },
-        { label: "Access", path: "/admin/users", icon: ShieldCheck, roles: MANAGEMENT_ROLES },
-        { label: "Console", path: "/admin/console", icon: TerminalSquare, roles: ["ADMIN", "MANAGER"] },
-        { label: "Meta Ads", path: "/admin/meta-ads", icon: Megaphone, roles: ["ADMIN", "MANAGER"] },
+        { label: "Alerts", path: "/admin/notifications", icon: Bell, page: "admin_notifications", roles: MANAGEMENT_ROLES },
+        { label: "Access", path: "/admin/users", icon: ShieldCheck, page: "admin_team", roles: MANAGEMENT_ROLES },
+        { label: "Role Types", path: "/admin/role-types", icon: Layers, page: "admin_role_types", roles: MANAGEMENT_ROLES, permission: "role_types.view" },
+        { label: "Console", path: "/admin/console", icon: TerminalSquare, page: "admin_console", roles: ["ADMIN", "MANAGER"] },
+        { label: "Meta Ads", path: "/admin/meta-ads", icon: Megaphone, page: "admin_meta_ads", roles: ["ADMIN", "MANAGER"] },
       ],
     },
   ],
@@ -194,8 +195,8 @@ export const WORKBENCH_MENU = {
     {
       group: "Account",
       items: [
-        { label: "Settings", path: "/settings", icon: Settings, roles: MANAGEMENT_ROLES },
-        { label: "Profile", path: "/profile", icon: UserCircle2, roles: [...SALES_ROLES, ...PRODUCTION_ROLES, ...PARTNER_ROLES] },
+        { label: "Settings", path: "/settings", icon: Settings, page: "settings", roles: MANAGEMENT_ROLES },
+        { label: "Profile", path: "/profile", icon: UserCircle2, page: "profile", roles: [...SALES_ROLES, ...PRODUCTION_ROLES, ...PARTNER_ROLES] },
       ],
     },
   ],
@@ -266,6 +267,7 @@ export const SIDEBAR_GROUPS = [
     group: "Admin",
     items: [
       navItem("/admin/users", { label: "Team", icon: Users }),
+      navItem("/admin/role-types", { label: "Role Types", icon: Layers }),
       navItem("/admin/console", { label: "Console", icon: ShieldCheck }),
       navItem("/admin/meta-ads", { label: "Meta Ads" }),
       navItem("/admin/notifications", { label: "Notifications" }),
@@ -280,8 +282,40 @@ export const SIDEBAR_GROUPS = [
   },
 ];
 
+// Pages whose page-access grant can only ever *narrow*, never widen: their
+// APIs are hard-gated on ADMIN / MANAGER, so showing them to anyone else would
+// produce a screen that cannot load. App.jsx keeps the matching role check on
+// these routes for the same reason.
+const ROLE_ONLY_PAGES = new Set([
+  "admin_team",
+  "admin_role_types",
+  "admin_notifications",
+  "admin_console",
+  "admin_meta_ads",
+  "settings",
+]);
+
 export const roleCanSeeItem = (item, userRole, user = {}) => {
-  if (!item?.roles?.includes(userRole)) return false;
+  const permissions = Array.isArray(user?.permissions) ? user.permissions : null;
+
+  // A role with explicit page access configured is decided by that
+  // configuration: it both grants pages the built-in role list never had and
+  // takes away ones it did. Roles without it — every account before the Role
+  // Types work — keep using the built-in list, and ADMIN sees everything.
+  const isConfiguredRole =
+    userRole !== "ADMIN" && Boolean(user?.enforcePageAccess) && Boolean(permissions);
+  const pageIsWidenable = Boolean(item.page) && !ROLE_ONLY_PAGES.has(item.page);
+
+  if (isConfiguredRole && pageIsWidenable) {
+    if (!permissions.includes(`page.${item.page}.view`)) return false;
+  } else {
+    if (!item?.roles?.includes(userRole)) return false;
+    // Role-only pages can still be revoked from a configured role.
+    if (isConfiguredRole && item.page && !permissions.includes(`page.${item.page}.view`)) {
+      return false;
+    }
+  }
+
   if (
     item.requiresInventoryAccessForPartner &&
     userRole === "CHANNEL_PARTNER" &&
@@ -290,7 +324,6 @@ export const roleCanSeeItem = (item, userRole, user = {}) => {
     return false;
   }
   if (item.permission && userRole !== "ADMIN") {
-    const permissions = Array.isArray(user?.permissions) ? user.permissions : null;
     // Permissions haven't loaded yet (null) — don't hide the item mid-fetch,
     // avoid nav flicker; the route itself still gates on load via
     // CoworkingPermissionGate. Once loaded, enforce the real list.

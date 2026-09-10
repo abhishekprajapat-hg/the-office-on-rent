@@ -5,18 +5,20 @@ const inventoryController = require("../controllers/inventory.controller");
 const authMiddleware = require("../middleware/auth.middleware");
 const companyMiddleware = require("../middleware/company.middleware");
 const { writeLimiter } = require("../middleware/rateLimit.middleware");
+const {
+  requirePageAccess,
+  checkRoleOrPageAccess,
+} = require("../middleware/pageAccess.middleware");
 
 router.use(authMiddleware.protect);
 router.use(
-  authMiddleware.checkRole([
-    "ADMIN",
-    "MANAGER",
-    "EXECUTIVE",
-    "FIELD_EXECUTIVE",
-    "CHANNEL_PARTNER",
-  ]),
+  checkRoleOrPageAccess(
+    ["ADMIN", "MANAGER", "EXECUTIVE", "FIELD_EXECUTIVE", "CHANNEL_PARTNER"],
+    "inventory",
+  ),
 );
 router.use(companyMiddleware.requireCompanyContext);
+router.use(requirePageAccess("inventory"));
 
 router.get("/", inventoryController.getInventory);
 router.get(

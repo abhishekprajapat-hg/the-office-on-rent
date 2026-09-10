@@ -63,6 +63,11 @@ const resolveCompanyContext = async (user) => {
 
 exports.protect = async (req, res, next) => {
   try {
+    // Some routers mount protect at router level *and* list it per route
+    // (lead.routes.js). Resolving the same token twice would mean a second JWT
+    // verify plus a second User lookup on a hot path, so short-circuit.
+    if (req.user) return next();
+
     let token = "";
 
     if (

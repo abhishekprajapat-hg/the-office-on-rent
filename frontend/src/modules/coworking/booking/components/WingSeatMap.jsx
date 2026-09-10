@@ -1,7 +1,7 @@
 import React, { useState } from "react";
 import { ChevronUp } from "lucide-react";
 import { cn } from "../../../../components/ui";
-import { WINGS } from "../floorPlanData";
+import { WINGS } from "../cabinData";
 import CabinTile from "./CabinTile";
 
 /*
