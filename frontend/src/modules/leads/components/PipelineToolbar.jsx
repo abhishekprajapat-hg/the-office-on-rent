@@ -2,7 +2,8 @@ import React, { useState, useRef, useEffect } from "react";
 import {
   Search,
   ChevronDown,
-  SlidersHorizontal,
+  Filter,
+  ArrowDownUp,
   Zap,
   Clock,
   Users as UsersIcon,
@@ -39,6 +40,8 @@ const PipelineToolbar = ({
   onOpenFiltersFlyout,
   employees = [],
   propertySubtypes = [],
+  sortBy = "FOLLOW_UP",
+  onSortByChange,
   className,
 }) => {
   const views = [
@@ -134,9 +137,9 @@ const PipelineToolbar = ({
   return (
     <div className={cn("flex flex-col gap-3.5 pb-1", className)}>
       {/* 1. Top Row: View Tabs + Right Action Buttons */}
-      <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-100 pb-2 dark:border-slate-800">
+      <div className="flex flex-col items-stretch gap-5 border-b border-slate-100 pb-4 dark:border-slate-800 sm:flex-row sm:items-center sm:justify-between sm:gap-3 sm:pb-2">
         {/* View Tabs */}
-        <div className="flex items-center gap-6">
+        <div className="flex w-full items-center justify-between gap-1 sm:w-auto sm:gap-6">
           {views.map((item) => {
             const isActive = item.key === view;
             return (
@@ -145,16 +148,17 @@ const PipelineToolbar = ({
                 type="button"
                 onClick={() => onViewChange?.(item.key)}
                 className={cn(
-                  "relative pb-2.5 text-[13.5px] transition-colors outline-none",
+                  "relative rounded-2xl px-2 py-2.5 text-[13px] transition-colors outline-none sm:rounded-none sm:px-0 sm:py-0 sm:pb-2.5",
                   isActive
-                    ? "font-bold text-slate-900 dark:text-slate-100"
+                    ? "bg-blue-50 font-bold text-blue-700 dark:bg-blue-500/15 dark:text-blue-300 sm:bg-transparent"
                     : "font-medium text-slate-500 hover:text-slate-800 dark:text-slate-400 dark:hover:text-slate-200",
+                  item.key === PIPELINE_VIEWS.NEEDS_ACTION && "border-l border-slate-200 pl-3 sm:border-l-0 sm:pl-0",
                 )}
               >
                 <span className="flex items-center gap-1.5">
                   {item.label}
                   {item.count > 0 && (
-                    <span className="flex h-4 min-w-[16px] items-center justify-center rounded-full bg-rose-500 px-1 text-[10px] font-bold text-white">
+                    <span className="flex h-5 min-w-[20px] items-center justify-center rounded-full bg-rose-600 px-1.5 text-[11px] font-bold text-white">
                       {item.count}
                     </span>
                   )}
@@ -168,14 +172,14 @@ const PipelineToolbar = ({
         </div>
 
         {/* Right Action Buttons */}
-        <div className="flex items-center gap-2">
+        <div className="grid grid-cols-3 gap-2 sm:flex sm:items-center">
           {canBulkUploadLeads && (
             <button
               type="button"
               onClick={onOpenBulkUploadModal}
-              className="flex items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-[12.5px] font-semibold text-slate-700 shadow-sm transition hover:bg-slate-50 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-200 dark:hover:bg-slate-700"
+              className="flex h-12 items-center justify-center gap-1 rounded-xl border border-slate-200 bg-white px-2 text-[12.5px] font-semibold text-slate-700 shadow-sm transition hover:bg-slate-50 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-200 dark:hover:bg-slate-700 sm:h-auto sm:justify-start sm:gap-1.5 sm:rounded-lg sm:px-3 sm:py-1.5"
             >
-              <Upload size={14} className="text-slate-500" />
+              <Upload size={18} className="text-slate-500 sm:h-3.5 sm:w-3.5" />
               <span>Bulk upload</span>
             </button>
           )}
@@ -184,9 +188,9 @@ const PipelineToolbar = ({
             <button
               type="button"
               onClick={onOpenAddModal}
-              className="flex items-center gap-1.5 rounded-lg bg-blue-600 px-3.5 py-1.5 text-[12.5px] font-semibold text-white shadow-sm transition hover:bg-blue-700"
+              className="flex h-12 items-center justify-center gap-1 rounded-xl bg-blue-600 px-2 text-[12.5px] font-semibold text-white shadow-sm transition hover:bg-blue-700 sm:h-auto sm:justify-start sm:gap-1.5 sm:rounded-lg sm:px-3.5 sm:py-1.5"
             >
-              <Plus size={15} strokeWidth={2.5} />
+              <Plus size={20} strokeWidth={2.5} className="sm:h-[15px] sm:w-[15px]" />
               <span>Add lead</span>
             </button>
           )}
@@ -195,9 +199,9 @@ const PipelineToolbar = ({
             type="button"
             onClick={onRefresh}
             disabled={refreshing}
-            className="flex items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-[12.5px] font-semibold text-slate-700 shadow-sm transition hover:bg-slate-50 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-200 dark:hover:bg-slate-700"
+            className="flex h-12 items-center justify-center gap-1 rounded-xl border border-slate-200 bg-white px-2 text-[12.5px] font-semibold text-slate-700 shadow-sm transition hover:bg-slate-50 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-200 dark:hover:bg-slate-700 sm:h-auto sm:justify-start sm:gap-1.5 sm:rounded-lg sm:px-3 sm:py-1.5"
           >
-            <RefreshCw size={14} className={cn("text-slate-500", refreshing && "animate-spin")} />
+            <RefreshCw size={19} className={cn("text-slate-500 sm:h-3.5 sm:w-3.5", refreshing && "animate-spin")} />
             <span>Refresh</span>
           </button>
         </div>
@@ -206,9 +210,9 @@ const PipelineToolbar = ({
       {/* 2. Second Row: Search Input + Inline Filter Dropdowns + Filters Button */}
       <div className="relative flex flex-wrap items-center gap-2" ref={dropdownRef}>
         {/* Search Bar */}
-        <div className="relative min-w-[240px] flex-1 sm:max-w-[340px]">
+        <div className="relative w-full min-w-0 flex-1 sm:min-w-[240px] sm:max-w-[340px]">
           <Search
-            size={15}
+            size={22}
             className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 dark:text-slate-500"
           />
           <input
@@ -216,7 +220,7 @@ const PipelineToolbar = ({
             value={query}
             onChange={(e) => onQueryChange?.(e.target.value)}
             placeholder="Search leads by name, phone, project..."
-            className="h-9 w-full rounded-lg border border-slate-200 bg-white pl-9 pr-3 text-[12.5px] text-slate-800 placeholder-slate-400 shadow-sm transition focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-100"
+            className="h-12 w-full rounded-xl border border-slate-200 bg-white pl-11 pr-3 text-[15px] text-slate-800 placeholder-slate-400 shadow-sm transition focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-100 sm:h-9 sm:rounded-lg sm:pl-9 sm:text-[12.5px]"
           />
           {query && (
             <button
@@ -230,7 +234,7 @@ const PipelineToolbar = ({
         </div>
 
         {/* Dropdown filter buttons */}
-        <div className="flex flex-wrap items-center gap-1.5">
+        <div className="hidden flex-wrap items-center gap-1.5 sm:flex">
           {/* Status Dropdown */}
           <div className="relative">
             <button
@@ -553,18 +557,19 @@ const PipelineToolbar = ({
           </div>
         </div>
 
+        <div className="flex w-full gap-2 sm:contents">
         {/* Filters flyout button on right */}
         <button
           type="button"
           onClick={onOpenFiltersFlyout}
           className={cn(
-            "ml-auto flex h-9 items-center gap-1.5 rounded-lg border px-3 text-[12.5px] font-semibold transition shadow-sm",
+            "flex h-12 flex-1 items-center justify-center gap-2 rounded-xl border px-3 text-[15px] font-semibold transition shadow-sm sm:ml-auto sm:h-9 sm:flex-none sm:justify-start sm:gap-1.5 sm:rounded-lg sm:text-[12.5px]",
             activeFiltersCount > 0
               ? "border-blue-600 bg-blue-50 text-blue-700 dark:border-blue-500 dark:bg-blue-500/15 dark:text-blue-300"
               : "border-slate-200 bg-white text-slate-700 hover:bg-slate-50 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-200",
           )}
         >
-          <SlidersHorizontal size={14} className={activeFiltersCount > 0 ? "text-blue-600 dark:text-blue-400" : "text-slate-500"} />
+          <Filter size={19} className={cn(activeFiltersCount > 0 ? "text-blue-600 dark:text-blue-400" : "text-slate-500", "sm:h-3.5 sm:w-3.5")} />
           <span>Filters</span>
           {activeFiltersCount > 0 && (
             <span className="flex h-4 min-w-[16px] items-center justify-center rounded-full bg-blue-600 px-1 text-[10px] font-bold text-white">
@@ -572,19 +577,55 @@ const PipelineToolbar = ({
             </span>
           )}
         </button>
+
+        <div className="relative flex-1 sm:flex-none">
+          <button
+            type="button"
+            onClick={() => setOpenDropdown(openDropdown === "sort" ? null : "sort")}
+            className="flex h-12 w-full items-center justify-center gap-2 rounded-xl border border-slate-200 bg-white px-3 text-[15px] font-semibold text-slate-800 shadow-sm dark:border-slate-700 dark:bg-slate-800 dark:text-slate-100 sm:h-9 sm:w-auto sm:rounded-lg sm:text-[12.5px]"
+          >
+            <ArrowDownUp size={21} className="text-slate-700 sm:h-[15px] sm:w-[15px] dark:text-slate-200" />
+            <span>Sort</span>
+            <ChevronDown size={16} className="text-slate-400" />
+          </button>
+          {openDropdown === "sort" && (
+            <div className="absolute right-0 top-full z-30 mt-1 w-44 rounded-xl border border-slate-200 bg-white p-1.5 shadow-xl dark:border-slate-700 dark:bg-slate-800">
+              {[{ value: "FOLLOW_UP", label: "Follow-up" }, { value: "RECENT", label: "Recent" }, { value: "NAME", label: "Name" }].map((option) => (
+                <button
+                  key={option.value}
+                  type="button"
+                  onClick={() => {
+                    onSortByChange?.(option.value);
+                    setOpenDropdown(null);
+                  }}
+                  className={cn(
+                    "flex w-full items-center rounded-lg px-2.5 py-1.5 text-left text-[12px] font-medium transition",
+                    sortBy === option.value
+                      ? "bg-blue-50 font-semibold text-blue-700 dark:bg-blue-500/20 dark:text-blue-300"
+                      : "text-slate-700 hover:bg-slate-100 dark:text-slate-200 dark:hover:bg-slate-700",
+                  )}
+                >
+                  {option.label}
+                </button>
+              ))}
+            </div>
+          )}
+        </div>
+        </div>
       </div>
 
       {/* 3. Third Row: Quick Filters */}
-      <div className="flex flex-wrap items-center gap-2">
-        <span className="text-[12px] font-semibold text-slate-500 dark:text-slate-400">
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <span className="text-[16px] font-semibold text-slate-700 dark:text-slate-300 sm:text-[12px] sm:text-slate-500">
           Quick filters:
         </span>
-        <div className="flex flex-wrap items-center gap-1.5">
+        <span className="text-[14px] text-slate-500 sm:hidden">Scroll for more <span aria-hidden="true">→</span></span>
+        <div className="grid w-full grid-cols-2 gap-2 sm:flex sm:w-auto sm:flex-wrap sm:items-center sm:gap-1.5">
           <button
             type="button"
             onClick={() => toggleQuickFilter(QUICK_FILTER_KEYS.NEEDS_FOLLOW_UP_TODAY)}
             className={cn(
-              "flex items-center gap-1.5 rounded-lg border px-2.5 py-1 text-[11.5px] font-medium transition",
+              "flex min-h-14 items-center justify-center gap-1.5 rounded-xl border px-2 text-[13px] font-medium transition sm:min-h-0 sm:justify-start sm:rounded-lg sm:px-2.5 sm:py-1 sm:text-[11.5px]",
               filterState.quickFilter === QUICK_FILTER_KEYS.NEEDS_FOLLOW_UP_TODAY
                 ? "border-blue-600 bg-blue-50 text-blue-700 dark:border-blue-500 dark:bg-blue-500/20 dark:text-blue-200"
                 : "border-slate-200 bg-white text-slate-700 hover:bg-slate-50 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-200",
@@ -598,7 +639,7 @@ const PipelineToolbar = ({
             type="button"
             onClick={() => toggleQuickFilter(QUICK_FILTER_KEYS.OVERDUE_FOLLOW_UPS)}
             className={cn(
-              "flex items-center gap-1.5 rounded-lg border px-2.5 py-1 text-[11.5px] font-medium transition",
+              "flex min-h-14 items-center justify-center gap-1.5 rounded-xl border px-2 text-[13px] font-medium transition sm:min-h-0 sm:justify-start sm:rounded-lg sm:px-2.5 sm:py-1 sm:text-[11.5px]",
               filterState.quickFilter === QUICK_FILTER_KEYS.OVERDUE_FOLLOW_UPS
                 ? "border-blue-600 bg-blue-50 text-blue-700 dark:border-blue-500 dark:bg-blue-500/20 dark:text-blue-200"
                 : "border-slate-200 bg-white text-slate-700 hover:bg-slate-50 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-200",
@@ -612,7 +653,7 @@ const PipelineToolbar = ({
             type="button"
             onClick={() => toggleQuickFilter(QUICK_FILTER_KEYS.UNASSIGNED_LEADS)}
             className={cn(
-              "flex items-center gap-1.5 rounded-lg border px-2.5 py-1 text-[11.5px] font-medium transition",
+              "flex min-h-14 items-center justify-center gap-1.5 rounded-xl border px-2 text-[13px] font-medium transition sm:min-h-0 sm:justify-start sm:rounded-lg sm:px-2.5 sm:py-1 sm:text-[11.5px]",
               filterState.quickFilter === QUICK_FILTER_KEYS.UNASSIGNED_LEADS
                 ? "border-blue-600 bg-blue-50 text-blue-700 dark:border-blue-500 dark:bg-blue-500/20 dark:text-blue-200"
                 : "border-slate-200 bg-white text-slate-700 hover:bg-slate-50 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-200",
@@ -626,7 +667,7 @@ const PipelineToolbar = ({
             type="button"
             onClick={() => toggleQuickFilter(QUICK_FILTER_KEYS.NEW_THIS_WEEK)}
             className={cn(
-              "flex items-center gap-1.5 rounded-lg border px-2.5 py-1 text-[11.5px] font-medium transition",
+              "flex min-h-14 items-center justify-center gap-1.5 rounded-xl border px-2 text-[13px] font-medium transition sm:min-h-0 sm:justify-start sm:rounded-lg sm:px-2.5 sm:py-1 sm:text-[11.5px]",
               filterState.quickFilter === QUICK_FILTER_KEYS.NEW_THIS_WEEK
                 ? "border-blue-600 bg-blue-50 text-blue-700 dark:border-blue-500 dark:bg-blue-500/20 dark:text-blue-200"
                 : "border-slate-200 bg-white text-slate-700 hover:bg-slate-50 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-200",
@@ -639,32 +680,42 @@ const PipelineToolbar = ({
       </div>
 
       {/* 4. Fourth Row: Active Filter Chips */}
-      {activeChips.length > 0 && (
-        <div className="flex flex-wrap items-center gap-2 pt-0.5">
-          {activeChips.map((chip) => (
-            <span
-              key={chip.key}
-              className="inline-flex items-center gap-1.5 rounded-lg border border-blue-200 bg-blue-50 px-2.5 py-1 text-[11.5px] font-medium text-blue-700 dark:border-blue-800 dark:bg-blue-900/40 dark:text-blue-200"
+      {activeFiltersCount > 0 && (
+        <div className="space-y-2 pt-1">
+          <div className="flex items-center justify-between">
+            <span className="text-[16px] font-semibold text-slate-700 dark:text-slate-300 sm:text-[12px] sm:text-slate-500">Active filters ({activeFiltersCount})</span>
+            <button
+              type="button"
+              onClick={onResetFilters}
+              className="text-[14px] font-semibold text-blue-600 hover:underline dark:text-blue-400 sm:text-[12px]"
             >
-              <span>{chip.label}</span>
-              <button
-                type="button"
-                onClick={chip.onRemove}
-                className="rounded p-0.5 hover:bg-blue-200/60 dark:hover:bg-blue-800/60"
-                aria-label={`Remove ${chip.label}`}
+              Clear all
+            </button>
+          </div>
+          <div className="flex flex-wrap items-center gap-2">
+            {activeChips.map((chip) => (
+              <span
+                key={chip.key}
+                className="inline-flex items-center gap-2 rounded-xl border border-blue-100 bg-blue-50 px-3 py-2 text-[13px] font-medium text-blue-800 dark:border-blue-800 dark:bg-blue-900/40 dark:text-blue-200 sm:rounded-lg sm:px-2.5 sm:py-1 sm:text-[11.5px]"
               >
-                <X size={12} />
-              </button>
-            </span>
-          ))}
-
-          <button
-            type="button"
-            onClick={onResetFilters}
-            className="text-[12px] font-semibold text-blue-600 hover:underline dark:text-blue-400"
-          >
-            Clear all
-          </button>
+                <span>{chip.label}</span>
+                <button
+                  type="button"
+                  onClick={chip.onRemove}
+                  className="rounded p-0.5 hover:bg-blue-200/60 dark:hover:bg-blue-800/60"
+                  aria-label={`Remove ${chip.label}`}
+                >
+                  <X size={15} className="sm:h-3 sm:w-3" />
+                </button>
+              </span>
+            ))}
+            {filterState.quickFilter ? (
+              <span className="inline-flex items-center gap-2 rounded-xl border border-blue-100 bg-blue-50 px-3 py-2 text-[13px] font-medium text-blue-800 dark:border-blue-800 dark:bg-blue-900/40 dark:text-blue-200 sm:rounded-lg sm:px-2.5 sm:py-1 sm:text-[11.5px]">
+                {filterState.quickFilter.replace(/_/g, " ").toLowerCase().replace(/\b\w/g, (character) => character.toUpperCase())}
+                <button type="button" onClick={() => toggleQuickFilter(filterState.quickFilter)} className="rounded p-0.5 hover:bg-blue-200/60" aria-label="Remove quick filter"><X size={15} className="sm:h-3 sm:w-3" /></button>
+              </span>
+            ) : null}
+          </div>
         </div>
       )}
     </div>

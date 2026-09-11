@@ -3,18 +3,13 @@ import { useNavigate, useParams } from "react-router-dom";
 import {
   ArrowLeft,
   Building2,
-  CalendarClock,
-  Check,
-  FileText,
-  Hash,
-  History,
   Image as ImageIcon,
-  Link,
   Loader,
-  MapPin,
-  Share2,
-  User,
-  WalletCards,
+  ChevronLeft,
+  ChevronRight,
+  MessageSquare,
+  Ruler,
+  Send,
 } from "lucide-react";
 import {
   getInventoryAssetActivity,
@@ -25,7 +20,6 @@ import { toErrorMessage } from "../../utils/errorMessage";
 import ToastNotice from "../../components/ui/ToastNotice";
 import { StatusBadge } from "../../components/crm";
 import { Badge, Button, Card, CardContent } from "../../components/ui";
-import InventoryOwnerCard from "./components/InventoryOwnerCard";
 import InventorySpecTabs from "./components/InventorySpecTabs";
 
 const formatPrice = (value) => {
@@ -95,12 +89,15 @@ const formatSoldPaymentType = (value) => {
   return normalized || "-";
 };
 
-const FieldRow = ({ label, value }) => (
-  <div className="flex items-start justify-between gap-4 border-b border-slate-100 py-2">
-    <span className="text-xs font-bold uppercase tracking-widest text-slate-400">{label}</span>
-    <span className="text-sm font-semibold text-slate-800 text-right break-words min-w-0 max-w-[65%]">
-      {value || "-"}
+const DetailMetric = ({ icon: Icon, label, value, valueClassName = "" }) => (
+  <div className="flex min-w-0 items-center gap-3">
+    <span className="grid h-9 w-9 shrink-0 place-items-center rounded-lg bg-slate-50 text-blue-700">
+      {React.createElement(Icon, { size: 21, strokeWidth: 1.8 })}
     </span>
+    <div className="min-w-0">
+      <p className={`truncate text-[15px] font-bold text-slate-900 ${valueClassName}`}>{value || "-"}</p>
+      <p className="mt-0.5 text-[11px] font-medium text-slate-500">{label}</p>
+    </div>
   </div>
 );
 
@@ -120,7 +117,6 @@ const InventoryDetails = () => {
   const [activities, setActivities] = useState([]);
   const [activeImageIndex, setActiveImageIndex] = useState(0);
   const [specTab, setSpecTab] = useState("specification");
-  const isChannelPartner = role === "CHANNEL_PARTNER";
 
   const fetchDetails = useCallback(async () => {
     try {
@@ -220,6 +216,20 @@ const InventoryDetails = () => {
 
   const safeImageIndex = Math.min(activeImageIndex, Math.max(images.length - 1, 0));
   const activeImage = images[safeImageIndex] || "";
+
+  useEffect(() => {
+    if (images.length < 2) return undefined;
+    const carouselTimer = window.setInterval(() => {
+      setActiveImageIndex((currentIndex) => (currentIndex + 1) % images.length);
+    }, 4500);
+    return () => window.clearInterval(carouselTimer);
+  }, [images.length]);
+
+  const changeImage = (direction) => {
+    if (images.length < 2) return;
+    setActiveImageIndex((currentIndex) => (currentIndex + direction + images.length) % images.length);
+  };
+
   const inventorySiteLat = toCoordinateNumber(inventory?.siteLocation?.lat ?? asset?.siteLocation?.lat);
   const inventorySiteLng = toCoordinateNumber(inventory?.siteLocation?.lng ?? asset?.siteLocation?.lng);
   const inventoryCoordinates =
@@ -330,7 +340,6 @@ const InventoryDetails = () => {
     );
   }
 
-  const source = inventory || asset || {};
   const priceValue = formatPrice(inventory?.price ?? asset?.price);
   const isRent = String(transactionType || "").trim().toUpperCase() === "RENT";
   const areaUnit = inventory?.areaUnit || asset?.areaUnit;
@@ -473,26 +482,37 @@ const InventoryDetails = () => {
   ].filter(Boolean);
 
   return (
-    <div className="ui-page-shell custom-scrollbar p-5">
+    <div className="ui-page-shell inventory-details-page custom-scrollbar p-5">
       <ToastNotice message={error} type="error" />
 
-      <div className="mb-4">
-        <Button variant="ghost" size="sm" leftIcon={ArrowLeft} onClick={() => navigate(-1)}>
+      <div className="inventory-detail-breadcrumb mb-4 flex items-center justify-between gap-3">
+        <Button variant="secondary" size="sm" leftIcon={ArrowLeft} onClick={() => navigate(-1)} className="h-10 rounded-xl px-5">
           Back
         </Button>
+        <div className="flex items-center gap-2">
+          <Button variant="secondary" size="sm" leftIcon={ChevronLeft} onClick={() => navigate(-1)} className="h-10 rounded-xl px-5">Previous</Button>
+          <Button variant="secondary" size="sm" rightIcon={ChevronRight} onClick={() => navigate("/inventory")} className="h-10 rounded-xl px-5">Next</Button>
+        </div>
       </div>
 
-      <div className="grid gap-4 xl:grid-cols-[1fr_328px]">
+      <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_316px]">
         <div className="flex min-w-0 flex-col gap-4">
-          <Card className="overflow-hidden">
-            <div className="relative grid h-[220px] place-items-center bg-slate-100 text-slate-400 dark:bg-slate-800 dark:text-slate-500">
+          <Card className="inventory-detail-hero overflow-hidden xl:grid xl:grid-cols-[minmax(0,1fr)_520px]">
+            <div className="relative grid h-[320px] max-h-[320px] overflow-hidden place-items-center bg-slate-100 text-slate-400 xl:order-2 dark:bg-slate-800 dark:text-slate-500">
               {activeImage ? (
-                <img src={activeImage} alt="" className="h-full w-full object-cover" />
+                <img src={activeImage} alt="" className="h-full w-full object-cover object-center" />
               ) : (
                 <Building2 aria-hidden="true" size={40} strokeWidth={1.2} />
               )}
 
-              <div className="absolute left-3 top-3 flex flex-wrap gap-1.5">
+              {images.length > 1 ? (
+                <>
+                  <button type="button" onClick={() => changeImage(-1)} aria-label="Previous property image" className="absolute left-3 top-1/2 grid h-9 w-9 -translate-y-1/2 place-items-center rounded-full bg-white/90 text-slate-900 shadow-md transition hover:bg-white"><ChevronLeft size={20} /></button>
+                  <button type="button" onClick={() => changeImage(1)} aria-label="Next property image" className="absolute right-3 top-1/2 grid h-9 w-9 -translate-y-1/2 place-items-center rounded-full bg-white/90 text-slate-900 shadow-md transition hover:bg-white"><ChevronRight size={20} /></button>
+                </>
+              ) : null}
+
+              <div className="hidden absolute left-3 top-3 flex flex-wrap gap-1.5">
                 <StatusBadge status={statusValue} />
                 <Badge variant="slate" className="text-[10.5px]">
                   {[formatEnumLabel(inventoryType), transactionType].filter(Boolean).join(" · ")}
@@ -510,13 +530,17 @@ const InventoryDetails = () => {
               ) : null}
             </div>
 
-            <CardContent>
+            <CardContent className="p-5 sm:p-6 xl:order-1">
               <div className="flex flex-wrap items-start gap-3">
                 <div className="min-w-0">
-                  <h1 className="text-[19px] font-semibold tracking-[-0.018em] text-slate-900 dark:text-slate-50">
+                  <div className="mb-4 flex flex-wrap items-center gap-2">
+                    <StatusBadge status={statusValue} className="border border-emerald-200 bg-emerald-50 px-3 py-1 text-[12px] font-semibold text-emerald-700" />
+                    <Badge variant="slate" className="rounded-full border border-slate-200 bg-white px-3 py-1 text-[12px] font-semibold text-slate-700">{formatEnumLabel(inventoryType)} · {transactionType}</Badge>
+                  </div>
+                  <h1 className="text-[27px] font-bold tracking-[-0.035em] text-slate-950 dark:text-slate-50">
                     {pageTitle}
                   </h1>
-                  <p className="mt-1 text-[13px] text-slate-500 dark:text-slate-400">
+                  <p className="mt-1.5 text-[15px] text-slate-500 dark:text-slate-400">
                     {addressLine}
                     {inventory?.propertyId || asset?.propertyId ? (
                       <>
@@ -525,8 +549,14 @@ const InventoryDetails = () => {
                       </>
                     ) : null}
                   </p>
+                  <div className="inventory-detail-stats mt-7 grid grid-cols-2 gap-y-5 border-t border-slate-100 pt-5 sm:grid-cols-[1fr_1fr_1fr_1.32fr]">
+                    <DetailMetric icon={Ruler} label="Total Area" value={formatArea(inventory?.totalArea ?? asset?.totalArea, areaUnit)} />
+                    <DetailMetric icon={Building2} label="Property Type" value={formatEnumLabel(isCommercial ? commercialDetails?.officeType : residentialDetails?.propertyType)} />
+                    <DetailMetric icon={ImageIcon} label="Floor" value={(inventory?.floorNumber ?? asset?.floorNumber) !== undefined ? `${inventory?.floorNumber ?? asset?.floorNumber} Floor` : "-"} />
+                    <DetailMetric icon={Ruler} label={isRent ? "Monthly Rent" : "Sale Price"} value={`${priceValue}${isRent ? "/mo" : ""}`} valueClassName="!overflow-visible text-[13px] whitespace-nowrap" />
+                  </div>
                 </div>
-                <div className="ml-auto text-right">
+                <div className="hidden ml-auto text-right">
                   <div className="text-[22px] font-bold tracking-[-0.03em] text-slate-900 dark:text-slate-50">
                     {priceValue}
                     {isRent ? (
@@ -560,13 +590,13 @@ const InventoryDetails = () => {
         </div>
 
         <div className="flex flex-col gap-4">
-          <Card>
-            <CardContent className="flex flex-col gap-2.5">
-              <Button className="justify-center" onClick={handleShareWithClient} disabled={shareLoading}>
+          <Card className="border-slate-100 shadow-[0_6px_20px_rgba(15,23,42,0.06)]">
+            <CardContent className="flex flex-col gap-2.5 p-4">
+              <Button leftIcon={Send} className="h-11 justify-center rounded-lg" onClick={handleShareWithClient} disabled={shareLoading}>
                 {shareLoading ? "Creating link..." : shareCopied ? "Link copied" : "Share with client"}
               </Button>
               {sharePayload ? (
-                <Button variant="secondary" className="justify-center" onClick={handleShareToChat}>
+                <Button variant="secondary" leftIcon={MessageSquare} className="h-11 justify-center rounded-lg" onClick={handleShareToChat}>
                   Share to chat
                 </Button>
               ) : null}
@@ -579,7 +609,6 @@ const InventoryDetails = () => {
             </CardContent>
           </Card>
 
-          <InventoryOwnerCard source={source} canViewOwner={!isChannelPartner} />
         </div>
       </div>
     </div>

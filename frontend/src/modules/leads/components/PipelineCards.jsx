@@ -1,5 +1,5 @@
 import React from "react";
-import { MessageCircle, NotebookPen, Phone } from "lucide-react";
+import { ArrowRight, CalendarDays, Mail, MessageCircle, MoreVertical, NotebookPen, Phone } from "lucide-react";
 import { StatusBadge } from "../../../components/crm";
 import { EmptyState, IconButton, Skeleton, cn } from "../../../components/ui";
 import { describeFollowUp } from "./pipelineViews";
@@ -48,23 +48,23 @@ const requirementOf = (lead) => {
 /** Label above value, the three facts that decide whether this lead is next. */
 const Fact = ({ label, children, className }) => (
   <div className={cn("min-w-0", className)}>
-    <p className="truncate text-[11.5px] text-slate-500 dark:text-slate-400">{label}</p>
-    <p className="mt-0.5 truncate text-[12.5px] text-slate-800 dark:text-slate-200">{children}</p>
+    <p className="truncate text-[14px] text-slate-500 dark:text-slate-400 sm:text-[11.5px]">{label}</p>
+    <p className="mt-1 truncate text-[17px] text-slate-800 dark:text-slate-200 sm:mt-0.5 sm:text-[12.5px]">{children}</p>
   </div>
 );
 
-const LeadCard = ({ lead, nowMs, showAssigned, selected, onToggleSelect, onOpen, onCall, onWhatsApp, onLog }) => {
+const LeadCard = ({ lead, nowMs, showAssigned, selected, onToggleSelect, onOpen, onCall, onEmail, onCalendar, onWhatsApp, onLog, statusOptions, onStatusChange, updatingStatusId }) => {
   const followUp = describeFollowUp(lead?.nextFollowUp, nowMs);
 
   return (
-    <li className="rounded-xl border border-slate-200 bg-white shadow-crm-soft dark:border-slate-700 dark:bg-slate-900">
-      <div className="flex items-start gap-2.5 p-3">
+    <li className="rounded-2xl border border-slate-200 bg-white shadow-crm-soft dark:border-slate-700 dark:bg-slate-900">
+      <div className="flex items-start gap-3 p-4 sm:gap-2.5 sm:p-3">
         <input
           type="checkbox"
           checked={selected}
           onChange={() => onToggleSelect?.(lead)}
           aria-label={`Select ${lead?.name || "lead"}`}
-          className="mt-1 h-4 w-4 shrink-0 rounded border-slate-300 text-blue-600 focus:ring-blue-500 dark:border-slate-600 dark:bg-slate-800"
+          className="mt-2 h-5 w-5 shrink-0 rounded border-slate-300 text-blue-600 focus:ring-blue-500 dark:border-slate-600 dark:bg-slate-800 sm:mt-1 sm:h-4 sm:w-4"
         />
 
         {/*
@@ -76,25 +76,41 @@ const LeadCard = ({ lead, nowMs, showAssigned, selected, onToggleSelect, onOpen,
           onClick={() => onOpen?.(lead)}
           className="flex min-w-0 flex-1 items-center gap-2.5 text-left outline-none focus-visible:ring-2 focus-visible:ring-blue-500/40"
         >
-          <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-blue-100 text-[11px] font-bold text-blue-700 dark:bg-blue-500/20 dark:text-blue-200">
+          <span className="flex h-12 w-12 shrink-0 items-center justify-center rounded-full bg-indigo-50 text-[16px] font-bold text-blue-700 dark:bg-blue-500/20 dark:text-blue-200 sm:h-9 sm:w-9 sm:text-[11px]">
             {initialsOf(lead?.name)}
           </span>
           <span className="min-w-0 flex-1">
-            <span className="block truncate text-[14px] font-semibold text-slate-900 dark:text-slate-100">
+            <span className="block truncate text-[16px] font-semibold text-slate-900 dark:text-slate-100 sm:text-[14px]">
               {lead?.name || "Unnamed lead"}
             </span>
-            <span className="block truncate font-mono text-[12.5px] text-slate-500 dark:text-slate-400">
+            <span className="block truncate font-mono text-[15px] text-slate-500 dark:text-slate-400 sm:text-[12.5px]">
               {lead?.phone || "—"}
             </span>
           </span>
         </button>
 
-        <StatusBadge status={lead?.status} className="shrink-0" />
+        <span className="relative inline-flex max-w-[86px] shrink-0" onClick={(event) => event.stopPropagation()}>
+          <StatusBadge status={lead?.status} className="pointer-events-none max-w-[86px] overflow-hidden px-1.5 py-1 text-[10px] sm:max-w-none sm:px-2.5 sm:py-1 sm:text-[11.5px]" />
+          {onStatusChange ? (
+            <select
+              aria-label={`Change status for ${lead?.name || "lead"}`}
+              value={lead?.status || "NEW"}
+              disabled={updatingStatusId === String(lead?._id || "")}
+              onChange={(event) => onStatusChange(lead, event.target.value)}
+              className="absolute inset-0 h-full w-full cursor-pointer opacity-0 disabled:cursor-wait"
+            >
+              {statusOptions.map((status) => <option key={status} value={status}>{status.replace(/_/g, " ")}</option>)}
+            </select>
+          ) : null}
+        </span>
+        <button type="button" onClick={() => onOpen?.(lead)} className="rounded-lg p-1 text-slate-500 hover:bg-slate-100 dark:hover:bg-slate-800" aria-label={`More actions for ${lead?.name || "lead"}`}>
+          <MoreVertical size={18} />
+        </button>
       </div>
 
       <div
         className={cn(
-          "grid gap-x-3 border-t border-slate-100 px-3 py-2.5 dark:border-slate-800",
+          "grid gap-x-3 border-t border-slate-100 px-4 py-3 dark:border-slate-800 sm:px-3 sm:py-2.5",
           showAssigned ? "grid-cols-3" : "grid-cols-2",
         )}
       >
@@ -111,20 +127,17 @@ const LeadCard = ({ lead, nowMs, showAssigned, selected, onToggleSelect, onOpen,
         </Fact>
       </div>
 
-      <div className="flex items-center justify-end gap-2 border-t border-slate-100 px-3 py-2 dark:border-slate-800">
-        <IconButton icon={Phone} label={`Call ${lead?.name || "lead"}`} size="sm" onClick={() => onCall?.(lead)} />
-        <IconButton
-          icon={MessageCircle}
-          label={`WhatsApp ${lead?.name || "lead"}`}
-          size="sm"
-          onClick={() => onWhatsApp?.(lead)}
-        />
-        <IconButton
-          icon={NotebookPen}
-          label={`Log an outcome for ${lead?.name || "lead"}`}
-          size="sm"
-          onClick={() => onLog?.(lead)}
-        />
+      <div className="flex items-center justify-between gap-2 border-t border-slate-100 px-4 py-3 dark:border-slate-800 sm:px-3 sm:py-2">
+        <div className="flex items-center gap-2">
+          <IconButton icon={Phone} label={`Call ${lead?.name || "lead"}`} size="sm" onClick={() => onCall?.(lead)} />
+          <IconButton icon={Mail} label={`Email ${lead?.name || "lead"}`} size="sm" onClick={() => onEmail?.(lead)} />
+          <IconButton icon={CalendarDays} label={`Schedule follow-up for ${lead?.name || "lead"}`} size="sm" onClick={() => onCalendar?.(lead)} />
+          <IconButton icon={NotebookPen} label={`Log an outcome for ${lead?.name || "lead"}`} size="sm" onClick={() => onLog?.(lead)} />
+          <IconButton icon={MessageCircle} label={`WhatsApp ${lead?.name || "lead"}`} size="sm" onClick={() => onWhatsApp?.(lead)} className="hidden sm:inline-flex" />
+        </div>
+        <button type="button" onClick={() => onOpen?.(lead)} className="flex items-center gap-2 rounded-xl border border-slate-200 px-4 py-2 text-[14px] font-semibold text-blue-700 shadow-sm dark:border-slate-700 dark:text-blue-300 sm:hidden">
+          View details <ArrowRight size={17} />
+        </button>
       </div>
     </li>
   );
@@ -139,8 +152,13 @@ const PipelineCards = ({
   onSelectionChange,
   onOpenLead,
   onCall,
+  onEmail,
+  onCalendar,
   onWhatsApp,
   onLog,
+  statusOptions = [],
+  onStatusChange,
+  updatingStatusId = "",
   emptyState,
   className,
 }) => {
@@ -190,8 +208,13 @@ const PipelineCards = ({
           onToggleSelect={toggle}
           onOpen={onOpenLead}
           onCall={onCall}
+          onEmail={onEmail}
+          onCalendar={onCalendar}
           onWhatsApp={onWhatsApp}
           onLog={onLog}
+          statusOptions={statusOptions}
+          onStatusChange={onStatusChange}
+          updatingStatusId={updatingStatusId}
         />
       ))}
     </ul>

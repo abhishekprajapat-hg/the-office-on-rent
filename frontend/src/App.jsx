@@ -351,8 +351,6 @@ export default function App() {
     location.pathname.startsWith(prefix),
   );
   const isChatPage = location.pathname === "/chat";
-  const canChannelPartnerViewInventory =
-    userRole === "CHANNEL_PARTNER" && Boolean(authUser?.canViewInventory);
   const shouldLockDocumentScroll = isLoggedIn && !isPublicPage;
   const routeViewportClass = shouldLockDocumentScroll
     ? "min-h-0 flex-1 overflow-hidden"
@@ -647,11 +645,6 @@ export default function App() {
     navigate("/login");
   }, [navigate]);
 
-  const canAccess = useCallback(
-    (allowedRoles) => userRole === "ADMIN" || allowedRoles.includes(userRole),
-    [userRole],
-  );
-
   // One gate, two regimes (see PageAccessGate): a role with configured page
   // access is decided entirely by that configuration, so an Admin can grant a
   // page as well as take one away. A role without it falls back to the built-in
@@ -701,27 +694,19 @@ export default function App() {
       />
       <Route
         path="/inventory"
-        element={(userRole !== "CHANNEL_PARTNER" || canChannelPartnerViewInventory)
-          ? withPageAccess("inventory", <AssetVault />, ["ADMIN", ...MANAGEMENT_ROLES, "EXECUTIVE", "FIELD_EXECUTIVE", "CHANNEL_PARTNER"])
-          : <Navigate to="/" />}
+        element={withPageAccess("inventory", <AssetVault />, ["ADMIN", ...MANAGEMENT_ROLES, "EXECUTIVE", "FIELD_EXECUTIVE", "CHANNEL_PARTNER"])}
       />
       <Route
         path="/inventory/:id"
-        element={(userRole !== "CHANNEL_PARTNER" || canChannelPartnerViewInventory)
-          ? withPageAccess("inventory", <InventoryDetails />, ["ADMIN", ...MANAGEMENT_ROLES, "EXECUTIVE", "FIELD_EXECUTIVE", "CHANNEL_PARTNER"])
-          : <Navigate to="/" />}
+        element={withPageAccess("inventory", <InventoryDetails />, ["ADMIN", ...MANAGEMENT_ROLES, "EXECUTIVE", "FIELD_EXECUTIVE", "CHANNEL_PARTNER"])}
       />
       <Route
         path="/projects"
-        element={(userRole !== "CHANNEL_PARTNER" || canChannelPartnerViewInventory)
-          ? withPageAccess("projects", <Projects />, ["ADMIN", ...MANAGEMENT_ROLES, "EXECUTIVE", "FIELD_EXECUTIVE", "CHANNEL_PARTNER"])
-          : <Navigate to="/" />}
+        element={withPageAccess("projects", <Projects />, ["ADMIN", ...MANAGEMENT_ROLES, "EXECUTIVE", "FIELD_EXECUTIVE", "CHANNEL_PARTNER"])}
       />
       <Route
         path="/projects/:id"
-        element={(userRole !== "CHANNEL_PARTNER" || canChannelPartnerViewInventory)
-          ? withPageAccess("projects", <ProjectDetails />, ["ADMIN", ...MANAGEMENT_ROLES, "EXECUTIVE", "FIELD_EXECUTIVE", "CHANNEL_PARTNER"])
-          : <Navigate to="/" />}
+        element={withPageAccess("projects", <ProjectDetails />, ["ADMIN", ...MANAGEMENT_ROLES, "EXECUTIVE", "FIELD_EXECUTIVE", "CHANNEL_PARTNER"])}
       />
       <Route
         path="/finance"
@@ -764,27 +749,27 @@ export default function App() {
       />
       <Route
         path="/admin/notifications"
-        element={["ADMIN", "MANAGER"].includes(userRole) ? withPageAccess("admin_notifications", <AdminNotifications />) : <Navigate to="/" />}
+        element={withPageAccess("admin_notifications", <AdminNotifications />, ["ADMIN", "MANAGER"])}
       />
       <Route
         path="/admin/users"
-        element={canAccess(["ADMIN", ...MANAGEMENT_ROLES]) ? withPageAccess("admin_team", <TeamManager theme={theme} />) : <Navigate to="/" />}
+        element={withPageAccess("admin_team", <TeamManager theme={theme} />, ["ADMIN", ...MANAGEMENT_ROLES])}
       />
       <Route
         path="/admin/users/:userId"
-        element={["ADMIN", "MANAGER"].includes(userRole) ? withPageAccess("admin_team", <UserDetailsEditor theme={theme} />) : <Navigate to="/" />}
+        element={withPageAccess("admin_team", <UserDetailsEditor theme={theme} />, ["ADMIN", "MANAGER"])}
       />
       <Route
         path="/admin/console"
-        element={["ADMIN", "MANAGER"].includes(userRole) ? withPageAccess("admin_console", <AdminCommandConsole />) : <Navigate to="/" />}
+        element={withPageAccess("admin_console", <AdminCommandConsole />, ["ADMIN", "MANAGER"])}
       />
       <Route
         path="/admin/meta-ads"
-        element={["ADMIN", "MANAGER"].includes(userRole) ? withPageAccess("admin_meta_ads", <AdminMetaAdsPanel theme={theme} />) : <Navigate to="/" />}
+        element={withPageAccess("admin_meta_ads", <AdminMetaAdsPanel theme={theme} />, ["ADMIN", "MANAGER"])}
       />
       <Route
         path="/settings"
-        element={canAccess(["ADMIN", "MANAGER"]) ? withPageAccess("settings", <SystemSettings />) : <Navigate to="/" />}
+        element={withPageAccess("settings", <SystemSettings />, ["ADMIN", "MANAGER"])}
       />
       <Route
         path="/targets"
@@ -850,9 +835,7 @@ export default function App() {
     </Routes>
   ), [
     DashboardByRole,
-    canAccess,
     withPageAccess,
-    canChannelPartnerViewInventory,
     theme,
     userRole,
   ]);

@@ -1,9 +1,9 @@
-import { memo, useCallback, useEffect, useMemo, useState } from "react";
+import { memo, useCallback, useMemo, useState } from "react";
 import { NavLink, useLocation } from "react-router-dom";
-import { ChevronRight, LogOut, X } from "lucide-react";
-import { IconButton, Tooltip, cn } from "../ui";
+import { ChevronRight, X } from "lucide-react";
+import { IconButton, cn } from "../ui";
 import BrandLogo from "../common/BrandLogo";
-import { PROFILE_ITEM, getVisibleSidebarGroups, roleCanSeeItem } from "./workbenchNavigation";
+import { getVisibleSidebarGroups } from "./workbenchNavigation";
 
 const pathMatchesItem = (pathname, itemPath) => {
   if (itemPath === "/dashboard") return pathname === "/" || pathname === "/dashboard";
@@ -11,25 +11,16 @@ const pathMatchesItem = (pathname, itemPath) => {
   return pathname === itemPath || pathname.startsWith(`${itemPath}/`);
 };
 
-const initialsOf = (user) => {
-  const name = String(user?.name || user?.fullName || user?.email || "").trim();
-  if (!name) return "??";
-  const parts = name.split(/[\s@._-]+/).filter(Boolean);
-  return (parts.length > 1 ? parts[0][0] + parts[1][0] : name.slice(0, 2)).toUpperCase();
-};
 
 const PrimarySidebar = ({
   userRole,
   user,
   roleLabel,
-  onLogout,
   mobileOpen,
   onMobileClose,
-  unreadChats = 0,
-  unreadAlerts = 0,
 }) => {
   const location = useLocation();
-  const groups = useMemo(() => getVisibleSidebarGroups(userRole, user), [userRole, user]);
+  const groups = useMemo(() => getVisibleSidebarGroups(userRole, user).map((group) => ({ ...group, items: group.items.filter((item) => !["/admin/notifications", "/profile", "/chat"].includes(item.path)) })).filter((group) => group.items.length), [userRole, user]);
   const activeGroupName = useMemo(() => {
     const activeGroup = groups.find((group) =>
       group.items.some((item) => pathMatchesItem(location.pathname, item.path)),
@@ -40,25 +31,13 @@ const PrimarySidebar = ({
   // Default active group to open
   const [expandedGroupNames, setExpandedGroupNames] = useState(["SALES", "WORK"]);
 
-  useEffect(() => {
+  const [previousGroup, setPreviousGroup] = useState(null);
+  if (previousGroup !== activeGroupName) {
+    setPreviousGroup(activeGroupName);
     if (activeGroupName && !expandedGroupNames.includes(activeGroupName)) {
-      setExpandedGroupNames((prev) => [...prev, activeGroupName]);
+      setExpandedGroupNames([...expandedGroupNames, activeGroupName]);
     }
-  }, [activeGroupName]);
-
-  const canSeeProfile = useMemo(
-    () => roleCanSeeItem(PROFILE_ITEM, userRole, user),
-    [userRole, user],
-  );
-
-  const badgeFor = useCallback(
-    (path) => {
-      if (path === "/chat") return unreadChats;
-      if (path === "/admin/notifications") return unreadAlerts;
-      return 0;
-    },
-    [unreadAlerts, unreadChats],
-  );
+  }
 
   const renderNav = useCallback(
     () => (
@@ -105,8 +84,6 @@ const PrimarySidebar = ({
                 <div className="mt-0.5 space-y-0.5">
                   {group.items.map((item) => {
                     const Icon = item.icon;
-                    const badge = badgeFor(item.path);
-
                     return (
                       <NavLink
                         key={`${group.group}-${item.path}`}
@@ -143,16 +120,6 @@ const PrimarySidebar = ({
                               strokeWidth={isActive ? 2.2 : 1.8}
                             />
                             <span className="truncate">{item.label}</span>
-                            {badge > 0 ? (
-                              <span
-                                className={cn(
-                                  "ml-auto flex h-[18px] min-w-[18px] items-center justify-center rounded-full bg-rose-50 px-1.5",
-                                  "text-[10.5px] font-bold text-rose-600 dark:bg-rose-500/15 dark:text-rose-300",
-                                )}
-                              >
-                                {badge > 99 ? "99+" : badge}
-                              </span>
-                            ) : null}
                           </>
                         )}
                       </NavLink>
@@ -165,7 +132,7 @@ const PrimarySidebar = ({
         })}
       </nav>
     ),
-    [badgeFor, expandedGroupNames, groups, location.pathname, onMobileClose],
+    [expandedGroupNames, groups, location.pathname, onMobileClose],
   );
 
   const sidebar = useCallback(
@@ -205,57 +172,10 @@ const PrimarySidebar = ({
             </div>
           )}
 
-          {/* Bottom User Profile Section */}
-          <div className="mt-auto border-t border-slate-100 p-2.5 dark:border-slate-800">
-            <div className="flex items-center gap-2 rounded-xl p-1 transition-colors hover:bg-slate-50 dark:hover:bg-slate-800/60">
-              {canSeeProfile ? (
-                <NavLink
-                  to="/profile"
-                  onClick={onMobileClose}
-                  className="flex min-w-0 flex-1 items-center gap-2.5 outline-none"
-                >
-                  <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-blue-600 text-[11px] font-bold text-white shadow-sm">
-                    {initialsOf(user)}
-                  </span>
-                  <span className="min-w-0 flex-1 text-left">
-                    <span className="block truncate text-[12.5px] font-bold leading-tight text-slate-900 dark:text-slate-100">
-                      {user?.name || user?.fullName || "Akhil Singh Thakur"}
-                    </span>
-                    <span className="block truncate text-[11px] text-slate-500 dark:text-slate-400">
-                      {roleLabel || "Admin"}
-                    </span>
-                  </span>
-                </NavLink>
-              ) : (
-                <div className="flex min-w-0 flex-1 items-center gap-2.5">
-                  <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-blue-600 text-[11px] font-bold text-white shadow-sm">
-                    {initialsOf(user)}
-                  </span>
-                  <span className="min-w-0 flex-1 text-left">
-                    <span className="block truncate text-[12.5px] font-bold leading-tight text-slate-900 dark:text-slate-100">
-                      {user?.name || user?.fullName || "User"}
-                    </span>
-                    <span className="block truncate text-[11px] text-slate-500 dark:text-slate-400">
-                      {roleLabel || "Admin"}
-                    </span>
-                  </span>
-                </div>
-              )}
-              <Tooltip label="Logout" side="right">
-                <IconButton
-                  icon={LogOut}
-                  label="Logout"
-                  size="sm"
-                  onClick={onLogout}
-                  className="border-transparent bg-transparent text-slate-400 hover:bg-rose-50 hover:text-rose-600 dark:hover:bg-rose-500/10 dark:hover:text-rose-300"
-                />
-              </Tooltip>
-            </div>
-          </div>
         </aside>
       );
     },
-    [canSeeProfile, groups.length, onLogout, onMobileClose, renderNav, roleLabel, user],
+    [groups.length, onMobileClose, renderNav, roleLabel],
   );
 
   return (

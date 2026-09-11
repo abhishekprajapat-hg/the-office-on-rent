@@ -27,6 +27,7 @@ import {
 import { uploadFile } from "../../services/uploadService";
 import { toErrorMessage } from "../../utils/errorMessage";
 import { useDebouncedValue } from "../../hooks/useDebouncedValue";
+import { usePermissions } from "../../context/usePermissions";
 import ToastNotice from "../../components/ui/ToastNotice";
 import {
   PROJECT_CATEGORY_OPTIONS,
@@ -650,8 +651,12 @@ const ProjectsPage = () => {
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
   const role = String(localStorage.getItem("role") || "").trim().toUpperCase();
-  const canManage = PROJECT_MANAGE_ROLES.has(role);
-  const canDelete = PROJECT_DELETE_ROLES.has(role);
+  const { canPageAction, enforcePageAccess } = usePermissions();
+  const canManage = PROJECT_MANAGE_ROLES.has(role)
+    || (enforcePageAccess && canPageAction("projects", "edit"))
+    || (enforcePageAccess && canPageAction("projects", "create"));
+  const canDelete = PROJECT_DELETE_ROLES.has(role)
+    || (enforcePageAccess && canPageAction("projects", "delete"));
 
   const [projects, setProjects] = useState([]);
   const [pagination, setPagination] = useState(null);

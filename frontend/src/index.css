@@ -990,6 +990,12 @@ html.theme-dark .workspace-shell .custom-scrollbar::-webkit-scrollbar-thumb {
   padding: 1rem 0.75rem 1.25rem !important;
 }
 
+/* Detail pages start directly under the workspace header; the lead profile
+   owns its own card spacing and should not inherit the list-page top gutter. */
+.workspace-main-content:not(.workspace-main-content-chat) > .ui-page-shell.route-details-page {
+  padding-top: 0 !important;
+}
+
 html.theme-dark .workspace-main-content:not(.workspace-main-content-chat) > .ui-page-shell:not(.chat-page) {
   background:
     radial-gradient(circle at 12% 0%, rgba(37, 99, 235, 0.16), transparent 30%),
@@ -1032,6 +1038,102 @@ html.theme-dark .workspace-main-content:not(.workspace-main-content-chat) > .ui-
   gap: 0 !important;
   padding: 0 !important;
   background: #f7f7f8 !important;
+}
+
+/* Inventory reference layout: a spacious blue-white workspace with compact
+   filter controls and large property cards. */
+.workspace-main-content:not(.workspace-main-content-chat) > .ui-page-shell.inventory-route-page,
+.workspace-main-content:not(.workspace-main-content-chat) > .ui-page-shell.inventory-details-page {
+  background: #f7f9fd !important;
+  gap: 1.25rem;
+  padding: 1.5rem 1.75rem 2rem !important;
+}
+
+.inventory-route-page .inventory-toolbar {
+  margin-top: 0;
+}
+
+.inventory-route-page .inventory-filter-panel {
+  border-color: #e7ebf3;
+  box-shadow: 0 5px 18px rgba(30, 64, 175, 0.045);
+}
+
+.inventory-route-page .inventory-filter-panel select,
+.inventory-route-page .inventory-filter-panel input {
+  min-width: 0;
+}
+
+.inventory-route-page .inventory-filter-panel select,
+.inventory-route-page .inventory-filter-panel input[type="text"],
+.inventory-route-page .inventory-filter-panel input[type="number"] {
+  height: 2.5rem;
+  border: 1px solid #e3e8f1;
+  border-radius: 0.75rem;
+  background: #fff;
+  padding: 0 0.75rem;
+  color: #25345d;
+  font-size: 0.8125rem;
+  outline: none;
+}
+
+.inventory-route-page .inventory-filter-panel select:focus,
+.inventory-route-page .inventory-filter-panel input:focus {
+  border-color: #3566ef;
+  box-shadow: 0 0 0 3px rgba(53, 102, 239, 0.1);
+}
+
+.inventory-route-page .inventory-results-bar {
+  min-height: 2.5rem;
+}
+
+.inventory-details-page .inventory-detail-hero {
+  border-color: #e7ebf3;
+  box-shadow: 0 7px 24px rgba(30, 64, 175, 0.055);
+}
+
+.inventory-details-page .inventory-detail-hero > .relative {
+  height: 320px;
+  min-height: 0;
+  max-height: 320px;
+  overflow: hidden;
+}
+
+.inventory-details-page .inventory-detail-stats > div + div {
+  border-left: 1px solid #e8edf5;
+  padding-left: 1rem;
+}
+
+@media (max-width: 767px) {
+  .workspace-main-content:not(.workspace-main-content-chat) > .ui-page-shell.inventory-route-page,
+  .workspace-main-content:not(.workspace-main-content-chat) > .ui-page-shell.inventory-details-page {
+    padding: 1rem 0.75rem 1.25rem !important;
+  }
+
+  .inventory-command-bar {
+    height: 60px !important;
+    padding: 0 0.75rem !important;
+  }
+
+  .inventory-command-bar > div:first-of-type {
+    min-width: 0;
+  }
+
+  .inventory-command-bar h1 {
+    font-size: 1.1rem;
+  }
+
+  .inventory-command-bar p {
+    display: none;
+  }
+
+  .inventory-filter-panel > .grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .inventory-details-page .inventory-detail-stats > div + div {
+    border-left: 0;
+    padding-left: 0;
+  }
 }
 
 html.theme-dark .workspace-main-content > .admin-chat-page {

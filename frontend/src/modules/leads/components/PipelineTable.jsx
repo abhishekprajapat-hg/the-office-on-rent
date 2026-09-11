@@ -1,8 +1,8 @@
 import React from "react";
 import { MessageCircle, NotebookPen, Phone } from "lucide-react";
 import { DataTable, StatusBadge } from "../../../components/crm";
-import { Badge, EmptyState, IconButton, cn } from "../../../components/ui";
-import { describeFollowUp, formatBudgetRange } from "./pipelineViews";
+import { EmptyState, IconButton } from "../../../components/ui";
+import { formatBudgetRange } from "./pipelineViews";
 
 const initialsOf = (name) => {
   const parts = String(name || "").trim().split(/\s+/).filter(Boolean);
@@ -42,14 +42,15 @@ const FOLLOW_UP_TONES = {
 const PipelineTable = ({
   leads = [],
   loading = false,
-  nowMs = 0,
-  showAssigned = true,
   selectedKeys = [],
   onSelectionChange,
   onOpenLead,
   onCall,
   onWhatsApp,
   onLog,
+  statusOptions = [],
+  onStatusChange,
+  updatingStatusId = "",
   emptyState,
   className,
 }) => {
@@ -76,7 +77,22 @@ const PipelineTable = ({
     {
       key: "status",
       header: "STATUS",
-      render: (lead) => <StatusBadge status={lead?.status} />,
+      render: (lead) => (
+        <span className="relative inline-flex" onClick={(event) => event.stopPropagation()}>
+          <StatusBadge status={lead?.status} className="pointer-events-none" />
+          {onStatusChange ? (
+            <select
+              aria-label={`Change status for ${lead?.name || "lead"}`}
+              value={lead?.status || "NEW"}
+              disabled={updatingStatusId === String(lead?._id || "")}
+              onChange={(event) => onStatusChange(lead, event.target.value)}
+              className="absolute inset-0 h-full w-full cursor-pointer opacity-0 disabled:cursor-wait"
+            >
+              {statusOptions.map((status) => <option key={status} value={status}>{status.replace(/_/g, " ")}</option>)}
+            </select>
+          ) : null}
+        </span>
+      ),
     },
     {
       key: "requirement",

@@ -21,6 +21,7 @@ import {
 import { getUsers } from "../../services/userService";
 import { toErrorMessage } from "../../utils/errorMessage";
 import { useDebouncedValue } from "../../hooks/useDebouncedValue";
+import { usePermissions } from "../../context/usePermissions";
 import {
   AddLeadModal,
   BulkLeadUploadModal,
@@ -1456,7 +1457,7 @@ const LeadsMatrix = () => {
   const [propertySubtypeFilter, setPropertySubtypeFilter] = useState(
     () => String(searchParams.get("subtype") || "").toUpperCase(),
   );
-  const [sortBy] = useState(() => {
+  const [sortBy, setSortBy] = useState(() => {
     const fromUrl = String(searchParams.get("sort") || "").toUpperCase();
     return LEAD_SORT_OPTIONS[fromUrl] || LEAD_SORT_OPTIONS.FOLLOW_UP;
   });
@@ -1467,6 +1468,7 @@ const LeadsMatrix = () => {
   const [selectedLeadKeys, setSelectedLeadKeys] = useState([]);
   const [nowMs, setNowMs] = useState(0);
   const debouncedQuery = useDebouncedValue(query, 180);
+  const { canPageAction, enforcePageAccess } = usePermissions();
 
   const filterState = useMemo(() => ({
     status: statusFilter,
@@ -1569,6 +1571,7 @@ const LeadsMatrix = () => {
   const [isDiaryMicSupported, setIsDiaryMicSupported] = useState(false);
   const [isDiaryListening, setIsDiaryListening] = useState(false);
   const [savingUpdates, setSavingUpdates] = useState(false);
+  const [updatingStatusId, setUpdatingStatusId] = useState("");
   const [assigning, setAssigning] = useState(false);
   const [linkingProperty, setLinkingProperty] = useState(false);
   const [propertyActionInventoryId, setPropertyActionInventoryId] = useState("");
@@ -1612,6 +1615,7 @@ const LeadsMatrix = () => {
     : "/leads";
 
   const userRole = localStorage.getItem("role") || "";
+  const currentPageKey = currentLeadRouteBase === "/my-leads" ? "my_leads" : "leads";
   const userRoleType = getStoredUserRoleType();
   const canChooseLeadRoleType = userRole === "ADMIN" || userRoleType === "BOTH";
   const isExecutiveUser = EXECUTIVE_ROLES.includes(userRole);
@@ -1622,8 +1626,18 @@ const LeadsMatrix = () => {
     || userRole === "CHANNEL_PARTNER";
   const canBulkUploadLeads =
     userRole === "ADMIN" || MANAGEMENT_ROLES.includes(userRole) || isExecutiveUser;
-  const canAssignLead = MANUAL_LEAD_TRANSFER_ACTOR_ROLES.includes(userRole);
-  const canManageLeadProperties = userRole !== "CHANNEL_PARTNER";
+  const canAssignLeadByRole = MANUAL_LEAD_TRANSFER_ACTOR_ROLES.includes(userRole);
+  const canEditLead = canPageAction(currentPageKey, "edit");
+  const canExportLeads = canPageAction(currentPageKey, "export");
+  const canFollowUpLead = canPageAction(currentPageKey, "follow_up");
+  const canAddLeadByPage = canPageAction(currentPageKey, "create");
+  const canBulkUploadByPage = canPageAction(currentPageKey, "create");
+  const canAssignLead = canAssignLeadByRole && canPageAction(currentPageKey, "assign");
+  // An explicit page grant is the Admin's per-employee override. It can widen
+  // the old role-based button visibility, while the API remains authoritative.
+  const canAddLeadAllowed = canAddLeadByPage && (canAddLead || enforcePageAccess);
+  const canBulkUploadAllowed = canBulkUploadByPage && (canBulkUploadLeads || enforcePageAccess);
+  const canManageLeadProperties = userRole !== "CHANNEL_PARTNER" && canEditLead;
   const canConfigureSiteLocation =
     userRole === "ADMIN" || MANAGEMENT_ROLES.includes(userRole);
   const canReviewDealPayment = userRole === "ADMIN";
@@ -2007,6 +2021,7 @@ const LeadsMatrix = () => {
   }, [advancedFilters, debouncedQuery, propertySubtypeFilter, setSearchParams, sortBy, statusFilter, view]);
 
   const handleExportSelectedLeads = useCallback(() => {
+    if (!canExportLeads) return;
     const chosen = new Set(selectedLeadKeys.map(String));
     const rows = filteredLeads.filter((lead) => chosen.has(String(lead?._id)));
     if (!rows.length) return;
@@ -2036,7 +2051,7 @@ const LeadsMatrix = () => {
     link.download = "leads-" + new Date().toISOString().slice(0, 10) + ".csv";
     link.click();
     URL.revokeObjectURL(url);
-  }, [filteredLeads, selectedLeadKeys]);
+  }, [canExportLeads, filteredLeads, selectedLeadKeys]);
 
 
   const openLeadDetails = useCallback(async (lead) => {
@@ -2201,6 +2216,39 @@ const LeadsMatrix = () => {
     setView(PIPELINE_VIEWS.ALL);
   }, []);
 
+  const handleInlineLeadStatusChange = useCallback(async (lead, nextStatus) => {
+    if (!canEditLead) return;
+    const leadId = String(lead?._id || "").trim();
+    const status = String(nextStatus || "").trim().toUpperCase();
+    const previousStatus = String(lead?.status || "NEW").trim().toUpperCase();
+    if (!leadId || !LEAD_STATUSES.includes(status) || status === previousStatus) return;
+
+    setUpdatingStatusId(leadId);
+    setError("");
+    setLeads((previous) => previous.map((item) => (
+      String(item?._id || "") === leadId ? { ...item, status } : item
+    )));
+
+    try {
+      const updatedLead = await updateLeadStatus(leadId, { status });
+      if (updatedLead) {
+        setLeads((previous) => previous.map((item) => (
+          String(item?._id || "") === leadId ? { ...item, ...updatedLead } : item
+        )));
+      }
+      setSuccess("Lead status updated");
+    } catch (updateError) {
+      setLeads((previous) => previous.map((item) => (
+        String(item?._id || "") === leadId ? { ...item, status: previousStatus } : item
+      )));
+      const message = toErrorMessage(updateError, "Failed to update lead status");
+      console.error(`Inline lead status update failed: ${message}`);
+      setError(message);
+    } finally {
+      setUpdatingStatusId("");
+    }
+  }, [canEditLead]);
+
   // Everything both pipeline presentations need. Defined once: the card list
   // and the table are the same list, and a callback that exists on only one of
   // them is a bug that only shows up at one screen width.
@@ -2219,6 +2267,11 @@ const LeadsMatrix = () => {
       const href = getDialerHref(lead?.phone);
       if (href) window.location.href = href;
     },
+    onEmail: (lead) => {
+      const email = String(lead?.email || "").trim();
+      if (email) window.location.href = `mailto:${email}`;
+    },
+    onCalendar: handleOpenLeadDetailsPage,
     onWhatsApp: (lead) => {
       const href = getWhatsAppHref(lead?.phone);
       if (href) window.open(href, "_blank", "noopener");
@@ -2226,6 +2279,9 @@ const LeadsMatrix = () => {
     // TODO(phase 7): swap for QuickLogPopover once it exists; until then Log
     // opens the record where the diary already lives.
     onLog: handleOpenLeadDetailsPage,
+    statusOptions: canEditLead ? LEAD_STATUSES : [],
+    onStatusChange: canEditLead ? handleInlineLeadStatusChange : undefined,
+    updatingStatusId,
   };
 
   useEffect(() => {
@@ -2457,7 +2513,7 @@ const LeadsMatrix = () => {
   };
 
   const handleSaveLead = async () => {
-    if (!canAddLead) return;
+    if (!canAddLeadAllowed) return;
 
     if (!formData.name.trim() || !formData.phone.trim()) {
       setError("Name and phone are required");
@@ -2607,13 +2663,13 @@ const LeadsMatrix = () => {
   };
 
   const handleOpenEditLeadForm = () => {
-    if (!selectedLead) return;
+    if (!selectedLead || !canEditLead) return;
     setFormData(mapLeadToFormData(selectedLead));
     setIsEditLeadModalOpen(true);
   };
 
   const handleSaveEditedLead = async () => {
-    if (!selectedLead) return;
+    if (!selectedLead || !canEditLead) return;
 
     if (!formData.name.trim() || !formData.phone.trim()) {
       setError("Name and phone are required");
@@ -2703,7 +2759,7 @@ const LeadsMatrix = () => {
   };
 
   const handleBulkUploadLeads = async () => {
-    if (!canBulkUploadLeads) return;
+    if (!canBulkUploadAllowed) return;
 
     try {
       setBulkUploading(true);
@@ -3206,7 +3262,7 @@ const LeadsMatrix = () => {
   };
 
   const handleAddDiary = async () => {
-    if (!selectedLead) return;
+    if (!selectedLead || !canFollowUpLead) return;
 
     const note = diaryDraft.trim();
     if (!note) {
@@ -3288,10 +3344,10 @@ const LeadsMatrix = () => {
   return (
     <div
       className={`ui-page-shell relative h-full w-full overflow-x-hidden overflow-y-auto custom-scrollbar ${
-        isDark ? "bg-slate-950" : ""
-      }`}
+        isRouteDetailsView ? "route-details-page" : ""
+      } ${isDark ? "bg-slate-950" : ""}`}
     >
-      <div className={`relative z-10 flex flex-col gap-4 p-5 ${isRouteDetailsView ? "" : "flex-1"}`}>
+      <div className={`relative z-10 flex flex-col gap-4 ${isRouteDetailsView ? "px-5" : "flex-1 p-5"}`}>
         {isRouteDetailsView ? (
           <>
             <LeadsMatrixAlerts isDark={isDark} error={error} success={success} />
@@ -3327,11 +3383,13 @@ const LeadsMatrix = () => {
               onQueryChange={setQuery}
               refreshing={refreshing}
               onRefresh={() => fetchLeads(true)}
+              sortBy={sortBy}
+              onSortByChange={setSortBy}
               onOpenFiltersFlyout={() => setFiltersFlyoutOpen(true)}
-              onOpenAddModal={() => { setFormData(getDefaultFormDataForRoleType()); setIsAddModalOpen(true); }}
+              onOpenAddModal={() => { if (!canAddLeadAllowed) return; setFormData(getDefaultFormDataForRoleType()); setIsAddModalOpen(true); }}
               onOpenBulkUploadModal={() => setIsBulkUploadModalOpen(true)}
-              canAddLead={canAddLead}
-              canBulkUploadLeads={canBulkUploadLeads}
+              canAddLead={canAddLeadAllowed}
+              canBulkUploadLeads={canBulkUploadAllowed}
               filterState={filterState}
               onFilterChange={applyToolbarFilters}
               onResetFilters={resetAllLeadFilters}
@@ -3381,7 +3439,7 @@ const LeadsMatrix = () => {
               <PipelineSelectionBar
                 count={selectedLeadKeys.length}
                 onClear={() => setSelectedLeadKeys([])}
-                onExport={handleExportSelectedLeads}
+                onExport={canExportLeads ? handleExportSelectedLeads : undefined}
               />
             </div> : null}
 
@@ -3422,7 +3480,7 @@ const LeadsMatrix = () => {
       </div>
 
       <AnimatePresence>
-        {isAddModalOpen && canAddLead && (
+        {isAddModalOpen && canAddLeadAllowed && (
           <AddLeadModal
             isDark={isDark}
             formData={formData}
@@ -3462,7 +3520,7 @@ const LeadsMatrix = () => {
       </AnimatePresence>
 
       <AnimatePresence>
-        {isBulkUploadModalOpen && canBulkUploadLeads && (
+        {isBulkUploadModalOpen && canBulkUploadAllowed && (
           <BulkLeadUploadModal
             isDark={isDark}
             csvText={bulkUploadText}
@@ -3564,6 +3622,7 @@ const LeadsMatrix = () => {
             closureDocumentsDraft={closureDocumentsDraft}
             setClosureDocumentsDraft={setClosureDocumentsDraft}
             canReviewDealPayment={canReviewDealPayment}
+            canEditLead={canEditLead}
             siteLatDraft={siteLatDraft}
             setSiteLatDraft={setSiteLatDraft}
             siteLngDraft={siteLngDraft}

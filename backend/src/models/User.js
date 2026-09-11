@@ -25,8 +25,10 @@ const brokerageConfigSchema = new mongoose.Schema(
 
 const userSchema = new mongoose.Schema(
   {
-    // Null inherits the role; an empty list keeps only always-accessible pages.
-    pageAccessOverride: { type: [String], default: null },
+    // Null inherits the role. Entries may be legacy page-key strings or the
+    // action-aware shape { pageKey, actions }, so existing employee grants
+    // keep working while new grants can restrict create/edit/delete/etc.
+    pageAccessOverride: { type: [mongoose.Schema.Types.Mixed], default: null },
     name: {
       type: String,
       required: true,

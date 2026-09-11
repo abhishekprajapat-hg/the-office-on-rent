@@ -27,6 +27,7 @@ import { getAllLeads } from "../../services/leadService";
 import { uploadFile } from "../../services/uploadService";
 import { toErrorMessage } from "../../utils/errorMessage";
 import { useDebouncedValue } from "../../hooks/useDebouncedValue";
+import { usePermissions } from "../../context/usePermissions";
 import ToastNotice from "../../components/ui/ToastNotice";
 import {
   AssetVaultFilters,
@@ -765,7 +766,7 @@ const AssetVault = () => {
   const [editingAssetId, setEditingAssetId] = useState("");
   const [modeType, setModeType] = useState("sale");
   const [viewMode, setViewMode] = useState("cards");
-  const [advancedFiltersOpen, setAdvancedFiltersOpen] = useState(false);
+  const [sortOrder, setSortOrder] = useState("latest");
   const [uploading, setUploading] = useState(false);
   const [uploadingFloorPlans, setUploadingFloorPlans] = useState(false);
   const [uploadingDocuments, setUploadingDocuments] = useState(false);
@@ -791,7 +792,6 @@ const AssetVault = () => {
   const [bhkFilter, setBhkFilter] = useState("");
   const [cabinsFilter, setCabinsFilter] = useState("");
   const [seatsFilter, setSeatsFilter] = useState("");
-  const [areaRangeFilter, setAreaRangeFilter] = useState("");
   const [budgetRangeFilter, setBudgetRangeFilter] = useState("");
   const [floorFilter, setFloorFilter] = useState("");
   const [parkingFilter, setParkingFilter] = useState("");
@@ -800,7 +800,6 @@ const AssetVault = () => {
   const debouncedSearchTerm = useDebouncedValue(searchTerm, 180);
   const debouncedCabinsFilter = useDebouncedValue(cabinsFilter, 160);
   const debouncedSeatsFilter = useDebouncedValue(seatsFilter, 160);
-  const debouncedAreaRangeFilter = useDebouncedValue(areaRangeFilter, 180);
   const debouncedBudgetRangeFilter = useDebouncedValue(budgetRangeFilter, 180);
   const debouncedFloorFilter = useDebouncedValue(floorFilter, 160);
   const debouncedAmenitiesFilter = useDebouncedValue(amenitiesFilter, 180);
@@ -812,6 +811,18 @@ const AssetVault = () => {
     setFormErrorPersistent(persistent);
   };
   const [success, setSuccess] = useState("");
+
+  useEffect(() => {
+    const handleInventorySearch = (event) => {
+      setSearchTerm(String(event.detail || ""));
+    };
+    window.addEventListener("inventory:search", handleInventorySearch);
+    return () => window.removeEventListener("inventory:search", handleInventorySearch);
+  }, []);
+
+  useEffect(() => {
+    window.dispatchEvent(new CustomEvent("inventory:search-sync", { detail: searchTerm }));
+  }, [searchTerm]);
 
   const [formData, setFormData] = useState(getDefaultInventoryForm);
   const [inventoryCustomNumberFields, setInventoryCustomNumberFields] = useState({});
@@ -831,15 +842,23 @@ const AssetVault = () => {
   const googleGeocoderRef = useRef(null);
 
   const role = getStoredUserRole();
+  const { canPageAction, enforcePageAccess } = usePermissions();
   const userRoleType = getStoredUserRoleType();
   const canChooseInventoryRoleType = role === "ADMIN" || userRoleType === "BOTH";
-  const canManage = role === "ADMIN" || role === "MANAGER";
-  const canDeleteDirect = role === "ADMIN";
-  const canRequestDelete = role !== "ADMIN" && UPDATE_STATUS_REQUEST_ROLES.has(role);
-  const canReviewInventoryRequests = role === "ADMIN";
-  const canCreateInventory = CREATE_REQUEST_ROLES.has(role);
+  const canManage = role === "ADMIN" || role === "MANAGER"
+    || (enforcePageAccess && canPageAction("inventory", "edit"));
+  const canDeleteDirect = role === "ADMIN"
+    || (enforcePageAccess && canPageAction("inventory", "delete"));
+  const canRequestDelete = !canDeleteDirect
+    && (UPDATE_STATUS_REQUEST_ROLES.has(role)
+      || (enforcePageAccess && canPageAction("inventory", "delete")));
+  const canReviewInventoryRequests = role === "ADMIN"
+    || (enforcePageAccess && canPageAction("inventory", "approve"));
+  const canCreateInventory = CREATE_REQUEST_ROLES.has(role)
+    || (enforcePageAccess && canPageAction("inventory", "create"));
   const canOpenCreateModal = canCreateInventory;
-  const canRequestEdit = UPDATE_STATUS_REQUEST_ROLES.has(role);
+  const canRequestEdit = UPDATE_STATUS_REQUEST_ROLES.has(role)
+    || (enforcePageAccess && canPageAction("inventory", "edit"));
   const canOpenEditModal = canManage || canRequestEdit;
   const canRequestStatusChange = UPDATE_STATUS_REQUEST_ROLES.has(role);
   const inventorySubtype = getInventorySubtypeValue(formData);
@@ -897,63 +916,14 @@ const AssetVault = () => {
     [assets, reserveAssetId],
   );
   const statusCounts = useMemo(() => {
-    const counts = { all: assets.length, Available: 0, Blocked: 0, Sold: 0 };
+    const counts = { all: assets.length, Available: 0, Blocked: 0, Sold: 0, Rented: 0 };
     assets.forEach((asset) => {
       const status = toApiStatus(asset?.status);
       if (counts[status] !== undefined) counts[status] += 1;
+      if (["RENT", "BOTH"].includes(String(asset?.type || "").trim().toUpperCase())) counts.Rented += 1;
     });
     return counts;
   }, [assets]);
-
-  // Active filters as removable chips. "Add filter" opens the full panel, which
-  // still owns every control - this only surfaces what is currently applied.
-  const inventoryFilterChips = useMemo(() => {
-    const chips = [];
-    const push = (id, label, value) => {
-      if (value) chips.push({ id, label, value: String(value).replace(/_/g, " ").toLowerCase(), active: true });
-    };
-    push("type", "Type", inventoryTypeFilter);
-    push("furnishing", "Furnishing", furnishingFilter);
-    push("bhk", "BHK", bhkFilter);
-    push("cabins", "Cabins", cabinsFilter);
-    push("seats", "Seats", seatsFilter);
-    push("area", "Area", areaRangeFilter);
-    push("budget", "Budget", budgetRangeFilter);
-    push("floor", "Floor", floorFilter);
-    push("parking", "Parking", parkingFilter);
-    push("pantry", "Pantry", pantryFilter);
-    push("amenities", "Amenities", amenitiesFilter);
-    return chips;
-  }, [
-    amenitiesFilter,
-    areaRangeFilter,
-    bhkFilter,
-    budgetRangeFilter,
-    cabinsFilter,
-    floorFilter,
-    furnishingFilter,
-    inventoryTypeFilter,
-    pantryFilter,
-    parkingFilter,
-    seatsFilter,
-  ]);
-
-  const handleRemoveInventoryFilter = useCallback((filter) => {
-    const clear = {
-      type: () => setInventoryTypeFilter(""),
-      furnishing: () => setFurnishingFilter(""),
-      bhk: () => setBhkFilter(""),
-      cabins: () => setCabinsFilter(""),
-      seats: () => setSeatsFilter(""),
-      area: () => setAreaRangeFilter(""),
-      budget: () => setBudgetRangeFilter(""),
-      floor: () => setFloorFilter(""),
-      parking: () => setParkingFilter(""),
-      pantry: () => setPantryFilter(""),
-      amenities: () => setAmenitiesFilter(""),
-    };
-    clear[filter.id]?.();
-  }, []);
 
   const sortedLeadOptions = useMemo(
     () =>
@@ -1258,7 +1228,6 @@ const AssetVault = () => {
 
   const filteredAssets = useMemo(() => {
     const normalizedSearch = debouncedSearchTerm.trim().toLowerCase();
-    const areaRange = parseRangeInput(debouncedAreaRangeFilter);
     const budgetRange = parseRangeInput(debouncedBudgetRangeFilter);
     const minCabins = toNumberOrNull(debouncedCabinsFilter);
     const minSeats = toNumberOrNull(debouncedSeatsFilter);
@@ -1278,7 +1247,7 @@ const AssetVault = () => {
         statusFilter === "all"
           ? true
           : toApiStatus(asset.status) === toApiStatus(statusFilter);
-      const inventoryTypeMatch = inventoryTypeFilter === "all"
+      const inventoryTypeMatch = !inventoryTypeFilter || inventoryTypeFilter === "all"
         ? true
         : String(asset.inventoryType || "").toUpperCase() === inventoryTypeFilter;
 
@@ -1323,11 +1292,6 @@ const AssetVault = () => {
         ? true
         : (seatsValue !== null && seatsValue >= minSeats);
 
-      const totalAreaValue = toNumberOrNull(asset.totalArea);
-      const areaMatch = areaRange
-        ? (totalAreaValue !== null && totalAreaValue >= areaRange.min && totalAreaValue <= areaRange.max)
-        : true;
-
       const priceValue = toNumberOrNull(asset.price);
       const budgetMatch = budgetRange
         ? (priceValue !== null && priceValue >= budgetRange.min && priceValue <= budgetRange.max)
@@ -1363,7 +1327,6 @@ const AssetVault = () => {
         && bhkMatch
         && cabinsMatch
         && seatsMatch
-        && areaMatch
         && budgetMatch
         && floorMatch
         && parkingMatch
@@ -1375,7 +1338,6 @@ const AssetVault = () => {
     assets,
     bhkFilter,
     debouncedAmenitiesFilter,
-    debouncedAreaRangeFilter,
     debouncedBudgetRangeFilter,
     debouncedCabinsFilter,
     debouncedFloorFilter,
@@ -1388,6 +1350,13 @@ const AssetVault = () => {
     parkingFilter,
     statusFilter,
   ]);
+
+  const sortedAssets = useMemo(() => {
+    const rows = [...filteredAssets];
+    if (sortOrder === "price-high") return rows.sort((a, b) => Number(b?.price || 0) - Number(a?.price || 0));
+    if (sortOrder === "price-low") return rows.sort((a, b) => Number(a?.price || 0) - Number(b?.price || 0));
+    return rows.sort((a, b) => new Date(b?.createdAt || 0).getTime() - new Date(a?.createdAt || 0).getTime());
+  }, [filteredAssets, sortOrder]);
 
   const handleImageUpload = async (e) => {
     const files = Array.from(e.target.files || []);
@@ -2920,17 +2889,13 @@ const AssetVault = () => {
   );
 
   return (
-    <div className="ui-page-shell asset-vault-page custom-scrollbar relative flex flex-col bg-slate-50/50">
+    <div className="ui-page-shell inventory-route-page asset-vault-page custom-scrollbar relative flex flex-col bg-slate-50/50">
       <InventoryToolbar
         modeType={modeType}
         onModeChange={setModeType}
         statusFilter={statusFilter}
         onStatusFilterChange={setStatusFilter}
         statusCounts={statusCounts}
-        filters={inventoryFilterChips}
-        onRemoveFilter={handleRemoveInventoryFilter}
-        onToggleFilter={handleRemoveInventoryFilter}
-        onAddFilter={() => setAdvancedFiltersOpen((prev) => !prev)}
         viewMode={viewMode}
         onViewModeChange={setViewMode}
         canManage={canOpenCreateModal}
@@ -2938,15 +2903,6 @@ const AssetVault = () => {
       />
 
       <AssetVaultFilters
-        searchTerm={searchTerm}
-        onSearchChange={setSearchTerm}
-        viewMode={viewMode}
-        onViewModeChange={setViewMode}
-        advancedFiltersOpen={advancedFiltersOpen}
-        onToggleAdvancedFilters={() => setAdvancedFiltersOpen((prev) => !prev)}
-        statusFilter={statusFilter}
-        onStatusFilterChange={setStatusFilter}
-        statusOptions={STATUS_OPTIONS}
         inventoryTypeFilter={inventoryTypeFilter}
         onInventoryTypeFilterChange={setInventoryTypeFilter}
         canChooseInventoryRoleType={canChooseInventoryRoleType}
@@ -2959,8 +2915,6 @@ const AssetVault = () => {
         onCabinsFilterChange={setCabinsFilter}
         seatsFilter={seatsFilter}
         onSeatsFilterChange={setSeatsFilter}
-        areaRangeFilter={areaRangeFilter}
-        onAreaRangeFilterChange={setAreaRangeFilter}
         budgetRangeFilter={budgetRangeFilter}
         onBudgetRangeFilterChange={setBudgetRangeFilter}
         floorFilter={floorFilter}
@@ -2989,9 +2943,21 @@ const AssetVault = () => {
         onViewInventory={(inventoryId) => navigate(`/inventory/${inventoryId}`)}
       />
 
+      <div className="inventory-results-bar flex items-center justify-between gap-3">
+        <p className="text-[16px] font-semibold text-slate-900">{sortedAssets.length} properties found</p>
+        <label className="flex items-center gap-2 text-[13px] text-slate-500">
+          <span className="hidden sm:inline">Sort by</span>
+          <select value={sortOrder} onChange={(event) => setSortOrder(event.target.value)} className="h-10 rounded-xl border border-slate-200 bg-white px-3 font-semibold text-slate-700 outline-none focus:border-blue-500">
+            <option value="latest">Latest Added</option>
+            <option value="price-high">Price: High to Low</option>
+            <option value="price-low">Price: Low to High</option>
+          </select>
+        </label>
+      </div>
+
       <PropertyWorkspace
         loading={loading}
-        assets={filteredAssets}
+        assets={sortedAssets}
         viewMode={viewMode}
         emptyAction={
           canOpenCreateModal

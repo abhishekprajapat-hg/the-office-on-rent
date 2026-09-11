@@ -8,6 +8,8 @@ const { writeLimiter } = require("../middleware/rateLimit.middleware");
 const {
   requirePageAccess,
   checkRoleOrPageAccess,
+  requirePageActionForMethod,
+  checkRoleOrPageAction,
 } = require("../middleware/pageAccess.middleware");
 
 const PROJECT_VIEW_ROLES = [
@@ -23,6 +25,7 @@ router.use(authMiddleware.protect);
 router.use(checkRoleOrPageAccess(PROJECT_VIEW_ROLES, "projects"));
 router.use(companyMiddleware.requireCompanyContext);
 router.use(requirePageAccess("projects"));
+router.use(requirePageActionForMethod("projects"));
 
 router.get("/", projectController.getProjects);
 router.get("/:id", projectController.getProject);
@@ -30,21 +33,21 @@ router.get("/:id", projectController.getProject);
 router.post(
   "/",
   writeLimiter,
-  authMiddleware.checkRole(PROJECT_MANAGE_ROLES),
+  checkRoleOrPageAction(PROJECT_MANAGE_ROLES, "create", "projects"),
   projectController.createProject,
 );
 
 router.patch(
   "/:id",
   writeLimiter,
-  authMiddleware.checkRole(PROJECT_MANAGE_ROLES),
+  checkRoleOrPageAction(PROJECT_MANAGE_ROLES, "edit", "projects"),
   projectController.updateProject,
 );
 
 router.delete(
   "/:id",
   writeLimiter,
-  authMiddleware.checkRole(["ADMIN"]),
+  checkRoleOrPageAction(["ADMIN"], "delete", "projects"),
   projectController.deleteProject,
 );
 

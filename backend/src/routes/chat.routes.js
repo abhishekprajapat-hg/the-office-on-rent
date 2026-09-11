@@ -6,10 +6,11 @@ const broadcastController = require("../controllers/broadcast.controller");
 const authMiddleware = require("../middleware/auth.middleware");
 const { requireChatRoles } = require("../middleware/chatPermission.middleware");
 const { chatMessageLimiter } = require("../middleware/rateLimit.middleware");
-const { requirePageAccess } = require("../middleware/pageAccess.middleware");
+const { requirePageAccess, requirePageActionForMethod } = require("../middleware/pageAccess.middleware");
 
 router.use(authMiddleware.protect);
 router.use(requirePageAccess("chat"));
+router.use(requirePageActionForMethod("chat"));
 
 router.get("/rooms", chatController.getRooms);
 router.post("/rooms/direct", chatController.createDirectRoom);

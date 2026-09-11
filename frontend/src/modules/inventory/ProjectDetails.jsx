@@ -3,6 +3,7 @@ import { useNavigate, useParams } from "react-router-dom";
 import { ArrowLeft, Loader, Pencil, Trash2 } from "lucide-react";
 import { getProjectById, deleteProject } from "../../services/projectService";
 import { toErrorMessage } from "../../utils/errorMessage";
+import { usePermissions } from "../../context/usePermissions";
 import ToastNotice from "../../components/ui/ToastNotice";
 import {
   PROJECT_CATEGORY_OPTIONS,
@@ -69,8 +70,11 @@ const ProjectDetailsPage = () => {
   const { id } = useParams();
   const navigate = useNavigate();
   const role = String(localStorage.getItem("role") || "").trim().toUpperCase();
-  const canManage = PROJECT_MANAGE_ROLES.has(role);
-  const canDelete = PROJECT_DELETE_ROLES.has(role);
+  const { canPageAction, enforcePageAccess } = usePermissions();
+  const canManage = PROJECT_MANAGE_ROLES.has(role)
+    || (enforcePageAccess && canPageAction("projects", "edit"));
+  const canDelete = PROJECT_DELETE_ROLES.has(role)
+    || (enforcePageAccess && canPageAction("projects", "delete"));
 
   const [project, setProject] = useState(null);
   const [loading, setLoading] = useState(true);

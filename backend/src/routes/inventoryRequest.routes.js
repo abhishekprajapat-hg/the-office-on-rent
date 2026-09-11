@@ -6,22 +6,27 @@ const companyMiddleware = require("../middleware/company.middleware");
 const inventoryRequestController = require("../controllers/inventoryRequest.controller");
 const inventoryApprovalController = require("../controllers/inventoryApproval.controller");
 const { writeLimiter } = require("../middleware/rateLimit.middleware");
-const { requirePageAccess } = require("../middleware/pageAccess.middleware");
+const {
+  requirePageAccess,
+  requirePageActionForMethod,
+  checkRoleOrPageAction,
+} = require("../middleware/pageAccess.middleware");
 
 router.use(authMiddleware.protect);
 router.use(companyMiddleware.requireCompanyContext);
 router.use(requirePageAccess("inventory"));
+router.use(requirePageActionForMethod("inventory"));
 
 router.post(
   "/",
   writeLimiter,
-  authMiddleware.checkRole([
+  checkRoleOrPageAction([
     "ADMIN",
     "MANAGER",
             "EXECUTIVE",
     "FIELD_EXECUTIVE",
     "CHANNEL_PARTNER",
-  ]),
+  ], "create", "inventory"),
   companyMiddleware.enforceBodyCompanyMatch("companyId"),
   inventoryRequestController.createRequest,
 );
@@ -30,81 +35,80 @@ router.post(
 router.post(
   "/create",
   writeLimiter,
-  authMiddleware.checkRole([
+  checkRoleOrPageAction([
     "ADMIN",
     "MANAGER",
             "EXECUTIVE",
     "FIELD_EXECUTIVE",
     "CHANNEL_PARTNER",
-  ]),
+  ], "create", "inventory"),
   companyMiddleware.enforceBodyCompanyMatch("companyId"),
   inventoryRequestController.createRequest,
 );
 
 router.get(
   "/pending",
-  authMiddleware.checkRole(["ADMIN", "MANAGER"]),
+  checkRoleOrPageAction(["ADMIN", "MANAGER"], "approve", "inventory"),
   inventoryApprovalController.getPending,
 );
 
 router.patch(
   "/:id/pre-approve",
   writeLimiter,
-  authMiddleware.checkRole(["MANAGER"]),
+  checkRoleOrPageAction(["MANAGER"], "approve", "inventory"),
   inventoryApprovalController.preApprove,
 );
 
 router.patch(
   "/:id/approve",
   writeLimiter,
-  authMiddleware.checkRole(["ADMIN", "MANAGER"]),
+  checkRoleOrPageAction(["ADMIN", "MANAGER"], "approve", "inventory"),
   inventoryApprovalController.approve,
 );
 
 router.patch(
   "/:id/reject",
   writeLimiter,
-  authMiddleware.checkRole(["ADMIN", "MANAGER"]),
+  checkRoleOrPageAction(["ADMIN", "MANAGER"], "approve", "inventory"),
   inventoryApprovalController.reject,
 );
 
 // Legacy aliases
 router.get(
   "/my",
-  authMiddleware.checkRole([
+  checkRoleOrPageAction([
     "FIELD_EXECUTIVE",
     "EXECUTIVE",
             "MANAGER",
     "ADMIN",
     "CHANNEL_PARTNER",
-  ]),
+  ], "view", "inventory"),
   inventoryRequestController.getMyInventoryRequests,
 );
 
 router.post(
   "/update/:inventoryId",
   writeLimiter,
-  authMiddleware.checkRole([
+  checkRoleOrPageAction([
     "FIELD_EXECUTIVE",
     "EXECUTIVE",
             "MANAGER",
     "ADMIN",
-  ]),
+  ], "edit", "inventory"),
   inventoryRequestController.updateRequest,
 );
 
 router.post(
   "/delete/:inventoryId",
   writeLimiter,
-  authMiddleware.checkRole([
+  checkRoleOrPageAction([
     "FIELD_EXECUTIVE",
     "EXECUTIVE",
             "MANAGER",
     "ADMIN",
     "CHANNEL_PARTNER",
-  ]),
+  ], "delete", "inventory"),
   inventoryRequestController.deleteRequest,
 );
 
 module.exports = router;
-

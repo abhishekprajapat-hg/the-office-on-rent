@@ -3,12 +3,13 @@ const express = require("express");
 const attendanceController = require("../controllers/attendance.controller");
 const { protect } = require("../middleware/auth.middleware");
 const { writeLimiter } = require("../middleware/rateLimit.middleware");
-const { requirePageAccess } = require("../middleware/pageAccess.middleware");
+const { requirePageAccess, requirePageActionForMethod } = require("../middleware/pageAccess.middleware");
 
 const router = express.Router();
 
 router.use(protect);
 router.use(requirePageAccess("attendance"));
+router.use(requirePageActionForMethod("attendance"));
 
 router.get("/me", attendanceController.getMyAttendance);
 router.post("/check-in", writeLimiter, attendanceController.checkIn);

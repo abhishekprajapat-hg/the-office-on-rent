@@ -514,6 +514,7 @@ const LeadDetailsRebuiltContent = ({
   closureDocumentsDraft,
   setClosureDocumentsDraft,
   canReviewDealPayment,
+  canEditLead = true,
   siteLatDraft,
   setSiteLatDraft,
   siteLngDraft,
@@ -2057,6 +2058,7 @@ const LeadDetailsRebuiltContent = ({
                 </span>
                 <select
                   value={statusDraft}
+                  disabled={!canEditLead}
                   onChange={(event) => setStatusDraft(event.target.value)}
                   className={`h-9 w-full rounded-xl border px-3 text-xs font-bold uppercase tracking-[0.08em] ${input}`}
                 >
@@ -2083,14 +2085,23 @@ const LeadDetailsRebuiltContent = ({
               <ArrowLeft size={12} />
               Back
             </button>
-            <button
+            {canEditLead ? <button
               type="button"
               onClick={onOpenEditLeadForm}
               className={`inline-flex h-9 items-center gap-1 rounded-xl border px-3 text-[11px] font-semibold uppercase tracking-[0.1em] sm:px-3.5 sm:text-xs sm:tracking-[0.12em] ${button}`}
             >
               <PencilLine size={12} />
               Edit Lead
-            </button>
+            </button> : null}
+            {canEditLead ? <button
+              type="button"
+              onClick={onUpdateLead}
+              disabled={savingUpdates}
+              className={`inline-flex h-9 items-center gap-1 rounded-xl px-3 text-[11px] font-semibold uppercase tracking-[0.1em] text-white shadow-sm transition disabled:cursor-not-allowed disabled:opacity-60 sm:px-3.5 sm:text-xs sm:tracking-[0.12em] ${primaryBtn}`}
+            >
+              {savingUpdates ? <Loader size={12} className="animate-spin" /> : <Save size={12} />}
+              {savingUpdates ? "Saving..." : "Save"}
+            </button> : null}
           </div>
         </div>
 
@@ -3161,9 +3172,6 @@ const LeadDetailsRebuiltContent = ({
               </div>
             ) : null}
 
-            <button type="button" onClick={onUpdateLead} disabled={savingUpdates} className={`mt-3 inline-flex h-10 w-full items-center justify-center gap-2 rounded-xl text-sm font-semibold text-white disabled:opacity-60 ${primaryBtn}`}>
-              {savingUpdates ? <Loader size={14} className="animate-spin" /> : <Save size={14} />} Save Lead Update
-            </button>
           </section>
 
           {/* Lead Tasks integration */}

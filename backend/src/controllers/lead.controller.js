@@ -2353,7 +2353,10 @@ const toLeadStatusRequestDealPayment = (saleMeta = {}) => {
 
 exports.bulkUploadLeads = async (req, res) => {
   try {
-    if (![USER_ROLES.ADMIN, ...MANAGEMENT_ROLES, ...EXECUTIVE_ROLES].includes(req.user?.role)) {
+    const access = await resolveAccessProfile(req.user);
+    const hasExplicitCreateGrant = access.enforcePageAccess
+      && access.permissions.includes("page.leads.create");
+    if (!hasExplicitCreateGrant && ![USER_ROLES.ADMIN, ...MANAGEMENT_ROLES, ...EXECUTIVE_ROLES].includes(req.user?.role)) {
       return res.status(403).json({ message: "Only ADMIN, MANAGER, or EXECUTIVE can bulk upload leads" });
     }
 
@@ -2926,7 +2929,10 @@ exports.assignLead = async (req, res) => {
       return res.status(400).json({ message: "assignedTo must be a valid user id" });
     }
 
-    if (!CRM_ASSIGNABLE_ROLES.includes(req.user?.role)) {
+    const access = await resolveAccessProfile(req.user);
+    const hasExplicitAssignGrant = access.enforcePageAccess
+      && access.permissions.includes("page.leads.assign");
+    if (!hasExplicitAssignGrant && !CRM_ASSIGNABLE_ROLES.includes(req.user?.role)) {
       return res.status(403).json({ message: "You are not authorized to transfer leads" });
     }
 

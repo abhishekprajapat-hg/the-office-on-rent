@@ -455,7 +455,7 @@ export const PropertyWorkspace = ({
 
   return (
     <>
-      <div className="grid gap-3 pb-8 [grid-template-columns:repeat(auto-fill,minmax(198px,1fr))]">
+      <div className="grid gap-5 pb-8 md:grid-cols-2 xl:grid-cols-3">
         {visibleAssets.map((asset) => (
           <InventoryCard
             key={asset._id}

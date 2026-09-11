@@ -42,18 +42,18 @@ const WorkbenchShell = ({
         userRole={userRole}
         user={userForNav}
         roleLabel={roleLabel}
-        onLogout={onLogout}
         mobileOpen={mobileMenuOpen}
         onMobileClose={handleCloseMobileMenu}
-        unreadChats={unreadTotal}
-        unreadAlerts={adminRequestUnread}
       />
 
       <main className="workspace-main app-page-bg relative min-w-0 flex flex-1 flex-col overflow-hidden">
           <AppTopCommandBar
-            className={isChatPage ? "md:hidden" : undefined}
-            user={user}
+            key={pageHeader?.title || (isChatPage ? "chat" : "workspace")}
+            user={userForNav}
+            userRole={userRole}
+            onLogout={onLogout}
             unreadAlerts={adminRequestUnread}
+            unreadChats={unreadTotal}
             pageHeader={isChatPage ? { title: "Team Chat" } : pageHeader}
             theme={theme}
             onToggleTheme={onToggleTheme}

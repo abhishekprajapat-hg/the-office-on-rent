@@ -33,9 +33,9 @@ const PipelineSelectionBar = ({ count = 0, onClear, onExport, children, classNam
 
       <div className="ml-auto flex flex-wrap items-center gap-2">
         {children}
-        <Button size="sm" variant="secondary" leftIcon={Download} onClick={onExport}>
+        {onExport ? <Button size="sm" variant="secondary" leftIcon={Download} onClick={onExport}>
           Export CSV
-        </Button>
+        </Button> : null}
         <Button size="sm" variant="ghost" leftIcon={X} onClick={onClear}>
           Clear
         </Button>

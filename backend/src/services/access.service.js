@@ -61,6 +61,19 @@ const normalizePageEntries = (pages = []) =>
       ],
     }));
 
+const normalizePageOverride = (entries = [], inherited = new Map()) =>
+  entries.map((entry) => {
+    // Older records stored only the page key. Preserve their old behaviour by
+    // inheriting that role page's action set when it is still available.
+    if (typeof entry === "string") {
+      return inherited.get(entry) || { pageKey: entry, actions: ["view"] };
+    }
+    return {
+      pageKey: String(entry?.pageKey || "").trim(),
+      actions: Array.isArray(entry?.actions) ? entry.actions : ["view"],
+    };
+  });
+
 // Pages every signed-in account keeps no matter what a role says — the spec's
 // "Profile and Logout stay reachable" rule.
 const withAlwaysAccessiblePages = (pages) => {
@@ -99,7 +112,7 @@ const buildAccessProfile = async (user) => {
   if (hasPageOverride) {
     const inherited = new Map(pages.map((page) => [page.pageKey, page]));
     pages = withAlwaysAccessiblePages(normalizePageEntries(
-      user.pageAccessOverride.map((pageKey) => inherited.get(pageKey) || { pageKey, actions: ["view"] }),
+      normalizePageOverride(user.pageAccessOverride, inherited),
     ));
   }
 
@@ -107,14 +120,26 @@ const buildAccessProfile = async (user) => {
     ...new Set([
       ...legacyPermissions.filter((permission) => !hasPageOverride || !permission.startsWith("page.")),
       ...toPagePermissions(pages),
-      // Coworking has an additional read-permission gate in navigation, the
-      // page component and the API. An explicit page grant must satisfy all
-      // three, without granting create/update/delete capabilities.
+      // Coworking sub-routes still use their legacy capability names, so mirror
+      // each explicitly granted page action into those API permissions.
       ...(hasPageOverride
-        ? pages.flatMap(({ pageKey }) => ({
-          coworking_booking: ["cabins.view", "bookings.view", "seats.view"],
-          coworking_clients: ["clients.view"],
-        }[pageKey] || []))
+        ? pages.flatMap(({ pageKey, actions = [] }) => {
+          const permissionMap = {
+            coworking_booking: {
+              view: ["cabins.view", "bookings.view", "seats.view"],
+              create: ["cabins.create", "bookings.create", "seats.assign"],
+              edit: ["cabins.update", "bookings.update", "seats.release"],
+              delete: ["bookings.cancel"],
+            },
+            coworking_clients: {
+              view: ["clients.view"],
+              create: ["clients.create"],
+              edit: ["clients.update"],
+              delete: ["clients.delete"],
+            },
+          }[pageKey];
+          return [...new Set(actions.flatMap((action) => permissionMap?.[action] || []))];
+        })
         : []),
     ]),
   ];
@@ -215,6 +240,7 @@ module.exports = {
   invalidateAccessCache,
   isAdminRole,
   normalizePageEntries,
+  normalizePageOverride,
   withAlwaysAccessiblePages,
   resolveLegacyPermissions,
   resolveAccessProfile,

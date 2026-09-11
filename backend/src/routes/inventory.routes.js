@@ -7,7 +7,9 @@ const companyMiddleware = require("../middleware/company.middleware");
 const { writeLimiter } = require("../middleware/rateLimit.middleware");
 const {
   requirePageAccess,
+  requirePageActionForMethod,
   checkRoleOrPageAccess,
+  checkRoleOrPageAction,
 } = require("../middleware/pageAccess.middleware");
 
 router.use(authMiddleware.protect);
@@ -19,11 +21,12 @@ router.use(
 );
 router.use(companyMiddleware.requireCompanyContext);
 router.use(requirePageAccess("inventory"));
+router.use(requirePageActionForMethod("inventory"));
 
 router.get("/", inventoryController.getInventory);
 router.get(
   "/:id/activity",
-  authMiddleware.checkRole(["ADMIN", "MANAGER"]),
+  checkRoleOrPageAction(["ADMIN", "MANAGER"], "view", "inventory"),
   inventoryController.getInventoryActivity,
 );
 router.get("/:id", inventoryController.getInventoryById);
@@ -37,34 +40,34 @@ router.post(
 router.post(
   "/",
   writeLimiter,
-  authMiddleware.checkRole([
+  checkRoleOrPageAction([
     "ADMIN",
     "MANAGER",
     "EXECUTIVE",
     "FIELD_EXECUTIVE",
     "CHANNEL_PARTNER",
-  ]),
+  ], "create", "inventory"),
   inventoryController.createInventory,
 );
 
 router.post(
   "/bulk",
   writeLimiter,
-  authMiddleware.checkRole(["ADMIN", "MANAGER"]),
+  checkRoleOrPageAction(["ADMIN", "MANAGER"], "create", "inventory"),
   inventoryController.bulkUploadInventory,
 );
 
 router.patch(
   "/:id",
   writeLimiter,
-  authMiddleware.checkRole(["ADMIN", "MANAGER"]),
+  checkRoleOrPageAction(["ADMIN", "MANAGER"], "edit", "inventory"),
   inventoryController.updateInventory,
 );
 
 router.delete(
   "/:id",
   writeLimiter,
-  authMiddleware.checkRole(["ADMIN"]),
+  checkRoleOrPageAction(["ADMIN"], "delete", "inventory"),
   inventoryController.deleteInventory,
 );
 

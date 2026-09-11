@@ -856,10 +856,17 @@ const getTeamIdForUser = (user) => {
   return null;
 };
 
-const ensureCanReviewInventoryRequests = (user) => {
+const hasExplicitInventoryAction = async (user, action) => {
+  const access = await resolveAccessProfile(user);
+  return access.enforcePageAccess
+    && access.permissions.includes(`page.inventory.${action}`);
+};
+
+const ensureCanReviewInventoryRequests = async (user) => {
   const userRole = String(user?.role || "").trim().toUpperCase();
 
-  if (!INVENTORY_REVIEW_ROLES.includes(userRole)) {
+  if (!INVENTORY_REVIEW_ROLES.includes(userRole)
+    && !(await hasExplicitInventoryAction(user, "approve"))) {
     throw createHttpError(403, "Only ADMIN or MANAGER can review requests");
   }
 };
@@ -1744,7 +1751,8 @@ const getInventoryById = async ({ user, inventoryId }) => {
 };
 
 const createInventoryDirect = async ({ user, payload }) => {
-  if (!INVENTORY_DIRECT_CREATE_ROLES.includes(user.role)) {
+  if (!INVENTORY_DIRECT_CREATE_ROLES.includes(user.role)
+    && !(await hasExplicitInventoryAction(user, "create"))) {
     throw createHttpError(403, "This role cannot create inventory");
   }
 
@@ -1796,7 +1804,8 @@ const createInventoryDirect = async ({ user, payload }) => {
 };
 
 const updateInventoryDirect = async ({ user, inventoryId, payload }) => {
-  if (!INVENTORY_DIRECT_MANAGE_ROLES.includes(user.role)) {
+  if (!INVENTORY_DIRECT_MANAGE_ROLES.includes(user.role)
+    && !(await hasExplicitInventoryAction(user, "edit"))) {
     throw createHttpError(403, "Only ADMIN or MANAGER can update inventory directly");
   }
 
@@ -1877,7 +1886,8 @@ const updateInventoryDirect = async ({ user, inventoryId, payload }) => {
 };
 
 const deleteInventoryDirect = async ({ user, inventoryId }) => {
-  if (user.role !== USER_ROLES.ADMIN) {
+  if (user.role !== USER_ROLES.ADMIN
+    && !(await hasExplicitInventoryAction(user, "delete"))) {
     throw createHttpError(403, "Only ADMIN can delete inventory directly");
   }
 
@@ -1910,7 +1920,8 @@ const deleteInventoryDirect = async ({ user, inventoryId }) => {
 };
 
 const bulkCreateInventoryDirect = async ({ user, payload = [] }) => {
-  if (!INVENTORY_DIRECT_MANAGE_ROLES.includes(user.role)) {
+  if (!INVENTORY_DIRECT_MANAGE_ROLES.includes(user.role)
+    && !(await hasExplicitInventoryAction(user, "create"))) {
     throw createHttpError(403, "Only ADMIN or MANAGER can bulk upload inventory");
   }
 
@@ -1994,7 +2005,8 @@ const bulkCreateInventoryDirect = async ({ user, payload = [] }) => {
 };
 
 const createInventoryCreateRequest = async ({ user, payload, io }) => {
-  if (!INVENTORY_CREATE_REQUEST_ROLES.includes(user.role)) {
+  if (!INVENTORY_CREATE_REQUEST_ROLES.includes(user.role)
+    && !(await hasExplicitInventoryAction(user, "create"))) {
     throw createHttpError(403, "This role cannot submit create requests");
   }
 
@@ -2039,7 +2051,8 @@ const createInventoryCreateRequest = async ({ user, payload, io }) => {
 const createInventoryUpdateRequest = async ({
   user, inventoryId, payload, requestNote, relatedLeadId, io,
 }) => {
-  if (!INVENTORY_UPDATE_REQUEST_ROLES.includes(user.role)) {
+  if (!INVENTORY_UPDATE_REQUEST_ROLES.includes(user.role)
+    && !(await hasExplicitInventoryAction(user, "edit"))) {
     throw createHttpError(
       403,
       "Channel partner cannot submit update/status-change requests",
@@ -2180,7 +2193,8 @@ const createInventoryUpdateRequest = async ({
 const createInventoryDeleteRequest = async ({
   user, inventoryId, requestNote, io,
 }) => {
-  if (!INVENTORY_DELETE_REQUEST_ROLES.includes(user.role)) {
+  if (!INVENTORY_DELETE_REQUEST_ROLES.includes(user.role)
+    && !(await hasExplicitInventoryAction(user, "delete"))) {
     throw createHttpError(403, "Admins can delete directly; other roles must submit a delete request");
   }
 
@@ -2257,7 +2271,7 @@ const createInventoryDeleteRequest = async ({
 };
 
 const getPendingRequests = async ({ user }) => {
-  ensureCanReviewInventoryRequests(user);
+  await ensureCanReviewInventoryRequests(user);
   const query = buildPendingRequestReviewQuery({ user });
 
   return applyRequestPopulates(
@@ -2268,7 +2282,8 @@ const getPendingRequests = async ({ user }) => {
 };
 
 const preApproveRequestByManager = async ({ user, requestId }) => {
-  if (!isManagementRole(user.role)) {
+  if (!isManagementRole(user.role)
+    && !(await hasExplicitInventoryAction(user, "approve"))) {
     throw createHttpError(403, "Only leadership roles can pre-approve requests");
   }
 
@@ -2296,7 +2311,7 @@ const preApproveRequestByManager = async ({ user, requestId }) => {
 };
 
 const approveRequest = async ({ user, requestId, io }) => {
-  ensureCanReviewInventoryRequests(user);
+  await ensureCanReviewInventoryRequests(user);
 
   if (!isValidObjectId(requestId)) {
     throw createHttpError(400, "Invalid request id");
@@ -2491,7 +2506,7 @@ const approveRequest = async ({ user, requestId, io }) => {
 };
 
 const rejectRequest = async ({ user, requestId, rejectionReason, io }) => {
-  ensureCanReviewInventoryRequests(user);
+  await ensureCanReviewInventoryRequests(user);
 
   if (!isValidObjectId(requestId)) {
     throw createHttpError(400, "Invalid request id");
@@ -2548,7 +2563,8 @@ const getMyRequests = async ({ user }) => {
 };
 
 const getInventoryActivities = async ({ user, inventoryId, limit = 100 }) => {
-  if (![USER_ROLES.ADMIN, ...MANAGEMENT_ROLES].includes(user.role)) {
+  if (![USER_ROLES.ADMIN, ...MANAGEMENT_ROLES].includes(user.role)
+    && !(await hasExplicitInventoryAction(user, "view"))) {
     throw createHttpError(403, "Only admin/leadership roles can view activity logs");
   }
 
