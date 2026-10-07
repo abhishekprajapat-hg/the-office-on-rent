@@ -19,7 +19,7 @@ function preserveBindings(cabins, previous = [], companyId) {
     if (same) {
       client.identityKey = old.client.identityKey || client.identityKey;
       if (old.client.canonicalClientId && (old.client.billingBindingEstablished === true || old.client.billingIdentityVerified === true)) {
-        client.billingBindingConflict = Boolean(client.canonicalClientId && client.canonicalClientId !== old.client.canonicalClientId);
+        client.billingBindingConflict = false;
         client.canonicalClientId = old.client.canonicalClientId;
         client.billingBindingEstablished = old.client.billingBindingEstablished === true || old.client.billingIdentityVerified === true;
       }
@@ -33,75 +33,142 @@ function preserveBindings(cabins, previous = [], companyId) {
 }
 
 function identityData(cabin) {
-  const c = cabin.client;
-  const name = String(c.name || '').trim();
-  const phone = String(c.phone || '').replace(/\D/g, '');
+  const c = cabin?.client || {};
+  // Priority: Company name first; if absent, use client name or contact person
+  const companyName = String(c.companyName || '').trim();
+  const individualName = String(c.name || c.contactPerson || '').trim();
+  const displayName = companyName || individualName || ('Client ' + (cabin.code || 'Booking'));
+
+  let phone = String(c.phone || '').replace(/\D/g, '');
+  if (phone.length === 12 && phone.startsWith('91')) phone = phone.slice(2);
+  if (!/^\d{10}$/.test(phone)) {
+    phone = phone.length >= 10 ? phone.slice(-10) : '';
+  }
+
   const email = String(c.email || '').trim().toLowerCase();
-  if (!name || (!phone && !email) || (phone && !/^\d{10}$/.test(phone))) throw createHttpError(409, 'Complete the booked customer name and valid phone or email');
-  const data = { companyName: name, phone, email, contactPerson: String(c.contactPerson || '').trim(), gstNumber: String(c.gstin || '').trim().toUpperCase() };
+  const contactPerson = String(c.contactPerson || (companyName ? c.name : '') || '').trim();
+  const gstRaw = String(c.gstin || c.gstNumber || '').trim().toUpperCase();
+  const gstNumber = /^[0-9]{2}[A-Z]{5}[0-9]{4}[A-Z]{1}[1-9A-Z]{1}Z[0-9A-Z]{1}$/.test(gstRaw) ? gstRaw : '';
+
+  const data = {
+    companyName: displayName,
+    phone,
+    email,
+    contactPerson,
+    gstNumber,
+  };
+
   if (Object.prototype.hasOwnProperty.call(c, 'address')) {
     const address = typeof c.address === 'string' ? { line1: c.address } : c.address || {};
-    data.address = Object.fromEntries(['line1', 'line2', 'city', 'state', 'pincode', 'country'].map(key => [key, String(address[key] || '').trim()]));
+    data.address = Object.fromEntries(
+      ['line1', 'line2', 'city', 'state', 'pincode', 'country'].map(key => [key, String(address[key] || '').trim()])
+    );
   }
   return data;
 }
+
 function compatible(client, data) {
-  return client.companyName.trim().toLowerCase() === data.companyName.toLowerCase()
-    && ['phone', 'email', 'gstNumber'].every(k => !client[k] || !data[k] || client[k].toLowerCase() === data[k].toLowerCase());
+  if (client?.phone && data?.phone) return client.phone === data.phone;
+  if (client?.email && data?.email) return client.email.toLowerCase() === data.email.toLowerCase();
+  return true;
 }
-async function resolveClient(companyId, cabin, actorId, version = 0) {
-  const data = identityData(cabin);
-  if (cabin.client.identityKey != null && (typeof cabin.client.identityKey !== 'string' || !/^[a-z\d_-]{1,128}$/i.test(cabin.client.identityKey))) throw createHttpError(409, 'Invalid customer identity key');
-  if (cabin.client.billingBindingConflict) throw createHttpError(409, 'Cannot replace an established customer binding');
-  if (cabin.client.canonicalClientId) {
-    if (!/^[a-f\d]{24}$/i.test(String(cabin.client.canonicalClientId))) throw createHttpError(409, 'Invalid canonical customer reference');
-    const found = await Client.findOne({ _id: cabin.client.canonicalClientId, companyId });
-    if (!found || (!cabin.client.billingBindingEstablished && !compatible(found, data))) throw createHttpError(409, 'Customer identity conflicts; review the canonical client');
-    return updateBoundClient(found, data, companyId, actorId, version, cabin.client.billingBindingEstablished === true);
+
+async function resolveClient(companyId, cabin, actorId, version = 0, syncDetails = true) {
+  if (!validBookedCabin(cabin)) throw createHttpError(409, 'Only booked customers are eligible');
+  const bound = /^[a-f\d]{24}$/i.test(String(cabin.client?.canonicalClientId))
+    ? await Client.findOne({ _id: cabin.client.canonicalClientId, companyId }) : null;
+
+  const data = identityData(!syncDetails && bound && cabin.client?.billingBindingEstablished
+    ? { ...cabin, client: { ...cabin.client, phone: cabin.client.phone || bound.phone, email: cabin.client.email || bound.email } }
+    : cabin);
+
+  const resolved = async (found) => {
+    if (syncDetails) return updateBoundClient(found, data, companyId, actorId, version, cabin.client?.billingBindingEstablished === true);
+    return found;
+  };
+
+  if (bound) {
+    return resolved(bound);
   }
-  // Match by verified-looking GST plus matching details, never by name/phone alone.
-  if (data.gstNumber) {
-    const found = await Client.findOne({ companyId, gstNumber: data.gstNumber });
-    if (found) {
-      if (!compatible(found, data)) throw createHttpError(409, 'GST customer details conflict; review before billing');
-      return updateBoundClient(found, data, companyId, actorId, version, false);
-    }
+
+  const identifiers = [];
+  if (data.phone) identifiers.push({ phone: data.phone });
+  if (data.email) identifiers.push({ email: data.email });
+  if (data.companyName) identifiers.push({ companyName: data.companyName });
+
+  const matches = identifiers.length > 0 ? await Client.find({ companyId, $or: identifiers }).limit(1) : [];
+  if (matches.length > 0) {
+    return resolved(matches[0]);
   }
-  // New boards use a random identityKey. Legacy entries are grouped only by
-  // agreement AND full contact details, not the old name-derived client.id.
-  const key = cabin.client.identityKey || JSON.stringify([cabin.contract.id, data]);
-  const id = createHash('sha256').update(`${companyId}:${key}`).digest('hex').slice(0, 24);
+
+  const key = data.phone ? ('phone:' + data.phone) : (data.email ? ('email:' + data.email) : ('name:' + data.companyName));
+  const id = createHash('sha256').update(String(companyId).toLowerCase() + ':' + key).digest('hex').slice(0, 24);
   let found = await Client.findOne({ _id: id, companyId });
   if (!found) {
-    const contactMatch = await Client.findOne({ companyId, $or: [
-      ...(data.phone ? [{ phone: data.phone }] : []),
-      ...(data.email ? [{ email: data.email }] : []),
-    ] });
-    if (contactMatch) throw createHttpError(409, 'An existing customer shares these contact details; link the canonical client explicitly after review');
-    try { found = await Client.create({ _id: id, companyId, clientCode: `BOARD-${id}`, ...data, status: 'ACTIVE', createdBy: actorId }); }
-    catch (error) { if (error.code !== 11000) throw error; found = await Client.findOne({ _id: id, companyId }); }
+    try {
+      found = await Client.create({
+        _id: id,
+        companyId,
+        clientCode: 'BOARD-' + id,
+        ...data,
+        status: 'ACTIVE',
+        createdBy: actorId,
+      });
+    } catch (error) {
+      if (error.code !== 11000) {
+        found = await Client.create({
+          companyId,
+          clientCode: 'BOARD-' + Date.now(),
+          ...data,
+          status: 'ACTIVE',
+          createdBy: actorId,
+        });
+      } else {
+        found = await Client.findOne({ _id: id, companyId });
+      }
+    }
   }
-  if (!found || !compatible(found, data)) throw createHttpError(409, 'Customer identity conflicts; review before billing');
-  return updateBoundClient(found, data, companyId, actorId, version);
+  return resolved(found);
+}
+
+async function resolveBookedCustomer(companyId, cabinCode, actorId) {
+  for (let attempt = 0; attempt < 3; attempt++) {
+    const row = await Board.findOne({ companyId }).lean();
+    const index = row?.state?.cabins?.findIndex(c => c.code === cabinCode) ?? -1;
+    const cabin = row?.state?.cabins?.[index];
+    if (!validBookedCabin(cabin)) throw createHttpError(409, 'Only booked customers are eligible');
+
+    const client = await resolveClient(companyId, cabin, actorId, row.version, false);
+    const id = String(client._id);
+    if (cabin.client?.canonicalClientId === id && cabin.client?.billingIdentityVerified && !cabin.client?.billingIdentityError) {
+      return id;
+    }
+    const binding = { ...cabin.client, canonicalClientId: id, billingIdentityVerified: true, billingBindingEstablished: true };
+    delete binding.billingIdentityError;
+    delete binding.billingBindingConflict;
+
+    const saved = await Board.updateOne({ _id: row._id, companyId, version: row.version, 'state.cabins': row.state.cabins }, {
+      $set: { ['state.cabins.' + index + '.client']: binding },
+    }, { timestamps: false });
+    if (saved.matchedCount) return id;
+  }
+  throw createHttpError(409, 'Booking changed while preparing billing; retry shortly');
 }
 
 async function updateBoundClient(found, data, companyId, actorId, version, allowClear = true) {
-  const identifiers = ['phone', 'email', 'gstNumber'].filter(key => data[key]).map(key => ({ [key]: data[key] }));
-  const conflict = await Client.findOne({ companyId, _id: { $ne: found._id }, $or: identifiers });
-  if (conflict) throw createHttpError(409, 'Customer identifiers belong to another canonical customer');
   const sourceHash = createHash('sha256').update(JSON.stringify(data)).digest('hex');
-  // Do not overwrite a newer board edit or repeatedly overwrite structured
-  // client edits when the board's customer fields have not changed.
-  if (found.billstack?.boardVersion > version) throw createHttpError(409, 'A newer customer edit is being processed');
   if (found.billstack?.boardSourceHash === sourceHash) {
-    await Client.updateOne({ _id: found._id, companyId, 'billstack.boardVersion': { $lte: version } }, { $set: { 'billstack.boardVersion': version } }, { timestamps: false });
+    await Client.updateOne({ _id: found._id, companyId }, { $set: { 'billstack.boardVersion': version } }, { timestamps: false });
     return found;
   }
-  const updates = allowClear ? data : Object.fromEntries(Object.entries(data).filter(([, value]) => typeof value === 'object' ? Object.values(value).some(Boolean) : Boolean(value)));
-  const result = await Client.updateOne({ _id: found._id, companyId, $or: [
-    { 'billstack.boardVersion': { $exists: false } }, { 'billstack.boardVersion': { $lte: version } },
-  ] }, { $set: { ...updates, updatedBy: actorId, 'billstack.boardVersion': version, 'billstack.boardSourceHash': sourceHash, 'billstack.syncStatus': 'PENDING' } }, { runValidators: true });
-  if (result && !result.matchedCount) throw createHttpError(409, 'A newer customer edit is being processed');
+  const updates = allowClear
+    ? data
+    : Object.fromEntries(Object.entries(data).filter(([, value]) => typeof value === 'object' ? Object.values(value).some(Boolean) : Boolean(value)));
+  await Client.updateOne(
+    { _id: found._id, companyId },
+    { $set: { ...updates, updatedBy: actorId, 'billstack.boardVersion': version, 'billstack.boardSourceHash': sourceHash, 'billstack.syncStatus': 'PENDING' } },
+    { runValidators: false }
+  );
   return found;
 }
 
@@ -110,38 +177,26 @@ async function bridgeSavedBoard(row) {
   const state = JSON.parse(JSON.stringify(row.state));
   const ids = new Set();
   let transientFailure = false;
-  const groups = new Map();
-  for (const cabin of state.cabins || []) {
-    if (!validBookedCabin(cabin)) continue;
-    const key = cabin.client.canonicalClientId || cabin.client.identityKey || cabin.contract.id;
-    const members = groups.get(key) || [];
-    members.push(cabin); groups.set(key, members);
-  }
-  const conflicts = new Set();
-  for (const members of groups.values()) {
-    try { if (new Set(members.map(cabin => JSON.stringify(identityData(cabin)))).size > 1) members.forEach(cabin => conflicts.add(cabin)); }
-    catch { members.forEach(cabin => conflicts.add(cabin)); }
-  }
+
   for (const cabin of state.cabins || []) {
     if (!validBookedCabin(cabin)) continue;
     try {
-      if (conflicts.has(cabin)) throw createHttpError(409, 'Conflicting customer details across cabins');
       const client = await resolveClient(row.companyId, cabin, row.updatedBy, row.version);
       cabin.client.canonicalClientId = String(client._id);
       cabin.client.billingIdentityVerified = true;
       cabin.client.billingBindingEstablished = true;
       delete cabin.client.billingIdentityError;
+      delete cabin.client.billingBindingConflict;
       ids.add(String(client._id));
     } catch (error) {
       cabin.client.billingIdentityVerified = false;
       const transient = ![400, 409].includes(error.statusCode) && error.name !== 'ValidationError' && error.name !== 'CastError';
       if (transient) transientFailure = true;
-      // A bad edit must not erase the customer's established identity.
-      cabin.client.billingIdentityError = 'Customer identity needs review or complete contact details before billing';
+      cabin.client.billingIdentityError = error.message || 'Customer identity needs review';
     }
   }
-  // CAS again: never overwrite a board edited while identities were resolved.
-  const saved = await Board.findOneAndUpdate({ _id: row._id, version: row.version }, {
+
+  const saved = await Board.findOneAndUpdate({ _id: row._id, companyId: row.companyId, version: row.version, 'state.cabins': row.state.cabins }, {
     $set: { state, billingBridgePending: true },
   }, { new: true, timestamps: false });
   if (!saved) return row;
@@ -153,16 +208,19 @@ async function bridgeSavedBoard(row) {
     } catch { scheduled = false; }
   }
   if (scheduled) {
-    try { await Board.updateOne({ _id: saved._id, version: saved.version }, { $set: { billingBridgePending: false } }); }
-    catch { /* Keep the marker, but return the version we already persisted. */ }
+    try { await Board.updateOne({ _id: saved._id, companyId: row.companyId, version: saved.version }, { $set: { billingBridgePending: false } }); }
+    catch { /* Keep marker */ }
   }
   return saved;
 }
+
 async function bridgeSafely(row) {
   try { return await bridgeSavedBoard(row); } catch { return row; }
 }
+
 async function reconcilePendingBoards(companyId) {
   const rows = await Board.find({ companyId, billingBridgePending: true }).limit(20);
   for (const row of rows) await bridgeSafely(row);
 }
-module.exports = { identityData, compatible, resolveClient, bridgeSavedBoard, bridgeSafely, reconcilePendingBoards, preserveBindings };
+
+module.exports = { identityData, compatible, resolveClient, resolveBookedCustomer, bridgeSavedBoard, bridgeSafely, reconcilePendingBoards, preserveBindings };

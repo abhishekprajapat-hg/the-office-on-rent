@@ -1,5 +1,4 @@
-const Board = require('../models/CoworkingBoardState');
-const { loadEligible, validBookedCabin } = require('../services/billstackCustomer.service');
+const { loadEligible } = require('../services/billstackCustomer.service');
 const { schedule, processJob, ensureSynced, safeError } = require('../services/billstackSync.service');
 const { createInvoiceHandoff } = require('../services/billstack.service');
 const { getBillstackConfig } = require('../config/billstack');
@@ -17,21 +16,8 @@ async function resolveCustomer(req) {
   } else if (['board', 'coworking-client'].includes(type)) {
     if (!await hasPermission(req.user, 'page.coworking_clients.view') && !await hasPermission(req.user, 'page.coworking_booking.view')) throw createHttpError(403, 'Coworking access is required');
     if (type === 'board') {
-      const board = await Board.findOne({ companyId }).lean();
-      const cabin = board?.state?.cabins?.find(c => c.code === id);
-      if (!validBookedCabin(cabin)) throw createHttpError(409, 'Only booked customers are eligible');
-      if (cabin.client.billingIdentityError) throw createHttpError(409, cabin.client.billingIdentityError);
-      id = cabin.client.canonicalClientId;
-      if (!id) {
-        const Client = require('../models/CoworkingClient');
-        const phone = String(cabin.client?.phone || '').replace(/\D/g, '');
-        const found = await Client.findOne({ companyId, $or: [
-          ...(phone ? [{ phone }] : []),
-          ...(cabin.client?.email ? [{ email: cabin.client.email.trim().toLowerCase() }] : []),
-        ] });
-        if (found) id = String(found._id);
-      }
-      if (!id) throw createHttpError(409, 'Customer identity is pending; save complete customer details and retry');
+      const { resolveBookedCustomer } = require('../services/coworkingBoardIdentity.service');
+      id = await resolveBookedCustomer(companyId, id, req.user._id);
       type = 'coworking-client';
     }
   } else throw createHttpError(400, 'Invalid customer type');
@@ -44,7 +30,7 @@ const handle = (action) => async (req, res) => {
     if (action === 'handoff') {
       const customerId = await ensureSynced(companyId, type, id);
       const { buildBillingContext } = require('../services/billstackCustomer.service');
-      const billingContext = await buildBillingContext(companyId, type, customer.entity);
+      const billingContext = await buildBillingContext(companyId, type, customer.entity, req.params.type === 'board' ? req.params.id : undefined);
       return res.json({ handoffUrl: await createInvoiceHandoff(companyId, customerId, billingContext) });
     }
     if (action === 'sync') {
