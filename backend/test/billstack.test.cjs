@@ -288,6 +288,31 @@ test('ambiguous phone/email recovery does not create or bind another customer', 
   assert.equal(h.clients.size, 2); assert.equal(c.client.canonicalClientId, undefined);
 });
 
+for (const contact of ['phone', 'email']) for (const bound of [false, true]) {
+  test(`different display/legal names resolve by ${contact}, existing binding=${bound}`, async () => {
+    const c = cabin('TEST-ROOM');
+    c.client.name = 'Example Workspace LLP';
+    if (contact === 'email') { c.client.phone = ''; c.client.email = 'accounts@example.test'; }
+    if (bound) c.client.canonicalClientId = entityId;
+    const h = boardHarness([c]);
+    h.clients.set(entityId, { _id: entityId, companyId, companyName: 'Example Workspace',
+      [contact]: c.client[contact], billstack: { syncStatus: 'SYNCED', customerId: 'existing-remote' } });
+    assert.equal(await h.service.resolveBookedCustomer(companyId, c.code, actorId), entityId);
+    assert.equal(h.clients.size, 1);
+    assert.equal(h.clients.get(entityId).companyName, 'Example Workspace');
+    assert.equal(h.clients.get(entityId).billstack.syncStatus, 'SYNCED');
+  });
+}
+
+test('name differences do not bypass contradictory identifiers or permit name-only matching', () => {
+  const { compatible } = boardHarness([]).service;
+  const client = { companyName: 'Example', phone: '9876543210', email: 'one@example.test' };
+  assert.equal(compatible(client, { companyName: 'Example LLP', phone: '+91 98765 43210', email: ' ONE@EXAMPLE.TEST ' }), true);
+  assert.equal(compatible(client, { companyName: 'Example LLP', phone: client.phone, email: 'other@example.test' }), false);
+  assert.equal(compatible(client, { companyName: 'Example', phone: '9123456789' }), false);
+  assert.equal(compatible(client, { companyName: 'Example' }), false);
+});
+
 test('non-BOOKED billing requests reject before identity creation', async () => {
   const c = cabin('TEST-ROOM', 'RESERVED'), h = boardHarness([c]);
   await assert.rejects(h.service.resolveBookedCustomer(companyId, c.code, actorId), /Only booked/);

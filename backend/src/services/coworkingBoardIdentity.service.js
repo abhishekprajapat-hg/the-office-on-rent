@@ -48,8 +48,17 @@ function identityData(cabin) {
   return data;
 }
 function compatible(client, data) {
-  return client.companyName.trim().toLowerCase() === data.companyName.toLowerCase()
-    && ['phone', 'email', 'gstNumber'].every(k => !client[k] || !data[k] || client[k].toLowerCase() === data[k].toLowerCase());
+  // Display/legal names can differ between the board and the client directory.
+  // Establish identity through a shared contact/GST identifier, not name equality.
+  const normalize = (key, value) => {
+    const text = String(value || '').trim().toLowerCase();
+    if (key !== 'phone') return text;
+    const digits = text.replace(/\D/g, '');
+    return digits.length === 12 && digits.startsWith('91') ? digits.slice(2) : digits;
+  };
+  const identifiers = ['phone', 'email', 'gstNumber'].map(key => [normalize(key, client[key]), normalize(key, data[key])]);
+  return identifiers.some(([existing, incoming]) => existing && incoming && existing === incoming)
+    && identifiers.every(([existing, incoming]) => !existing || !incoming || existing === incoming);
 }
 async function resolveClient(companyId, cabin, actorId, version = 0, syncDetails = true) {
   if (!validBookedCabin(cabin)) throw createHttpError(409, 'Only booked customers are eligible');
