@@ -67,32 +67,53 @@ exports.handle = (update = false) => async (req, res) => {
       if (entries?.some((entry) => !entry)) {
         return res.status(400).json({ message: "Choose valid pages and actions or use role defaults" });
       }
-      const nextOverride = entries === null
-        ? null
-        : (hasActionPayload
-          ? [...new Map(entries.map((entry) => [entry.pageKey, entry])).values()]
-          : [...new Set(entries)]);
+      // "Billing" only: a field-level grant that leaves the rest of the
+      // person's access (role defaults or a full override) untouched.
+      const billingPatch = req.body?.scope === "billing";
+      let before;
+      if (billingPatch) {
+        if (!hasActionPayload || entries === null || entries.some((entry) => entry.pageKey !== "billing")) {
+          return res.status(403).json({ message: "Billing access update must contain Billing only" });
+        }
+        const actorAccess = await resolveAccessProfile(req.user);
+        if (entries.some((entry) => ["view", ...entry.actions].some((action) => !actorAccess.permissions.includes(`page.billing.${action}`)))) {
+          return res.status(403).json({ message: "You cannot grant Billing actions you do not hold" });
+        }
+        const actions = [...new Set(entries.flatMap((entry) => ["view", ...entry.actions]))];
+        before = user.pageActionOverrides?.billing;
+        // A field-level update cannot overwrite concurrent unrelated grants or
+        // turn inherited role defaults into a frozen full override.
+        await User.updateOne({ _id: user._id, companyId: req.user.companyId }, { $set: { "pageActionOverrides.billing": actions } });
+        user.pageActionOverrides = { ...user.pageActionOverrides, billing: actions };
+      } else {
+        const nextOverride = entries === null
+          ? null
+          : (hasActionPayload
+            ? [...new Map(entries.map((entry) => [entry.pageKey, entry])).values()]
+            : [...new Set(entries)]);
 
-      if (!isAdmin(req.user)) {
-        // Compare what the employee would reach with what they reach today:
-        // only the additions are grants, and those must pass the same checks
-        // as a role edit - held by the Manager, not protected, not a delete.
-        const [current, next] = await Promise.all([
-          resolveAccessProfile(user),
-          resolveAccessProfile({ ...user.toObject(), pageAccessOverride: nextOverride }),
-        ]);
-        await assertGrantablePermissions({
-          actor: req.user,
-          permissions: toPagePermissions(next.pages),
-          existing: toPagePermissions(current.pages),
-        });
+        if (!isAdmin(req.user)) {
+          // Compare what the employee would reach with what they reach today:
+          // only the additions are grants, and those must pass the same checks
+          // as a role edit - held by the Manager, not protected, not a delete.
+          const [current, next] = await Promise.all([
+            resolveAccessProfile(user),
+            resolveAccessProfile({ ...user.toObject(), pageAccessOverride: nextOverride }),
+          ]);
+          await assertGrantablePermissions({
+            actor: req.user,
+            permissions: toPagePermissions(next.pages),
+            existing: toPagePermissions(current.pages),
+          });
+        }
+
+        before = user.pageAccessOverride;
+        user.pageAccessOverride = nextOverride;
+        user.pageActionOverrides = {};
+        await user.save();
       }
-
-      const before = user.pageAccessOverride;
-      user.pageAccessOverride = nextOverride;
-      await user.save();
       invalidateAccessCache();
-      await writeAuditLog({ companyId: req.user.companyId, actor: req.user, action: "USER_PAGE_ACCESS_UPDATED", entityType: "User", entityId: user._id, metadata: { before, after: user.pageAccessOverride }, req });
+      await writeAuditLog({ companyId: req.user.companyId, actor: req.user, action: "USER_PAGE_ACCESS_UPDATED", entityType: "User", entityId: user._id, metadata: { before, after: billingPatch ? user.pageActionOverrides.billing : user.pageAccessOverride, scope: billingPatch ? 'billing' : 'all' }, req });
     }
     const access = await resolveAccessProfile(user);
     return res.json({
