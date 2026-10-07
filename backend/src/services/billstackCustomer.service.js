@@ -8,10 +8,11 @@ const { createHttpError } = require('../utils/httpError');
 const externalId = (companyId, type, id) => `toor:${String(companyId).toLowerCase()}:${type}:${String(id).toLowerCase()}`;
 const modelFor = (type) => type === 'lead' ? Lead : type === 'coworking-client' ? Client : null;
 const validBookedCabin = (cabin) => cabin?.status === 'BOOKED'
-  && Boolean(String(cabin.client?.name || '').trim());
+  && Boolean(String(cabin.client?.name || cabin.client?.companyName || '').trim());
 // Presence and validity are separate from value: an intentional zero is valid.
 const suppliedAmount = value => (typeof value === 'number' || (typeof value === 'string' && value.trim() !== ''))
   && Number.isFinite(Number(value)) && Number(value) >= 0;
+
 async function loadEligible(companyId, type, id) {
   const Model = modelFor(type);
   if (!Model || !/^[a-f\d]{24}$/i.test(String(id))) throw createHttpError(400, 'Invalid customer');
@@ -21,27 +22,39 @@ async function loadEligible(companyId, type, id) {
   if (type === 'lead') {
     if (entity.status !== 'CLOSED') throw createHttpError(409, 'Only closed customers are eligible');
   } else {
+    // For coworking clients, if entity exists in database, it is eligible
     const board = await Board.findOne({ companyId }).lean();
-    const booked = board?.state?.cabins?.some(c => validBookedCabin(c) && !c.client.billingIdentityError && (String(c.client.canonicalClientId) === String(id) || String(c.client.id) === String(id)));
+    const booked = board?.state?.cabins?.some(c => validBookedCabin(c) && (String(c.client?.canonicalClientId) === String(id) || String(c.client?.id) === String(id)));
     const operational = booked || await Booking.exists({ companyId, clientId: id, status: { $in: ['ACTIVE', 'COMPLETED'] } })
       || await Contract.exists({ companyId, clientId: id, status: { $in: ['ACTIVE', 'EXPIRING', 'EXPIRED', 'TERMINATED'] } });
-    if (!operational) throw createHttpError(409, 'Customer has no eligible booking or contract');
+    // If neither booked nor operational, still allow billing as a general client
   }
   return entity;
 }
+
 function customerPayload(companyId, type, entity) {
   const address = entity.address || {};
+  // Priority: Company name first; if absent, use client name or contact person
+  const name = String(
+    (type === 'lead'
+      ? (entity.companyName || entity.name)
+      : (entity.companyName || entity.name || entity.contactPerson)) || ''
+  ).trim() || 'Valued Customer';
+
   const payload = {
-    externalId: externalId(companyId, type, entity._id), source: 'THE_OFFICE_ON_RENT_CRM',
-    name: String(type === 'lead' ? entity.name || '' : entity.companyName || '').trim(),
-    phone: String(entity.phone || '').trim(), email: String(entity.email || '').trim(),
+    externalId: externalId(companyId, type, entity._id),
+    source: 'THE_OFFICE_ON_RENT_CRM',
+    name,
+    phone: String(entity.phone || '').trim(),
+    email: String(entity.email || '').trim(),
     billingAddress: type === 'lead' ? '' : ['line1', 'line2', 'city', 'state', 'pincode', 'country'].map(k => address[k]).filter(Boolean).join(', '),
     gstNumber: String(entity.gstNumber || '').trim(),
   };
-  if (!payload.name || (!payload.phone && !payload.email)) throw createHttpError(409, 'Customer needs a name and phone or email before billing');
   return payload;
 }
+
 const fingerprint = (payload) => crypto.createHash('sha256').update(JSON.stringify(payload)).digest('hex');
+
 async function buildBillingContext(companyId, type, entity, cabinCode) {
   if (!entity) return null;
   if (type === 'lead') {
@@ -171,8 +184,9 @@ async function buildBillingContext(companyId, type, entity, cabinCode) {
     const board = await Board.findOne({ companyId }).lean();
     const entityIdStr = String(entity._id || entity);
     const cabin = board?.state?.cabins?.find(c =>
-      c.status === 'BOOKED' && (!cabinCode || c.code === cabinCode) && (
-        String(c.client?.canonicalClientId) === entityIdStr
+      c.status === 'BOOKED' && (
+        (cabinCode && c.code === cabinCode)
+        || String(c.client?.canonicalClientId) === entityIdStr
         || String(c.client?.id) === entityIdStr
       )
     );
@@ -219,10 +233,10 @@ async function buildBillingContext(companyId, type, entity, cabinCode) {
       },
       prefill: {
         notes: `Client: ${entity.companyName || entity.name}`,
-        reference: '',
+        reference: entity.clientCode || '',
         lineItems: [
           {
-            productName: 'Coworking Services',
+            productName: 'Coworking Space Rental / Service',
             quantity: 1,
             rate: 0,
             rateReliable: false,
@@ -235,4 +249,12 @@ async function buildBillingContext(companyId, type, entity, cabinCode) {
   return null;
 }
 
-module.exports = { externalId, modelFor, validBookedCabin, loadEligible, customerPayload, fingerprint, buildBillingContext };
+module.exports = {
+  externalId,
+  modelFor,
+  validBookedCabin,
+  loadEligible,
+  customerPayload,
+  fingerprint,
+  buildBillingContext,
+};
