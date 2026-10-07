@@ -254,6 +254,9 @@ const leadSchema = new mongoose.Schema(
         "FOLLOW_UP_1",
         "FOLLOW_UP_2",
         "FOLLOW_UP_3",
+        "QUALIFIED_LEAD",
+        "REQUIREMENT_AFTER_1_MONTH",
+        "REQUIREMENT_AFTER_2_MONTHS",
         "INTERESTED",
         "SITE_VISIT_SCHEDULED",
         "SITE_VISIT",
@@ -373,6 +376,22 @@ const leadSchema = new mongoose.Schema(
         },
       },
     ],
+    // Revenue Module: who pays the brokerage, what was agreed in total, and
+    // when the last brokerage payment came in. Pending = agreed - received.
+    brokerageSource: {
+      type: String,
+      enum: ["TENANT", "OWNER", "BOTH", ""],
+      default: "",
+    },
+    brokerageAgreed: {
+      type: Number,
+      min: 0,
+      default: null,
+    },
+    brokeragePaymentDate: {
+      type: Date,
+      default: null,
+    },
     brokerageClosedAt: {
       type: Date,
       default: null,

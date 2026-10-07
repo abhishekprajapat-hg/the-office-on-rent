@@ -3,6 +3,7 @@ import { useNavigate } from "react-router-dom";
 import { RefreshCw } from "lucide-react";
 import { getAllLeads } from "../../services/leadService";
 import { toErrorMessage } from "../../utils/errorMessage";
+import RevenueCenter from "./RevenueCenter";
 import ToastNotice from "../../components/ui/ToastNotice";
 
 const COMMISSION_PER_DEAL = 50000;
@@ -726,6 +727,11 @@ const FinancialCore = () => {
       value: pendingPayments.length,
       detail: "Deal payments",
     },
+    ...(isManagerView ? [{
+      key: "Brokerage distributed",
+      value: formatCurrencyCompact(dashboard.brokerageDistributedTotal),
+      detail: "Paid to other parties, not revenue",
+    }] : []),
   ];
   const dealPaymentRows = [
     ...pendingPayments,
@@ -938,6 +944,8 @@ const FinancialCore = () => {
           </div>
         </div>
       </div>
+
+      <RevenueCenter />
     </div>
   );
 };

@@ -3,7 +3,7 @@ const router = express.Router();
 const taskController = require("../controllers/task.controller");
 const authMiddleware = require("../middleware/auth.middleware");
 const { writeLimiter } = require("../middleware/rateLimit.middleware");
-const { requirePageAccess, requirePageActionForMethod } = require("../middleware/pageAccess.middleware");
+const { requirePageAccess, requirePageAction, requirePageActionForMethod } = require("../middleware/pageAccess.middleware");
 const Task = require("../models/Task");
 const { requireAdminApprovalForDelete, describeByModel } = require("../services/deleteApproval.service");
 
@@ -16,6 +16,10 @@ router.get("/assignees", taskController.getAssignees);
 router.post("/", writeLimiter, taskController.createTask);
 
 router.use(requirePageAccess("tasks"));
+// Taking back your own comment or file edits the task; it does not delete a
+// task record, so it needs the "edit" action rather than "delete".
+router.delete("/:taskId/comments/:commentId", writeLimiter, requirePageAction("edit", "tasks"), taskController.deleteComment);
+router.delete("/:taskId/attachments/:attachmentId", writeLimiter, requirePageAction("edit", "tasks"), taskController.deleteAttachment);
 router.use(requirePageActionForMethod("tasks"));
 
 router.get("/", taskController.getTasks);
@@ -27,6 +31,8 @@ router.patch("/:taskId", writeLimiter, taskController.updateTask);
 router.post("/:taskId/subtasks", writeLimiter, taskController.addSubtask);
 router.patch("/:taskId/subtasks/:subtaskId", writeLimiter, taskController.updateSubtask);
 router.delete("/:taskId/subtasks/:subtaskId", writeLimiter, taskController.deleteSubtask);
+router.post("/:taskId/comments", writeLimiter, taskController.addComment);
+router.post("/:taskId/attachments", writeLimiter, taskController.addAttachments);
 // A Manager's delete becomes a request an Admin approves.
 router.delete(
   "/:taskId",

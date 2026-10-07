@@ -252,7 +252,7 @@ const PipelineToolbar = ({
             </button>
             {openDropdown === "status" && (
               <div className="absolute left-0 top-full z-30 mt-1 w-44 rounded-xl border border-slate-200 bg-white p-1.5 shadow-xl dark:border-slate-700 dark:bg-slate-800">
-                {["ALL", "TRANSFER", "INTERESTED", "NEW", "CONTACTED", "FOLLOW_UP_1", "FOLLOW_UP_2", "FOLLOW_UP_3", "REQUESTED", "SITE_VISIT", "CLOSED", "LOST"].map((st) => (
+                {["ALL", "TRANSFER", "INTERESTED", "NEW", "CONTACTED", "FOLLOW_UP_1", "FOLLOW_UP_2", "FOLLOW_UP_3", "QUALIFIED_LEAD", "REQUIREMENT_AFTER_1_MONTH", "REQUIREMENT_AFTER_2_MONTHS", "REQUESTED", "SITE_VISIT", "CLOSED", "LOST"].map((st) => (
                   <button
                     key={st}
                     type="button"

@@ -16,6 +16,7 @@ const {
   EXECUTIVE_ROLES,
   LEAD_OWNER_ROLES,
   MANUAL_LEAD_TRANSFER_TARGET_ROLES,
+  MANUAL_LEAD_TRANSFER_ACTOR_ROLES,
   PRODUCTION_ROLES,
   MANAGEMENT_ROLES,
   ROLE_LABELS,
@@ -52,6 +53,12 @@ const LOCATION_VIEWER_ROLES = [
 const LEAD_STATUSES = [
   "NEW",
   "CONTACTED",
+  "FOLLOW_UP_1",
+  "FOLLOW_UP_2",
+  "FOLLOW_UP_3",
+  "QUALIFIED_LEAD",
+  "REQUIREMENT_AFTER_1_MONTH",
+  "REQUIREMENT_AFTER_2_MONTHS",
   "INTERESTED",
   "SITE_VISIT_SCHEDULED",
   "SITE_VISIT",
@@ -111,12 +118,6 @@ const USER_SELECTABLE_FIELDS = [
 const USER_ROLE_VALUES = Object.values(USER_ROLES);
 const ADMIN_TOOL_ROLES = [USER_ROLES.ADMIN, USER_ROLES.MANAGER];
 const canUseAdminTools = (role) => ADMIN_TOOL_ROLES.includes(role);
-const CRM_ASSIGNABLE_ROLES = [
-  USER_ROLES.ADMIN,
-  ...MANAGEMENT_ROLES,
-  USER_ROLES.INSIDE_EXECUTIVE,
-  USER_ROLES.EXECUTIVE,
-];
 const BROKERAGE_MODES = Object.freeze(["FLAT", "PERCENTAGE"]);
 const DEFAULT_BROKERAGE_VALUE = 50000;
 const DEFAULT_BROKERAGE_PERCENTAGE = 2;
@@ -874,6 +875,12 @@ const buildProfileSummary = async (userDoc) => {
           $in: [
             "NEW",
             "CONTACTED",
+            "FOLLOW_UP_1",
+            "FOLLOW_UP_2",
+            "FOLLOW_UP_3",
+            "QUALIFIED_LEAD",
+            "REQUIREMENT_AFTER_1_MONTH",
+            "REQUIREMENT_AFTER_2_MONTHS",
             "INTERESTED",
             "SITE_VISIT_SCHEDULED",
             "SITE_VISIT",
@@ -957,7 +964,7 @@ exports.getUsers = async (req, res) => {
     let query = {};
 
     if (crmAssignableOnly) {
-      if (!CRM_ASSIGNABLE_ROLES.includes(req.user.role)) {
+      if (!MANUAL_LEAD_TRANSFER_ACTOR_ROLES.includes(req.user.role)) {
         return res.status(403).json({ message: "Access denied" });
       }
       query = {

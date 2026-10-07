@@ -23,7 +23,20 @@ export const STATUS_STYLES = {
     label: "Follow-Up 3",
     tone: "cyan",
   },
+  // Parked - a real requirement, but the client will buy later.
+  REQUIREMENT_AFTER_1_MONTH: {
+    label: "Requirement After 1 Month",
+    tone: "cyan",
+  },
+  REQUIREMENT_AFTER_2_MONTHS: {
+    label: "Requirement After 2 Months",
+    tone: "cyan",
+  },
   // Warm
+  QUALIFIED_LEAD: {
+    label: "Qualified Lead",
+    tone: "amber",
+  },
   INTERESTED: {
     label: "Interested",
     tone: "amber",

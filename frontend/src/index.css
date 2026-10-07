@@ -2624,7 +2624,7 @@ html.theme-dark .calendar-done-btn { border-color: #2f8053; background: #142d20;
 
 .finance-statgrid {
   display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(170px, 1fr));
   gap: var(--s4);
 }
 
@@ -5035,3 +5035,22 @@ html.theme-dark .console-input-wrap {
     display: none !important;
   }
 }
+
+/* Revenue Module (Finance > Revenue) */
+.revenue-head { flex-wrap: wrap; padding-block: 8px; }
+.revenue-head .finance-seg { flex-wrap: wrap; }
+.revenue-toolbar { display: flex; flex-wrap: wrap; align-items: flex-end; gap: 12px; border-bottom: 1px solid var(--line); }
+.revenue-field { display: flex; flex-direction: column; gap: 4px; font-size: 11px; font-weight: 750; text-transform: uppercase; color: var(--muted); }
+.revenue-field select, .revenue-field input { min-height: 34px; border: 1px solid var(--line); border-radius: 8px; background: var(--surface); color: var(--text); padding: 0 10px; font: inherit; font-size: 13px; font-weight: 600; text-transform: none; }
+.revenue-range { color: var(--muted); font-size: 12.5px; padding-bottom: 8px; }
+.revenue-export { margin-left: auto; }
+.revenue-pad { padding: 12px; }
+.revenue-overview { display: flex; flex-direction: column; gap: 18px; }
+.revenue-subhead { margin: 0 0 10px; font-size: 13px; font-weight: 750; color: var(--text); }
+.revenue-subhead small { margin-left: 8px; font-weight: 500; color: var(--muted); }
+.revenue-grid { grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); }
+.revenue-split-table { margin-top: 12px; border: 1px solid var(--line); border-radius: var(--r-md); }
+.revenue-wide { min-width: 1080px; }
+.revenue-summary { min-width: 420px; }
+.revenue-summary tr.is-total td { background: var(--surface2); }
+.revenue-error { margin: 12px; color: var(--dg700); font-size: 13px; }

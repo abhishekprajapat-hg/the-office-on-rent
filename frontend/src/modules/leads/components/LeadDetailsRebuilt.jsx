@@ -564,6 +564,8 @@ const LeadDetailsRebuiltContent = ({
   brokerageReceivedDraft,
   setBrokerageReceivedDraft,
   brokerageDistributedDraft,
+  brokerageExtraDraft = { source: "", agreed: "", paymentDate: "" },
+  setBrokerageExtraDraft = () => {},
   setBrokerageDistributedDraft,
   closureDocumentsDraft,
   setClosureDocumentsDraft,
@@ -3248,6 +3250,58 @@ const LeadDetailsRebuiltContent = ({
                     />
                   </label>
                 </div>
+                <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">
+                  <label className="space-y-1">
+                    <span className={`text-[10px] font-bold uppercase tracking-wider ${isDark ? "text-slate-400" : "text-slate-500"}`}>
+                      Brokerage Paid By
+                    </span>
+                    <select
+                      value={brokerageExtraDraft.source}
+                      onChange={(event) => setBrokerageExtraDraft((prev) => ({ ...prev, source: event.target.value }))}
+                      className={`h-9 w-full rounded-lg border px-2 text-xs ${input}`}
+                    >
+                      <option value="">Not set</option>
+                      <option value="TENANT">Tenant</option>
+                      <option value="OWNER">Owner</option>
+                      <option value="BOTH">Both</option>
+                    </select>
+                  </label>
+                  <label className="space-y-1">
+                    <span className={`text-[10px] font-bold uppercase tracking-wider ${isDark ? "text-slate-400" : "text-slate-500"}`}>
+                      Agreed Brokerage
+                    </span>
+                    <input
+                      type="number"
+                      min="0"
+                      step="0.01"
+                      value={brokerageExtraDraft.agreed}
+                      onChange={(event) => setBrokerageExtraDraft((prev) => ({ ...prev, agreed: event.target.value }))}
+                      placeholder="Total agreed"
+                      className={`h-9 w-full rounded-lg border px-3 text-sm ${input}`}
+                    />
+                  </label>
+                  <label className="space-y-1">
+                    <span className={`text-[10px] font-bold uppercase tracking-wider ${isDark ? "text-slate-400" : "text-slate-500"}`}>
+                      Brokerage Payment Date
+                    </span>
+                    <input
+                      type="date"
+                      value={brokerageExtraDraft.paymentDate}
+                      onChange={(event) => setBrokerageExtraDraft((prev) => ({ ...prev, paymentDate: event.target.value }))}
+                      className={`h-9 w-full rounded-lg border px-3 text-sm ${input}`}
+                    />
+                  </label>
+                </div>
+                {(() => {
+                  const agreed = brokerageExtraDraft.agreed === "" ? null : Number(brokerageExtraDraft.agreed);
+                  const received = Number(brokerageReceivedDraft) || 0;
+                  const pending = agreed !== null && Number.isFinite(agreed) ? Math.max(0, agreed - received) : null;
+                  return pending ? (
+                    <div className={`rounded-lg border px-2 py-1.5 text-[11px] ${isDark ? "border-amber-500/40 bg-amber-500/10 text-amber-100" : "border-amber-200 bg-amber-50 text-amber-700"}`}>
+                      Pending brokerage: {new Intl.NumberFormat("en-IN", { style: "currency", currency: "INR", maximumFractionDigits: 0 }).format(pending)}
+                    </div>
+                  ) : null;
+                })()}
                 <div className={`rounded-lg border px-2 py-1.5 text-[11px] ${isDark ? "border-sky-500/30 bg-sky-500/10 text-sky-100" : "border-sky-200 bg-sky-50 text-sky-700"}`}>
                   Only Brokerage Received will be counted as company revenue.
                 </div>

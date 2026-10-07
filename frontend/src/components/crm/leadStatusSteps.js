@@ -27,8 +27,14 @@ export const statusToStep = (status) => {
     case "NEW":
       return { stepKey: "NEW", sideState: null };
     case "CONTACTED":
+    case "FOLLOW_UP_1":
+    case "FOLLOW_UP_2":
+    case "FOLLOW_UP_3":
+    case "REQUIREMENT_AFTER_1_MONTH":
+    case "REQUIREMENT_AFTER_2_MONTHS":
       return { stepKey: "CONTACTED", sideState: null };
     case "INTERESTED":
+    case "QUALIFIED_LEAD":
     case "REQUESTED":
       return { stepKey: "INTERESTED", sideState: null };
     case "SITE_VISIT_SCHEDULED":

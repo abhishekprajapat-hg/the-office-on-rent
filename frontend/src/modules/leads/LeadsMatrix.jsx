@@ -57,6 +57,9 @@ const LEAD_STATUSES = [
   "FOLLOW_UP_1",
   "FOLLOW_UP_2",
   "FOLLOW_UP_3",
+  "QUALIFIED_LEAD",
+  "REQUIREMENT_AFTER_1_MONTH",
+  "REQUIREMENT_AFTER_2_MONTHS",
   "INTERESTED",
   "SITE_VISIT_SCHEDULED",
   "SITE_VISIT",
@@ -71,6 +74,29 @@ const LEAD_STATUSES = [
   "LOST",
 ];
 const LEAD_STATUS_SET = new Set(["ALL", "TRANSFER", ...LEAD_STATUSES]);
+
+const EMPTY_BROKERAGE_EXTRA_DRAFT = Object.freeze({ source: "", agreed: "", paymentDate: "" });
+const toDateOnlyInput = (value) => {
+  if (!value) return "";
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return "";
+  const local = new Date(date.getTime() - date.getTimezoneOffset() * 60000);
+  return local.toISOString().slice(0, 10);
+};
+const toBrokerageExtraDraft = (lead) => ({
+  source: String(lead?.brokerageSource || ""),
+  agreed: lead?.brokerageAgreed === null || lead?.brokerageAgreed === undefined ? "" : String(lead.brokerageAgreed),
+  paymentDate: toDateOnlyInput(lead?.brokeragePaymentDate),
+});
+// Send only what changed, so an untouched form never rewrites these fields.
+const toBrokerageExtraPayload = (draft, lead) => {
+  const saved = toBrokerageExtraDraft(lead);
+  const payload = {};
+  if ((draft?.source || "") !== saved.source) payload.brokerageSource = draft.source || "";
+  if ((draft?.agreed || "") !== saved.agreed) payload.brokerageAgreed = draft.agreed === "" ? null : Number(draft.agreed);
+  if ((draft?.paymentDate || "") !== saved.paymentDate) payload.brokeragePaymentDate = draft.paymentDate || null;
+  return payload;
+};
 
 const LEAD_SORT_OPTIONS = {
   RECENT: "RECENT",
@@ -146,9 +172,10 @@ const getLeadFilterDateRange = (preset, type) => {
 
 const EXECUTIVE_ROLES = ["INSIDE_EXECUTIVE", "EXECUTIVE", "FIELD_EXECUTIVE"];
 const LEAD_OWNER_ROLES = ["INSIDE_EXECUTIVE", "EXECUTIVE"];
-const MANUAL_LEAD_TRANSFER_TARGET_ROLES = [...LEAD_OWNER_ROLES, "FIELD_EXECUTIVE"];
+// Any sales user can hand a lead to any other sales user (Lead Assignment Workflow).
+const MANUAL_LEAD_TRANSFER_TARGET_ROLES = ["ADMIN", "MANAGER", ...LEAD_OWNER_ROLES, "FIELD_EXECUTIVE"];
 const MANAGEMENT_ROLES = ["MANAGER"];
-const MANUAL_LEAD_TRANSFER_ACTOR_ROLES = ["ADMIN", ...MANAGEMENT_ROLES, ...LEAD_OWNER_ROLES];
+const MANUAL_LEAD_TRANSFER_ACTOR_ROLES = MANUAL_LEAD_TRANSFER_TARGET_ROLES;
 const SITE_VISIT_RADIUS_METERS = 200;
 const CUSTOM_NUMBER_OPTION_VALUE = "__CUSTOM_NUMBER__";
 const DEAL_PAYMENT_MODES = [
@@ -1714,6 +1741,8 @@ const LeadsMatrix = () => {
   const [paymentApprovalNoteDraft, setPaymentApprovalNoteDraft] = useState("");
   const [brokerageReceivedDraft, setBrokerageReceivedDraft] = useState("");
   const [brokerageDistributedDraft, setBrokerageDistributedDraft] = useState("0");
+  // Revenue Module extras: who pays the brokerage, total agreed, last payment date.
+  const [brokerageExtraDraft, setBrokerageExtraDraft] = useState(EMPTY_BROKERAGE_EXTRA_DRAFT);
   const [closureDocumentsDraft, setClosureDocumentsDraft] = useState([]);
   const [requirementsDraft, setRequirementsDraft] = useState(
     createDefaultLeadRequirementsDraft(),
@@ -2285,6 +2314,7 @@ const LeadsMatrix = () => {
         ? "0"
         : String(detailLead.brokerageDistributed),
     );
+    setBrokerageExtraDraft(toBrokerageExtraDraft(detailLead));
     setClosureDocumentsDraft(sanitizeClosureDocumentList(detailLead?.closureDocuments));
     setRequirementsDraft(mapLeadRequirementsToDraft(detailLead?.requirements));
     setDiaryDraft("");
@@ -2347,6 +2377,7 @@ const LeadsMatrix = () => {
     setAssigneeSearchDraft("");
     setBrokerageReceivedDraft("");
     setBrokerageDistributedDraft("0");
+    setBrokerageExtraDraft(EMPTY_BROKERAGE_EXTRA_DRAFT);
     setClosureDocumentsDraft([]);
     setRequirementsDraft(createDefaultLeadRequirementsDraft());
     if (normalizedRouteLeadId) {
@@ -2544,6 +2575,7 @@ const LeadsMatrix = () => {
         ? "0"
         : String(updatedLead.brokerageDistributed),
     );
+    setBrokerageExtraDraft(toBrokerageExtraDraft(updatedLead));
     setClosureDocumentsDraft(sanitizeClosureDocumentList(updatedLead?.closureDocuments));
     setRequirementsDraft(mapLeadRequirementsToDraft(updatedLead?.requirements));
   };
@@ -3315,6 +3347,7 @@ const LeadsMatrix = () => {
           }
           payload.brokerageDistributed = parsedBrokerageDistributed || 0;
         }
+        Object.assign(payload, toBrokerageExtraPayload(brokerageExtraDraft, selectedLead));
       }
 
       if (String(statusDraft || "").toUpperCase() === "CLOSED") {
@@ -3880,6 +3913,8 @@ const LeadsMatrix = () => {
             brokerageReceivedDraft={brokerageReceivedDraft}
             setBrokerageReceivedDraft={setBrokerageReceivedDraft}
             brokerageDistributedDraft={brokerageDistributedDraft}
+            brokerageExtraDraft={brokerageExtraDraft}
+            setBrokerageExtraDraft={setBrokerageExtraDraft}
             setBrokerageDistributedDraft={setBrokerageDistributedDraft}
             closureDocumentsDraft={closureDocumentsDraft}
             setClosureDocumentsDraft={setClosureDocumentsDraft}

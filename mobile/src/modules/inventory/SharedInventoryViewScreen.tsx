@@ -72,10 +72,11 @@ const escapeHtml = (value: unknown) =>
     .replace(/"/g, "&quot;");
 
 const MapFrame = ({ lat, lng, height }: { lat: number; lng: number; height: number }) => {
-  const src = `https://www.google.com/maps?q=${lat},${lng}&z=15&output=embed`;
+  // The share API sends an area-level point (rounded ~1 km), never the exact building.
+  const src = `https://www.google.com/maps?q=${lat},${lng}&z=14&output=embed`;
   if (Platform.OS === "web") {
     // @ts-ignore web-only element
-    return <iframe title="Property location" src={src} style={{ width: "100%", height, border: 0, borderRadius: 12 }} />;
+    return <iframe title="Approximate property area" src={src} style={{ width: "100%", height, border: 0, borderRadius: 12 }} />;
   }
   return (
     <View style={{ height, borderRadius: 12, overflow: "hidden" }}>
@@ -239,7 +240,7 @@ export const SharedInventoryViewScreen = () => {
         <h3>Summary</h3><table style="font-size:13px">${rows(summaryRows)}</table>
         <h3>${isCommercial ? "Commercial Details" : "Residential Details"}</h3><table style="font-size:13px">${rows(detailRows)}</table>
         ${amenityList.length ? `<h3>Amenities</h3><div style="font-size:13px">${amenityList.map(escapeHtml).join(" · ")}</div>` : ""}
-        ${hasPin ? `<h3>Location</h3><div style="font-size:13px">${escapeHtml(address || "Property location")} (${lat}, ${lng})</div>` : ""}
+        ${hasPin ? `<h3>Location</h3><div style="font-size:13px">${escapeHtml(address || "Property area")} (approximate area)</div>` : ""}
         <p style="margin-top:24px;text-align:center;font-size:11px;color:#94a3b8">Shared securely via Office on Rent</p>
       </body></html>`;
     setPrinting(true);
@@ -404,8 +405,8 @@ export const SharedInventoryViewScreen = () => {
             <View style={styles.locationNote}>
               <Glyph name="location" size={16} color={themePalette.emerald[700]} />
               <View style={styles.metricBody}>
-                <Text style={styles.locationTitle}>{address || "Property location"}</Text>
-                <Text style={styles.metricName}>Explore the location and nearby connectivity.</Text>
+                <Text style={styles.locationTitle}>{address || "Property area"}</Text>
+                <Text style={styles.metricName}>Approximate area shown. The exact address is shared when you schedule a visit.</Text>
               </View>
             </View>
             <MapFrame lat={lat} lng={lng} height={220} />

@@ -79,6 +79,12 @@ const CLIENT_SAFE_FIELDS = [
   "videoTours",
 ];
 
+const APPROXIMATE_LOCATION_DECIMALS = 2;
+const roundToApproximateArea = (value) => {
+  const factor = 10 ** APPROXIMATE_LOCATION_DECIMALS;
+  return Math.round(value * factor) / factor;
+};
+
 const toClientSafeView = (inventory) => {
   if (!inventory) return null;
 
@@ -96,6 +102,18 @@ const toClientSafeView = (inventory) => {
     HIDDEN_DETAIL_KEYS.forEach((hidden) => { delete details[hidden]; });
     safe[key] = details;
   });
+
+  // The exact pin would lead a client straight to the building, so the shared
+  // page gets the area only: coordinates rounded to 2 decimals (~1 km).
+  if (safe.siteLocation) {
+    const lat = Number(safe.siteLocation.lat);
+    const lng = Number(safe.siteLocation.lng);
+    safe.siteLocation = safe.siteLocation.lat != null && safe.siteLocation.lng != null
+      && Number.isFinite(lat) && Number.isFinite(lng)
+      ? { lat: roundToApproximateArea(lat), lng: roundToApproximateArea(lng), approximate: true }
+      : undefined;
+    if (!safe.siteLocation) delete safe.siteLocation;
+  }
 
   // The title is built only from the listing name, never the building,
   // tower or unit, so the heading cannot give the building away.

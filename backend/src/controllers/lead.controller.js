@@ -20,6 +20,7 @@ const {
   EXECUTIVE_ROLES,
   LEAD_OWNER_ROLES,
   MANUAL_LEAD_TRANSFER_TARGET_ROLES,
+  MANUAL_LEAD_TRANSFER_ACTOR_ROLES,
   MANAGEMENT_ROLES,
   isManagementRole,
 } = require("../constants/role.constants");
@@ -138,6 +139,9 @@ const LEAD_SELECTABLE_FIELDS = [
   "brokerageReceived",
   "brokerageDistributed",
   "brokerageDistributionBreakdown",
+  "brokerageSource",
+  "brokerageAgreed",
+  "brokeragePaymentDate",
   "brokerageClosedAt",
   "brokerageClosedBy",
   "closureDocuments",
@@ -184,6 +188,17 @@ const SITE_VISIT_REQUIRED_STATUS = "SITE_VISIT_REQUIRED";
 const QUALIFIED_LEAD_STATUS = "QUALIFIED_LEAD";
 const ROLE_TYPE_VALUES = Object.freeze(["COMMERCIAL", "RESIDENTIAL", "BOTH", "COWORKING"]);
 const REQUESTED_STATUS = "REQUESTED";
+const REQUIREMENT_LATER_FOLLOW_UP_MONTHS = Object.freeze({
+  REQUIREMENT_AFTER_1_MONTH: 1,
+  REQUIREMENT_AFTER_2_MONTHS: 2,
+});
+const getRequirementLaterFollowUpDate = (status, from = new Date()) => {
+  const months = REQUIREMENT_LATER_FOLLOW_UP_MONTHS[status];
+  if (!months) return null;
+  const date = new Date(from.getTime());
+  date.setMonth(date.getMonth() + months);
+  return date;
+};
 const CLOSED_STATUS = "CLOSED";
 const LEAD_STATUS_VALUES = Object.freeze([
   "NEW",
@@ -191,6 +206,9 @@ const LEAD_STATUS_VALUES = Object.freeze([
   "FOLLOW_UP_1",
   "FOLLOW_UP_2",
   "FOLLOW_UP_3",
+  "QUALIFIED_LEAD",
+  "REQUIREMENT_AFTER_1_MONTH",
+  "REQUIREMENT_AFTER_2_MONTHS",
   "INTERESTED",
   "SITE_VISIT_SCHEDULED",
   "SITE_VISIT",
@@ -246,12 +264,6 @@ const LEAD_TEMPERATURES = Object.freeze(["COLD", "WARM", "HOT"]);
 const LEAD_REQUIREMENT_INVENTORY_TYPES = Object.freeze(["COMMERCIAL", "RESIDENTIAL", "COWORKING"]);
 const LEAD_REQUIREMENT_TRANSACTION_TYPES = Object.freeze(["SALE", "LEASE", "RENT"]);
 const LEAD_REQUIREMENT_AREA_UNITS = Object.freeze(["SQ_FT", "SQ_M"]);
-const CRM_ASSIGNABLE_ROLES = Object.freeze([
-  USER_ROLES.ADMIN,
-  ...MANAGEMENT_ROLES,
-  USER_ROLES.INSIDE_EXECUTIVE,
-  USER_ROLES.EXECUTIVE,
-]);
 const MANUAL_TRANSFER_REASON_FALLBACK = "Manual lead transfer";
 const MAX_ASSIGNMENT_REASON_LENGTH = 500;
 
@@ -1385,11 +1397,58 @@ const pickBrokerageSource = (rawPayload = {}) => {
     hasOwn(rawPayload, "brokerageReceived")
     || hasOwn(rawPayload, "brokerageDistributed")
     || hasOwn(rawPayload, "brokerageDistributionBreakdown")
+    || hasOwn(rawPayload, "brokerageSource")
+    || hasOwn(rawPayload, "brokerageAgreed")
+    || hasOwn(rawPayload, "brokeragePaymentDate")
   ) {
     return rawPayload;
   }
 
   return undefined;
+};
+
+const BROKERAGE_SOURCE_VALUES = Object.freeze(["TENANT", "OWNER", "BOTH"]);
+
+// Optional Revenue Module fields that travel with the brokerage payload.
+const parseBrokerageRevenueExtras = (source = {}) => {
+  const value = {
+    hasBrokerageSource: hasOwn(source, "brokerageSource"),
+    hasBrokerageAgreed: hasOwn(source, "brokerageAgreed"),
+    hasBrokeragePaymentDate: hasOwn(source, "brokeragePaymentDate"),
+  };
+
+  if (value.hasBrokerageSource) {
+    const normalized = String(source.brokerageSource || "").trim().toUpperCase();
+    if (normalized && !BROKERAGE_SOURCE_VALUES.includes(normalized)) {
+      return { error: "brokerageSource must be TENANT, OWNER or BOTH" };
+    }
+    value.brokerageSource = normalized;
+  }
+
+  if (value.hasBrokerageAgreed) {
+    const raw = source.brokerageAgreed;
+    if (raw === null || raw === "" || raw === undefined) {
+      value.brokerageAgreed = null;
+    } else {
+      const amount = toFiniteNumber(raw);
+      if (amount === null) return { error: "brokerageAgreed must be a valid number" };
+      if (amount < 0) return { error: "brokerageAgreed cannot be negative" };
+      value.brokerageAgreed = amount;
+    }
+  }
+
+  if (value.hasBrokeragePaymentDate) {
+    const raw = String(source.brokeragePaymentDate || "").trim();
+    if (!raw) {
+      value.brokeragePaymentDate = null;
+    } else {
+      const date = new Date(raw);
+      if (Number.isNaN(date.getTime())) return { error: "brokeragePaymentDate must be a valid date" };
+      value.brokeragePaymentDate = date;
+    }
+  }
+
+  return { value };
 };
 
 const parseBrokeragePayload = (rawPayload = {}) => {
@@ -1470,6 +1529,11 @@ const parseBrokeragePayload = (rawPayload = {}) => {
     };
   }
 
+  const extras = parseBrokerageRevenueExtras(source);
+  if (extras.error) {
+    return { error: extras.error };
+  }
+
   return {
     provided: true,
     value: {
@@ -1478,6 +1542,8 @@ const parseBrokeragePayload = (rawPayload = {}) => {
       brokerageDistributed: resolvedDistributed,
       brokerageDistributionBreakdown: cleanBreakdown,
       hasBreakdown,
+      hasDistributed: hasDistributed || hasBreakdown,
+      ...extras.value,
     },
   };
 };
@@ -1485,10 +1551,18 @@ const parseBrokeragePayload = (rawPayload = {}) => {
 const applyBrokerageToLead = ({ lead, brokerage, user, markClosed = false }) => {
   if (!lead || !brokerage) return;
 
+  if (brokerage.hasBrokerageSource) lead.brokerageSource = brokerage.brokerageSource;
+  if (brokerage.hasBrokerageAgreed) lead.brokerageAgreed = brokerage.brokerageAgreed;
+  if (brokerage.hasBrokeragePaymentDate) lead.brokeragePaymentDate = brokerage.brokeragePaymentDate;
+
   if (brokerage.hasReceived) {
     lead.brokerageReceived = brokerage.brokerageReceived;
   }
-  lead.brokerageDistributed = brokerage.brokerageDistributed ?? 0;
+  // A payload that only carries the revenue extras (source, agreed amount,
+  // payment date) must not reset what was already distributed.
+  if (brokerage.hasDistributed !== false) {
+    lead.brokerageDistributed = brokerage.brokerageDistributed ?? 0;
+  }
   if (brokerage.hasBreakdown) {
     lead.brokerageDistributionBreakdown = brokerage.brokerageDistributionBreakdown || [];
   }
@@ -3499,7 +3573,7 @@ exports.assignLead = async (req, res) => {
     const access = await resolveAccessProfile(req.user);
     const hasExplicitAssignGrant = access.enforcePageAccess
       && access.permissions.includes("page.leads.assign");
-    if (!hasExplicitAssignGrant && !CRM_ASSIGNABLE_ROLES.includes(req.user?.role)) {
+    if (!hasExplicitAssignGrant && !MANUAL_LEAD_TRANSFER_ACTOR_ROLES.includes(req.user?.role)) {
       return res.status(403).json({ message: "You are not authorized to transfer leads" });
     }
 
@@ -3527,7 +3601,7 @@ exports.assignLead = async (req, res) => {
 
     if (!MANUAL_LEAD_TRANSFER_TARGET_ROLES.includes(targetUser.role)) {
       return res.status(400).json({
-        message: "Lead can only be assigned to an Executive or Field Executive",
+        message: "Lead can only be transferred to a sales user (Admin, Manager, Executive or Field Executive)",
       });
     }
 
@@ -4665,6 +4739,13 @@ exports.updateLeadStatus = async (req, res) => {
       lead.nextFollowUp = parsedNextFollowUp;
     } else if (clearNextFollowUp) {
       lead.nextFollowUp = null;
+    } else if (
+      previousLeadStatus !== nextLeadStatus
+      && REQUIREMENT_LATER_FOLLOW_UP_MONTHS[nextLeadStatus]
+    ) {
+      // "Requirement After 1/2 Months": put the callback on the calendar so the
+      // lead resurfaces on its own instead of being forgotten.
+      lead.nextFollowUp = getRequirementLaterFollowUpDate(nextLeadStatus);
     }
 
     if (isCloseRequestTransition) {
@@ -5711,3 +5792,6 @@ exports.deleteLead = async (req, res) => {
     return res.status(500).json({ message: "Server error" });
   }
 };
+
+exports.getRequirementLaterFollowUpDate = getRequirementLaterFollowUpDate;
+exports.parseBrokeragePayload = parseBrokeragePayload;

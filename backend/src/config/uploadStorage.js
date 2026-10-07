@@ -13,6 +13,8 @@ const UPLOAD_CATEGORIES = Object.freeze([
   // Coworking client KYC scans and deposit cheques. Kept on the server so every
   // desk sees the same file; before this they lived in one browser's storage.
   "coworking-documents",
+  // Files attached to tasks and task comments.
+  "task-attachments",
 ]);
 const DEFAULT_CATEGORY = "chat";
 

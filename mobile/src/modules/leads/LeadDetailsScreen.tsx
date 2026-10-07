@@ -86,6 +86,12 @@ import { themedStyles, themeColor } from "../../theme/themedStyles";
 const STATUSES = [
   "NEW",
   "CONTACTED",
+  "FOLLOW_UP_1",
+  "FOLLOW_UP_2",
+  "FOLLOW_UP_3",
+  "QUALIFIED_LEAD",
+  "REQUIREMENT_AFTER_1_MONTH",
+  "REQUIREMENT_AFTER_2_MONTHS",
   "INTERESTED",
   "SITE_VISIT_SCHEDULED",
   "SITE_VISIT",
@@ -1023,7 +1029,7 @@ export const LeadDetailsScreen = () => {
   const assignableExecutives = useMemo(
     () =>
       executives.filter(
-        (u) => u.isActive !== false && ["EXECUTIVE", "FIELD_EXECUTIVE"].includes(String(u.role)),
+        (u) => u.isActive !== false && ["ADMIN", "MANAGER", "INSIDE_EXECUTIVE", "EXECUTIVE", "FIELD_EXECUTIVE"].includes(String(u.role)),
       ),
     [executives],
   );

@@ -667,3 +667,29 @@ html.theme-dark .workspace-shell .task-workspace-page select:not([multiple]) {
   color: #e8edf7 !important;
   box-shadow: none !important;
 }
+
+/* Task comments, files and history */
+.tw-discussion { display: flex; flex-direction: column; gap: 12px; }
+.tw-discussion .tw-detail-subtasks-heading { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+.tw-discussion-empty { margin: 0; color: var(--tw-muted, #64748b); font-size: 14px; }
+.tw-file-list { display: flex; flex-wrap: wrap; gap: 8px; }
+.tw-file-chip { display: inline-flex; align-items: center; gap: 4px; max-width: 100%; border: 1px solid var(--tw-border); border-radius: 8px; background: var(--tw-surface, #fff); padding: 4px 6px 4px 9px; font-size: 13px; }
+.tw-file-chip a { display: inline-flex; align-items: center; gap: 6px; min-width: 0; color: var(--tw-blue); text-decoration: none; font-weight: 600; }
+.tw-file-chip a span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 220px; }
+.tw-file-chip small { color: var(--tw-muted, #64748b); font-weight: 500; }
+.tw-file-chip button { display: inline-grid; place-items: center; width: 20px; height: 20px; border: 0; border-radius: 5px; background: transparent; color: inherit; cursor: pointer; }
+.tw-file-chip button:hover { background: rgba(220, 53, 53, .1); color: #dc3535; }
+.tw-history { margin: 0; padding: 10px 12px 10px 28px; border: 1px solid var(--tw-border); border-radius: 10px; display: flex; flex-direction: column; gap: 6px; font-size: 13.5px; }
+.tw-history time { margin-left: 8px; color: var(--tw-muted, #64748b); font-size: 12px; }
+.tw-comments { display: flex; flex-direction: column; gap: 10px; }
+.tw-comment { border: 1px solid var(--tw-border); border-radius: 10px; padding: 10px 12px; display: flex; flex-direction: column; gap: 6px; background: var(--tw-surface, #fff); }
+.tw-comment.is-mine { border-color: #c7d4fb; }
+.tw-comment header { display: flex; align-items: center; gap: 8px; font-size: 14px; }
+.tw-comment header time { color: var(--tw-muted, #64748b); font-size: 12px; }
+.tw-comment p { margin: 0; white-space: pre-wrap; overflow-wrap: anywhere; font-size: 14.5px; line-height: 1.5; }
+.tw-comment-delete { margin-left: auto; display: inline-grid; place-items: center; width: 26px; height: 26px; border: 0; border-radius: 6px; background: transparent; color: #94a3b8; cursor: pointer; }
+.tw-comment-delete:hover { color: #dc3535; background: rgba(220, 53, 53, .08); }
+.tw-comment-form { display: flex; flex-direction: column; gap: 8px; }
+.tw-comment-form textarea { width: 100%; min-height: 64px; border: 1px solid var(--tw-border); border-radius: 10px; padding: 10px 12px; font: inherit; font-size: 14.5px; resize: vertical; }
+.tw-comment-actions { display: flex; justify-content: flex-end; gap: 8px; }
+.dark .task-workspace-page :is(.tw-file-chip, .tw-comment, .tw-history, .tw-comment-form textarea) { background-color: var(--tw-surface); color: var(--tw-ink); }

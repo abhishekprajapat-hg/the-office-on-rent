@@ -16,6 +16,97 @@ const {
 } = require("../utils/taskSubtasks");
 
 const isProductionTaskRole = (user) => PRODUCTION_ROLES.includes(user?.role);
+// Plain objects (tests, lean reads) may not carry the array yet.
+const pushTaskActivity = (task, entry) => {
+  if (Array.isArray(task.activity) && typeof task.activity.push === "function" && task.activity.isMongooseArray) {
+    task.activity.push(entry);
+  } else {
+    task.activity = [...(Array.isArray(task.activity) ? task.activity : []), entry];
+  }
+};
+const toStatusLabel = (status) => String(status || "").replaceAll("_", " ").toLowerCase()
+  .replace(/^./, (c) => c.toUpperCase());
+
+const MAX_TASK_ATTACHMENTS = 30;
+const MAX_COMMENT_ATTACHMENTS = 5;
+const MAX_TASK_COMMENTS = 500;
+const MAX_COMMENT_LENGTH = 4000;
+// Only files uploaded through this CRM are accepted, so an attachment can never
+// point a teammate at an outside link.
+const UPLOADED_FILE_URL = /^\/api\/uploads\/files\/[a-z0-9-]+\/[A-Za-z0-9._-]+$/;
+
+const toTaskFile = (raw, user) => {
+  const url = String(raw?.url || "").trim();
+  if (!UPLOADED_FILE_URL.test(url)) return { error: "Attach a file uploaded to the CRM" };
+  return {
+    value: {
+      url,
+      name: String(raw?.name || raw?.fileName || url.split("/").pop()).trim().slice(0, 200),
+      mimeType: String(raw?.mimeType || "").trim().slice(0, 120),
+      size: Math.max(0, Number(raw?.size) || 0),
+      uploadedBy: user._id,
+      uploadedAt: new Date(),
+    },
+  };
+};
+
+const toTaskFiles = (rawList, user, max) => {
+  if (rawList === undefined || rawList === null) return { value: [] };
+  if (!Array.isArray(rawList)) return { error: "attachments must be a list" };
+  if (rawList.length > max) return { error: `At most ${max} files can be attached at once` };
+  const files = [];
+  for (const raw of rawList) {
+    const result = toTaskFile(raw, user);
+    if (result.error) return result;
+    files.push(result.value);
+  }
+  return { value: files };
+};
+
+// The other people on a task: creator, assignee and subtask owners.
+const taskParticipantIds = (task) => [...new Set([
+  referenceId(task.createdBy),
+  referenceId(task.assignedTo),
+  ...(task.subtasks || []).map((subtask) => referenceId(subtask.assignedTo)),
+].filter(Boolean))];
+
+const notifyTaskParticipants = ({ req, task, message, eventName = "task:updated" }) => {
+  const actorId = referenceId(req.user);
+  const io = req.app.get("io");
+  taskParticipantIds(task).filter((id) => id !== actorId).forEach((recipient) => {
+    if (io) {
+      io.to(`user:${recipient}`).emit(eventName, {
+        actorId,
+        eventId: `${eventName}:${task._id}:${recipient}:${Date.now()}`,
+        task,
+        message,
+      });
+    }
+    notify(recipient, { title: "Task update", body: message, url: "/tasks", tag: `task:${task._id}:${recipient}` });
+  });
+};
+
+const loadAccessibleTask = async (req, res) => {
+  const { taskId } = req.params;
+  if (!mongoose.Types.ObjectId.isValid(taskId)) {
+    res.status(400).json({ message: "Invalid task ID" });
+    return null;
+  }
+  const task = await Task.findById(taskId);
+  if (!task) {
+    res.status(404).json({ message: "Task not found" });
+    return null;
+  }
+  if (!checkTaskAccess(task, req.user)) {
+    res.status(403).json({ message: "Access denied. You do not have permission to view this task" });
+    return null;
+  }
+  return task;
+};
+
+const canRemoveOwnItem = (item, user) =>
+  referenceId(item.author || item.uploadedBy) === referenceId(user)
+  || [USER_ROLES.ADMIN, USER_ROLES.MANAGER].includes(user.role);
 
 /*
  * A task is overdue once its due date has passed and it is not completed.
@@ -39,7 +130,9 @@ const populateTask = (query) => query
   .populate("assignedTo", "name email role profileImageUrl")
   .populate("createdBy", "name role profileImageUrl")
   .populate("leadId", "name phone email status")
-  .populate("subtasks.assignedTo", "name email role profileImageUrl");
+  .populate("subtasks.assignedTo", "name email role profileImageUrl")
+  .populate("comments.author", "name role profileImageUrl")
+  .populate("activity.actor", "name role");
 
 const canManageTask = (task, user) => {
   if (String(task.companyId) !== String(user.companyId)) return false;
@@ -155,6 +248,7 @@ exports.createTask = async (req, res) => {
       companyId,
       createdBy: req.user._id,
       assignmentHistory: [{ fromUser: null, toUser: assignedTo || null, actor: req.user._id }],
+      activity: [{ action: "CREATED", actor: req.user._id, detail: "", at: new Date() }],
     });
 
     const savedTask = await newTask.save();
@@ -396,6 +490,15 @@ exports.updateTask = async (req, res) => {
 
     if (assignedTo !== undefined && referenceId(assignedTo) !== referenceId(originalAssignee)) {
       task.assignmentHistory = [...(task.assignmentHistory || []), { fromUser: originalAssignee || null, toUser: assignedTo || null, actor: req.user._id, at: new Date() }];
+      pushTaskActivity(task, { action: "REASSIGNED", actor: req.user._id, detail: "", at: new Date() });
+    }
+    if (nextStatus !== undefined && nextStatus !== originalStatus) {
+      pushTaskActivity(task, {
+        action: "STATUS_CHANGED",
+        actor: req.user._id,
+        detail: `${toStatusLabel(originalStatus)} → ${toStatusLabel(nextStatus)}`,
+        at: new Date(),
+      });
     }
     const updatedTask = await task.save();
 
@@ -826,3 +929,104 @@ exports.getAssignees = async (req, res) => {
 };
 
 module.exports.getOverdueCutoff = getOverdueCutoff;
+
+// Comments and progress updates: anyone who can see the task can post, with
+// optional files. The other people on the task are notified.
+exports.addComment = async (req, res) => {
+  try {
+    const task = await loadAccessibleTask(req, res);
+    if (!task) return;
+    const body = String(req.body?.body || "").trim();
+    if (body.length > MAX_COMMENT_LENGTH) {
+      return res.status(400).json({ message: `A comment can be at most ${MAX_COMMENT_LENGTH} characters` });
+    }
+    const files = toTaskFiles(req.body?.attachments, req.user, MAX_COMMENT_ATTACHMENTS);
+    if (files.error) return res.status(400).json({ message: files.error });
+    if (!body && !files.value.length) {
+      return res.status(400).json({ message: "Write a comment or attach a file" });
+    }
+    if ((task.comments || []).length >= MAX_TASK_COMMENTS) {
+      return res.status(409).json({ message: "This task has reached its comment limit" });
+    }
+    task.comments.push({ author: req.user._id, body, attachments: files.value, createdAt: new Date() });
+    pushTaskActivity(task, {
+      action: "COMMENTED",
+      actor: req.user._id,
+      detail: files.value.length ? `${files.value.length} file${files.value.length === 1 ? "" : "s"}` : "",
+      at: new Date(),
+    });
+    await task.save();
+    const populatedTask = await populateTask(Task.findById(task._id));
+    notifyTaskParticipants({ req, task: populatedTask, message: `${req.user.name} commented on "${task.title}"` });
+    return res.status(201).json(populatedTask);
+  } catch (error) {
+    if (sendMongooseError(res, error)) return;
+    req.log?.error(error);
+    return res.status(500).json({ message: "Failed to add comment" });
+  }
+};
+
+exports.deleteComment = async (req, res) => {
+  try {
+    const task = await loadAccessibleTask(req, res);
+    if (!task) return;
+    const comment = task.comments.id(req.params.commentId);
+    if (!comment) return res.status(404).json({ message: "Comment not found" });
+    if (!canRemoveOwnItem(comment, req.user)) {
+      return res.status(403).json({ message: "You can only delete your own comments" });
+    }
+    comment.deleteOne();
+    await task.save();
+    return res.status(200).json(await populateTask(Task.findById(task._id)));
+  } catch (error) {
+    req.log?.error(error);
+    return res.status(500).json({ message: "Failed to delete comment" });
+  }
+};
+
+exports.addAttachments = async (req, res) => {
+  try {
+    const task = await loadAccessibleTask(req, res);
+    if (!task) return;
+    const files = toTaskFiles(req.body?.attachments, req.user, MAX_COMMENT_ATTACHMENTS);
+    if (files.error) return res.status(400).json({ message: files.error });
+    if (!files.value.length) return res.status(400).json({ message: "Choose a file to attach" });
+    if ((task.attachments || []).length + files.value.length > MAX_TASK_ATTACHMENTS) {
+      return res.status(409).json({ message: `A task can hold at most ${MAX_TASK_ATTACHMENTS} files` });
+    }
+    files.value.forEach((file) => {
+      task.attachments.push(file);
+      pushTaskActivity(task, { action: "FILE_ADDED", actor: req.user._id, detail: file.name, at: new Date() });
+    });
+    await task.save();
+    const populatedTask = await populateTask(Task.findById(task._id));
+    notifyTaskParticipants({ req, task: populatedTask, message: `${req.user.name} attached a file to "${task.title}"` });
+    return res.status(201).json(populatedTask);
+  } catch (error) {
+    if (sendMongooseError(res, error)) return;
+    req.log?.error(error);
+    return res.status(500).json({ message: "Failed to attach file" });
+  }
+};
+
+exports.deleteAttachment = async (req, res) => {
+  try {
+    const task = await loadAccessibleTask(req, res);
+    if (!task) return;
+    const file = task.attachments.id(req.params.attachmentId);
+    if (!file) return res.status(404).json({ message: "File not found" });
+    if (!canRemoveOwnItem(file, req.user)) {
+      return res.status(403).json({ message: "You can only remove files you attached" });
+    }
+    const name = file.name;
+    file.deleteOne();
+    pushTaskActivity(task, { action: "FILE_REMOVED", actor: req.user._id, detail: name, at: new Date() });
+    await task.save();
+    return res.status(200).json(await populateTask(Task.findById(task._id)));
+  } catch (error) {
+    req.log?.error(error);
+    return res.status(500).json({ message: "Failed to remove file" });
+  }
+};
+
+exports.toTaskFiles = toTaskFiles;

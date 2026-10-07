@@ -1,5 +1,17 @@
 const mongoose = require("mongoose");
 
+const taskFileSchema = new mongoose.Schema(
+  {
+    url: { type: String, required: true, trim: true, maxlength: 600 },
+    name: { type: String, trim: true, default: "", maxlength: 200 },
+    mimeType: { type: String, trim: true, default: "", maxlength: 120 },
+    size: { type: Number, min: 0, default: 0 },
+    uploadedBy: { type: mongoose.Schema.Types.ObjectId, ref: "User", default: null },
+    uploadedAt: { type: Date, default: Date.now },
+  },
+  { _id: true },
+);
+
 const taskSchema = new mongoose.Schema(
   {
     title: {
@@ -86,6 +98,27 @@ const taskSchema = new mongoose.Schema(
         trim: true
       }
     ],
+    // Files on the task itself (briefs, references, deliverables).
+    attachments: [taskFileSchema],
+    // Comments / progress updates from the assigner and the receiver.
+    comments: [{
+      author: { type: mongoose.Schema.Types.ObjectId, ref: "User", required: true },
+      body: { type: String, trim: true, default: "", maxlength: 4000 },
+      attachments: [taskFileSchema],
+      createdAt: { type: Date, default: Date.now },
+    }],
+    // What happened to the task, newest last: created, status changes,
+    // comments, files. Shown as the task history.
+    activity: [{
+      action: {
+        type: String,
+        enum: ["CREATED", "STATUS_CHANGED", "REASSIGNED", "COMMENTED", "FILE_ADDED", "FILE_REMOVED"],
+        required: true,
+      },
+      actor: { type: mongoose.Schema.Types.ObjectId, ref: "User", default: null },
+      detail: { type: String, trim: true, default: "", maxlength: 300 },
+      at: { type: Date, default: Date.now },
+    }],
   },
   { timestamps: true }
 );

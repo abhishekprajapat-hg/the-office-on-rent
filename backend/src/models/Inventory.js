@@ -289,6 +289,32 @@ const inventorySchema = new mongoose.Schema(
       default: "",
       trim: true,
     },
+    // Revenue Module: SELF (own space -> rental income) or THIRD_PARTY
+    // (someone else's -> brokerage), and the business model it runs under.
+    ownershipType: {
+      type: String,
+      enum: ["SELF", "THIRD_PARTY", ""],
+      default: "",
+    },
+    businessModel: {
+      type: String,
+      enum: ["COWORKING", "ENTERPRISE", "RENTAL_BROKERAGE", "BUY_SELL", ""],
+      default: "",
+    },
+    // Enterprise model: the company leases the space and sublets it.
+    // Monthly profit = clientRent - leaseRent (computed, never stored).
+    enterpriseDetails: {
+      leaseRent: { type: Number, min: 0, default: null },
+      clientRent: { type: Number, min: 0, default: null },
+      clientName: { type: String, trim: true, default: "", maxlength: 160 },
+      rentDueDay: { type: Number, min: 1, max: 31, default: null },
+      paymentStatus: {
+        type: String,
+        enum: ["PAID", "PARTIAL", "PENDING", "OVERDUE", ""],
+        default: "",
+      },
+      lastPaymentDate: { type: Date, default: null },
+    },
     keyManagerName: {
       type: String,
       trim: true,

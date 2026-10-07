@@ -1,4 +1,5 @@
 const financeService = require("../services/finance.service");
+const revenueService = require("../services/revenue.service");
 const invoiceService = require("../services/coworkingInvoice.service");
 const paymentService = require("../services/coworkingPayment.service");
 const logger = require("../config/logger");
@@ -75,5 +76,14 @@ exports.getInvoice = async (req, res) => {
     return res.json({ invoice, payments: ledger?.payments || [] });
   } catch (error) {
     return handleControllerError(res, error, "getInvoice failed");
+  }
+};
+
+exports.getRevenue = async (req, res) => {
+  try {
+    const report = await revenueService.getRevenueReport({ companyId: req.user.companyId, query: req.query });
+    return res.json(report);
+  } catch (error) {
+    return handleControllerError(res, error, "getRevenue failed");
   }
 };

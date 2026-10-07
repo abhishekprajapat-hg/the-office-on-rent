@@ -26,6 +26,13 @@ const {
   INVENTORY_ACTIVITY_ACTIONS,
 } = require("../constants/inventory.constants");
 const {
+  OWNERSHIP_TYPES,
+  BUSINESS_MODELS,
+  BUSINESS_MODELS_BY_OWNERSHIP,
+  RENT_PAYMENT_STATUSES,
+  ownershipForBusinessModel,
+} = require("../constants/revenue.constants");
+const {
   notifyRequestCreated,
   notifyRequestReviewed,
 } = require("./inventoryNotification.service");
@@ -134,6 +141,74 @@ const RESIDENTIAL_WATER_SUPPLY_TYPES = Object.freeze([
   "OTHER",
 ]);
 const DEAL_TYPE_OPTIONS = Object.freeze(["", ...INVENTORY_DEAL_TYPES]);
+
+const toOptionalAmount = (value, label) => {
+  if (value === null || value === undefined || value === "") return null;
+  const amount = Number(value);
+  if (!Number.isFinite(amount) || amount < 0) {
+    throw createHttpError(400, `${label} must be a non-negative number`);
+  }
+  return Math.round(amount * 100) / 100;
+};
+
+const sanitizeEnterpriseDetails = (value) => {
+  if (value === null || value === undefined) {
+    return { leaseRent: null, clientRent: null, clientName: "", rentDueDay: null, paymentStatus: "", lastPaymentDate: null };
+  }
+  if (typeof value !== "object" || Array.isArray(value)) {
+    throw createHttpError(400, "enterpriseDetails must be an object");
+  }
+  const rentDueDayRaw = value.rentDueDay;
+  let rentDueDay = null;
+  if (rentDueDayRaw !== null && rentDueDayRaw !== undefined && rentDueDayRaw !== "") {
+    rentDueDay = Number.parseInt(rentDueDayRaw, 10);
+    if (!Number.isInteger(rentDueDay) || rentDueDay < 1 || rentDueDay > 31) {
+      throw createHttpError(400, "Rent due day must be between 1 and 31");
+    }
+  }
+  const paymentStatus = toUpperSnake(value.paymentStatus || "");
+  if (paymentStatus && !RENT_PAYMENT_STATUSES.includes(paymentStatus)) {
+    throw createHttpError(400, "Enterprise payment status is invalid");
+  }
+  let lastPaymentDate = null;
+  if (value.lastPaymentDate) {
+    lastPaymentDate = new Date(value.lastPaymentDate);
+    if (Number.isNaN(lastPaymentDate.getTime())) {
+      throw createHttpError(400, "Enterprise last payment date is invalid");
+    }
+  }
+  return {
+    leaseRent: toOptionalAmount(value.leaseRent, "Lease rent"),
+    clientRent: toOptionalAmount(value.clientRent, "Client rent"),
+    clientName: String(value.clientName || "").trim().slice(0, 160),
+    rentDueDay,
+    paymentStatus,
+    lastPaymentDate,
+  };
+};
+
+// Self-owned space runs as Coworking or Enterprise; third-party space as
+// Rental Brokerage or Buy & Sell. A model without an ownership fills it in.
+const assertOwnershipMatchesBusinessModel = (payload) => {
+  const model = payload.businessModel;
+  if (!model) return;
+  const ownership = payload.ownershipType;
+  if (!ownership) {
+    if (!Object.prototype.hasOwnProperty.call(payload, "ownershipType")) {
+      payload.ownershipType = ownershipForBusinessModel(model);
+    }
+    return;
+  }
+  if (!(BUSINESS_MODELS_BY_OWNERSHIP[ownership] || []).includes(model)) {
+    throw createHttpError(
+      400,
+      ownership === OWNERSHIP_TYPES.SELF
+        ? "A self-owned property can only be Coworking or Enterprise"
+        : "A third-party property can only be Rental Brokerage or Buy & Sell",
+    );
+  }
+};
+
 const OWNER_TYPE_OPTIONS = Object.freeze(["", ...INVENTORY_OWNER_TYPES]);
 const PROPERTY_ID_PREFIX = Object.freeze({
   COMMERCIAL: "COM",
@@ -1244,6 +1319,23 @@ const sanitizeInventoryPayload = ({
       return;
     }
 
+    if (field === "ownershipType" || field === "businessModel") {
+      const clean = toUpperSnake(value);
+      const allowed = field === "ownershipType"
+        ? Object.values(OWNERSHIP_TYPES)
+        : Object.values(BUSINESS_MODELS);
+      if (clean && !allowed.includes(clean)) {
+        throw createHttpError(400, `${field} is invalid`);
+      }
+      safePayload[field] = clean;
+      return;
+    }
+
+    if (field === "enterpriseDetails") {
+      safePayload[field] = sanitizeEnterpriseDetails(value);
+      return;
+    }
+
     if (field === "ownerType") {
       const cleanOwnerType = toUpperSnake(value);
       if (!OWNER_TYPE_OPTIONS.includes(cleanOwnerType)) {
@@ -1449,6 +1541,8 @@ const sanitizeInventoryPayload = ({
   if (mode === "update" && Object.keys(safePayload).length === 0) {
     throw createHttpError(400, "At least one valid field is required for update");
   }
+
+  assertOwnershipMatchesBusinessModel(safePayload);
 
   return safePayload;
 };
@@ -2103,7 +2197,7 @@ const createInventoryUpdateRequest = async ({
     ...scope,
   })
     .select(
-      "_id projectName towerName unitNumber propertyId inventoryType price rent deposit depositMonths agreementYears lockInYears type category furnishingStatus status reservationReason reservationLeadId saleDetails location city area pincode buildingName floorNumber totalFloors totalArea carpetArea builtUpArea superBuiltUpArea length width height areaUnit maintenanceCharges commercialDetails residentialDetails documentsAvailable siteLocation images documents floorPlans videoTours officeNumber ownerName ownerNumber ownerWhatsappNumber ownerType keyManagerName keyManagerNumber dealType propertyDate gstApplicable",
+      "_id projectName towerName unitNumber propertyId inventoryType price rent deposit depositMonths agreementYears lockInYears type category furnishingStatus status reservationReason reservationLeadId saleDetails location city area pincode buildingName floorNumber totalFloors totalArea carpetArea builtUpArea superBuiltUpArea length width height areaUnit maintenanceCharges commercialDetails residentialDetails documentsAvailable siteLocation images documents floorPlans videoTours officeNumber ownerName ownerNumber ownerWhatsappNumber ownerType ownershipType businessModel enterpriseDetails keyManagerName keyManagerNumber dealType propertyDate gstApplicable",
     )
     .lean();
 
@@ -2650,4 +2744,5 @@ module.exports = {
   rejectRequest,
   getMyRequests,
   getInventoryActivities,
+  sanitizeInventoryPayload,
 };

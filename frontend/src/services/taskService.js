@@ -51,3 +51,23 @@ export const getTaskStatsByUser = async () => {
 };
 
 export const getTaskAssignees = async () => (await api.get("/tasks/assignees")).data;
+
+export const addTaskComment = async (taskId, payload) => {
+  const res = await api.post(`/tasks/${taskId}/comments`, payload);
+  return res.data || null;
+};
+
+export const deleteTaskComment = async (taskId, commentId) => {
+  const res = await api.delete(`/tasks/${taskId}/comments/${commentId}`);
+  return res.data || null;
+};
+
+export const addTaskAttachments = async (taskId, attachments) => {
+  const res = await api.post(`/tasks/${taskId}/attachments`, { attachments });
+  return res.data || null;
+};
+
+export const deleteTaskAttachment = async (taskId, attachmentId) => {
+  const res = await api.delete(`/tasks/${taskId}/attachments/${attachmentId}`);
+  return res.data || null;
+};

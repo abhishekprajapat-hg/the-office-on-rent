@@ -651,20 +651,23 @@ const resolveAttendanceStatus = ({
     return ATTENDANCE_STATUS.ABSENT;
   }
 
-  if (effectiveWorkedMinutes < HALF_DAY_PRODUCTIVE_MINUTES) {
+  // Thresholds come from the company's attendance policy (Admin > Attendance
+  // policy); the defaults are the company rule of 4 h for a half day and
+  // 7 h 30 m for a full day of productive time.
+  const halfDayMinutes = safePolicy.halfDayMinutes > 0
+    ? safePolicy.halfDayMinutes
+    : HALF_DAY_PRODUCTIVE_MINUTES;
+  const fullDayMinutes = Math.max(
+    halfDayMinutes,
+    safePolicy.fullDayMinutes > 0 ? safePolicy.fullDayMinutes : FULL_DAY_PRODUCTIVE_MINUTES,
+  );
+
+  if (effectiveWorkedMinutes < halfDayMinutes) {
     return ATTENDANCE_STATUS.ABSENT;
   }
 
-  if (effectiveWorkedMinutes < FULL_DAY_PRODUCTIVE_MINUTES) {
+  if (effectiveWorkedMinutes < fullDayMinutes) {
     return ATTENDANCE_STATUS.HALF_DAY;
-  }
-
-  if (
-    ATTENDANCE_DATE_PATTERN.test(attendanceDate)
-    && safePolicy.weeklyOffDays.includes(new Date(toUtcMsFromDateKey(attendanceDate)).getUTCDay())
-    && effectiveWorkedMinutes < FULL_DAY_PRODUCTIVE_MINUTES
-  ) {
-    return ATTENDANCE_STATUS.PRESENT;
   }
 
   return ATTENDANCE_STATUS.PRESENT;
@@ -2911,3 +2914,4 @@ exports.reviewViolation = async (req, res) => {
 };
 
 module.exports.buildAttendanceSummary = buildAttendanceSummary;
+module.exports.resolveAttendanceStatus = resolveAttendanceStatus;

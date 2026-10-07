@@ -36,6 +36,7 @@ import { getAllLeads } from "../../services/leadService";
 import { deleteOutcomeMessage, isDeleteApprovalPending } from "../../services/deleteRequestService";
 import ToastNotice from "../../components/ui/ToastNotice";
 import TaskAssigneePicker from "./TaskAssigneePicker";
+import TaskDiscussion from "./TaskDiscussion";
 import "./task-workspace.css";
 
 const STATUSES = [
@@ -350,7 +351,7 @@ function SavedSubtask({ subtask, index, task, expanded, setExpanded, canManage, 
   );
 }
 
-function TaskDetails({ task, users, leads, currentUserId, canManage, canDelete, productionRole, expandedSubtask, setExpandedSubtask, onCloseMobile, onEdit, onDelete, onPatchTask, onPatchSubtask, onDeleteSubtask, onAddSubtask }) {
+function TaskDetails({ task, users, leads, currentUserId, canManage, canDelete, canModerate, productionRole, expandedSubtask, setExpandedSubtask, onCloseMobile, onEdit, onDelete, onPatchTask, onPatchSubtask, onDeleteSubtask, onAddSubtask, onTaskChange, onError }) {
   const [tagDraft, setTagDraft] = useState("");
   const [addingSubtask, setAddingSubtask] = useState(false);
   const [subtaskDraft, setSubtaskDraft] = useState(null);
@@ -430,6 +431,7 @@ function TaskDetails({ task, users, leads, currentUserId, canManage, canDelete, 
         ))}
         {!total ? <div className="tw-no-subtasks"><ListChecks size={23} /><p>No subtasks yet.</p>{canManage ? <button type="button" onClick={onAddSubtask}>Add the first subtask</button> : null}</div> : null}
       </div>
+      <TaskDiscussion task={task} currentUserId={currentUserId} canModerate={canModerate} onTaskChange={onTaskChange} onError={onError} />
     </section>
   );
 }
@@ -806,7 +808,7 @@ export default function TaskWorkspace() {
           </section>
 
           <div className="tw-detail-shell" key={selectedTask?._id || "empty"}>
-            <TaskDetails task={selectedTask} users={assignableUsers} leads={leads} currentUserId={currentUserId} canManage={canManageTask(selectedTask)} canDelete={canDeleteTask(selectedTask)} productionRole={productionRole} expandedSubtask={expandedSubtask} setExpandedSubtask={setExpandedSubtask} onCloseMobile={() => setMobileDetails(false)} onEdit={() => editTask(selectedTask)} onDelete={() => removeTask(selectedTask)} onPatchTask={(patch) => patchTask(selectedTask, patch)} onPatchSubtask={(index, patch, localOnly) => patchSubtask(selectedTask, index, patch, localOnly)} onDeleteSubtask={(index) => removeSubtask(selectedTask, index)} onAddSubtask={(draft) => addSubtask(selectedTask, draft)} />
+            <TaskDetails task={selectedTask} users={assignableUsers} leads={leads} currentUserId={currentUserId} canManage={canManageTask(selectedTask)} canDelete={canDeleteTask(selectedTask)} productionRole={productionRole} expandedSubtask={expandedSubtask} setExpandedSubtask={setExpandedSubtask} onCloseMobile={() => setMobileDetails(false)} onEdit={() => editTask(selectedTask)} onDelete={() => removeTask(selectedTask)} onPatchTask={(patch) => patchTask(selectedTask, patch)} onPatchSubtask={(index, patch, localOnly) => patchSubtask(selectedTask, index, patch, localOnly)} onDeleteSubtask={(index) => removeSubtask(selectedTask, index)} onAddSubtask={(draft) => addSubtask(selectedTask, draft)} canModerate={["ADMIN", "MANAGER"].includes(role)} onTaskChange={replaceTask} onError={setError} />
           </div>
         </div>
         </>

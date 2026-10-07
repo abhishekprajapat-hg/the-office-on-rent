@@ -29,10 +29,18 @@ const LEAD_OWNER_ROLES = Object.freeze([
   USER_ROLES.EXECUTIVE,
 ]);
 
+// Manual transfer is open between everyone who works leads (Lead Assignment
+// Workflow, Oct 2026): executives, field executives, managers and admins can
+// hand a lead to one another. Production, community, channel-partner and
+// coworking-admin roles do not work the sales pipeline and stay excluded.
 const MANUAL_LEAD_TRANSFER_TARGET_ROLES = Object.freeze([
+  USER_ROLES.ADMIN,
+  USER_ROLES.MANAGER,
   ...LEAD_OWNER_ROLES,
   USER_ROLES.FIELD_EXECUTIVE,
 ]);
+
+const MANUAL_LEAD_TRANSFER_ACTOR_ROLES = MANUAL_LEAD_TRANSFER_TARGET_ROLES;
 
 const INSIDE_EXECUTIVE_ROLES = Object.freeze([
   USER_ROLES.INSIDE_EXECUTIVE,
@@ -121,6 +129,7 @@ module.exports = {
   EXECUTIVE_ROLES,
   LEAD_OWNER_ROLES,
   MANUAL_LEAD_TRANSFER_TARGET_ROLES,
+  MANUAL_LEAD_TRANSFER_ACTOR_ROLES,
   INSIDE_EXECUTIVE_ROLES,
   PRODUCTION_ROLES,
   LEAD_MANAGEMENT_ROLES,

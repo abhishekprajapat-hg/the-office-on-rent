@@ -24,6 +24,7 @@ router.use(requirePageActionForMethod("finance"));
 router.use(companyMiddleware.requireCompanyContext);
 
 router.get("/overview", financeController.getOverview);
+router.get("/revenue", financeController.getRevenue);
 router.get("/transactions", financeController.listTransactions);
 router.get("/invoices", financeController.listInvoices);
 router.get("/invoices/:invoiceId", financeController.getInvoice);

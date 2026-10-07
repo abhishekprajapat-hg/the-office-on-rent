@@ -33,6 +33,7 @@ import { toErrorMessage } from "../../utils/errorMessage";
 import { useDebouncedValue } from "../../hooks/useDebouncedValue";
 import { usePermissions } from "../../context/usePermissions";
 import ToastNotice from "../../components/ui/ToastNotice";
+import InventoryRevenueFields, { EMPTY_ENTERPRISE_DETAILS } from "./components/InventoryRevenueFields";
 import FittedImage from "../../components/ui/FittedImage";
 import GoogleMapPicker from "../../components/common/GoogleMapPicker";
 import {
@@ -295,6 +296,9 @@ const DEFAULT_FORM = {
   ownerNumber: "",
   ownerWhatsappNumber: "",
   ownerType: "",
+  ownershipType: "",
+  businessModel: "",
+  enterpriseDetails: { ...EMPTY_ENTERPRISE_DETAILS },
   keyManagerName: "",
   keyManagerNumber: "",
   dealType: "",
@@ -718,6 +722,9 @@ const REQUEST_FIELD_LABELS = {
   ownerNumber: "Owner Number",
   ownerWhatsappNumber: "Owner WhatsApp Number",
   ownerType: "Ownership",
+  ownershipType: "Ownership Type",
+  businessModel: "Business Model",
+  enterpriseDetails: "Enterprise Details",
   keyManagerName: "Key Manager Name",
   keyManagerNumber: "Key Manager Number",
   dealType: "Deal Type",
@@ -1915,6 +1922,18 @@ const AssetVault = () => {
       ownerNumber: String(formData.ownerNumber || "").trim(),
       ownerWhatsappNumber: String(formData.ownerWhatsappNumber || "").trim(),
       ownerType: String(formData.ownerType || "").toUpperCase(),
+      ownershipType: String(formData.ownershipType || "").toUpperCase(),
+      businessModel: String(formData.businessModel || "").toUpperCase(),
+      enterpriseDetails: formData.businessModel === "ENTERPRISE"
+        ? {
+          leaseRent: formData.enterpriseDetails?.leaseRent === "" ? null : Number(formData.enterpriseDetails?.leaseRent),
+          clientRent: formData.enterpriseDetails?.clientRent === "" ? null : Number(formData.enterpriseDetails?.clientRent),
+          clientName: String(formData.enterpriseDetails?.clientName || "").trim(),
+          rentDueDay: formData.enterpriseDetails?.rentDueDay === "" ? null : Number(formData.enterpriseDetails?.rentDueDay),
+          paymentStatus: String(formData.enterpriseDetails?.paymentStatus || "").toUpperCase(),
+          lastPaymentDate: formData.enterpriseDetails?.lastPaymentDate || null,
+        }
+        : null,
       keyManagerName: String(formData.keyManagerName || "").trim(),
       keyManagerNumber: String(formData.keyManagerNumber || "").trim(),
       dealType: String(formData.dealType || "").toUpperCase(),
@@ -2213,6 +2232,16 @@ const AssetVault = () => {
       ownerNumber: asset.ownerNumber || "",
       ownerWhatsappNumber: asset.ownerWhatsappNumber || "",
       ownerType: asset.ownerType || "",
+      ownershipType: asset.ownershipType || "",
+      businessModel: asset.businessModel || "",
+      enterpriseDetails: {
+        leaseRent: asset.enterpriseDetails?.leaseRent ?? "",
+        clientRent: asset.enterpriseDetails?.clientRent ?? "",
+        clientName: asset.enterpriseDetails?.clientName || "",
+        rentDueDay: asset.enterpriseDetails?.rentDueDay ?? "",
+        paymentStatus: asset.enterpriseDetails?.paymentStatus || "",
+        lastPaymentDate: asset.enterpriseDetails?.lastPaymentDate ? String(asset.enterpriseDetails.lastPaymentDate).slice(0, 10) : "",
+      },
       keyManagerName: asset.keyManagerName || "",
       keyManagerNumber: asset.keyManagerNumber || "",
       dealType: asset.dealType || "",
@@ -4287,6 +4316,7 @@ const AssetVault = () => {
                     </select>
                   </div>
                 </div>
+                <InventoryRevenueFields formData={formData} setFormData={setFormData} inputClass={INVENTORY_MODAL_INPUT_CLASS} sectionClass={INVENTORY_MODAL_SECTION_CLASS} headingClass={INVENTORY_MODAL_SECTION_HEADING_CLASS} />
                 <div className={`${INVENTORY_MODAL_SECTION_CLASS} grid grid-cols-1 gap-3 sm:grid-cols-2 sm:gap-4`}>
                   <div className="sm:col-span-2">
                     <div className={INVENTORY_MODAL_SECTION_HEADING_CLASS}>Key Manager Details</div>

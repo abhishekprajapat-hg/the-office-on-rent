@@ -14,6 +14,7 @@ const PARTNER_HIDDEN_INVENTORY_FIELDS = [
   "ownerWhatsappNumber",
   "ownerType",
   "ownerContactId",
+  "enterpriseDetails",
   "keyManagerName",
   "keyManagerNumber",
 ];

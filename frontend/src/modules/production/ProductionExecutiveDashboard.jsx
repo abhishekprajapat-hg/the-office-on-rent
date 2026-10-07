@@ -10,6 +10,8 @@ import {
   UserCheck,
 } from "lucide-react";
 import { getMyAttendance } from "../../services/attendanceService";
+import { getMessengerConversations } from "../../services/chatService";
+import { useChatNotifications } from "../../context/useChatNotifications";
 import { getTaskStats, getTasks } from "../../services/taskService";
 import { toErrorMessage } from "../../utils/errorMessage";
 
@@ -69,6 +71,53 @@ const ActionCard = ({ to, icon: Icon, title, subtitle }) => (
   </Link>
 );
 
+const formatWhen = (value) => {
+  if (!value) return "";
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return "";
+  const sameDay = date.toDateString() === new Date().toDateString();
+  return sameDay
+    ? date.toLocaleTimeString("en-IN", { hour: "2-digit", minute: "2-digit" })
+    : date.toLocaleDateString("en-IN", { day: "2-digit", month: "short" });
+};
+
+const recentConversations = (rows, currentUserId) => [...rows]
+  .sort((a, b) => new Date(b.lastMessageAt || 0) - new Date(a.lastMessageAt || 0))
+  .slice(0, 4)
+  .map((row) => {
+    const others = (row.participants || []).filter((person) => String(person?._id || "") !== currentUserId);
+    return {
+      ...row,
+      title: row.name || others.map((person) => person?.name).filter(Boolean).join(", ") || "Conversation",
+    };
+  });
+
+const RecentList = ({ icon: Icon, title, items, emptyText, action }) => (
+  <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+    <div className="flex items-center justify-between gap-3">
+      <p className="flex items-center gap-2 text-xs font-semibold uppercase tracking-[0.14em] text-slate-500">
+        {React.createElement(Icon, { size: 14 })}
+        {title}
+      </p>
+      {action ? <Link to={action.to} className="text-xs font-semibold text-cyan-700 hover:underline">{action.label}</Link> : null}
+    </div>
+    <div className="mt-3 space-y-2">
+      {items.length ? items.map((item) => (
+        <Link key={item.id} to={item.to} className="flex items-start justify-between gap-3 rounded-xl border border-slate-100 bg-slate-50 px-3 py-2.5 transition hover:border-cyan-200 hover:bg-white">
+          <div className="min-w-0">
+            <p className="truncate text-sm font-semibold text-slate-900">{item.title}</p>
+            <p className="mt-0.5 line-clamp-2 text-xs text-slate-500">{item.body}</p>
+          </div>
+          <div className="flex shrink-0 flex-col items-end gap-1">
+            <span className="text-[11px] text-slate-400">{formatWhen(item.at)}</span>
+            {item.badge ? <span className="rounded-full bg-cyan-600 px-1.5 text-[10px] font-bold text-white">{item.badge}</span> : null}
+          </div>
+        </Link>
+      )) : <p className="rounded-xl border border-dashed border-slate-200 bg-slate-50 px-3 py-5 text-center text-xs text-slate-500">{emptyText}</p>}
+    </div>
+  </div>
+);
+
 const ProductionExecutiveDashboard = ({ mode = "home" }) => {
   const currentRole = String(localStorage.getItem("role") || "").trim().toUpperCase();
   const isCommunityManager = currentRole === "COMMUNITY_MANAGER";
@@ -79,6 +128,13 @@ const ProductionExecutiveDashboard = ({ mode = "home" }) => {
   const [stats, setStats] = useState(null);
   const [tasks, setTasks] = useState([]);
   const [attendance, setAttendance] = useState(null);
+  const [conversations, setConversations] = useState([]);
+  // Only task and chat events reach this role: sales and finance alerts are
+  // sent to Admin/Manager rooms alone, so nothing here needs filtering out.
+  const { recentNotifications } = useChatNotifications();
+  const currentUserId = (() => {
+    try { return String(JSON.parse(localStorage.getItem("user") || "{}")?._id || ""); } catch { return ""; }
+  })();
 
   useEffect(() => {
     let alive = true;
@@ -87,13 +143,15 @@ const ProductionExecutiveDashboard = ({ mode = "home" }) => {
       setLoading(true);
       setError("");
       try {
-        const [taskStats, taskRows, attendanceData] = await Promise.all([
+        const [taskStats, taskRows, attendanceData, conversationRows] = await Promise.all([
           getTaskStats(),
           getTasks(),
           getMyAttendance(),
+          getMessengerConversations().catch(() => []),
         ]);
 
         if (!alive) return;
+        setConversations(Array.isArray(conversationRows) ? conversationRows : []);
         setStats(taskStats || {});
         setTasks(Array.isArray(taskRows) ? taskRows : []);
         setAttendance(attendanceData?.today || null);
@@ -240,10 +298,36 @@ const ProductionExecutiveDashboard = ({ mode = "home" }) => {
               </div>
             </div>
 
+            <RecentList
+              icon={Bell}
+              title="Recent Notifications"
+              emptyText="No new task or chat notifications."
+              items={recentNotifications.slice(0, 5).map((item) => ({
+                id: item.id,
+                to: item.targetPath || (item.source === "task" ? "/tasks" : "/chat"),
+                title: item.senderName || (item.source === "task" ? "Task update" : "Message"),
+                body: item.preview,
+                at: item.createdAt,
+              }))}
+            />
+
+            <RecentList
+              icon={MessageSquare}
+              title="Recent Team Messages"
+              emptyText="No conversations yet."
+              action={{ to: "/chat", label: "Open chat" }}
+              items={recentConversations(conversations, currentUserId).map((row) => ({
+                id: row._id,
+                to: "/chat",
+                title: row.title,
+                body: row.lastMessage || "No messages yet",
+                at: row.lastMessageAt,
+                badge: row.unreadCount,
+              }))}
+            />
+
             <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-1">
-              <ActionCard to="/chat" icon={MessageSquare} title="Team Messaging" subtitle="Open one-to-one and team conversations." />
               <ActionCard to="/profile" icon={UserCheck} title="Profile Settings" subtitle="Update identity and account details." />
-              <ActionCard to="/tasks" icon={Bell} title="Task Notifications" subtitle="Review new assignments and deadline changes." />
             </div>
           </div>
         </div>
