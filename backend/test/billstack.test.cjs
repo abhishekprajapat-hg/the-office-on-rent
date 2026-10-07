@@ -161,10 +161,21 @@ function boardHarness(cabins, conflict = false) {
   const row = { _id: entityId, companyId, updatedBy: actorId, version: 3, billingBridgePending: true, state: { cabins, activity: [] } };
   const service = load('services/coworkingBoardIdentity.service.js', {
     '../models/CoworkingClient': {
+      find(filter) { return q([...clients.values()].filter(c => matches(c, filter))); },
       async findOne(filter) { return [...clients.values()].find(c => matches(c, filter)) || null; },
-      async create(data) { clients.set(data._id, data); return data; }, async updateOne(filter, update) { const row = [...clients.values()].find(c => matches(c, filter)); if (!row) return { matchedCount: 0 }; apply(row, update); return { matchedCount: 1 }; },
+      async create(data) { if (clients.has(data._id)) throw Object.assign(new Error('duplicate'), { code: 11000 }); clients.set(data._id, data); return data; }, async updateOne(filter, update) { const row = [...clients.values()].find(c => matches(c, filter)); if (!row) return { matchedCount: 0 }; apply(row, update); return { matchedCount: 1 }; },
     },
-    '../models/CoworkingBoardState': { async findOneAndUpdate(filter, update) { assert.equal(filter.version, 3); if (conflict) return null; apply(row, update); return row; }, async updateOne() {} },
+    '../models/CoworkingBoardState': {
+      findOne(filter) { assert.equal(filter.companyId, companyId); return q(structuredClone(row)); },
+      async findOneAndUpdate(filter, update) { assert.equal(filter.version, 3); if (conflict) return null; apply(row, update); return row; },
+      async updateOne(filter, update) {
+        if (conflict) return { matchedCount: 0 };
+        assert.equal(filter.companyId, companyId);
+        if (!filter['state.cabins']) return { matchedCount: 1 };
+        if (JSON.stringify(filter['state.cabins']) !== JSON.stringify(row.state.cabins)) return { matchedCount: 0 };
+        apply(row, update); return { matchedCount: 1 };
+      },
+    },
     './billstackSync.service': { async scheduleSafely(...args) { scheduled.push(args); return {}; } },
   });
   return { service, clients, scheduled, row };
@@ -190,11 +201,170 @@ test('board CAS conflict never schedules an unpersisted canonical binding', asyn
   const h = boardHarness([cabin()], true); await h.service.bridgeSavedBoard(h.row);
   assert.equal(h.scheduled.length, 0); assert.equal(h.row.version, 3);
 });
-test('foreign-company canonical ID is refused', async () => {
+test('foreign-company canonical ID is never reused; recovery creates a tenant-local customer', async () => {
   const h = boardHarness([cabin()]); h.row.state.cabins[0].client.canonicalClientId = actorId;
   h.clients.set(actorId, { _id: actorId, companyId: otherCompany, companyName: 'Customer Co', phone: '9876543210' });
   await h.service.bridgeSavedBoard(h.row);
-  assert.equal(h.scheduled.length, 0); assert.equal(h.row.state.cabins[0].client.billingIdentityVerified, false); assert.ok(h.row.state.cabins[0].client.billingIdentityError);
+  assert.equal(h.scheduled.length, 1);
+  const id = h.row.state.cabins[0].client.canonicalClientId;
+  assert.notEqual(id, actorId); assert.equal(h.clients.get(id).companyId, companyId);
+  assert.equal(h.clients.get(actorId).companyId, otherCompany);
+});
+
+for (const stale of [undefined, actorId, 'old-invalid-id']) test(`billing repairs ${stale || 'missing'} binding without a contract`, async () => {
+  const c = cabin('TEST-ROOM'); delete c.contract;
+  c.client.canonicalClientId = stale;
+  c.client.billingIdentityError = 'Old identity failure';
+  const h = boardHarness([c]);
+  const id = await h.service.resolveBookedCustomer(companyId, c.code, actorId);
+  assert.equal(h.clients.size, 1);
+  assert.equal(h.row.state.cabins[0].client.canonicalClientId, id);
+  assert.equal(h.row.state.cabins[0].client.billingIdentityError, undefined);
+  assert.equal(await h.service.resolveBookedCustomer(companyId, c.code, actorId), id);
+  assert.equal(h.clients.size, 1);
+});
+
+for (const contact of ['phone', 'email']) test(`billing resolves an existing customer by ${contact}`, async () => {
+  const c = cabin('TEST-ROOM'); delete c.contract;
+  if (contact === 'email') { c.client.phone = ''; c.client.email = ' CUSTOMER@EXAMPLE.TEST '; }
+  else c.client.phone = '+91 98765 43210';
+  const h = boardHarness([c]);
+  h.clients.set(entityId, { _id: entityId, companyId, companyName: c.client.name,
+    [contact]: contact === 'phone' ? '9876543210' : 'customer@example.test',
+    billstack: { syncStatus: 'SYNCED', customerId: 'existing-remote' } });
+  assert.equal(await h.service.resolveBookedCustomer(companyId, c.code, actorId), entityId);
+  assert.equal(h.clients.size, 1);
+  assert.equal(h.clients.get(entityId).billstack.syncStatus, 'SYNCED');
+  assert.equal(h.clients.get(entityId).billstack.customerId, 'existing-remote');
+});
+
+test('valid established binding keeps the canonical identity and synced state', async () => {
+  const c = cabin(); c.client.canonicalClientId = entityId; c.client.billingBindingEstablished = true;
+  const h = boardHarness([c]);
+  h.clients.set(entityId, { _id: entityId, companyId, companyName: 'Updated structured name', phone: c.client.phone,
+    billstack: { syncStatus: 'SYNCED', customerId: 'remote' } });
+  assert.equal(await h.service.resolveBookedCustomer(companyId, c.code, actorId), entityId);
+  assert.equal(h.clients.get(entityId).companyName, 'Updated structured name');
+  assert.equal(h.clients.get(entityId).billstack.syncStatus, 'SYNCED');
+  h.row.state.cabins[0].client.phone = '';
+  assert.equal(await h.service.resolveBookedCustomer(companyId, c.code, actorId), entityId, 'canonical contact is usable when legacy board contact is missing');
+});
+
+test('repeated board handoff repairs identity, syncs once and preserves invoice source', async () => {
+  const c = cabin('TEST-ROOM'); c.contract = { monthlyRent: 0 };
+  const board = boardHarness([c]);
+  const queue = queueHarness(); queue.entity.companyName = c.client.name;
+  board.clients.set(entityId, queue.entity);
+  const customer = contextHarness({ cabins: board.row.state.cabins, entity: queue.entity });
+  const contexts = [];
+  const controller = load('controllers/billstack.controller.js', {
+    '../services/access.service': { hasPermission: async () => true },
+    '../services/coworkingBoardIdentity.service': board.service,
+    '../services/billstackCustomer.service': { ...customer,
+      buildBillingContext: (...args) => contextHarness({ cabins: board.row.state.cabins }).buildBillingContext(...args) },
+    '../services/billstackSync.service': queue.service,
+    '../services/billstack.service': { async createInvoiceHandoff(company, remote, context) {
+      assert.equal(company, companyId); assert.equal(remote, 'remote-customer');
+      contexts.push(context); return 'https://billing.example.test/invoice';
+    } },
+  });
+  for (let i = 0; i < 2; i++) {
+    const res = response();
+    await controller.handoff({ user: { companyId, _id: actorId }, params: { type: 'board', id: c.code } }, res);
+    assert.equal(res.code, 200, JSON.stringify(res.body));
+  }
+  assert.equal(queue.calls(), 1); assert.equal(queue.rows.size, 1);
+  assert.equal(JSON.stringify(contexts[0].sourceRef), JSON.stringify(contexts[1].sourceRef));
+  assert.equal(contexts[0].prefill.lineItems[0].rateReliable, true);
+  assert.equal(contexts[0].prefill.lineItems[0].rate, 0);
+});
+
+test('ambiguous phone/email recovery does not create or bind another customer', async () => {
+  const c = cabin(); c.client.email = 'customer@example.test';
+  const h = boardHarness([c]);
+  h.clients.set(entityId, { _id: entityId, companyId, companyName: c.client.name, phone: c.client.phone });
+  h.clients.set(actorId, { _id: actorId, companyId, companyName: c.client.name, email: c.client.email });
+  await assert.rejects(h.service.resolveBookedCustomer(companyId, c.code, actorId), /multiple customers/);
+  assert.equal(h.clients.size, 2); assert.equal(c.client.canonicalClientId, undefined);
+});
+
+test('non-BOOKED billing requests reject before identity creation', async () => {
+  const c = cabin('TEST-ROOM', 'RESERVED'), h = boardHarness([c]);
+  await assert.rejects(h.service.resolveBookedCustomer(companyId, c.code, actorId), /Only booked/);
+  assert.equal(h.clients.size, 0);
+});
+
+test('a concurrent board edit cannot receive a stale billing binding', async () => {
+  const c = cabin(), h = boardHarness([c], true);
+  await assert.rejects(h.service.resolveBookedCustomer(companyId, c.code, actorId), /Booking changed/);
+  assert.equal(c.client.canonicalClientId, undefined);
+  assert.equal(h.clients.size, 1, 'retries converge on one customer');
+});
+
+test('concurrent first billing requests converge on one customer and binding', async () => {
+  const c = cabin('TEST-ROOM'), h = boardHarness([c]);
+  const ids = await Promise.all([
+    h.service.resolveBookedCustomer(companyId, c.code, actorId),
+    h.service.resolveBookedCustomer(companyId, c.code, actorId),
+  ]);
+  assert.equal(ids[0], ids[1]); assert.equal(h.clients.size, 1);
+  assert.equal(h.row.state.cabins[0].client.canonicalClientId, ids[0]);
+});
+
+test('name and email alone satisfy canonical model and BillStack payload', () => {
+  const c = cabin(); c.client.phone = ''; c.client.email = 'billing@example.test';
+  const h = boardHarness([c]);
+  const data = h.service.identityData(c);
+  const Client = require('../src/models/CoworkingClient');
+  const client = new Client({ ...data, _id: entityId, companyId, createdBy: actorId, clientCode: 'TEST-CUSTOMER' });
+  assert.equal(client.validateSync(), undefined);
+  const payload = core.customerPayload(companyId, 'coworking-client', client);
+  assert.equal(payload.phone, ''); assert.equal(payload.email, c.client.email);
+});
+
+function contextHarness({ cabins = [], contract = null, booking = null, entity } = {}) {
+  return load('services/billstackCustomer.service.js', {
+    '../models/CoworkingBoardState': { findOne(filter) { assert.equal(filter.companyId, companyId); return q({ state: { cabins } }); } },
+    '../models/CoworkingClient': { findOne(filter) { assert.equal(filter.companyId, companyId); return q(entity); } },
+    '../models/CoworkingContract': { findOne: () => q(contract), exists: async () => false },
+    '../models/CoworkingBooking': { findOne: () => q(booking), exists: async () => false },
+  });
+}
+
+for (const source of ['board', 'contract', 'booking']) for (const amount of [0, null, undefined, '', 'invalid', 1200]) {
+  test(`${source} prefill distinguishes amount ${String(amount)} from intentional zero`, async () => {
+    const c = cabin('TEST-ROOM'); c.client.canonicalClientId = entityId;
+    c.contract.monthlyRent = amount;
+    const entity = { _id: entityId, companyName: c.client.name };
+    const service = contextHarness({ cabins: [c],
+      contract: source === 'contract' ? { _id: actorId, rent: amount } : null,
+      booking: source === 'booking' ? { _id: actorId, price: amount } : null });
+    const first = await service.buildBillingContext(companyId, 'coworking-client', entity, c.code);
+    const second = await service.buildBillingContext(companyId, 'coworking-client', entity, c.code);
+    const item = first.prefill.lineItems[0];
+    assert.equal(item.rate, typeof amount === 'number' ? amount : 0);
+    assert.equal(item.rateReliable, typeof amount === 'number');
+    assert.equal(first.billingType, 'COWORKING'); assert.equal(first.billingEntityCode, '');
+    assert.deepEqual(first.sourceRef, second.sourceRef, 'repeated handoff keeps duplicate prevention key');
+  });
+}
+
+test('BOOKED canonical client is eligible without agreement dates; same name alone cannot prefill another client', async () => {
+  const c = cabin(); delete c.contract; c.client.canonicalClientId = entityId;
+  const entity = { _id: entityId, companyName: c.client.name };
+  const service = contextHarness({ cabins: [c], entity });
+  assert.equal((await service.loadEligible(companyId, 'coworking-client', entityId))._id, entityId);
+  const other = await service.buildBillingContext(companyId, 'coworking-client', { ...entity, _id: actorId });
+  assert.equal(other.sourceRef.sourceType, 'coworking-client');
+});
+
+test('residential and commercial zero brokerage retain entity routing', async () => {
+  for (const inventoryType of ['RESIDENTIAL', 'COMMERCIAL']) {
+    const context = await core.buildBillingContext(companyId, 'lead', { _id: entityId, brokerageReceived: 0, requirements: { inventoryType } });
+    assert.equal(context.billingEntityCode, inventoryType === 'RESIDENTIAL' ? 'GOLDHAWK' : '');
+    assert.equal(context.prefill.lineItems[0].rate, 0);
+    assert.equal(context.prefill.lineItems[0].rateReliable, true);
+  }
 });
 
 for (const [role, override, allowed] of [
@@ -234,10 +404,11 @@ test('handoff rejects destinations outside the configured BillStack origin', asy
 });
 test('company binding rejects another tenant before any network request', () => {
   const config = load('config/billstack.js');
-  const before = process.env.BILLSTACK_COMPANY_ID;
-  process.env.BILLSTACK_COMPANY_ID = companyId;
+  const names = ['BILLSTACK_COMPANY_ID', 'BILLSTACK_BASE_URL', 'BILLSTACK_FRONTEND_URL', 'BILLSTACK_API_KEY', 'NODE_ENV'];
+  const before = Object.fromEntries(names.map(name => [name, process.env[name]]));
+  Object.assign(process.env, { NODE_ENV: 'production', BILLSTACK_COMPANY_ID: companyId, BILLSTACK_BASE_URL: 'https://api.example.test', BILLSTACK_FRONTEND_URL: 'https://app.example.test', BILLSTACK_API_KEY: 'test-only' });
   try { assert.throws(() => config.getBillstackConfig(otherCompany), /not enabled/); }
-  finally { if (before === undefined) delete process.env.BILLSTACK_COMPANY_ID; else process.env.BILLSTACK_COMPANY_ID = before; }
+  finally { for (const name of names) if (before[name] === undefined) delete process.env[name]; else process.env[name] = before[name]; }
 });
 test('handoff uses eligible CRM entity, ignores browser customer ID and API key', async () => {
   let resolved, received;
@@ -436,6 +607,8 @@ test('conflicting multi-cabin snapshots fail before creating or updating a custo
   const h = boardHarness([first, second]); await h.service.bridgeSavedBoard(h.row);
   assert.equal(h.clients.size, 0); assert.equal(h.scheduled.length, 0);
   assert.ok(h.row.state.cabins.every(c => c.client.billingIdentityError));
+  await assert.rejects(h.service.resolveBookedCustomer(companyId, first.code, actorId), /Conflicting customer details/);
+  assert.equal(h.clients.size, 0);
 });
 
 test('permanent provider errors stop automatic retry and allow an explicit retry', async () => {

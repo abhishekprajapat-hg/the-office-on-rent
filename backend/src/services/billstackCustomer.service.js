@@ -8,11 +8,10 @@ const { createHttpError } = require('../utils/httpError');
 const externalId = (companyId, type, id) => `toor:${String(companyId).toLowerCase()}:${type}:${String(id).toLowerCase()}`;
 const modelFor = (type) => type === 'lead' ? Lead : type === 'coworking-client' ? Client : null;
 const validBookedCabin = (cabin) => cabin?.status === 'BOOKED'
-  && Boolean(String(cabin.client?.name || '').trim())
-  && Boolean(String(cabin.contract?.id || '').trim())
-  && Number.isFinite(Date.parse(cabin.contract?.startDate))
-  && Number.isFinite(Date.parse(cabin.contract?.endDate))
-  && Date.parse(cabin.contract.endDate) >= Date.parse(cabin.contract.startDate);
+  && Boolean(String(cabin.client?.name || '').trim());
+// Presence and validity are separate from value: an intentional zero is valid.
+const suppliedAmount = value => (typeof value === 'number' || (typeof value === 'string' && value.trim() !== ''))
+  && Number.isFinite(Number(value)) && Number(value) >= 0;
 async function loadEligible(companyId, type, id) {
   const Model = modelFor(type);
   if (!Model || !/^[a-f\d]{24}$/i.test(String(id))) throw createHttpError(400, 'Invalid customer');
@@ -43,7 +42,7 @@ function customerPayload(companyId, type, entity) {
   return payload;
 }
 const fingerprint = (payload) => crypto.createHash('sha256').update(JSON.stringify(payload)).digest('hex');
-async function buildBillingContext(companyId, type, entity) {
+async function buildBillingContext(companyId, type, entity, cabinCode) {
   if (!entity) return null;
   if (type === 'lead') {
     let inventory = null;
@@ -59,8 +58,8 @@ async function buildBillingContext(companyId, type, entity) {
     const billingType = isResidential ? 'RESIDENTIAL' : 'COMMERCIAL';
     const billingEntityCode = isResidential ? 'GOLDHAWK' : '';
 
-    const brokerage = typeof entity.brokerageReceived === 'number' && entity.brokerageReceived > 0 
-      ? entity.brokerageReceived 
+    const brokerage = suppliedAmount(entity.brokerageReceived)
+      ? Number(entity.brokerageReceived)
       : 0;
 
     let propDesc = '';
@@ -89,7 +88,7 @@ async function buildBillingContext(companyId, type, entity) {
             productName: `Brokerage Services - ${isResidential ? 'Residential' : 'Commercial'}`,
             quantity: 1,
             rate: brokerage,
-            rateReliable: brokerage > 0,
+            rateReliable: suppliedAmount(entity.brokerageReceived),
             hsnSac: '997222',
           },
         ],
@@ -114,7 +113,7 @@ async function buildBillingContext(companyId, type, entity) {
     const currentPeriod = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
 
     if (contract) {
-      const rent = typeof contract.rent === 'number' && contract.rent > 0 ? contract.rent : 0;
+      const rent = suppliedAmount(contract.rent) ? Number(contract.rent) : 0;
       return {
         billingType: 'COWORKING',
         billingEntityCode: '',
@@ -133,7 +132,7 @@ async function buildBillingContext(companyId, type, entity) {
               productName: `Coworking Space Rental (${currentPeriod})`,
               quantity: 1,
               rate: rent,
-              rateReliable: rent > 0,
+              rateReliable: suppliedAmount(contract.rent),
               hsnSac: '997212',
             },
           ],
@@ -142,7 +141,7 @@ async function buildBillingContext(companyId, type, entity) {
     }
 
     if (booking) {
-      const price = typeof booking.price === 'number' && booking.price > 0 ? booking.price : 0;
+      const price = suppliedAmount(booking.price) ? Number(booking.price) : 0;
       return {
         billingType: 'COWORKING',
         billingEntityCode: '',
@@ -161,7 +160,7 @@ async function buildBillingContext(companyId, type, entity) {
               productName: `Coworking Booking - ${booking.bookingCode || ''}`,
               quantity: 1,
               rate: price,
-              rateReliable: price > 0,
+              rateReliable: suppliedAmount(booking.price),
               hsnSac: '997212',
             },
           ],
@@ -172,16 +171,15 @@ async function buildBillingContext(companyId, type, entity) {
     const board = await Board.findOne({ companyId }).lean();
     const entityIdStr = String(entity._id || entity);
     const cabin = board?.state?.cabins?.find(c =>
-      c.status === 'BOOKED' && (
+      c.status === 'BOOKED' && (!cabinCode || c.code === cabinCode) && (
         String(c.client?.canonicalClientId) === entityIdStr
         || String(c.client?.id) === entityIdStr
-        || (entity.companyName && c.client?.companyName?.toLowerCase() === entity.companyName.toLowerCase())
-        || (entity.name && c.client?.name?.toLowerCase() === entity.name.toLowerCase())
       )
     );
 
     if (cabin) {
-      const rent = Number(cabin.contract?.monthlyRent ?? cabin.monthlyRent ?? 0);
+      const amount = cabin.contract?.monthlyRent ?? cabin.monthlyRent;
+      const rent = suppliedAmount(amount) ? Number(amount) : 0;
       const cabinLabel = cabin.label || cabin.code;
       const agreementId = cabin.contract?.id || '';
       return {
@@ -202,7 +200,7 @@ async function buildBillingContext(companyId, type, entity) {
               productName: `Coworking Space Rental - Cabin ${cabinLabel} (${cabin.seats} Seats) - ${currentPeriod}`,
               quantity: 1,
               rate: rent,
-              rateReliable: rent > 0,
+              rateReliable: suppliedAmount(amount),
             },
           ],
         },

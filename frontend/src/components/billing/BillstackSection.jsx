@@ -39,7 +39,7 @@ export default function BillstackSection({ entityType, entityId }) {
     {(error || state?.lastSyncError) && <p className="my-2 text-sm text-red-600" role="alert">{error || state.lastSyncError}</p>}
     <div className="flex flex-wrap gap-2">
       {can('page.billing.sync_customer') && <button type="button" disabled={Boolean(busy)} onClick={() => perform('sync')} className="rounded-lg border px-3 py-2 text-sm disabled:opacity-50">{busy === 'sync' ? 'Syncing…' : 'Sync / retry'}</button>}
-      {can('page.billing.create_invoice') && <button type="button" disabled={Boolean(busy) || !state} onClick={() => perform('handoff')} className="rounded-lg bg-blue-700 px-3 py-2 text-sm text-white disabled:opacity-50">{busy === 'handoff' ? 'Opening BillStack…' : 'Create Invoice'}</button>}
+      {can('page.billing.create_invoice') && <button type="button" disabled={Boolean(busy)} onClick={() => perform('handoff')} className="rounded-lg bg-blue-700 px-3 py-2 text-sm text-white disabled:opacity-50">{busy === 'handoff' ? 'Opening BillStack…' : 'Create Invoice'}</button>}
     </div>
     <p className="mt-2 text-xs text-slate-500">Opens BillStack. Your BillStack login is required.</p>
   </section>;

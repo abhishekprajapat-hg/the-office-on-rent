@@ -18,7 +18,7 @@ function nodes(tree) {
   if (Array.isArray(tree)) return tree.flatMap(nodes);
   return [tree, ...nodes(tree.props?.children)];
 }
-function uiHarness(permissions, failure = false) {
+function uiHarness(permissions, failure = false, statusFailure = false) {
   const state = [], effects = [], calls = [], navigations = [];
   let index = 0;
   const react = {
@@ -30,7 +30,7 @@ function uiHarness(permissions, failure = false) {
     '../../context/usePermissions': { usePermissions: () => ({ can: p => permissions.includes(p), loading: false }) },
     '../../utils/errorMessage': { toErrorMessage: error => error.message },
     '../../services/billstackService': {
-      async getBillingStatus(...args) { calls.push(['status', ...args]); return { syncStatus: 'PENDING' }; },
+      async getBillingStatus(...args) { calls.push(['status', ...args]); if (statusFailure) throw new Error('Temporary status failure'); return { syncStatus: 'PENDING' }; },
       async retryBillingSync(...args) { calls.push(['sync', ...args]); return { syncStatus: 'SYNCED' }; },
       async createBillingHandoff(...args) { calls.push(['handoff', ...args]); if (failure) throw new Error('BillStack unavailable'); return { handoffUrl: 'https://billing.example.test/secure' }; },
     },
@@ -64,6 +64,15 @@ test('handoff failure remains on CRM and displays the error', async () => {
   await nodes(h.render()).find(n => n.type === 'button').props.onClick();
   assert.equal(h.navigations.length, 0);
   assert.ok(nodes(h.render()).some(n => n.props?.role === 'alert' && n.props.children === 'BillStack unavailable'));
+});
+
+test('recoverable status failure does not disable authorized invoice handoff', async () => {
+  const h = uiHarness(['page.billing.view', 'page.billing.create_invoice'], false, true);
+  h.render(); h.effects[0](); await new Promise(resolve => setImmediate(resolve));
+  const button = nodes(h.render()).find(n => n.type === 'button');
+  assert.equal(h.state[0], null); assert.equal(button.props.disabled, false);
+  await button.props.onClick();
+  assert.deepEqual(h.navigations, ['https://billing.example.test/secure']);
 });
 test('retry permission is independent of invoice creation', async () => {
   const h = uiHarness(['page.billing.view', 'page.billing.sync_customer']);
