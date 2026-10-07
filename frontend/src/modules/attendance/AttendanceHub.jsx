@@ -1,4 +1,5 @@
 import AttendanceViolations from "./AttendanceViolations";
+import { MANUAL_ATTENDANCE_STATUS_OPTIONS, canEditAttendanceStatus } from "./attendanceStatus";
 import React, { useCallback, useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import {
@@ -69,12 +70,6 @@ const STATUS_STYLES = {
 };
 
 const LEAVE_TYPE_OPTIONS = ["CASUAL", "SICK", "EMERGENCY", "UNPAID", "OTHER"];
-const MANUAL_ATTENDANCE_STATUS_OPTIONS = [
-  { label: "Present", value: "PRESENT" },
-  { label: "Half Day", value: "HALF_DAY" },
-  { label: "Absent", value: "ABSENT" },
-];
-
 const getRoleFromStorage = () =>
   String(localStorage.getItem("role") || "").trim().toUpperCase();
 
@@ -1409,7 +1404,7 @@ const AttendanceHub = () => {
                           </td>
                           <td className="border-b border-slate-100 px-3 py-2.5">
                             <div className="flex items-center justify-end gap-1.5">
-                              {row.attendance?.checkInAt ? (
+                              {canEditAttendanceStatus(row.attendance) ? (
                                 /* Native select arrows are sized by the browser and
                                    were clipping the label, so the chevron is ours. */
                                 <span className="relative inline-flex">
