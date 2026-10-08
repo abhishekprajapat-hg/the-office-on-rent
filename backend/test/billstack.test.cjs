@@ -406,6 +406,27 @@ test('the opened cabin is billed even when another cabin shares the canonical li
   assert.equal(ctx.prefill.lineItems[0].rate, 50000);
 });
 
+function sharedPhoneBoard(wrongBinding) {
+  const abhishek = cabin('A-1'); abhishek.client = { id: 'cl-abhishek', name: 'Abhishek Tomar', phone: '8090807681', contactPerson: 'ASHISH VERMA', identityKey: 'k1' };
+  const purple = cabin('A-2'); purple.client = { id: 'cl-purple', name: 'PURPLETREE SOFTWARE LLP', phone: '8090807681', contactPerson: 'ASHISH VERMA', identityKey: 'k2' };
+  const h = boardHarness([abhishek, purple]);
+  const owner = '1'.repeat(24);
+  h.clients.set(owner, { _id: owner, companyId, companyName: 'Abhishek Tomar', phone: '8090807681' });
+  abhishek.client.canonicalClientId = owner; abhishek.client.billingBindingEstablished = true; abhishek.client.billingIdentityVerified = true;
+  if (wrongBinding) { purple.client.canonicalClientId = owner; purple.client.billingBindingEstablished = true; purple.client.billingIdentityVerified = true; }
+  return { h, owner };
+}
+for (const wrongBinding of [false, true]) {
+  test(`two companies sharing a phone number keep separate customers (${wrongBinding ? 'wrong stored link repaired' : 'no stored link'})`, async () => {
+    const { h, owner } = sharedPhoneBoard(wrongBinding);
+    const purpleId = await h.service.resolveBookedCustomer(companyId, 'A-2', actorId);
+    assert.notEqual(purpleId, owner, 'PURPLETREE must not be billed as Abhishek Tomar');
+    assert.equal(h.clients.get(purpleId).companyName, 'PURPLETREE SOFTWARE LLP');
+    assert.equal(await h.service.resolveBookedCustomer(companyId, 'A-1', actorId), owner, 'Abhishek keeps his own customer');
+    assert.equal(h.clients.get(owner).companyName, 'Abhishek Tomar');
+  });
+}
+
 test('BOOKED canonical client is eligible without agreement dates; same name alone cannot prefill another client', async () => {
   const c = cabin(); delete c.contract; c.client.canonicalClientId = entityId;
   const entity = { _id: entityId, companyName: c.client.name };
