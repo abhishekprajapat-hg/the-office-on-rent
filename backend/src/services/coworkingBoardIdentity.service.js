@@ -67,6 +67,16 @@ function identityData(cabin) {
   return data;
 }
 
+const nameKey = value => String(value || '').toLowerCase().replace(/[^a-z0-9]/g, '');
+// Two names describe the same party when equal after normalising, or one
+// contains the other ("Credifin" / "Credifin Limited"). Shared phone numbers
+// and e-mail addresses alone never prove it.
+function sameParty(a, b) {
+  const [x, y] = [nameKey(a), nameKey(b)];
+  if (!x || !y) return false;
+  return x === y || (Math.min(x.length, y.length) >= 4 && (x.includes(y) || y.includes(x)));
+}
+
 function compatible(client, data) {
   if (client?.phone && data?.phone) return client.phone === data.phone;
   if (client?.email && data?.email) return client.email.toLowerCase() === data.email.toLowerCase();
@@ -87,7 +97,13 @@ async function resolveClient(companyId, cabin, actorId, version = 0, syncDetails
     return found;
   };
 
-  if (bound) {
+  // A renamed client keeps its binding (same contact details). A binding whose
+  // name AND contact details both contradict this cabin is a wrong merge from an
+  // earlier phone/e-mail match: ignore it and resolve this cabin afresh.
+  const contradicts = (a, b) => Boolean(a) && Boolean(b) && String(a).toLowerCase() !== String(b).toLowerCase();
+  const wrongMerge = bound && !sameParty(bound.companyName, data.companyName)
+    && (contradicts(bound.phone, data.phone) || contradicts(bound.email, data.email));
+  if (bound && !wrongMerge) {
     return resolved(bound);
   }
 
@@ -96,7 +112,11 @@ async function resolveClient(companyId, cabin, actorId, version = 0, syncDetails
   if (data.email) identifiers.push({ email: data.email });
   if (data.companyName) identifiers.push({ companyName: data.companyName });
 
-  const matches = identifiers.length > 0 ? await Client.find({ companyId, $or: identifiers }).limit(1) : [];
+  const candidates = identifiers.length > 0 ? await Client.find({ companyId, $or: identifiers }).limit(25) : [];
+  const matches = [
+    ...candidates.filter(row => nameKey(row.companyName) === nameKey(data.companyName)),
+    ...candidates.filter(row => sameParty(row.companyName, data.companyName)),
+  ];
   if (matches.length > 0) {
     return resolved(matches[0]);
   }

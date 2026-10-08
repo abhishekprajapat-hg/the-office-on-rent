@@ -394,6 +394,18 @@ test('a client with several booked cabins gets one line item per cabin', async (
   assert.equal(single.prefill.lineItems.length, 1, 'a different client keeps its own single-cabin invoice');
 });
 
+test('the opened cabin is billed even when another cabin shares the canonical link and comes first', async () => {
+  const wrong = cabin('A-11'); wrong.seats = 6; wrong.label = 'A-11'; wrong.client.id = 'other-client'; wrong.client.canonicalClientId = entityId;
+  const right = cabin('A-14'); right.seats = 8; right.label = 'A-14'; right.client.id = 'credifin'; right.client.canonicalClientId = entityId;
+  wrong.contract.monthlyRent = 11111; right.contract.monthlyRent = 50000;
+  const entity = { _id: entityId, companyName: 'CREDIFIN LIMITED' };
+  const service = contextHarness({ cabins: [wrong, right], entity });
+  const ctx = await service.buildBillingContext(companyId, 'coworking-client', entity, 'A-14');
+  assert.equal(ctx.prefill.lineItems.length, 1);
+  assert.match(ctx.prefill.lineItems[0].productName, /Cabin A-14 \(8 Seats\)/);
+  assert.equal(ctx.prefill.lineItems[0].rate, 50000);
+});
+
 test('BOOKED canonical client is eligible without agreement dates; same name alone cannot prefill another client', async () => {
   const c = cabin(); delete c.contract; c.client.canonicalClientId = entityId;
   const entity = { _id: entityId, companyName: c.client.name };

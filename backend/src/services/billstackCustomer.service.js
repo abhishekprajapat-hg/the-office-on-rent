@@ -244,13 +244,13 @@ async function buildBillingContext(companyId, type, entity, cabinCode) {
 
     const board = boardRow;
     const entityIdStr = String(entity._id || entity);
-    const cabin = board?.state?.cabins?.find(c =>
-      c.status === 'BOOKED' && (
-        (cabinCode && c.code === cabinCode)
-        || String(c.client?.canonicalClientId) === entityIdStr
-        || String(c.client?.id) === entityIdStr
-      )
-    );
+    // The cabin the user opened always wins. Only without one fall back to a
+    // cabin linked to this customer, and then never by the shared canonical
+    // link alone being found first in board order.
+    const bookedCabins = (board?.state?.cabins || []).filter(c => c.status === 'BOOKED');
+    const cabin = (cabinCode && bookedCabins.find(c => c.code === cabinCode))
+      || bookedCabins.find(c => String(c.client?.id) === entityIdStr)
+      || bookedCabins.find(c => String(c.client?.canonicalClientId) === entityIdStr);
 
     if (cabin) {
       const amount = cabin.contract?.monthlyRent ?? cabin.monthlyRent;
