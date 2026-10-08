@@ -83,7 +83,7 @@ function compatible(client, data) {
   return true;
 }
 
-async function resolveClient(companyId, cabin, actorId, version = 0, syncDetails = true) {
+async function resolveClient(companyId, cabin, actorId, version = 0, syncDetails = true, boardCabins = []) {
   if (!validBookedCabin(cabin)) throw createHttpError(409, 'Only booked customers are eligible');
   const bound = /^[a-f\d]{24}$/i.test(String(cabin.client?.canonicalClientId))
     ? await Client.findOne({ _id: cabin.client.canonicalClientId, companyId }) : null;
@@ -97,12 +97,18 @@ async function resolveClient(companyId, cabin, actorId, version = 0, syncDetails
     return found;
   };
 
-  // A renamed client keeps its binding (same contact details). A binding whose
-  // name AND contact details both contradict this cabin is a wrong merge from an
-  // earlier phone/e-mail match: ignore it and resolve this cabin afresh.
+  // A renamed client keeps its binding. A binding is a wrong merge when it points
+  // at a client that clearly belongs to ANOTHER booked cabin on the board (same
+  // name as that cabin's client, different from this one) - typically two
+  // companies sharing a contact person's phone number - or when both its name
+  // and its contact details contradict this cabin.
   const contradicts = (a, b) => Boolean(a) && Boolean(b) && String(a).toLowerCase() !== String(b).toLowerCase();
-  const wrongMerge = bound && !sameParty(bound.companyName, data.companyName)
-    && (contradicts(bound.phone, data.phone) || contradicts(bound.email, data.email));
+  const otherOwner = bound && !sameParty(bound.companyName, data.companyName) && boardCabins.some(other =>
+    other !== cabin && validBookedCabin(other)
+    && other.client?.id && other.client.id !== cabin.client?.id
+    && sameParty(other.client.companyName || other.client.name, bound.companyName));
+  const wrongMerge = bound && (otherOwner || (!sameParty(bound.companyName, data.companyName)
+    && (contradicts(bound.phone, data.phone) || contradicts(bound.email, data.email))));
   if (bound && !wrongMerge) {
     return resolved(bound);
   }
@@ -121,7 +127,7 @@ async function resolveClient(companyId, cabin, actorId, version = 0, syncDetails
     return resolved(matches[0]);
   }
 
-  const key = data.phone ? ('phone:' + data.phone) : (data.email ? ('email:' + data.email) : ('name:' + data.companyName));
+  const key = [data.phone ? ('phone:' + data.phone) : (data.email ? ('email:' + data.email) : ''), 'name:' + nameKey(data.companyName)].join('|');
   const id = createHash('sha256').update(String(companyId).toLowerCase() + ':' + key).digest('hex').slice(0, 24);
   let found = await Client.findOne({ _id: id, companyId });
   if (!found) {
@@ -158,7 +164,7 @@ async function resolveBookedCustomer(companyId, cabinCode, actorId) {
     const cabin = row?.state?.cabins?.[index];
     if (!validBookedCabin(cabin)) throw createHttpError(409, 'Only booked customers are eligible');
 
-    const client = await resolveClient(companyId, cabin, actorId, row.version, false);
+    const client = await resolveClient(companyId, cabin, actorId, row.version, false, row.state.cabins);
     const id = String(client._id);
     if (cabin.client?.canonicalClientId === id && cabin.client?.billingIdentityVerified && !cabin.client?.billingIdentityError) {
       return id;
@@ -201,7 +207,7 @@ async function bridgeSavedBoard(row) {
   for (const cabin of state.cabins || []) {
     if (!validBookedCabin(cabin)) continue;
     try {
-      const client = await resolveClient(row.companyId, cabin, row.updatedBy, row.version);
+      const client = await resolveClient(row.companyId, cabin, row.updatedBy, row.version, true, state.cabins);
       cabin.client.canonicalClientId = String(client._id);
       cabin.client.billingIdentityVerified = true;
       cabin.client.billingBindingEstablished = true;

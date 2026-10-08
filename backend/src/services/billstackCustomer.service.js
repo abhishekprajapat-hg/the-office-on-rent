@@ -109,7 +109,7 @@ function multiCabinContext(entity, cabins, currentPeriod) {
   };
 }
 
-async function buildBillingContext(companyId, type, entity, cabinCode) {
+async function buildBillingContextInner(companyId, type, entity, cabinCode) {
   if (!entity) return null;
   if (type === 'lead') {
     let inventory = null;
@@ -309,6 +309,21 @@ async function buildBillingContext(companyId, type, entity, cabinCode) {
   }
 
   return null;
+}
+
+// The name the user saw in the CRM (the clicked cabin's client), so BillStack can
+// refuse to bill a different customer than the one that was opened.
+async function buildBillingContext(companyId, type, entity, cabinCode) {
+  const context = await buildBillingContextInner(companyId, type, entity, cabinCode);
+  if (!context) return context;
+  let name = '';
+  if (type !== 'lead' && cabinCode) {
+    const board = await Board.findOne({ companyId }).lean();
+    const cabin = (board?.state?.cabins || []).find(c => c.code === cabinCode);
+    name = String(cabin?.client?.companyName || cabin?.client?.name || '').trim();
+  }
+  context.clientName = (name || String(entity?.companyName || entity?.name || '')).slice(0, 160);
+  return context;
 }
 
 module.exports = {
