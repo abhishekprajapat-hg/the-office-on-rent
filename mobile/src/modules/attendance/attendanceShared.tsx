@@ -233,8 +233,8 @@ export const TeamRow = ({
 }) => {
   const name = String(row.user?.name || "Team member");
   const live = liveStatusOf(row);
-  // An absent row's action is to reverse that; anything else opens the sheet.
-  const absent = live === "ABSENT" || live === "PENDING";
+  // Every row's action opens the status sheet - absent rows too, so Half Day
+  // and Leave are on offer rather than only Present.
 
   return (
     <Pressable style={styles.row} onPress={onPress} accessibilityRole="button">
@@ -267,7 +267,7 @@ export const TeamRow = ({
           </Pressable>
         </View>
         <Pressable style={styles.rowAction} onPress={onAction} accessibilityRole="button">
-          <Text style={styles.rowActionText}>{absent ? "Mark Present" : "Set Status"}</Text>
+          <Text style={styles.rowActionText}>Set Status</Text>
         </Pressable>
       </View>
     </Pressable>

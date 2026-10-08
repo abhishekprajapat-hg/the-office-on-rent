@@ -2595,6 +2595,73 @@ exports.manageUserBreak = async (req, res) => {
   }
 };
 
+/*
+ * What an admin or manager may set on somebody's day by hand, from the daily
+ * board or from the person's attendance calendar (any date, so a day can be
+ * corrected after the fact).
+ *
+ * LEAVE marks the day off without the employee having to file a request for
+ * it. It does not draw on their leave balance - that is counted from approved
+ * leave requests only.
+ */
+const MANUAL_ATTENDANCE_STATUSES = Object.freeze([
+  ATTENDANCE_STATUS.PRESENT,
+  ATTENDANCE_STATUS.HALF_DAY,
+  ATTENDANCE_STATUS.ABSENT,
+  ATTENDANCE_STATUS.LEAVE,
+]);
+
+// Not a day worked: any check-in, check-out or breaks on the row go with it.
+const NOT_WORKED_MANUAL_STATUSES = new Set([
+  ATTENDANCE_STATUS.ABSENT,
+  ATTENDANCE_STATUS.LEAVE,
+]);
+
+const MANUAL_STATUS_DEFAULT_NOTES = Object.freeze({
+  [ATTENDANCE_STATUS.PRESENT]: "Marked present manually",
+  [ATTENDANCE_STATUS.HALF_DAY]: "Marked half day manually",
+  [ATTENDANCE_STATUS.ABSENT]: "Marked absent manually",
+  [ATTENDANCE_STATUS.LEAVE]: "Marked on leave manually",
+});
+
+const applyManualAttendanceStatus = (attendance, {
+  status,
+  note = "",
+  policy,
+  actorId,
+  now = new Date(),
+}) => {
+  const notWorked = NOT_WORKED_MANUAL_STATUSES.has(status);
+
+  attendance.status = status;
+  attendance.source = ATTENDANCE_SOURCE.MANUAL;
+  attendance.totalBreakMinutes = notWorked ? 0 : Number(attendance.totalBreakMinutes || 0);
+  attendance.breakSessions = notWorked
+    ? []
+    : normalizeBreakSessions(attendance.breakSessions).sessions;
+  attendance.workedMinutes = status === ATTENDANCE_STATUS.PRESENT
+    ? Number(policy?.fullDayMinutes || DEFAULT_POLICY.fullDayMinutes)
+    : status === ATTENDANCE_STATUS.HALF_DAY
+      ? Number(policy?.halfDayMinutes || DEFAULT_POLICY.halfDayMinutes)
+      : 0;
+
+  attendance.checkInNote = note || MANUAL_STATUS_DEFAULT_NOTES[status];
+  if (notWorked) {
+    attendance.checkInAt = null;
+    attendance.checkOutAt = null;
+    attendance.checkOutNote = "";
+  }
+
+  attendance.metadata = {
+    ...(attendance.metadata || {}),
+    manualStatusBy: actorId,
+    manualStatusAt: now,
+    manualStatusNote: note,
+  };
+
+  return attendance;
+};
+
 exports.updateUserAttendanceStatus = async (req, res) => {
   try {
     if (!req.user?.companyId) {
@@ -2613,12 +2680,8 @@ exports.updateUserAttendanceStatus = async (req, res) => {
     if (!ATTENDANCE_DATE_PATTERN.test(attendanceDate)) {
       return res.status(400).json({ message: "date must be in YYYY-MM-DD format" });
     }
-    if (![
-      ATTENDANCE_STATUS.PRESENT,
-      ATTENDANCE_STATUS.HALF_DAY,
-      ATTENDANCE_STATUS.ABSENT,
-    ].includes(nextStatus)) {
-      return res.status(400).json({ message: "status must be PRESENT, HALF_DAY, or ABSENT" });
+    if (!MANUAL_ATTENDANCE_STATUSES.includes(nextStatus)) {
+      return res.status(400).json({ message: "status must be PRESENT, HALF_DAY, ABSENT, or LEAVE" });
     }
 
     const canAccessTarget = await ensureUserInScope({
@@ -2658,35 +2721,12 @@ exports.updateUserAttendanceStatus = async (req, res) => {
       });
     }
 
-    attendance.status = nextStatus;
-    attendance.source = ATTENDANCE_SOURCE.MANUAL;
-    attendance.totalBreakMinutes = nextStatus === ATTENDANCE_STATUS.ABSENT
-      ? 0
-      : Number(attendance.totalBreakMinutes || 0);
-    attendance.breakSessions = nextStatus === ATTENDANCE_STATUS.ABSENT
-      ? []
-      : normalizeBreakSessions(attendance.breakSessions).sessions;
-    attendance.workedMinutes = nextStatus === ATTENDANCE_STATUS.PRESENT
-      ? Number(policy.fullDayMinutes || DEFAULT_POLICY.fullDayMinutes)
-      : nextStatus === ATTENDANCE_STATUS.HALF_DAY
-        ? Number(policy.halfDayMinutes || DEFAULT_POLICY.halfDayMinutes)
-        : 0;
-
-    if (nextStatus === ATTENDANCE_STATUS.ABSENT) {
-      attendance.checkInAt = null;
-      attendance.checkOutAt = null;
-      attendance.checkInNote = note || "Marked absent manually";
-      attendance.checkOutNote = "";
-    } else {
-      attendance.checkInNote = note || `Marked ${nextStatus.toLowerCase().replaceAll("_", " ")} manually`;
-    }
-
-    attendance.metadata = {
-      ...(attendance.metadata || {}),
-      manualStatusBy: req.user._id,
-      manualStatusAt: new Date(),
-      manualStatusNote: note,
-    };
+    applyManualAttendanceStatus(attendance, {
+      status: nextStatus,
+      note,
+      policy,
+      actorId: req.user._id,
+    });
 
     await attendance.save();
 
@@ -2913,5 +2953,80 @@ exports.reviewViolation = async (req, res) => {
  } catch (error) { req.log?.error(error); res.status(error.name === "VersionError" ? 409 : 500).json({ message: "Unable to save review; refresh and try again" }); }
 };
 
+/*
+ * Every person's attendance days for a date range, built exactly the way their
+ * attendance calendar builds them: real records first, approved leave filling
+ * the days with no record, and a working day with neither counted absent.
+ *
+ * For callers outside this controller - the salary module - that need the same
+ * days the calendar shows, for several people at once, without a query each.
+ * `users` must carry joiningDate and createdAt for the absent-day cut-off.
+ */
+const loadAttendanceDaysForUsers = async ({ companyId, users = [], range, policy }) => {
+  const result = new Map();
+  if (!companyId || !users.length || !range?.from || !range?.to) return result;
+
+  const userIds = users.map((user) => user._id);
+  await autoCheckoutDueAttendanceRows({
+    companyId,
+    userIds,
+    fromDate: range.from,
+    toDate: range.to,
+    policy,
+  });
+
+  const [rows, leaveMap] = await Promise.all([
+    Attendance.find({
+      companyId,
+      userId: { $in: userIds },
+      attendanceDate: { $gte: range.from, $lte: range.to },
+    }).lean(),
+    getApprovedLeavesMap({ companyId, userIds, fromDate: range.from, toDate: range.to }),
+  ]);
+
+  const rowsByUser = new Map();
+  rows.forEach((row) => {
+    const key = String(row.userId);
+    if (!rowsByUser.has(key)) rowsByUser.set(key, []);
+    rowsByUser.get(key).push(row);
+  });
+
+  users.forEach((user) => {
+    const key = String(user._id);
+    const attendanceMap = new Map(
+      (rowsByUser.get(key) || []).map((row) => [String(row.attendanceDate), toAttendanceView(row, policy)]),
+    );
+    (leaveMap.get(key) || new Map()).forEach((leaveRow, dateKey) => {
+      if (attendanceMap.has(dateKey)) return;
+      attendanceMap.set(dateKey, {
+        _id: `leave:${key}:${dateKey}`,
+        attendanceDate: dateKey,
+        checkInAt: null,
+        checkOutAt: null,
+        workedMinutes: 0,
+        totalBreakMinutes: 0,
+        isLateCheckIn: false,
+        status: ATTENDANCE_STATUS.LEAVE,
+        source: leaveRow.leaveType || "LEAVE",
+      });
+    });
+    result.set(key, buildAttendanceSummary({
+      attendanceMap,
+      range,
+      policy,
+      joinedOn: user.joiningDate || user.createdAt || null,
+      idPrefix: `absent:${key}`,
+    }));
+  });
+
+  return result;
+};
+
 module.exports.buildAttendanceSummary = buildAttendanceSummary;
+module.exports.loadAttendanceDaysForUsers = loadAttendanceDaysForUsers;
+module.exports.resolvePolicyForCompany = resolvePolicyForCompany;
+module.exports.ensureUserInScope = ensureUserInScope;
+module.exports.getScopedUsersForAttendanceViewer = getScopedUsersForAttendanceViewer;
 module.exports.resolveAttendanceStatus = resolveAttendanceStatus;
+module.exports.applyManualAttendanceStatus = applyManualAttendanceStatus;
+module.exports.MANUAL_ATTENDANCE_STATUSES = MANUAL_ATTENDANCE_STATUSES;

@@ -13,6 +13,7 @@ import {
   Loader2,
   LogIn,
   MapPin,
+  Pencil,
   RefreshCw,
   Save,
   Star,
@@ -49,6 +50,8 @@ import { getProjectsWithMeta } from "../../services/projectService";
 import { toErrorMessage } from "../../utils/errorMessage";
 import ToastNotice from "../../components/ui/ToastNotice";
 import AvatarFace from "../../components/ui/AvatarFace";
+import AttendanceDayStatusDialog from "../attendance/AttendanceDayStatusDialog";
+import { canSetAttendanceOnDate, todayDateKey } from "../attendance/attendanceStatus";
 
 const REPORTING_PARENT_ROLES = {
   MANAGER: ["ADMIN"],
@@ -267,6 +270,19 @@ const safeReadCurrentUserId = () => {
   }
 };
 
+const safeReadCurrentUserRole = () => {
+  try {
+    const row = JSON.parse(localStorage.getItem("user") || "{}");
+    return String(row?.role || "").trim().toUpperCase();
+  } catch {
+    return "";
+  }
+};
+
+// The attendance API lets these two set somebody's status (a manager only for
+// their own team), so only they get a clickable calendar.
+const ATTENDANCE_STATUS_SETTER_ROLES = new Set(["ADMIN", "MANAGER"]);
+
 const normalizeBrokerageMode = (value) =>
   String(value || "").trim().toUpperCase() === "PERCENTAGE" ? "PERCENTAGE" : "FLAT";
 
@@ -319,6 +335,7 @@ const UserDetailsEditor = ({ theme = "light" }) => {
   const navigate = useNavigate();
   const isDarkTheme = theme === "dark";
   const currentUserId = safeReadCurrentUserId();
+  const currentUserRole = safeReadCurrentUserRole();
 
   const nameInputRef = useRef(null);
   const attendanceSectionRef = useRef(null);
@@ -338,6 +355,7 @@ const UserDetailsEditor = ({ theme = "light" }) => {
 
   const [attendanceMonth, setAttendanceMonth] = useState(toMonthInputValue(new Date()));
   const [attendanceLoading, setAttendanceLoading] = useState(false);
+  const [statusDialogDate, setStatusDialogDate] = useState("");
   const [attendanceData, setAttendanceData] = useState({
     timezone: "",
     from: "",
@@ -605,6 +623,17 @@ const UserDetailsEditor = ({ theme = "light" }) => {
     () => buildMonthCalendarDays(attendanceMonth),
     [attendanceMonth],
   );
+  // Admin attendance is never marked by hand - the server refuses it.
+  const canSetDayStatus = ATTENDANCE_STATUS_SETTER_ROLES.has(currentUserRole)
+    && Boolean(profile)
+    && profile.role !== "ADMIN";
+  const attendanceTodayKey = todayDateKey(attendanceData.timezone);
+  const closeStatusDialog = useCallback(() => setStatusDialogDate(""), []);
+  const handleDayStatusSaved = useCallback((result) => {
+    setStatusDialogDate("");
+    setSuccess(result?.message || "Attendance status updated");
+    loadAttendanceCalendar();
+  }, [loadAttendanceCalendar]);
 
   const attendanceSummaryCards = useMemo(() => {
     const summary = attendanceData.summary || {};
@@ -1730,6 +1759,13 @@ const UserDetailsEditor = ({ theme = "light" }) => {
               ))}
             </div>
 
+            {canSetDayStatus ? (
+              <p className={`mt-3 flex items-center gap-1.5 text-xs ${isDarkTheme ? "text-slate-400" : "text-slate-500"}`}>
+                <Pencil aria-hidden="true" size={12} />
+                Click any day up to today to set it as Present, Half Day, Absent or Leave.
+              </p>
+            ) : null}
+
             <div className={`mt-4 rounded-xl border ${isDarkTheme ? "border-slate-700" : "border-slate-200"}`}>
               <div className={`grid grid-cols-7 border-b text-center text-[10px] font-bold uppercase tracking-[0.12em] ${
                 isDarkTheme ? "border-slate-700 bg-slate-950 text-slate-400" : "border-slate-200 bg-slate-50 text-slate-500"
@@ -1744,48 +1780,80 @@ const UserDetailsEditor = ({ theme = "light" }) => {
                   const row = day.dateKey ? attendanceByDate.get(day.dateKey) : null;
                   const hasRecord = Boolean(row);
                   const statusLabel = formatAttendanceStatus(row?.status);
+                  const editable = canSetDayStatus && canSetAttendanceOnDate(day.dateKey, attendanceTodayKey);
+                  const cellClass = `flex min-h-[108px] flex-col border-b border-r p-2 text-left ${
+                    isDarkTheme
+                      ? "border-slate-800 bg-slate-950/40"
+                      : "border-slate-100 bg-white"
+                  } ${day.dateKey ? "" : isDarkTheme ? "bg-slate-950/20" : "bg-slate-50/60"}`;
+                  // Spans, not divs: an editable day is a button, and a button
+                  // may only hold phrasing content. Flex children lay out the same.
+                  const content = day.dateKey ? (
+                    <span className="flex flex-1 flex-col gap-1.5">
+                      <span className={`text-xs font-bold ${isDarkTheme ? "text-slate-100" : "text-slate-900"}`}>
+                        {day.day}
+                      </span>
+                      {hasRecord ? (
+                        <>
+                          <span className={`inline-flex w-fit rounded-full border px-2 py-0.5 text-[10px] font-bold ${attendanceStatusClass(row.status, isDarkTheme)}`}>
+                            {statusLabel}
+                          </span>
+                          <span className={`text-[11px] ${row.isLateCheckIn ? "font-bold text-rose-700" : isDarkTheme ? "text-slate-300" : "text-slate-600"}`}>
+                            In: {formatDate(row.checkInAt)}
+                          </span>
+                          <span className={`text-[11px] ${isDarkTheme ? "text-slate-400" : "text-slate-500"}`}>
+                            Work: {formatDuration(row.workedMinutes)}
+                          </span>
+                          <span className={`text-[11px] ${isDarkTheme ? "text-slate-500" : "text-slate-400"}`}>
+                            Break: {formatDuration(row.totalBreakMinutes)}
+                          </span>
+                        </>
+                      ) : (
+                        <span className={`mt-auto text-[11px] ${isDarkTheme ? "text-slate-600" : "text-slate-400"}`}>
+                          No record
+                        </span>
+                      )}
+                    </span>
+                  ) : null;
+
+                  if (!editable) {
+                    return <div key={day.key} className={cellClass}>{content}</div>;
+                  }
                   return (
-                    <div
+                    <button
                       key={day.key}
-                      className={`min-h-[108px] border-b border-r p-2 ${
-                        isDarkTheme
-                          ? "border-slate-800 bg-slate-950/40"
-                          : "border-slate-100 bg-white"
-                      } ${day.dateKey ? "text-left" : isDarkTheme ? "bg-slate-950/20" : "bg-slate-50/60"}`}
+                      type="button"
+                      onClick={() => setStatusDialogDate(day.dateKey)}
+                      aria-label={`Set attendance for ${formatDateLabel(day.dateKey)}${hasRecord ? `, currently ${statusLabel}` : ""}`}
+                      className={`group relative ${cellClass} cursor-pointer outline-none transition focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-blue-500 ${
+                        isDarkTheme ? "hover:bg-slate-900" : "hover:bg-cyan-50/50"
+                      }`}
                     >
-                      {day.dateKey ? (
-                        <div className="flex h-full flex-col gap-1.5">
-                          <div className={`text-xs font-bold ${isDarkTheme ? "text-slate-100" : "text-slate-900"}`}>
-                            {day.day}
-                          </div>
-                          {hasRecord ? (
-                            <>
-                              <span className={`inline-flex w-fit rounded-full border px-2 py-0.5 text-[10px] font-bold ${attendanceStatusClass(row.status, isDarkTheme)}`}>
-                                {statusLabel}
-                              </span>
-                              <div className={`text-[11px] ${row.isLateCheckIn ? "font-bold text-rose-700" : isDarkTheme ? "text-slate-300" : "text-slate-600"}`}>
-                                In: {formatDate(row.checkInAt)}
-                              </div>
-                              <div className={`text-[11px] ${isDarkTheme ? "text-slate-400" : "text-slate-500"}`}>
-                                Work: {formatDuration(row.workedMinutes)}
-                              </div>
-                              <div className={`text-[11px] ${isDarkTheme ? "text-slate-500" : "text-slate-400"}`}>
-                                Break: {formatDuration(row.totalBreakMinutes)}
-                              </div>
-                            </>
-                          ) : (
-                            <div className={`mt-auto text-[11px] ${isDarkTheme ? "text-slate-600" : "text-slate-400"}`}>
-                              No record
-                            </div>
-                          )}
-                        </div>
-                      ) : null}
-                    </div>
+                      {content}
+                      <Pencil
+                        aria-hidden="true"
+                        size={12}
+                        className={`absolute right-2 top-2 opacity-0 transition group-hover:opacity-100 group-focus-visible:opacity-100 ${
+                          isDarkTheme ? "text-cyan-300" : "text-cyan-700"
+                        }`}
+                      />
+                    </button>
                   );
                 })}
               </div>
             </div>
           </>
+        ) : null}
+
+        {statusDialogDate ? (
+          <AttendanceDayStatusDialog
+            userId={userId}
+            userName={profile.name}
+            dateKey={statusDialogDate}
+            row={attendanceByDate.get(statusDialogDate) || null}
+            onClose={closeStatusDialog}
+            onSaved={handleDayStatusSaved}
+          />
         ) : null}
       </section>
     </div>

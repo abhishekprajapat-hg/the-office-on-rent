@@ -147,6 +147,20 @@ const CRM_PAGES = Object.freeze([
     actions: [PAGE_ACTIONS.VIEW, PAGE_ACTIONS.EDIT, PAGE_ACTIONS.APPROVE],
   },
   {
+    /*
+     * Always available: everybody may see their own salary. Seeing or setting
+     * anybody else's - and the deduction rules - is decided by role in the
+     * salary controller (admins, and managers for their own team), so a page
+     * grant cannot widen it.
+     */
+    key: "salary",
+    label: "Salary",
+    group: "Workspace",
+    path: "/salary",
+    actions: [PAGE_ACTIONS.VIEW],
+    alwaysAccessible: true,
+  },
+  {
     key: "chat",
     label: "Team Chat",
     group: "Workspace",

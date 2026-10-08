@@ -24,6 +24,7 @@ import {
   UserCheck,
   UserCircle2,
   Users,
+  Wallet,
 } from "lucide-react";
 
 const MANAGEMENT_ROLES = ["ADMIN", "MANAGER"];
@@ -37,7 +38,7 @@ export const ACTIVITY_SECTIONS = [
     id: "dashboard",
     label: "Dashboard",
     icon: Home,
-    match: ["/", "/dashboard", "/tasks", "/attendance"],
+    match: ["/", "/dashboard", "/tasks", "/attendance", "/salary"],
   },
   {
     id: "leads",
@@ -115,6 +116,8 @@ export const WORKBENCH_MENU = {
         { label: "Home", path: "/dashboard", icon: Home, page: "dashboard", roles: [...SALES_ROLES, ...PRODUCTION_ROLES, ...PARTNER_ROLES] },
         { label: "Tasks", path: "/tasks", icon: CheckSquare, page: "tasks", roles: [...SALES_ROLES, ...PRODUCTION_ROLES] },
         { label: "Attendance", path: "/attendance", icon: UserCheck, page: "attendance", roles: [...SALES_ROLES, ...PRODUCTION_ROLES, ...PARTNER_ROLES] },
+        // Pay comes out of attendance, so whoever keeps attendance has a salary.
+        { label: "Salary", path: "/salary", icon: Wallet, page: "salary", roles: [...SALES_ROLES, ...PRODUCTION_ROLES, ...PARTNER_ROLES] },
       ],
     },
   ],
@@ -243,6 +246,7 @@ export const SIDEBAR_GROUPS = [
       navItem("/tasks", { label: "Tasks" }),
       navItem("/calendar", { label: "Calendar" }),
       navItem("/attendance", { label: "Attendance" }),
+      navItem("/salary", { label: "Salary" }),
     ],
   },
   {

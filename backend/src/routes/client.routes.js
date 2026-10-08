@@ -13,6 +13,7 @@ router.use("/auth", require("./auth.routes"));
 router.use("/leads", require("./lead.routes"));
 router.use("/users", require("./user.routes"));
 router.use("/attendance", require("./attendance.routes"));
+router.use("/salary", require("./salary.routes"));
 router.use("/targets", require("./target.routes"));
 router.use("/inventory", require("./inventory.routes"));
 router.use("/inventory-request", require("./inventoryRequest.routes"));

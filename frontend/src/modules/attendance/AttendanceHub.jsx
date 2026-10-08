@@ -1,5 +1,5 @@
 import AttendanceViolations from "./AttendanceViolations";
-import { MANUAL_ATTENDANCE_STATUS_OPTIONS, canEditAttendanceStatus } from "./attendanceStatus";
+import { MANUAL_ATTENDANCE_STATUS_OPTIONS, manualStatusSelectValue } from "./attendanceStatus";
 import React, { useCallback, useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import {
@@ -1404,36 +1404,26 @@ const AttendanceHub = () => {
                           </td>
                           <td className="border-b border-slate-100 px-3 py-2.5">
                             <div className="flex items-center justify-end gap-1.5">
-                              {canEditAttendanceStatus(row.attendance) ? (
-                                /* Native select arrows are sized by the browser and
-                                   were clipping the label, so the chevron is ours. */
-                                <span className="relative inline-flex">
-                                  <select
-                                    value={MANUAL_ATTENDANCE_STATUS_OPTIONS.some((option) => option.value === row.attendance?.status) ? row.attendance?.status : ""}
-                                    onChange={(event) => handleManualStatusChange(row, event.target.value)}
-                                    disabled={rowBusy(row)}
-                                    className="h-8 appearance-none rounded-lg border border-blue-600 bg-blue-600 pl-3 pr-7 text-[13px] font-semibold text-white outline-none disabled:opacity-60"
-                                    title="Set attendance manually"
-                                  >
-                                    <option value="">Set Status</option>
-                                    {MANUAL_ATTENDANCE_STATUS_OPTIONS.map((option) => (
-                                      <option key={option.value} value={option.value}>{option.label}</option>
-                                    ))}
-                                  </select>
-                                  <ChevronDown aria-hidden="true" size={13} className="pointer-events-none absolute right-2 top-1/2 -translate-y-1/2 text-white" />
-                                </span>
-                              ) : (
-                                <button
-                                  type="button"
-                                  onClick={() => handleManualStatusChange(row, "PRESENT")}
+                              {/* Every row gets the dropdown, absent ones too, so Half
+                                  Day and Leave are always one pick away. Native select
+                                  arrows are sized by the browser and were clipping the
+                                  label, so the chevron is ours. */}
+                              <span className="relative inline-flex">
+                                <select
+                                  value={manualStatusSelectValue(row.attendance)}
+                                  onChange={(event) => handleManualStatusChange(row, event.target.value)}
                                   disabled={rowBusy(row)}
-                                  className="inline-flex h-8 items-center gap-1.5 rounded-lg border border-slate-300 bg-white px-3 text-[13px] font-semibold text-slate-700 transition hover:bg-slate-50 disabled:opacity-60"
-                                  title="Mark this employee present for the day"
+                                  className="h-8 appearance-none rounded-lg border border-blue-600 bg-blue-600 pl-3 pr-7 text-[13px] font-semibold text-white outline-none disabled:opacity-60"
+                                  title="Set attendance manually"
+                                  aria-label={`Set attendance status for ${row.user?.name || "employee"}`}
                                 >
-                                  {rowBusy(row) ? <Loader2 size={12} className="animate-spin" /> : null}
-                                  Mark Present
-                                </button>
-                              )}
+                                  <option value="">Set Status</option>
+                                  {MANUAL_ATTENDANCE_STATUS_OPTIONS.map((option) => (
+                                    <option key={option.value} value={option.value}>{option.label}</option>
+                                  ))}
+                                </select>
+                                <ChevronDown aria-hidden="true" size={13} className="pointer-events-none absolute right-2 top-1/2 -translate-y-1/2 text-white" />
+                              </span>
 
                               {/* Break controls live behind the kebab: they matter
                                   on a handful of rows, and inline they crowded out

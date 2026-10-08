@@ -50,6 +50,7 @@ const IntelligenceReports = lazy(() => import("./modules/reports/IntelligenceRep
 const RoleLeaderboard = lazy(() => import("./modules/reports/RoleLeaderboard"));
 const MasterSchedule = lazy(() => import("./modules/calendar/MasterSchedule"));
 const AttendanceHub = lazy(() => import("./modules/attendance/AttendanceHub"));
+const SalaryHub = lazy(() => import("./modules/salary/SalaryHub"));
 const SystemSettings = lazy(() => import("./modules/admin/SystemSettings"));
 const DataUseNotice = lazy(() => import("./modules/legal/DataUseNotice"));
 const ServiceTermsNotice = lazy(() => import("./modules/legal/ServiceTermsNotice"));
@@ -232,6 +233,14 @@ const resolvePageHeader = (pathname, userRole) => {
       title: "Attendance",
       subtitle: "Daily check-in, work-hour tracking and team attendance visibility",
       scopeLabel: "Attendance",
+    };
+  }
+
+  if (pathname.startsWith("/salary")) {
+    return {
+      title: "Salary",
+      subtitle: "Monthly salary and what attendance has deducted from it",
+      scopeLabel: "Salary",
     };
   }
 
@@ -780,6 +789,11 @@ export default function App() {
       <Route
         path="/attendance"
         element={withPageAccess("attendance", <AttendanceHub />, ["ADMIN", ...MANAGEMENT_ROLES, "EXECUTIVE", "FIELD_EXECUTIVE", ...PRODUCTION_ROLES, "CHANNEL_PARTNER"])}
+      />
+      <Route
+        path="/salary"
+        // Pay is worked out from attendance, so the same people keep a salary.
+        element={withPageAccess("salary", <SalaryHub />, ["ADMIN", ...MANAGEMENT_ROLES, "EXECUTIVE", "FIELD_EXECUTIVE", ...PRODUCTION_ROLES, "CHANNEL_PARTNER"])}
       />
       <Route
         path="/admin/notifications"

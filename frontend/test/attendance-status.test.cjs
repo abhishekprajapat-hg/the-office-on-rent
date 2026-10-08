@@ -15,40 +15,44 @@ function load(relative) {
   return module.exports;
 }
 
-const { canEditAttendanceStatus, MANUAL_ATTENDANCE_STATUS_OPTIONS } = load('modules/attendance/attendanceStatus.js');
+const {
+  canSetAttendanceOnDate,
+  manualStatusSelectValue,
+  MANUAL_ATTENDANCE_STATUS_OPTIONS,
+  statusClearsCheckIn,
+  todayDateKey,
+} = load('modules/attendance/attendanceStatus.js');
 
 /*
- * The bug this guards: the status control was shown only when the row had a
- * checkInAt. Somebody marked present by an admin has no check-in, so their row
- * kept offering "Mark Present" and the status could never be changed again -
- * a mis-click was permanent for that day.
+ * Every row on the daily board gets the status dropdown. An absent row used to
+ * get a one-click "Mark Present" instead, which left Half Day and Leave out of
+ * reach on the rows that most often need them.
  */
 
-test('a row with a check-in can have its status changed', () => {
-  assert.equal(canEditAttendanceStatus({ checkInAt: '2026-10-07T05:29:00.000Z', source: 'WEB' }), true);
+test('a row with a check-in shows its status in the dropdown', () => {
+  assert.equal(manualStatusSelectValue({ checkInAt: '2026-10-07T05:29:00.000Z', source: 'WEB', status: 'PRESENT' }), 'PRESENT');
+  assert.equal(manualStatusSelectValue({ checkInAt: '2026-10-07T05:29:00.000Z', source: 'WEB', status: 'HALF_DAY' }), 'HALF_DAY');
 });
 
-test('a row an admin marked, with no check-in, can still be changed', () => {
-  assert.equal(
-    canEditAttendanceStatus({ checkInAt: null, source: 'MANUAL', status: 'PRESENT' }),
-    true,
-    'marking somebody present must not strand the row with no way back',
-  );
-  assert.equal(canEditAttendanceStatus({ checkInAt: null, source: 'MANUAL', status: 'HALF_DAY' }), true);
-  assert.equal(canEditAttendanceStatus({ checkInAt: null, source: 'MANUAL', status: 'ABSENT' }), true);
+test('a row an admin set shows what they set', () => {
+  for (const status of ['PRESENT', 'HALF_DAY', 'ABSENT', 'LEAVE']) {
+    assert.equal(manualStatusSelectValue({ checkInAt: null, source: 'MANUAL', status }), status);
+  }
+  assert.equal(manualStatusSelectValue({ source: 'manual', status: 'absent' }), 'ABSENT', 'case does not matter');
 });
 
-test('source is matched regardless of case', () => {
-  assert.equal(canEditAttendanceStatus({ source: 'manual' }), true);
+test('an untouched absent row shows the Set Status prompt, not "Absent"', () => {
+  // The server reports a day nobody touched as ABSENT; nobody chose that, so it
+  // must not read like a row an admin marked absent.
+  assert.equal(manualStatusSelectValue({ _id: null, checkInAt: null, source: '', status: 'ABSENT' }), '');
+  assert.equal(manualStatusSelectValue(null), '');
+  assert.equal(manualStatusSelectValue(undefined), '');
+  assert.equal(manualStatusSelectValue({}), '');
 });
 
-test('an untouched row keeps the one-click Mark Present shortcut', () => {
-  // Nobody has checked in and no admin has set anything: the quick action is
-  // the right control here, not a dropdown.
-  assert.equal(canEditAttendanceStatus({ checkInAt: null, source: 'WEB', status: 'ABSENT' }), false);
-  assert.equal(canEditAttendanceStatus(null), false);
-  assert.equal(canEditAttendanceStatus(undefined), false);
-  assert.equal(canEditAttendanceStatus({}), false);
+test('a live status the dropdown does not offer shows the prompt', () => {
+  assert.equal(manualStatusSelectValue({ checkInAt: '2026-10-08T05:00:00.000Z', source: 'WEB', status: 'WORKING' }), '');
+  assert.equal(manualStatusSelectValue({ checkInAt: '2026-10-08T05:00:00.000Z', source: 'WEB', status: 'PENDING' }), '');
 });
 
 test('every status the backend accepts is offered', () => {
@@ -58,21 +62,70 @@ test('every status the backend accepts is offered', () => {
   // returns belongs to that context's realm - so compare structure, not identity.
   assert.equal(
     JSON.stringify(MANUAL_ATTENDANCE_STATUS_OPTIONS.map((option) => option.value).sort()),
-    JSON.stringify(['ABSENT', 'HALF_DAY', 'PRESENT']),
+    JSON.stringify(['ABSENT', 'HALF_DAY', 'LEAVE', 'PRESENT']),
   );
   MANUAL_ATTENDANCE_STATUS_OPTIONS.forEach((option) => {
     assert.ok(option.label, `${option.value} needs a label`);
   });
 });
 
-test('the row actions are gated on the helper, not on checkInAt alone', () => {
+test('no row gets a direct Mark Present button', () => {
   const source = fs.readFileSync(
     path.resolve(__dirname, '../src/modules/attendance/AttendanceHub.jsx'),
     'utf8',
   );
+  assert.doesNotMatch(source, /Mark Present/, 'absent rows must get the dropdown too');
+  assert.doesNotMatch(source, /handleManualStatusChange\(row, "PRESENT"\)/);
+  assert.match(source, /value=\{manualStatusSelectValue\(row\.attendance\)\}/);
+});
+
+/*
+ * The attendance calendar on a team member's page: admins and managers can set
+ * any day up to today, which is what makes a backdated correction possible.
+ */
+
+test('leave is offered alongside present, half day and absent', () => {
+  const leave = MANUAL_ATTENDANCE_STATUS_OPTIONS.find((option) => option.value === 'LEAVE');
+  assert.ok(leave, 'LEAVE must be selectable');
+  assert.equal(leave.label, 'Leave');
+});
+
+test('absent and leave clear the check-in; present and half day keep it', () => {
+  assert.equal(statusClearsCheckIn('ABSENT'), true);
+  assert.equal(statusClearsCheckIn('LEAVE'), true);
+  assert.equal(statusClearsCheckIn('leave'), true);
+  assert.equal(statusClearsCheckIn('PRESENT'), false);
+  assert.equal(statusClearsCheckIn('HALF_DAY'), false);
+  assert.equal(statusClearsCheckIn(''), false);
+  assert.equal(statusClearsCheckIn(undefined), false);
+});
+
+test('past days and today can be set; future days cannot', () => {
+  const today = '2026-10-08';
+  assert.equal(canSetAttendanceOnDate('2026-10-05', today), true, 'a backdated day');
+  assert.equal(canSetAttendanceOnDate('2026-09-30', today), true, 'last month');
+  assert.equal(canSetAttendanceOnDate('2026-10-08', today), true, 'today');
+  assert.equal(canSetAttendanceOnDate('2026-10-09', today), false, 'tomorrow');
+  assert.equal(canSetAttendanceOnDate('', today), false, 'a blank calendar cell');
+  assert.equal(canSetAttendanceOnDate('2026-10-05', ''), false, 'no idea what today is');
+});
+
+test("today is the company's date, not the browser's", () => {
+  // 20:00 UTC on the 7th is already 01:30 on the 8th in Kolkata.
+  const instant = new Date('2026-10-07T20:00:00.000Z');
+  assert.equal(todayDateKey('Asia/Kolkata', instant), '2026-10-08');
+  assert.equal(todayDateKey('UTC', instant), '2026-10-07');
+  assert.match(todayDateKey('Not/AZone', instant), /^\d{4}-\d{2}-\d{2}$/, 'a bad zone still gives a date');
+});
+
+test('the calendar only makes days clickable through the date helper', () => {
+  const source = fs.readFileSync(
+    path.resolve(__dirname, '../src/modules/admin/UserDetailsEditor.jsx'),
+    'utf8',
+  );
   assert.match(
     source,
-    /\{canEditAttendanceStatus\(row\.attendance\) \? \(/,
-    'the Set Status / Mark Present branch must ask the helper',
+    /canSetDayStatus && canSetAttendanceOnDate\(day\.dateKey, attendanceTodayKey\)/,
+    'a future day must not open the status dialog',
   );
 });

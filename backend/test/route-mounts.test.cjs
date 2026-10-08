@@ -45,6 +45,7 @@ const ROUTES = [
   "/leads",
   "/tasks",
   "/attendance/me",
+  "/salary/me",
   "/targets/my",
   "/inventory",
   "/projects",

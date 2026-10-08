@@ -6,28 +6,76 @@
  * export components alone.
  */
 
-// The backend accepts exactly these three (attendance.controller rejects
-// anything else with "status must be PRESENT, HALF_DAY, or ABSENT"), so this
-// list and that check have to stay in step.
+// The backend accepts exactly these four (attendance.controller's
+// MANUAL_ATTENDANCE_STATUSES rejects anything else), so this list and that one
+// have to stay in step.
 export const MANUAL_ATTENDANCE_STATUS_OPTIONS = [
   { label: "Present", value: "PRESENT" },
   { label: "Half Day", value: "HALF_DAY" },
   { label: "Absent", value: "ABSENT" },
+  { label: "Leave", value: "LEAVE" },
 ];
+
+/*
+ * Neither is a day worked, so the server drops whatever check-in, check-out
+ * and breaks the day had. Worth saying before somebody clicks Save on a day
+ * that has them.
+ */
+const STATUSES_CLEARING_CHECK_IN = new Set(["ABSENT", "LEAVE"]);
+
+export const statusClearsCheckIn = (status) =>
+  STATUSES_CLEARING_CHECK_IN.has(String(status || "").toUpperCase());
 
 const ATTENDANCE_SOURCE_MANUAL = "MANUAL";
 
 /**
- * Whether this row's status can still be changed from the dropdown.
+ * The value a row's status dropdown shows - "" for the "Set Status" prompt.
  *
- * Checking in is not the only way a row acquires a status: an admin can set one
- * on somebody who never checked in at all. Gating the control on checkInAt
- * alone left exactly those rows offering "Mark Present" for ever, with no way
- * back - so a status set by mistake could not be corrected, which is the case
- * where being able to correct it matters most.
+ * Every row gets the dropdown, absent ones included. An absent row used to get
+ * a one-click "Mark Present" instead, which hid Half Day and Leave on exactly
+ * the rows that most often need one of them.
  *
- * A row nobody has touched keeps the one-click shortcut instead: a dropdown is
- * the wrong control when there is only one sensible thing to do.
+ * A day nobody has touched comes back from the server as ABSENT, but nobody
+ * chose that. Showing "Absent" in its dropdown would make it look the same as a
+ * row an admin really did mark absent, so it shows the prompt. A row somebody
+ * checked in on, or an admin set, shows its status when it is one on offer.
  */
-export const canEditAttendanceStatus = (attendance) => Boolean(attendance?.checkInAt)
-  || String(attendance?.source || "").toUpperCase() === ATTENDANCE_SOURCE_MANUAL;
+export const manualStatusSelectValue = (attendance) => {
+  const touched = Boolean(attendance?.checkInAt)
+    || String(attendance?.source || "").toUpperCase() === ATTENDANCE_SOURCE_MANUAL;
+  const status = String(attendance?.status || "").toUpperCase();
+  return touched && MANUAL_ATTENDANCE_STATUS_OPTIONS.some((option) => option.value === status)
+    ? status
+    : "";
+};
+
+/**
+ * Today as YYYY-MM-DD in the company's attendance timezone.
+ *
+ * The calendar lets a day be set up to and including today, and "today" is the
+ * server's: the browser's own date can be a day out for somebody travelling,
+ * and the attendance date keys are in the company's zone. en-CA formats as
+ * YYYY-MM-DD. An unknown zone falls back to the browser's.
+ */
+export const todayDateKey = (timezone, now = new Date()) => {
+  try {
+    return new Intl.DateTimeFormat("en-CA", {
+      timeZone: timezone || undefined,
+      year: "numeric",
+      month: "2-digit",
+      day: "2-digit",
+    }).format(now);
+  } catch {
+    return new Intl.DateTimeFormat("en-CA", { year: "numeric", month: "2-digit", day: "2-digit" }).format(now);
+  }
+};
+
+/**
+ * Whether a calendar day can have its status set: any day up to today.
+ *
+ * Correcting the past is the point. A future day is left alone - marking
+ * somebody present in advance means nothing, and planned time off already has
+ * its own route through a leave request.
+ */
+export const canSetAttendanceOnDate = (dateKey, todayKey) =>
+  Boolean(dateKey) && Boolean(todayKey) && String(dateKey) <= String(todayKey);
