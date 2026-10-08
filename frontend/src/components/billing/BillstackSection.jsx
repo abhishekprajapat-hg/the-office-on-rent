@@ -3,6 +3,10 @@ import { usePermissions } from '../../context/usePermissions';
 import { getBillingStatus, retryBillingSync, createBillingHandoff } from '../../services/billstackService';
 import { toErrorMessage } from '../../utils/errorMessage';
 
+// A failed sync is retried once automatically per client per page load, so a
+// stale error from an earlier (now fixed) failure clears without a manual click.
+const autoRetried = new Set();
+
 export default function BillstackSection({ entityType, entityId }) {
   const { can, loading } = usePermissions();
   const visible = !loading && can('page.billing.view') && Boolean(entityId);
@@ -16,6 +20,12 @@ export default function BillstackSection({ entityType, entityId }) {
       try {
         const data = await getBillingStatus(entityType, entityId);
         if (active) { setState(data); setError(''); }
+        const key = `${entityType}:${entityId}`;
+        if (active && data?.syncStatus === 'FAILED' && !autoRetried.has(key)) {
+          autoRetried.add(key);
+          const retried = await retryBillingSync(entityType, entityId).catch(() => null);
+          if (active && retried) setState(retried);
+        }
       } catch (err) { if (active) setError(toErrorMessage(err, 'Billing is unavailable')); }
     };
     refresh();

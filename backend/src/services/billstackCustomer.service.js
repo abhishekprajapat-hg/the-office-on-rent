@@ -55,6 +55,60 @@ function customerPayload(companyId, type, entity) {
 
 const fingerprint = (payload) => crypto.createHash('sha256').update(JSON.stringify(payload)).digest('hex');
 
+// Every booked cabin that belongs to the same customer as the selected cabin.
+// A client with several cabins must be billed for all of them in one invoice.
+// Grouping mirrors the CRM Clients page exactly (same `client.id`). The
+// canonical-client link is deliberately NOT used: it is resolved from shared
+// phone/email/name and can join two different clients.
+function clientBoardCabins(board, entityId, cabinCode) {
+  const cabins = (board?.state?.cabins || []).filter(validBookedCabin);
+  const selected = cabinCode ? cabins.find(c => c.code === cabinCode) : null;
+  if (selected) {
+    const clientId = selected.client?.id;
+    if (!clientId) return [selected];
+    return cabins.filter(c => c === selected || String(c.client?.id) === String(clientId));
+  }
+  const id = String(entityId);
+  return cabins.filter(c => String(c.client?.canonicalClientId) === id || String(c.client?.id) === id);
+}
+
+function boardCabinRent(cabin) {
+  const amount = cabin.contract?.monthlyRent ?? cabin.monthlyRent;
+  return { amount, rent: suppliedAmount(amount) ? Number(amount) : 0, reliable: suppliedAmount(amount) };
+}
+
+function multiCabinContext(entity, cabins, currentPeriod) {
+  const clientName = entity.companyName || entity.name;
+  const agreements = [...new Set(cabins.map(c => c.contract?.id).filter(Boolean))];
+  const labelOf = c => c.label || c.code;
+  return {
+    billingType: 'COWORKING',
+    billingEntityCode: '',
+    sourceRef: {
+      source: 'THE_OFFICE_ON_RENT_CRM',
+      sourceType: 'board',
+      // One invoice per client per month, covering every cabin.
+      sourceId: `multi:${String(entity._id)}:${currentPeriod}`,
+      billingPurpose: 'RENT',
+      billingPeriod: currentPeriod,
+    },
+    prefill: {
+      notes: `Cabins: ${cabins.map(c => `${labelOf(c)} (${c.seats} Seater)`).join(', ')} | Client: ${clientName}`.slice(0, 500),
+      reference: agreements.join(', ') || cabins.map(c => c.code).join(', '),
+      lineItems: cabins.map(cabin => {
+        const { rent, reliable } = boardCabinRent(cabin);
+        return {
+          productName: `Coworking Space Rental - Cabin ${labelOf(cabin)} (${cabin.seats} Seats) - ${currentPeriod}`,
+          quantity: 1,
+          rate: rent,
+          rateReliable: reliable,
+          hsnSac: '997212',
+        };
+      }),
+    },
+  };
+}
+
 async function buildBillingContext(companyId, type, entity, cabinCode) {
   if (!entity) return null;
   if (type === 'lead') {
@@ -110,6 +164,13 @@ async function buildBillingContext(companyId, type, entity, cabinCode) {
   }
 
   if (['coworking-client', 'board'].includes(type)) {
+    const boardRow = await Board.findOne({ companyId }).lean();
+    const clientCabins = clientBoardCabins(boardRow, entity._id, cabinCode);
+    if (clientCabins.length > 1) {
+      const n = new Date();
+      return multiCabinContext(entity, clientCabins, `${n.getFullYear()}-${String(n.getMonth() + 1).padStart(2, '0')}`);
+    }
+
     const contract = await Contract.findOne({
       companyId,
       clientId: entity._id,
@@ -181,15 +242,15 @@ async function buildBillingContext(companyId, type, entity, cabinCode) {
       };
     }
 
-    const board = await Board.findOne({ companyId }).lean();
+    const board = boardRow;
     const entityIdStr = String(entity._id || entity);
-    const cabin = board?.state?.cabins?.find(c =>
-      c.status === 'BOOKED' && (
-        (cabinCode && c.code === cabinCode)
-        || String(c.client?.canonicalClientId) === entityIdStr
-        || String(c.client?.id) === entityIdStr
-      )
-    );
+    // The cabin the user opened always wins. Only without one fall back to a
+    // cabin linked to this customer, and then never by the shared canonical
+    // link alone being found first in board order.
+    const bookedCabins = (board?.state?.cabins || []).filter(c => c.status === 'BOOKED');
+    const cabin = (cabinCode && bookedCabins.find(c => c.code === cabinCode))
+      || bookedCabins.find(c => String(c.client?.id) === entityIdStr)
+      || bookedCabins.find(c => String(c.client?.canonicalClientId) === entityIdStr);
 
     if (cabin) {
       const amount = cabin.contract?.monthlyRent ?? cabin.monthlyRent;
@@ -215,6 +276,7 @@ async function buildBillingContext(companyId, type, entity, cabinCode) {
               quantity: 1,
               rate: rent,
               rateReliable: suppliedAmount(amount),
+              hsnSac: '997212',
             },
           ],
         },

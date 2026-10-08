@@ -82,7 +82,10 @@ async function processJob(id) {
 
 async function ensureSynced(companyId, type, id) {
   getBillstackConfig(companyId);
-  const job = await schedule(companyId, type, id);
+  // A user explicitly asking to invoice is a manual retry: a previously failed
+  // (even non-retryable) sync must not keep replaying its stale error.
+  const previous = await Job.findById(externalId(companyId, type, id)).lean();
+  const job = await schedule(companyId, type, id, previous?.status === 'FAILED');
   if (job.status !== 'SYNCED') await processJob(job._id);
   const entity = await loadEligible(companyId, type, id);
   const latestJob = await Job.findById(job._id).lean();
