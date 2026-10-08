@@ -31,6 +31,7 @@ import {
   updateMyProfile,
 } from "../../services/userService";
 import { uploadFile } from "../../services/uploadService";
+import ImageCropDialog from "../../components/ui/ImageCropDialog";
 import {
   createLeaveRequest,
   getMyAttendance,
@@ -258,6 +259,8 @@ const UserProfile = () => {
   const [photoViewOpen, setPhotoViewOpen] = useState(false);
   const [photoRemoveOpen, setPhotoRemoveOpen] = useState(false);
   const [removingPhoto, setRemovingPhoto] = useState(false);
+  // The file the person picked, held back until they have chosen a square of it.
+  const [pendingPhoto, setPendingPhoto] = useState(null);
   const [attendanceMonth, setAttendanceMonth] = useState(toMonthInputValue(new Date()));
   const [selectedAttendanceDate, setSelectedAttendanceDate] = useState(toLocalDateInputValue(new Date()));
   const [attendanceLoading, setAttendanceLoading] = useState(false);
@@ -577,6 +580,18 @@ const UserProfile = () => {
       return;
     }
 
+    /*
+     * Crop before upload, not after: a phone portrait stored whole is shown as
+     * a small circle, and the middle of a head-and-shoulders shot is a chest.
+     * What gets stored is already the square people will actually see.
+     */
+    setError("");
+    setPendingPhoto(file);
+  };
+
+  const handleCroppedPhoto = async (file) => {
+    if (!file) return;
+
     try {
       setUploadingPhoto(true);
       setError("");
@@ -585,6 +600,7 @@ const UserProfile = () => {
       setProfile(response.profile || profile);
       setSummary(response.summary || summary);
       persistCachedProfileImage(response.profile?.profileImageUrl || uploaded.url);
+      setPendingPhoto(null);
 
       setSuccess("Profile photo updated");
     } catch (uploadError) {
@@ -842,6 +858,14 @@ const UserProfile = () => {
               </div>
             </div>
           </Modal>
+
+          <ImageCropDialog
+            open={Boolean(pendingPhoto)}
+            file={pendingPhoto}
+            busy={uploadingPhoto}
+            onCancel={() => { if (!uploadingPhoto) setPendingPhoto(null); }}
+            onConfirm={handleCroppedPhoto}
+          />
         </>
       )}
     </div>
