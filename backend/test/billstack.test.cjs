@@ -376,9 +376,10 @@ for (const source of ['board', 'contract', 'booking']) for (const amount of [0, 
 
 test('a client with several booked cabins gets one line item per cabin', async () => {
   const a = cabin('A1'); const b = cabin('A2'); const other = cabin('B1');
-  for (const c of [a, b]) c.client.canonicalClientId = entityId;
+  for (const c of [a, b]) { c.client.canonicalClientId = entityId; c.client.id = 'client-1'; }
   a.contract.monthlyRent = 15000; b.contract.monthlyRent = 15000; other.contract.monthlyRent = 99999;
-  other.client.canonicalClientId = actorId; other.client.id = 'someone-else'; other.client.identityKey = 'other-key';
+  // Another client wrongly joined to the same canonical record must not be billed.
+  other.client.canonicalClientId = entityId; other.client.id = 'client-2';
   const entity = { _id: entityId, companyName: a.client.name };
   const service = contextHarness({ cabins: [a, b, other], entity });
   const ctx = await service.buildBillingContext(companyId, 'coworking-client', entity, a.code);
@@ -389,6 +390,8 @@ test('a client with several booked cabins gets one line item per cabin', async (
   assert.ok(ctx.sourceRef.sourceId.length <= 40);
   const fromSecond = await service.buildBillingContext(companyId, 'coworking-client', entity, b.code);
   assert.deepEqual(fromSecond.sourceRef, ctx.sourceRef, 'either cabin opens the same invoice');
+  const single = await service.buildBillingContext(companyId, 'coworking-client', entity, other.code);
+  assert.equal(single.prefill.lineItems.length, 1, 'a different client keeps its own single-cabin invoice');
 });
 
 test('BOOKED canonical client is eligible without agreement dates; same name alone cannot prefill another client', async () => {

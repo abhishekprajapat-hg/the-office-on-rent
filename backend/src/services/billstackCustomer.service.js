@@ -57,17 +57,19 @@ const fingerprint = (payload) => crypto.createHash('sha256').update(JSON.stringi
 
 // Every booked cabin that belongs to the same customer as the selected cabin.
 // A client with several cabins must be billed for all of them in one invoice.
+// Grouping mirrors the CRM Clients page exactly (same `client.id`). The
+// canonical-client link is deliberately NOT used: it is resolved from shared
+// phone/email/name and can join two different clients.
 function clientBoardCabins(board, entityId, cabinCode) {
   const cabins = (board?.state?.cabins || []).filter(validBookedCabin);
   const selected = cabinCode ? cabins.find(c => c.code === cabinCode) : null;
+  if (selected) {
+    const clientId = selected.client?.id;
+    if (!clientId) return [selected];
+    return cabins.filter(c => c === selected || String(c.client?.id) === String(clientId));
+  }
   const id = String(entityId);
-  const keys = new Set([selected?.client?.identityKey].filter(Boolean));
-  const clientIds = new Set([id, selected?.client?.id && String(selected.client.id)].filter(Boolean));
-  const matches = cabins.filter(c => String(c.client?.canonicalClientId) === id
-    || clientIds.has(String(c.client?.id))
-    || (c.client?.identityKey && keys.has(c.client.identityKey)));
-  if (selected && !matches.includes(selected)) matches.unshift(selected);
-  return matches;
+  return cabins.filter(c => String(c.client?.canonicalClientId) === id || String(c.client?.id) === id);
 }
 
 function boardCabinRent(cabin) {
