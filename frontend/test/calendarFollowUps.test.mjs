@@ -12,11 +12,13 @@ test("terminal leads leave the pending calendar except unpaid collection", () =>
   const regular = { status: "CONTACTED", nextFollowUp: "2026-09-29T10:00:00Z" };
   const lost = { ...regular, status: "LOST" };
   const invalid = { ...regular, status: "INVALID" };
+  const missing = { ...regular, status: "MISSING_IN_ACTION" };
   const closedPaid = { ...regular, status: "CLOSED", dealPayment: { paymentType: "FULL" } };
   const closedUnpaid = { ...regular, status: "CLOSED", dealPayment: { paymentType: "PARTIAL", remainingAmount: 500 } };
   assert.equal(isPendingCalendarFollowUp(regular), true);
   assert.equal(isPendingCalendarFollowUp(lost), false);
   assert.equal(isPendingCalendarFollowUp(invalid), false);
+  assert.equal(isPendingCalendarFollowUp(missing), false);
   assert.equal(isPendingCalendarFollowUp(closedPaid), false);
   assert.equal(isPendingCalendarFollowUp(closedUnpaid), true);
   assert.equal(isUnpaidCollectionLead(closedUnpaid), true);

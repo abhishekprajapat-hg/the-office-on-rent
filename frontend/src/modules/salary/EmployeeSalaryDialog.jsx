@@ -1,9 +1,18 @@
 import React, { useCallback, useEffect, useRef, useState } from "react";
 import { Loader2 } from "lucide-react";
 import Modal from "../../components/ui/Modal";
-import { getUserSalary, setUserSalary } from "../../services/salaryService";
+import {
+  addEmployeeDeduction,
+  getUserSalary,
+  removeEmployeeDeduction,
+  setUserSalary,
+  updateEmployeeDeduction,
+} from "../../services/salaryService";
+import { isDeleteApprovalPending } from "../../services/deleteRequestService";
 import { toErrorMessage } from "../../utils/errorMessage";
 import SalaryBreakdown from "./SalaryBreakdown";
+import CustomDeductionsEditor from "./CustomDeductionsEditor";
+import EmployeeRulesEditor from "./EmployeeRulesEditor";
 import { fieldClass, primaryButtonClass } from "./salaryUi";
 import { formatMonthLabel, formatRupees } from "./salaryFormat";
 
@@ -78,6 +87,29 @@ export default function EmployeeSalaryDialog({ user, monthKey, focusForm = false
   };
 
   const revisions = Array.isArray(data?.revisions) ? data.revisions : [];
+  const firstName = String(user.name || "").trim().split(/\s+/)[0] || "this person";
+
+  /*
+   * A change to this person's deductions changes this month's figures, so the
+   * dialog reloads to show the new breakdown, and the team list behind it is
+   * told to refresh as well.
+   */
+  const afterDeductionChange = async (result, fallback) => {
+    await load();
+    onSaved?.(result?.message || fallback);
+  };
+  const addDeduction = async (payload) => {
+    await afterDeductionChange(await addEmployeeDeduction(user._id, payload), "Deduction added");
+  };
+  const updateDeduction = async (item, payload) => {
+    await afterDeductionChange(await updateEmployeeDeduction(user._id, item._id, payload), "Deduction updated");
+  };
+  // A manager's removal waits for an admin; nothing changes until then.
+  const removeDeduction = async (item) => {
+    const result = await removeEmployeeDeduction(user._id, item._id);
+    if (isDeleteApprovalPending(result)) onSaved?.(result.message);
+    else await afterDeductionChange(result, "Deduction removed");
+  };
 
   return (
     <Modal
@@ -156,6 +188,33 @@ export default function EmployeeSalaryDialog({ user, monthKey, focusForm = false
               </button>
             </div>
           </form>
+
+          {data?.companyRules ? (
+            <EmployeeRulesEditor
+              // Remounted after each save, so the form starts from what is stored.
+              key={data.deductionRules?.updatedAt || "company-rules"}
+              userId={user._id}
+              firstName={firstName}
+              companyRules={data.companyRules}
+              deductionRules={data.deductionRules}
+              onSaved={(message) => afterDeductionChange({ message }, "Deductions saved")}
+            />
+          ) : null}
+
+          <div>
+            <h3 className="text-[13.5px] font-semibold text-slate-900">Other deductions for {firstName}</h3>
+            <p className="mb-2 mt-0.5 text-[12px] text-slate-500">
+              Only for {firstName}, on top of the company&apos;s rules - an advance being recovered, a loan, a one-off fine.
+            </p>
+            <CustomDeductionsEditor
+              items={Array.isArray(data?.deductions) ? data.deductions : []}
+              monthKey={monthKey}
+              emptyText={`Nothing extra is deducted from ${firstName}'s salary.`}
+              onAdd={addDeduction}
+              onUpdate={updateDeduction}
+              onRemove={removeDeduction}
+            />
+          </div>
 
           {revisions.length ? (
             <div>

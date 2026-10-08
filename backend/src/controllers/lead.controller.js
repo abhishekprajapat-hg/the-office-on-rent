@@ -2774,7 +2774,7 @@ exports.bulkUploadLeads = async (req, res) => {
             { phone: { $in: payloadPhoneMatchers } },
           ],
         })
-          .select("phone status")
+          .select("phone status dealPayment")
           .lean()
         : [],
       payloadInventoryIds.length
@@ -2801,8 +2801,8 @@ exports.bulkUploadLeads = async (req, res) => {
     const storedPhoneByKey = new Map(
       accessibleExistingRows.map((row) => [toPhoneSetKey(row?.phone), String(row?.phone || "").trim()]),
     );
-    const existingStatusByKey = new Map(
-      accessibleExistingRows.map((row) => [toPhoneSetKey(row?.phone), normalizeLeadStatusValue(row?.status)]),
+    const existingLeadByKey = new Map(
+      accessibleExistingRows.map((row) => [toPhoneSetKey(row?.phone), row]),
     );
     const seenPhones = new Set(companyPhoneSet);
     const uploadedPhoneSet = new Set();
@@ -2955,7 +2955,17 @@ exports.bulkUploadLeads = async (req, res) => {
           throw new Error(roleTypeError);
         }
 
-        if (nextFollowUp) {
+        // A sheet can carry a date for a lead that is lost, invalid or missing;
+        // it is dropped so the lead does not come back onto the follow-up list.
+        const existingLead = isExistingLead ? existingLeadByKey.get(phone) : null;
+        const existingStatus = normalizeLeadStatusValue(existingLead?.status);
+        const rowHasStatus = Boolean(String(row.status || "").trim())
+          && LEAD_STATUS_VALUES.includes(normalizedRowStatus);
+        const dropFollowUp = shouldClearTerminalFollowUp(
+          rowHasStatus || !existingLead ? status : existingStatus,
+          existingLead,
+        );
+        if (nextFollowUp && !dropFollowUp) {
           writePayload.nextFollowUp = nextFollowUp;
         }
         if (lastContactedAt) {
@@ -2987,9 +2997,6 @@ exports.bulkUploadLeads = async (req, res) => {
           // Re-uploading a sheet must not wipe what the team already recorded:
           // only the columns this row actually fills are written onto the
           // existing lead, and a closed deal is never reopened from a sheet.
-          const existingStatus = existingStatusByKey.get(phone) || "";
-          const rowHasStatus = Boolean(String(row.status || "").trim())
-            && LEAD_STATUS_VALUES.includes(normalizedRowStatus);
           if (rowHasStatus && existingStatus === CLOSED_STATUS && status !== CLOSED_STATUS) {
             throw new Error("This lead has a closed deal, so its status cannot be changed from a bulk upload");
           }
@@ -3009,6 +3016,10 @@ exports.bulkUploadLeads = async (req, res) => {
           if (String(row.source || "").trim()) updatePayload.source = source;
           if (rowHasStatus) updatePayload.status = status;
           if (writePayload.nextFollowUp) updatePayload.nextFollowUp = writePayload.nextFollowUp;
+          if (dropFollowUp) {
+            updatePayload.nextFollowUp = null;
+            updatePayload.followUpPurpose = "";
+          }
           if (writePayload.lastContactedAt) updatePayload.lastContactedAt = writePayload.lastContactedAt;
           if (inventory) updatePayload.inventoryId = inventory._id;
           if (parsedSiteLocation.provided) updatePayload.siteLocation = writePayload.siteLocation;
@@ -4735,6 +4746,7 @@ exports.updateLeadStatus = async (req, res) => {
 
     if (clearTerminalFollowUp) {
       lead.nextFollowUp = null;
+      lead.followUpPurpose = "";
     } else if (hasNextFollowUpInput) {
       lead.nextFollowUp = parsedNextFollowUp;
     } else if (clearNextFollowUp) {
@@ -4779,7 +4791,7 @@ exports.updateLeadStatus = async (req, res) => {
     }
 
     applyLeadTemperature(lead, req.body);
-    if (req.body.followUpPurpose !== undefined) {
+    if (req.body.followUpPurpose !== undefined && !clearTerminalFollowUp) {
       lead.followUpPurpose = String(req.body.followUpPurpose || "").trim().slice(0, 200);
     }
     if (req.body.hotClient !== undefined) lead.hotClient = req.body.hotClient;
@@ -5284,6 +5296,7 @@ exports.approveLeadStatusRequest = async (req, res) => {
     }
     if (shouldClearTerminalFollowUp(request.proposedStatus, lead)) {
       lead.nextFollowUp = null;
+      lead.followUpPurpose = "";
     }
     if (Array.isArray(request.closureDocuments) && request.closureDocuments.length) {
       lead.closureDocuments = request.closureDocuments.map((row) => ({

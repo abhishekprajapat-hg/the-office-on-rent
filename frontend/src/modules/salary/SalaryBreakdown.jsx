@@ -58,14 +58,20 @@ export default function SalaryBreakdown({ salary }) {
           </thead>
           <tbody>
             {lines.map((line) => {
-              const muted = !line.count;
+              // A named deduction has no count of days; it is muted only when it costs nothing.
+              const muted = line.custom ? !line.amount : !line.count;
               const dates = Array.isArray(line.dates) ? line.dates : [];
               return (
                 <tr key={line.key} className={muted ? "text-slate-400" : "text-slate-700"}>
                   <td className="border-b border-slate-100 px-3 py-2 align-top">
                     <span className="flex items-center gap-2 font-semibold">
-                      <span aria-hidden="true" className={`h-2 w-2 shrink-0 rounded-full ${muted ? "bg-slate-300" : LINE_TONES[line.key] || "bg-slate-400"}`} />
+                      <span aria-hidden="true" className={`h-2 w-2 shrink-0 rounded-full ${muted ? "bg-slate-300" : line.custom ? "bg-fuchsia-500" : LINE_TONES[line.key] || "bg-slate-400"}`} />
                       {line.label}
+                      {line.custom ? (
+                        <span className="rounded-full border border-slate-200 bg-white px-1.5 py-px text-[10.5px] font-medium text-slate-500">
+                          {line.scope === "EMPLOYEE" ? "Personal" : "Everybody"}
+                        </span>
+                      ) : null}
                     </span>
                     {dates.length && line.key !== "beforeJoining" ? (
                       <span className="mt-1 block pl-4 text-[11.5px] font-normal text-slate-500">
@@ -79,7 +85,7 @@ export default function SalaryBreakdown({ salary }) {
                       </span>
                     ) : null}
                   </td>
-                  <td className="border-b border-slate-100 px-3 py-2 text-right align-top font-mono tabular-nums">{line.count}</td>
+                  <td className="border-b border-slate-100 px-3 py-2 text-right align-top font-mono tabular-nums">{line.custom ? "–" : line.count}</td>
                   <td className="border-b border-slate-100 px-3 py-2 align-top text-[12.5px]">{line.rule}</td>
                   <td className={`border-b border-slate-100 px-3 py-2 text-right align-top font-mono font-semibold tabular-nums ${line.amount > 0 ? "text-rose-700" : ""}`}>
                     {line.amount > 0 ? `− ${formatRupees(line.amount)}` : formatRupees(0)}

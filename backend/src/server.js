@@ -8,6 +8,7 @@ const { runAutoCheckoutSweep } = require("./controllers/attendance.controller");
 const { runExpiredBookingSweep } = require("./services/coworkingBooking.service");
 const { runContractLifecycleSweep } = require("./services/coworkingContract.service");
 const { runInvoiceOverdueSweep } = require("./services/coworkingInvoice.service");
+const { clearStaleFollowUps } = require("./utils/leadFollowUp");
 const logger = require("./config/logger");
 
 const PORT = process.env.PORT || 5000;
@@ -221,8 +222,20 @@ const startAttendanceViolationSweep = () => {
  const sweep = async () => { if (running) return; running = true; try { await require("./services/attendanceViolation.service").runViolationSweep(); } catch (error) { logger.error({ error: error.message, message: "Attendance violation sweep failed" }); } finally { running = false; } };
  const timer = setInterval(sweep, 60 * 60 * 1000); timer.unref(); sweep();
 };
+// Status changes clear these as they happen; this is for leads saved before that.
+const clearStaleLeadFollowUps = async () => {
+  try {
+    const clearedCount = await clearStaleFollowUps();
+    if (clearedCount > 0) {
+      logger.info({ clearedCount, message: "Cleared follow-ups from closed, lost, invalid and missing leads" });
+    }
+  } catch (error) {
+    logger.error({ error: error.message, message: "Clearing stale lead follow-ups failed" });
+  }
+};
 const bootstrap = async () => {
   await connectDB();
+  clearStaleLeadFollowUps();
   require('./services/billstackSync.service').startWorker();
   startAttendanceAutoCheckoutSweep();
   startAttendanceViolationSweep();

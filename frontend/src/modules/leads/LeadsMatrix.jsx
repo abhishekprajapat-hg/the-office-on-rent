@@ -2028,8 +2028,22 @@ const LeadsMatrix = () => {
     }
   }, [selectedLead, inventoryOptions, relatedInventoryDraft]);
 
+  // The list's query string, remembered while a lead is open. Leaving the lead -
+  // by its Back button, the sidebar, or a transfer or delete that closes it -
+  // lands on plain /leads, which below would read as "no filters" and clear them.
+  const pipelineSearchRef = useRef("");
+  const wasRouteDetailsViewRef = useRef(isRouteDetailsView);
+
   useEffect(() => {
+    const cameBackFromLead = wasRouteDetailsViewRef.current && !isRouteDetailsView;
+    wasRouteDetailsViewRef.current = isRouteDetailsView;
     if (isRouteDetailsView) return;
+
+    if (cameBackFromLead && !location.search && pipelineSearchRef.current) {
+      navigate(`${location.pathname}${pipelineSearchRef.current}`, { replace: true });
+      return;
+    }
+    pipelineSearchRef.current = location.search;
 
     const search = new URLSearchParams(location.search || "");
     const statusParam = String(search.get("status") || "").trim().toUpperCase();
@@ -2046,7 +2060,7 @@ const LeadsMatrix = () => {
       setQuery("");
     }
 
-  }, [isRouteDetailsView, location.search]);
+  }, [isRouteDetailsView, location.pathname, location.search, navigate]);
 
   useEffect(() => {
     if (typeof window === "undefined") return undefined;

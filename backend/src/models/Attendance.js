@@ -53,6 +53,12 @@ const attendanceLocationSchema = new mongoose.Schema(
       min: 0,
       default: null,
     },
+    // Which office's geofence the check-in fell inside; "" before offices had names.
+    officeName: {
+      type: String,
+      trim: true,
+      default: "",
+    },
   },
   { _id: false },
 );

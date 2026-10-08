@@ -1,4 +1,5 @@
 import AttendanceViolations from "./AttendanceViolations";
+import AttendanceOfficesPanel from "./AttendanceOfficesPanel";
 import { MANUAL_ATTENDANCE_STATUS_OPTIONS, manualStatusSelectValue } from "./attendanceStatus";
 import React, { useCallback, useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
@@ -1074,7 +1075,9 @@ const AttendanceHub = () => {
                         <span className="flex items-center gap-2">
                           <MapPin size={15} className="shrink-0 text-slate-500" aria-hidden="true" />
                           <span className="leading-tight">
-                            <span className="block text-[12px] text-slate-500">Office radius</span>
+                            <span className="block text-[12px] text-slate-500">
+                              {todayAttendance?.checkInLocation?.officeName || "Office radius"}
+                            </span>
                             <strong className="font-mono text-[14px] text-slate-800">
                               {formatDistance(todayAttendance?.checkInLocation?.distanceMeters)}
                             </strong>
@@ -1355,7 +1358,9 @@ const AttendanceHub = () => {
                             </td>
                             {isAdminViewer ? (
                               <td className="border-b border-slate-100 px-3 py-2.5 text-[13px] text-slate-500">
-                                In {formatDistance(row.checkInLocation?.distanceMeters)} · Out {formatDistance(row.checkOutLocation?.distanceMeters)}
+                                In {formatDistance(row.checkInLocation?.distanceMeters)}
+                                {row.checkInLocation?.officeName ? ` (${row.checkInLocation.officeName})` : ""}
+                                {" · "}Out {formatDistance(row.checkOutLocation?.distanceMeters)}
                               </td>
                             ) : null}
                           </tr>
@@ -1722,6 +1727,10 @@ const AttendanceHub = () => {
             ) : null}
 
             {isAdminViewer ? (
+              <AttendanceOfficesPanel requestLocation={() => requestAttendanceLocation({ required: true })} />
+            ) : null}
+
+            {isAdminViewer ? (
               <section className={cardClass}>
                 <div className={cardHeaderClass}>
                   <IconBox icon={Lightbulb} tone="amber" boxSize="h-8 w-8" iconSize={15} />
@@ -1748,7 +1757,8 @@ const AttendanceHub = () => {
         <p className="mt-4 flex items-start gap-2 rounded-xl border border-blue-200 bg-blue-50 p-3.5 text-[13.5px] text-blue-900">
           <Info size={15} className="mt-px shrink-0" aria-hidden="true" />
           <span>
-            Tip: team members can only check in within the allowed office radius.
+            Tip: team members can only check in within the radius of the main office, or of another
+            office they have been allowed at.
             Break time is excluded from total working hours, and check-out works from anywhere.
           </span>
         </p>

@@ -24,30 +24,72 @@ const PER_DAY_BASIS = Object.freeze({
   FIXED_DAYS: "FIXED_DAYS",
 });
 
-const LATE_DEDUCTION_UNIT = Object.freeze({
+/*
+ * What one deduction is measured in. Every rule picks its own:
+ *   DAYS     value x the per-day salary (0.5 = half a day's pay)
+ *   AMOUNT   a fixed number of rupees
+ *   PERCENT  value % of the monthly salary
+ */
+const DEDUCTION_UNIT = Object.freeze({
   DAYS: "DAYS",
   AMOUNT: "AMOUNT",
+  PERCENT: "PERCENT",
 });
+
+// Sanity caps on one deduction. Over 1 day is a penalty some companies apply
+// to an absence nobody was told about; nothing sensible needs more than these.
+const DEDUCTION_UNIT_LIMITS = Object.freeze({
+  [DEDUCTION_UNIT.DAYS]: 5,
+  [DEDUCTION_UNIT.AMOUNT]: 100000,
+  [DEDUCTION_UNIT.PERCENT]: 100,
+});
+
+// The rules that each carry a unit and a value, in the order they are shown.
+const DEDUCTION_RULE_KEYS = Object.freeze(["absent", "unapprovedLeave", "halfDay", "unpaidLeave", "paidLeave", "late"]);
+
+const rule = (unit, value) => Object.freeze({ unit, value });
 
 const DEFAULT_PAYROLL_POLICY = Object.freeze({
   perDayBasis: PER_DAY_BASIS.CALENDAR_DAYS,
   fixedDaysPerMonth: 30,
-  absentDays: 1,
-  unapprovedLeaveDays: 1,
-  halfDayDays: 0.5,
-  unpaidLeaveDays: 1,
-  paidLeaveDays: 0,
+  absent: rule(DEDUCTION_UNIT.DAYS, 1),
+  unapprovedLeave: rule(DEDUCTION_UNIT.DAYS, 1),
+  halfDay: rule(DEDUCTION_UNIT.DAYS, 0.5),
+  unpaidLeave: rule(DEDUCTION_UNIT.DAYS, 1),
+  paidLeave: rule(DEDUCTION_UNIT.DAYS, 0),
   lateGraceCount: 0,
   lateEveryCount: 3,
-  lateDeductionUnit: LATE_DEDUCTION_UNIT.DAYS,
-  lateDeductionValue: 0.5,
+  // Charged for every lateEveryCount late check-ins after the first lateGraceCount.
+  late: rule(DEDUCTION_UNIT.DAYS, 0.5),
 });
 
-// Days of pay a single day can cost. Above 1 is a penalty, which some
-// companies apply to an absence nobody was told about; 5 is a sanity cap.
-const MAX_DAYS_PER_EVENT = 5;
-const MAX_LATE_AMOUNT = 100000;
 const MAX_MONTHLY_SALARY = 100000000;
+
+/*
+ * Deductions that admins and managers name themselves - "PF", "Professional
+ * tax", "Advance recovery" - on top of the attendance rules. Each is either for
+ * everybody (kept with the company's rules) or for one person (kept with their
+ * salary), and runs every month from a month on, optionally until a month, or
+ * in one month only.
+ */
+const DEDUCTION_FREQUENCY = Object.freeze({
+  MONTHLY: "MONTHLY",
+  ONCE: "ONCE",
+});
+
+const CUSTOM_DEDUCTION_SCOPE = Object.freeze({
+  COMPANY: "COMPANY",
+  EMPLOYEE: "EMPLOYEE",
+});
+
+/** Whether a named deduction applies in a month. A one-month one has from = to. */
+const deductionAppliesInMonth = (item, monthKey) => {
+  const from = String(item?.fromMonth || "");
+  const to = String(item?.toMonth || "");
+  if (!MONTH_KEY_PATTERN.test(from) || from > monthKey) return false;
+  if (item?.frequency === DEDUCTION_FREQUENCY.ONCE) return from === monthKey;
+  return !to || monthKey <= to;
+};
 
 const roundMoney = (value) => Math.round((Number(value) || 0) * 100) / 100;
 
@@ -63,32 +105,75 @@ const clampInteger = (value, min, max, fallback) => {
   return Math.min(max, Math.max(min, parsed));
 };
 
+// Rules saved before each one had a unit were plain day counts (and the late
+// rule a unit/value pair of its own). Read them as such rather than dropping
+// them back to the defaults.
+const LEGACY_DAY_FIELDS = Object.freeze({
+  absent: "absentDays",
+  unapprovedLeave: "unapprovedLeaveDays",
+  halfDay: "halfDayDays",
+  unpaidLeave: "unpaidLeaveDays",
+  paidLeave: "paidLeaveDays",
+});
+
+const readStoredRule = (source, key) => {
+  const stored = source[key];
+  if (stored && typeof stored === "object") return stored;
+  if (key === "late" && source.lateDeductionValue !== undefined) {
+    return { unit: source.lateDeductionUnit, value: source.lateDeductionValue };
+  }
+  const legacyField = LEGACY_DAY_FIELDS[key];
+  if (legacyField && source[legacyField] !== undefined) {
+    return { unit: DEDUCTION_UNIT.DAYS, value: source[legacyField] };
+  }
+  return null;
+};
+
+const toDeductionRule = (raw, fallback) => {
+  const unit = Object.values(DEDUCTION_UNIT).includes(raw?.unit) ? raw.unit : fallback.unit;
+  // A value only means something in its own unit: never carry the default's
+  // "1 day" over as "1 rupee".
+  const fallbackValue = unit === fallback.unit ? fallback.value : 0;
+  return { unit, value: clampNumber(raw?.value, 0, DEDUCTION_UNIT_LIMITS[unit], fallbackValue) };
+};
+
 /** Every field present and inside its range, whatever was stored or sent. */
 const toPayrollPolicyView = (source = {}) => {
   const base = DEFAULT_PAYROLL_POLICY;
   const value = source || {};
-  return {
+  const view = {
     perDayBasis: Object.values(PER_DAY_BASIS).includes(value.perDayBasis)
       ? value.perDayBasis
       : base.perDayBasis,
     fixedDaysPerMonth: clampInteger(value.fixedDaysPerMonth, 1, 31, base.fixedDaysPerMonth),
-    absentDays: clampNumber(value.absentDays, 0, MAX_DAYS_PER_EVENT, base.absentDays),
-    unapprovedLeaveDays: clampNumber(value.unapprovedLeaveDays, 0, MAX_DAYS_PER_EVENT, base.unapprovedLeaveDays),
-    halfDayDays: clampNumber(value.halfDayDays, 0, MAX_DAYS_PER_EVENT, base.halfDayDays),
-    unpaidLeaveDays: clampNumber(value.unpaidLeaveDays, 0, MAX_DAYS_PER_EVENT, base.unpaidLeaveDays),
-    paidLeaveDays: clampNumber(value.paidLeaveDays, 0, MAX_DAYS_PER_EVENT, base.paidLeaveDays),
     lateGraceCount: clampInteger(value.lateGraceCount, 0, 31, base.lateGraceCount),
     lateEveryCount: clampInteger(value.lateEveryCount, 1, 31, base.lateEveryCount),
-    lateDeductionUnit: Object.values(LATE_DEDUCTION_UNIT).includes(value.lateDeductionUnit)
-      ? value.lateDeductionUnit
-      : base.lateDeductionUnit,
-    lateDeductionValue: clampNumber(
-      value.lateDeductionValue,
-      0,
-      value.lateDeductionUnit === LATE_DEDUCTION_UNIT.AMOUNT ? MAX_LATE_AMOUNT : MAX_DAYS_PER_EVENT,
-      base.lateDeductionValue,
-    ),
   };
+  DEDUCTION_RULE_KEYS.forEach((key) => {
+    view[key] = toDeductionRule(readStoredRule(value, key), base[key]);
+  });
+  return view;
+};
+
+/*
+ * What one person's own deduction amounts may replace. The per-day basis stays
+ * the company's: it is how a day's pay is worked out, not what an absence costs.
+ */
+const EMPLOYEE_RULE_FIELDS = Object.freeze([...DEDUCTION_RULE_KEYS, "lateGraceCount", "lateEveryCount"]);
+
+/**
+ * The rules that apply to one person: their own amounts where a manager set
+ * them, otherwise the company's.
+ */
+const mergeEmployeeRules = (companyRules, employeeRules) => {
+  const company = toPayrollPolicyView(companyRules);
+  if (!employeeRules) return company;
+  const own = Object.fromEntries(
+    EMPLOYEE_RULE_FIELDS
+      .filter((field) => employeeRules[field] !== undefined && employeeRules[field] !== null)
+      .map((field) => [field, employeeRules[field]]),
+  );
+  return toPayrollPolicyView({ ...company, ...own });
 };
 
 /* ------------------------------------------------------------------ dates -- */
@@ -196,20 +281,26 @@ const isLateDay = (row) => Boolean(row?.checkInAt)
 
 /* ------------------------------------------------------------ calculation -- */
 
-const daysOfPayLabel = (days) => {
-  if (days === 0) return "No deduction";
-  if (days === 0.5) return "Half a day's pay each";
-  if (days === 1) return "1 day's pay each";
-  return `${days} days' pay each`;
+const formatRupeeValue = (value) =>
+  `₹${Number(value).toLocaleString("en-IN", { maximumFractionDigits: 2 })}`;
+
+/** "Half a day's pay", "₹500", "5% of salary" */
+const describeCost = ({ unit, value }) => {
+  if (unit === DEDUCTION_UNIT.AMOUNT) return formatRupeeValue(value);
+  if (unit === DEDUCTION_UNIT.PERCENT) return `${value}% of salary`;
+  if (value === 0.5) return "Half a day's pay";
+  if (value === 1) return "1 day's pay";
+  return `${value} days' pay`;
 };
 
+const dayRuleLabel = (deduction) =>
+  (deduction.value ? `${describeCost(deduction)} each` : "No deduction");
+
 const lateRuleLabel = (policy) => {
+  if (!policy.late.value) return "No deduction";
   const every = policy.lateEveryCount === 1 ? "every late check-in" : `every ${policy.lateEveryCount} late check-ins`;
-  const cost = policy.lateDeductionUnit === LATE_DEDUCTION_UNIT.AMOUNT
-    ? `₹${policy.lateDeductionValue}`
-    : policy.lateDeductionValue === 1 ? "1 day's pay" : `${policy.lateDeductionValue} day's pay`;
   const grace = policy.lateGraceCount ? ` after the first ${policy.lateGraceCount}` : "";
-  return policy.lateDeductionValue ? `${cost} for ${every}${grace}` : "No deduction";
+  return `${describeCost(policy.late)} for ${every}${grace}`;
 };
 
 /**
@@ -232,6 +323,7 @@ const calculateMonthlySalary = ({
   days = [],
   unapprovedLeaveDates = [],
   joiningKey = "",
+  customDeductions = [],
 }) => {
   const range = monthRange(monthKey);
   if (!range) throw new Error("monthKey must be YYYY-MM");
@@ -287,41 +379,71 @@ const calculateMonthlySalary = ({
   Object.values(buckets).forEach((dates) => dates.sort());
   lateDates.sort();
 
-  const dayLine = (key, label, dates, daysEach) => ({
+  // What one occurrence costs under a rule, in rupees.
+  const costOf = ({ unit, value }) => {
+    if (unit === DEDUCTION_UNIT.AMOUNT) return value;
+    if (unit === DEDUCTION_UNIT.PERCENT) return (salary * value) / 100;
+    return value * perDayRate;
+  };
+
+  const dayLine = (key, label, dates) => ({
     key,
     label,
     count: dates.length,
     dates,
-    rule: daysOfPayLabel(daysEach),
-    daysOfPay: roundMoney(dates.length * daysEach),
-    amount: roundMoney(dates.length * daysEach * perDayRate),
+    unit: policy[key].unit,
+    value: policy[key].value,
+    rule: dayRuleLabel(policy[key]),
+    amount: roundMoney(dates.length * costOf(policy[key])),
   });
 
   const chargeableLates = Math.max(0, lateDates.length - policy.lateGraceCount);
   const lateBlocks = Math.floor(chargeableLates / policy.lateEveryCount);
-  const lateAmount = policy.lateDeductionUnit === LATE_DEDUCTION_UNIT.AMOUNT
-    ? lateBlocks * policy.lateDeductionValue
-    : lateBlocks * policy.lateDeductionValue * perDayRate;
 
   const lines = [
-    dayLine("absent", "Absent", buckets[DAY_KIND.ABSENT], policy.absentDays),
-    dayLine("unapprovedLeave", "Unapproved leave", buckets[DAY_KIND.UNAPPROVED_LEAVE], policy.unapprovedLeaveDays),
-    dayLine("halfDay", "Half day", buckets[DAY_KIND.HALF_DAY], policy.halfDayDays),
-    dayLine("unpaidLeave", "Unpaid leave", buckets[DAY_KIND.UNPAID_LEAVE], policy.unpaidLeaveDays),
-    dayLine("paidLeave", "Paid leave", buckets[DAY_KIND.PAID_LEAVE], policy.paidLeaveDays),
+    dayLine("absent", "Absent", buckets[DAY_KIND.ABSENT]),
+    dayLine("unapprovedLeave", "Unapproved leave", buckets[DAY_KIND.UNAPPROVED_LEAVE]),
+    dayLine("halfDay", "Half day", buckets[DAY_KIND.HALF_DAY]),
+    dayLine("unpaidLeave", "Unpaid leave", buckets[DAY_KIND.UNPAID_LEAVE]),
+    dayLine("paidLeave", "Paid leave", buckets[DAY_KIND.PAID_LEAVE]),
     {
       key: "late",
       label: "Late check-in",
       count: lateDates.length,
       dates: lateDates,
+      unit: policy.late.unit,
+      value: policy.late.value,
       rule: lateRuleLabel(policy),
       chargeableCount: chargeableLates,
-      daysOfPay: policy.lateDeductionUnit === LATE_DEDUCTION_UNIT.DAYS
-        ? roundMoney(lateBlocks * policy.lateDeductionValue)
-        : 0,
-      amount: roundMoney(lateAmount),
+      amount: roundMoney(lateBlocks * costOf(policy.late)),
     },
   ];
+
+  /*
+   * Named deductions are monthly items, not attendance: they apply in full for
+   * any month they cover - a month still to come included - and do not wait
+   * for the days to pass the way absences do.
+   */
+  (Array.isArray(customDeductions) ? customDeductions : [])
+    .filter((item) => deductionAppliesInMonth(item, monthKey))
+    .forEach((item) => {
+      const deduction = toDeductionRule(item, { unit: DEDUCTION_UNIT.DAYS, value: 0 });
+      const once = item.frequency === DEDUCTION_FREQUENCY.ONCE;
+      lines.push({
+        key: `custom:${item.id}`,
+        label: String(item.name || "Deduction"),
+        custom: true,
+        scope: item.scope === CUSTOM_DEDUCTION_SCOPE.EMPLOYEE
+          ? CUSTOM_DEDUCTION_SCOPE.EMPLOYEE
+          : CUSTOM_DEDUCTION_SCOPE.COMPANY,
+        count: null,
+        dates: [],
+        unit: deduction.unit,
+        value: deduction.value,
+        rule: deduction.value ? `${describeCost(deduction)} ${once ? "this month only" : "every month"}` : "No deduction",
+        amount: roundMoney(costOf(deduction)),
+      });
+    });
 
   if (beforeJoiningDates.length) {
     lines.push({
@@ -329,8 +451,9 @@ const calculateMonthlySalary = ({
       label: "Before joining date",
       count: beforeJoiningDates.length,
       dates: beforeJoiningDates,
+      unit: DEDUCTION_UNIT.DAYS,
+      value: 1,
       rule: "Not paid",
-      daysOfPay: beforeJoiningDates.length,
       amount: roundMoney(beforeJoiningDates.length * perDayRate),
     });
   }
@@ -361,7 +484,14 @@ const calculateMonthlySalary = ({
 
 module.exports = {
   PER_DAY_BASIS,
-  LATE_DEDUCTION_UNIT,
+  DEDUCTION_FREQUENCY,
+  CUSTOM_DEDUCTION_SCOPE,
+  deductionAppliesInMonth,
+  DEDUCTION_UNIT,
+  DEDUCTION_UNIT_LIMITS,
+  DEDUCTION_RULE_KEYS,
+  EMPLOYEE_RULE_FIELDS,
+  mergeEmployeeRules,
   DEFAULT_PAYROLL_POLICY,
   MAX_MONTHLY_SALARY,
   MONTH_KEY_PATTERN,

@@ -9,6 +9,7 @@ const {
   describeFollowUp,
   formatBudgetShort,
   formatBudgetRange,
+  canHaveFollowUp,
 } = require("../.test-build/modules/leads/pipelineViews.js");
 
 /*
@@ -167,5 +168,23 @@ describe("budget formatting", () => {
     assert.equal(formatBudgetRange({ budgetMin: 100000, budgetMax: 500000 }), "₹5.00 L");
     assert.equal(formatBudgetRange({ budgetMin: 100000 }), "₹1.00 L");
     assert.equal(formatBudgetRange({}), "—");
+  });
+});
+
+describe("follow-up eligibility", () => {
+  test("closed, lost, invalid and missing leads get no follow-up", () => {
+    for (const status of ["CLOSED", "LOST", "INVALID", "MISSING_IN_ACTION"]) {
+      assert.equal(canHaveFollowUp({ status }), false, status);
+    }
+    for (const status of ["NEW", "CONTACTED", "QUALIFIED_LEAD", "NOT_PICKING_CALLS", "SITE_VISIT"]) {
+      assert.equal(canHaveFollowUp({ status }), true, status);
+    }
+  });
+
+  test("a deal closed on part payment keeps its collection follow-up", () => {
+    const dealPayment = { paymentType: "PARTIAL", remainingAmount: 2500 };
+    assert.equal(canHaveFollowUp({ status: "CLOSED", dealPayment }), true);
+    assert.equal(canHaveFollowUp({ status: "CLOSED", dealPayment: { ...dealPayment, remainingAmount: 0 } }), false);
+    assert.equal(canHaveFollowUp({ status: "LOST", dealPayment }), false);
   });
 });

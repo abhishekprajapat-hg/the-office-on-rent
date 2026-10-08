@@ -1,5 +1,18 @@
 const mongoose = require("mongoose");
 
+/*
+ * A further office people may check in from, with its own geofence. The main
+ * office above stays open to everyone; one of these only to the employees an
+ * admin or manager has listed against it - the few who work from that branch.
+ */
+const extraOfficeSchema = new mongoose.Schema({
+  name: { type: String, trim: true, required: true, maxlength: 80 },
+  latitude: { type: Number, min: -90, max: 90, required: true },
+  longitude: { type: Number, min: -180, max: 180, required: true },
+  radiusMeters: { type: Number, min: 10, max: 5000, default: 200 },
+  userIds: [{ type: mongoose.Schema.Types.ObjectId, ref: "User" }],
+});
+
 const attendancePolicySchema = new mongoose.Schema(
   {
     companyId: {
@@ -80,6 +93,10 @@ const attendancePolicySchema = new mongoose.Schema(
       min: 10,
       max: 5000,
       default: 200,
+    },
+    offices: {
+      type: [extraOfficeSchema],
+      default: [],
     },
     notes: {
       type: String,

@@ -118,6 +118,8 @@ export interface Lead {
   nextFollowUp?: string;
   /** Why the follow-up exists - "Discuss shortlisted properties". */
   followUpPurpose?: string;
+  /* Read only to tell a part-paid close, which keeps its collection follow-up. */
+  dealPayment?: { paymentType?: string | null; remainingAmount?: number | null } | null;
   lastContactedAt?: string;
   assignedTo?: User;
   inventoryId?: InventoryAsset | string | null;

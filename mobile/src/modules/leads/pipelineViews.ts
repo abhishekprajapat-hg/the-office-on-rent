@@ -24,6 +24,21 @@ export type PipelineView = (typeof PIPELINE_VIEWS)[keyof typeof PIPELINE_VIEWS];
 /** Statuses that are out of the pipeline: nothing here is ever "needs action". */
 export const TERMINAL_STATUSES = new Set(["CLOSED", "LOST", "INVALID"]);
 
+/*
+ * Statuses that carry no follow-up. The server clears the date and purpose when
+ * a lead reaches one; a deal closed on part payment keeps its follow-up until
+ * the rest is collected.
+ */
+export const NO_FOLLOW_UP_STATUSES = new Set(["CLOSED", "LOST", "INVALID", "MISSING_IN_ACTION"]);
+
+export const canHaveFollowUp = (lead: Pick<Partial<Lead>, "status" | "dealPayment"> | null | undefined) => {
+  const status = String(lead?.status || "").trim().toUpperCase();
+  if (!NO_FOLLOW_UP_STATUSES.has(status)) return true;
+  return status === "CLOSED"
+    && String(lead?.dealPayment?.paymentType || "").toUpperCase() === "PARTIAL"
+    && Number(lead?.dealPayment?.remainingAmount) > 0;
+};
+
 export const startOfDayMs = (ms: number) => {
   const date = new Date(ms);
   date.setHours(0, 0, 0, 0);

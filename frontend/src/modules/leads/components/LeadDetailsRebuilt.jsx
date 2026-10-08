@@ -37,6 +37,7 @@ import {
   deleteTask as apiDeleteTask,
 } from "../../../services/taskService";
 import { deleteOutcomeMessage, isDeleteApprovalPending } from "../../../services/deleteRequestService";
+import { canScheduleLeadFollowUp } from "../../calendar/calendarFollowUps";
 import {
   FURNISHING_OPTIONS,
   LEAD_SOURCE_CHANNELS,
@@ -648,6 +649,10 @@ const LeadDetailsRebuiltContent = ({
   const requiresRemainingPaymentFollowUp =
     isClosedDealFlow && normalizedPaymentType === "PARTIAL";
   const hasFollowUpDraft = String(followUpDraft || "").trim().length > 0;
+  // Closed, lost, invalid and missing leads get no follow-up; saving one clears it.
+  const effectiveStatus = statusDraft || selectedLead?.status;
+  const canHaveFollowUp = requiresRemainingPaymentFollowUp
+    || canScheduleLeadFollowUp({ ...selectedLead, status: effectiveStatus });
   const isClosedStatusSelected =
     statusDraft === "CLOSED" || String(selectedLead?.status || "").toUpperCase() === "CLOSED";
   const normalizedActiveInventoryId = String(selectedLeadActiveInventoryId || "").trim();
@@ -2218,7 +2223,7 @@ const LeadDetailsRebuiltContent = ({
           <div className={`rounded-2xl border px-2.5 py-2 sm:px-3 sm:py-2.5 ${card}`}>
             <p className={`text-[9px] uppercase tracking-[0.1em] sm:text-[10px] sm:tracking-[0.12em] ${isDark ? "text-slate-400" : "text-slate-500"}`}>Follow-up</p>
             <p className={`mt-0.5 truncate text-[11px] font-semibold sm:mt-1 sm:text-xs ${isDark ? "text-slate-100" : "text-slate-800"}`}>
-              {formatDate(followUpDraft || selectedLead?.nextFollowUp)}
+              {formatDate(canHaveFollowUp ? followUpDraft || selectedLead?.nextFollowUp : null)}
             </p>
           </div>
           <div className={`rounded-2xl border px-2.5 py-2 sm:px-3 sm:py-2.5 ${card}`}>
@@ -3033,7 +3038,13 @@ const LeadDetailsRebuiltContent = ({
                   <span className={isDark ? "text-amber-200" : "text-amber-700"}>*</span>
                 ) : null}
               </label>
-              <input type="datetime-local" value={followUpDraft} onChange={(event) => setFollowUpDraft(event.target.value)} className={`mt-1 h-10 w-full rounded-xl border px-3 text-sm ${input}`} />
+              {canHaveFollowUp ? (
+                <input type="datetime-local" value={followUpDraft} onChange={(event) => setFollowUpDraft(event.target.value)} className={`mt-1 h-10 w-full rounded-xl border px-3 text-sm ${input}`} />
+              ) : (
+                <div className={`mt-1 rounded-xl border px-3 py-2 text-xs ${softCard}`}>
+                  {statusLabel(effectiveStatus)} leads don&apos;t get follow-ups. Any follow-up on this lead is removed when you save.
+                </div>
+              )}
               {requiresRemainingPaymentFollowUp ? (
                 <div className={`mt-1 text-[10px] ${isDark ? "text-amber-200" : "text-amber-700"}`}>
                   Required for collection of pending amount

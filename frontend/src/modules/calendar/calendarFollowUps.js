@@ -30,12 +30,12 @@ export const isUnpaidCollectionLead = (lead) =>
   && normalize(lead?.dealPayment?.paymentType) === "PARTIAL"
   && Number(lead?.dealPayment?.remainingAmount) > 0;
 
-export const canScheduleLeadFollowUp = (lead) => {
-  const status = normalize(lead?.status);
-  return status !== "LOST"
-    && status !== "INVALID"
-    && (status !== "CLOSED" || isUnpaidCollectionLead(lead));
-};
+// Mirrors the server: these leads are finished with, so they carry no follow-up.
+// A deal closed on part payment keeps one until the rest is collected.
+export const NO_FOLLOW_UP_STATUSES = new Set(["CLOSED", "LOST", "INVALID", "MISSING_IN_ACTION"]);
+
+export const canScheduleLeadFollowUp = (lead) =>
+  !NO_FOLLOW_UP_STATUSES.has(normalize(lead?.status)) || isUnpaidCollectionLead(lead);
 
 export const isPendingCalendarFollowUp = (lead) =>
   Boolean(lead?.nextFollowUp) && canScheduleLeadFollowUp(lead);

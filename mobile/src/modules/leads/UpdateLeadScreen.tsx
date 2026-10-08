@@ -45,6 +45,7 @@ import {
   type StageKey,
   type Temperature,
 } from "./leadPipeline";
+import { canHaveFollowUp } from "./pipelineViews";
 import { PhotoOverlay, profilePhotoOf } from "../../components/common/PhotoOverlay";
 
 /*
@@ -257,6 +258,8 @@ export const UpdateLeadScreen = () => {
     [users],
   );
   const assignee = assignableUsers.find((row) => row._id === assignedTo);
+  // Closed, lost, invalid and missing leads get no follow-up, so no phone reminder either.
+  const followUpAllowed = canHaveFollowUp({ status: primaryStatusOf(stage), dealPayment: lead?.dealPayment });
 
   const pickStage = (next: StageKey) => {
     if (next === "CLOSED") {
@@ -279,7 +282,7 @@ export const UpdateLeadScreen = () => {
   const submit = async () => {
     if (!lead?._id) return;
 
-    const followUpAt = scheduleFollowUp ? new Date(`${date}T${time}:00`) : null;
+    const followUpAt = scheduleFollowUp && followUpAllowed ? new Date(`${date}T${time}:00`) : null;
     if (followUpAt && Number.isNaN(followUpAt.getTime())) {
       setError("That follow-up date and time could not be read");
       return;
@@ -430,10 +433,14 @@ export const UpdateLeadScreen = () => {
           <SectionCard>
             <View style={styles.cardHeadRow}>
               <Text style={[styles.cardTitle, styles.cardTitleFlush]}>Schedule Follow-up</Text>
-              <Toggle value={scheduleFollowUp} onValueChange={setScheduleFollowUp} />
+              {followUpAllowed ? <Toggle value={scheduleFollowUp} onValueChange={setScheduleFollowUp} /> : null}
             </View>
 
-            {scheduleFollowUp ? (
+            {!followUpAllowed ? (
+              <Text style={styles.cardNote}>
+                Closed, lost, invalid and missing-in-action leads don&apos;t get follow-ups.
+              </Text>
+            ) : scheduleFollowUp ? (
               <>
                 <FieldRow>
                   <FieldCol>

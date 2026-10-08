@@ -1,4 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useState } from "react";
+import { useNavigate } from "react-router-dom";
 import { Banknote, Loader2, RefreshCw, Search, TrendingDown, UserX, Users, Wallet } from "lucide-react";
 import { usePermissions } from "../../context/usePermissions";
 import { getMySalary, getTeamSalaries } from "../../services/salaryService";
@@ -14,6 +15,7 @@ import {
   avatarTone,
   countLine,
   currentMonthKey,
+  customDeductionTotal,
   describeCoverage,
   formatMonthLabel,
   formatRupees,
@@ -89,6 +91,9 @@ const MySalary = ({ month, setMonth, onError }) => {
         ) : data?.salary ? (
           <div className="space-y-5">
             <SalaryBreakdown salary={data.salary} />
+            {data.ownRules ? (
+              <p className="text-[12.5px] text-slate-500">Your deduction amounts were set for you by your manager or an admin.</p>
+            ) : null}
             {revisions.length ? (
               <div>
                 <h3 className="text-[13.5px] font-semibold text-slate-900">Salary history</h3>
@@ -121,6 +126,7 @@ const TeamSalaries = ({ month, setMonth, onError, onSuccess }) => {
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
   const [dialog, setDialog] = useState(null);
+  const navigate = useNavigate();
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -153,7 +159,7 @@ const TeamSalaries = ({ month, setMonth, onError, onSuccess }) => {
     <div className="space-y-4">
       <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
         <StatCard icon={Banknote} tone="blue" label="Monthly payroll" value={formatRupees(totals.monthlyPayroll)} hint={`${totals.withSalary || 0} with a salary set`} />
-        <StatCard icon={TrendingDown} tone="rose" label="Deducted so far" value={formatRupees(totals.totalDeduction)} hint="Absence, half days, leave and lates" />
+        <StatCard icon={TrendingDown} tone="rose" label="Deducted so far" value={formatRupees(totals.totalDeduction)} hint="Attendance and other deductions" />
         <StatCard icon={Wallet} tone="green" label="Payable after deductions" value={formatRupees(totals.netPayable)} hint={formatMonthLabel(month)} />
         <StatCard
           icon={UserX}
@@ -190,6 +196,7 @@ const TeamSalaries = ({ month, setMonth, onError, onSuccess }) => {
                 <th className="border-b border-slate-200 px-3 py-2.5 text-right">Half day</th>
                 <th className="border-b border-slate-200 px-3 py-2.5 text-right">Leave</th>
                 <th className="border-b border-slate-200 px-3 py-2.5 text-right">Late</th>
+                <th className="border-b border-slate-200 px-3 py-2.5 text-right" title="Named deductions such as PF or an advance">Other</th>
                 <th className="border-b border-slate-200 px-3 py-2.5 text-right">Deducted</th>
                 <th className="border-b border-slate-200 px-3 py-2.5 text-right">After deductions</th>
                 <th className="border-b border-slate-200 px-3 py-2.5 text-right">
@@ -200,13 +207,13 @@ const TeamSalaries = ({ month, setMonth, onError, onSuccess }) => {
             <tbody>
               {loading && !data ? (
                 <tr>
-                  <td colSpan={9} className="px-3 py-10 text-center text-[13px] text-slate-500">
+                  <td colSpan={10} className="px-3 py-10 text-center text-[13px] text-slate-500">
                     <Loader2 size={15} className="mr-2 inline animate-spin" /> Loading salaries…
                   </td>
                 </tr>
               ) : !rows.length ? (
                 <tr>
-                  <td colSpan={9} className="px-3 py-10 text-center text-[13px] text-slate-500">
+                  <td colSpan={10} className="px-3 py-10 text-center text-[13px] text-slate-500">
                     {search ? "Nobody matches that search." : "There is nobody on your team yet."}
                   </td>
                 </tr>
@@ -220,12 +227,19 @@ const TeamSalaries = ({ month, setMonth, onError, onSuccess }) => {
                 return (
                   <tr key={row.user._id} className="transition hover:bg-slate-50/70">
                     <td className="border-b border-slate-100 px-3 py-2.5">
-                      <button type="button" onClick={() => setDialog({ user: row.user, focusForm: false })} className="flex items-center gap-3 text-left">
+                      {/* The name opens the person's profile, as it does on the
+                          attendance table; their pay opens from Details. */}
+                      <button
+                        type="button"
+                        onClick={() => navigate(`/admin/users/${row.user._id}`)}
+                        className="group flex items-center gap-3 text-left"
+                        title={`Open ${row.user.name || "this person"}'s profile`}
+                      >
                         <span className={`grid h-9 w-9 shrink-0 place-items-center rounded-full text-[12.5px] font-bold text-white ${avatarTone(row.user.name)}`}>
                           <AvatarFace user={row.user} initials={getInitials(row.user.name)} />
                         </span>
                         <span className="min-w-0">
-                          <span className="block max-w-[180px] truncate font-semibold text-slate-900 hover:text-blue-700">{row.user.name || "-"}</span>
+                          <span className="block max-w-[180px] truncate font-semibold text-slate-900 group-hover:text-blue-700 group-hover:underline">{row.user.name || "-"}</span>
                           <span className="block max-w-[180px] truncate text-[12px] capitalize text-slate-500">
                             {String(row.user.role || "").replaceAll("_", " ").toLowerCase()}
                           </span>
@@ -234,6 +248,11 @@ const TeamSalaries = ({ month, setMonth, onError, onSuccess }) => {
                     </td>
                     <td className="border-b border-slate-100 px-3 py-2.5 text-right font-mono tabular-nums text-slate-800">
                       {salary ? formatRupees(salary.monthlySalary) : <span className="font-sans text-[12.5px] font-semibold text-amber-700">Not set</span>}
+                      {row.ownRules ? (
+                        <span className="block font-sans text-[11px] font-medium text-blue-700" title="This person's deductions were set for them, not the company's rules">
+                          Own deduction amounts
+                        </span>
+                      ) : null}
                     </td>
                     <td className="border-b border-slate-100 px-3 py-2.5 text-right font-mono tabular-nums text-slate-700">
                       {salary ? (
@@ -256,6 +275,9 @@ const TeamSalaries = ({ month, setMonth, onError, onSuccess }) => {
                     </td>
                     <td className="border-b border-slate-100 px-3 py-2.5 text-right font-mono tabular-nums text-slate-700">
                       {salary ? countLine(salary, "late") : dash}
+                    </td>
+                    <td className="border-b border-slate-100 px-3 py-2.5 text-right font-mono tabular-nums text-slate-700">
+                      {salary ? (customDeductionTotal(salary) > 0 ? formatRupees(customDeductionTotal(salary)) : <span className="text-slate-300">–</span>) : dash}
                     </td>
                     <td className={`border-b border-slate-100 px-3 py-2.5 text-right font-mono font-semibold tabular-nums ${salary?.totalDeduction > 0 ? "text-rose-700" : "text-slate-500"}`}>
                       {salary ? (salary.totalDeduction > 0 ? `− ${formatRupees(salary.totalDeduction)}` : formatRupees(0)) : dash}
@@ -335,7 +357,9 @@ export default function SalaryHub() {
   }, [error]);
 
   return (
-    <div className="space-y-4">
+    // ui-page-shell is what scrolls: the workspace gives each page a fixed
+    // height and expects the page to scroll inside it.
+    <div className="ui-page-shell custom-scrollbar space-y-4 bg-slate-50/70 text-slate-900">
       <ToastNotice message={error} type="error" />
       <ToastNotice message={success} type="success" />
 

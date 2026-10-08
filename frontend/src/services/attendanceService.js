@@ -126,6 +126,24 @@ export const updateAttendancePolicy = async (payload = {}) => {
   };
 };
 
+// Further offices with their own geofence, and the people who may be allowed at them.
+export const getAttendanceOffices = async () => {
+  const res = await api.get("/attendance/offices");
+  return {
+    offices: Array.isArray(res.data?.offices) ? res.data.offices : [],
+    assignableUsers: Array.isArray(res.data?.assignableUsers) ? res.data.assignableUsers : [],
+  };
+};
+
+export const updateAttendanceOffices = async (offices = []) => {
+  const res = await api.put("/attendance/offices", { offices });
+  return {
+    message: res.data?.message || "Offices updated",
+    offices: Array.isArray(res.data?.offices) ? res.data.offices : [],
+    assignableUsers: Array.isArray(res.data?.assignableUsers) ? res.data.assignableUsers : [],
+  };
+};
+
 export const getMyLeaveBalance = async (params = {}) => {
   const res = await api.get("/attendance/leave-balance/my", { params });
   return {

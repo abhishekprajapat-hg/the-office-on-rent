@@ -4,6 +4,11 @@ const LeaveRequestModel = require("../models/LeaveRequest");
 const AttendanceRegularizationModel = require("../models/AttendanceRegularization");
 const User = require("../models/User");
 const { validateBreakTimeline } = require("../utils/attendanceBreaks");
+const {
+  MAIN_OFFICE_NAME,
+  matchOfficeGeofence,
+  resolveCheckInOffices,
+} = require("../utils/attendanceGeofence");
 const logger = require("../config/logger");
 const {
   USER_ROLES,
@@ -144,28 +149,6 @@ const toCoordinate = (value, min, max) => {
   return parsed;
 };
 
-const hasValidOfficeGeofence = (policy = {}) =>
-  Number.isFinite(policy.officeLatitude)
-  && Number.isFinite(policy.officeLongitude)
-  && Number(policy.officeRadiusMeters || 0) > 0;
-
-const toRadians = (degrees) => (degrees * Math.PI) / 180;
-
-const calculateDistanceMeters = (first, second) => {
-  const earthRadiusMeters = 6371000;
-  const deltaLat = toRadians(second.latitude - first.latitude);
-  const deltaLon = toRadians(second.longitude - first.longitude);
-  const firstLat = toRadians(first.latitude);
-  const secondLat = toRadians(second.latitude);
-
-  const haversine =
-    Math.sin(deltaLat / 2) ** 2
-    + Math.cos(firstLat) * Math.cos(secondLat) * Math.sin(deltaLon / 2) ** 2;
-  return Math.round(
-    earthRadiusMeters * 2 * Math.atan2(Math.sqrt(haversine), Math.sqrt(1 - haversine)),
-  );
-};
-
 const parseAttendanceLocation = (value = {}) => {
   const latitude = toCoordinate(value?.latitude ?? value?.lat, -90, 90);
   const longitude = toCoordinate(value?.longitude ?? value?.lng, -180, 180);
@@ -179,10 +162,11 @@ const parseAttendanceLocation = (value = {}) => {
   };
 };
 
-const validateAttendanceGeofence = ({ policy, location, actionLabel }) => {
+const validateAttendanceGeofence = ({ policy, location, actionLabel, userId }) => {
   if (!policy.geofenceEnabled) return null;
 
-  if (!hasValidOfficeGeofence(policy)) {
+  const offices = resolveCheckInOffices(policy, userId);
+  if (!offices.length) {
     return {
       status: 400,
       message: "Office geofence is enabled but office coordinates are not configured",
@@ -196,26 +180,21 @@ const validateAttendanceGeofence = ({ policy, location, actionLabel }) => {
     };
   }
 
-  const distanceMeters = calculateDistanceMeters(
-    {
-      latitude: policy.officeLatitude,
-      longitude: policy.officeLongitude,
-    },
+  const { match, nearest, accuracyBufferMeters } = matchOfficeGeofence({
+    offices,
     location,
-  );
-  const radiusMeters = Number(policy.officeRadiusMeters || DEFAULT_OFFICE_RADIUS_METERS);
-  const accuracyBufferMeters = Math.min(
-    MAX_GEOFENCE_ACCURACY_BUFFER_METERS,
-    Math.max(0, Number(location.accuracy || 0)),
-  );
-  const effectiveDistanceMeters = Math.max(0, distanceMeters - accuracyBufferMeters);
+    maxAccuracyBufferMeters: MAX_GEOFENCE_ACCURACY_BUFFER_METERS,
+  });
 
-  if (effectiveDistanceMeters > radiusMeters) {
+  if (!match) {
+    const { office } = nearest;
     return {
       status: 403,
-      message: `You are outside the office geofence. Allowed range is ${radiusMeters} m.`,
-      distanceMeters,
-      effectiveDistanceMeters,
+      message: offices.length > 1
+        ? `You are outside all ${offices.length} offices you can check in from. The nearest, ${office.name}, allows ${office.radiusMeters} m.`
+        : `You are outside the office geofence. Allowed range is ${office.radiusMeters} m.`,
+      distanceMeters: nearest.distanceMeters,
+      effectiveDistanceMeters: nearest.effectiveDistanceMeters,
       accuracyMeters: location.accuracy,
     };
   }
@@ -223,9 +202,10 @@ const validateAttendanceGeofence = ({ policy, location, actionLabel }) => {
   return {
     location: {
       ...location,
-      distanceMeters,
-      effectiveDistanceMeters,
+      distanceMeters: match.distanceMeters,
+      effectiveDistanceMeters: match.effectiveDistanceMeters,
       accuracyBufferMeters,
+      officeName: match.office.name,
     },
   };
 };
@@ -574,6 +554,15 @@ const normalizeWeeklyOffDays = (value) => {
   return rows.sort((left, right) => left - right);
 };
 
+const toOfficeView = (office = {}) => ({
+  _id: office._id ? String(office._id) : "",
+  name: toTrimmedString(office.name).slice(0, 80),
+  latitude: toCoordinate(office.latitude, -90, 90),
+  longitude: toCoordinate(office.longitude, -180, 180),
+  radiusMeters: clampInteger(toInteger(office.radiusMeters, DEFAULT_OFFICE_RADIUS_METERS), 10, 5000),
+  userIds: (Array.isArray(office.userIds) ? office.userIds : []).map(String),
+});
+
 const toPolicyView = (policy = null) => {
   const source = policy || {};
   const timezone = toTrimmedString(source.timezone) || DEFAULT_POLICY.timezone;
@@ -628,9 +617,21 @@ const toPolicyView = (policy = null) => {
       10,
       5000,
     ),
+    offices: (Array.isArray(source.offices) ? source.offices : []).map(toOfficeView),
     notes: toTrimmedString(source.notes).slice(0, 500),
   };
 };
+
+// What an employee is sent: only the offices they may check in from, and not
+// who else may.
+const toPersonalPolicyView = (policy, userId) => ({
+  ...policy,
+  offices: policy.offices
+    .filter((office) => office.userIds.includes(String(userId)))
+    .map(({ _id, name, latitude, longitude, radiusMeters }) => ({
+      _id, name, latitude, longitude, radiusMeters,
+    })),
+});
 
 const resolvePolicyForCompany = async (companyId) => {
   if (!companyId) return toPolicyView(DEFAULT_POLICY);
@@ -1227,6 +1228,132 @@ exports.upsertAttendancePolicy = async (req, res) => {
   }
 };
 
+const MAX_EXTRA_OFFICES = 25;
+
+const toOfficesResponse = (policy, assignableUsers) => ({
+  offices: policy.offices,
+  assignableUsers: assignableUsers.map((row) => ({
+    _id: String(row._id),
+    name: row.name || "",
+    role: row.role || "",
+    profileImageUrl: row.profileImageUrl || "",
+  })),
+});
+
+/*
+ * Further offices, and who may check in from each. The people listed are the
+ * ones the viewer can manage - everyone for an admin, their own team for a
+ * manager - so the page can offer exactly those.
+ */
+exports.getAttendanceOffices = async (req, res) => {
+  try {
+    if (!req.user?.companyId) {
+      return res.status(403).json({ message: "Company context is required" });
+    }
+    if (!ensureManageAttendanceRole(req, res)) return null;
+
+    const [policy, assignableUsers] = await Promise.all([
+      resolvePolicyForCompany(req.user.companyId),
+      getScopedUsersForAttendanceViewer(req.user),
+    ]);
+    return res.json(toOfficesResponse(policy, assignableUsers));
+  } catch (error) {
+    logger.error({
+      requestId: req.requestId || null,
+      error: error.message,
+      message: "getAttendanceOffices failed",
+    });
+    return res.status(500).json({ message: "Server error" });
+  }
+};
+
+/*
+ * Replaces the further offices. A manager changes access only for their own
+ * team: anyone else already allowed at an office stays allowed, and anyone
+ * outside the team in the request is ignored.
+ */
+exports.updateAttendanceOffices = async (req, res) => {
+  try {
+    if (!req.user?.companyId) {
+      return res.status(403).json({ message: "Company context is required" });
+    }
+    if (!ensureManageAttendanceRole(req, res)) return null;
+
+    const rows = req.body?.offices;
+    if (!Array.isArray(rows)) {
+      return res.status(400).json({ message: "offices must be a list" });
+    }
+    if (rows.length > MAX_EXTRA_OFFICES) {
+      return res.status(400).json({ message: `Up to ${MAX_EXTRA_OFFICES} offices can be added` });
+    }
+
+    const companyId = req.user.companyId;
+    const [stored, assignableUsers] = await Promise.all([
+      AttendancePolicy.findOne({ companyId }).select("offices").lean(),
+      getScopedUsersForAttendanceViewer(req.user),
+    ]);
+    const inScope = new Set(assignableUsers.map((row) => String(row._id)));
+    const storedById = new Map((stored?.offices || []).map((office) => [String(office._id), office]));
+
+    const offices = [];
+    const seenNames = new Set([MAIN_OFFICE_NAME.toLowerCase()]);
+    for (const [index, row] of rows.entries()) {
+      const name = toTrimmedString(row?.name).slice(0, 80);
+      const latitude = toCoordinate(row?.latitude, -90, 90);
+      const longitude = toCoordinate(row?.longitude, -180, 180);
+      if (!name) {
+        return res.status(400).json({ message: `Office ${index + 1} needs a name` });
+      }
+      if (seenNames.has(name.toLowerCase())) {
+        return res.status(400).json({ message: `There is already an office called ${name}` });
+      }
+      seenNames.add(name.toLowerCase());
+      if (!Number.isFinite(latitude) || !Number.isFinite(longitude)) {
+        return res.status(400).json({ message: `${name} needs a valid latitude and longitude` });
+      }
+
+      const existing = storedById.get(String(row?._id || ""));
+      const keptOutsideScope = (existing?.userIds || [])
+        .map(String)
+        .filter((userId) => !inScope.has(userId));
+      const requested = (Array.isArray(row?.userIds) ? row.userIds : [])
+        .map(String)
+        .filter((userId) => inScope.has(userId));
+
+      offices.push({
+        ...(existing ? { _id: existing._id } : {}),
+        name,
+        latitude,
+        longitude,
+        radiusMeters: clampInteger(toInteger(row?.radiusMeters, DEFAULT_OFFICE_RADIUS_METERS), 10, 5000),
+        userIds: [...new Set([...keptOutsideScope, ...requested])],
+      });
+    }
+
+    // A company with no saved policy runs on the defaults; writing the offices
+    // must not swap those for the schema's own.
+    const insertDefaults = toPolicyView(DEFAULT_POLICY);
+    delete insertDefaults.offices;
+    const updated = await AttendancePolicy.findOneAndUpdate(
+      { companyId },
+      { $set: { offices }, $setOnInsert: insertDefaults },
+      { upsert: true, setDefaultsOnInsert: true, returnDocument: "after" },
+    ).lean();
+
+    return res.json({
+      message: "Offices updated",
+      ...toOfficesResponse(toPolicyView(updated), assignableUsers),
+    });
+  } catch (error) {
+    logger.error({
+      requestId: req.requestId || null,
+      error: error.message,
+      message: "updateAttendanceOffices failed",
+    });
+    return res.status(500).json({ message: "Server error" });
+  }
+};
+
 exports.checkIn = async (req, res) => {
   try {
     if (!req.user?.companyId) {
@@ -1251,6 +1378,7 @@ exports.checkIn = async (req, res) => {
       policy,
       location: parsedLocation,
       actionLabel: "check-in",
+      userId: req.user._id,
     });
     if (geofenceResult?.status) {
       return res.status(geofenceResult.status).json({
@@ -2289,7 +2417,7 @@ exports.getMyAttendance = async (req, res) => {
       from: range.from,
       to: range.to,
       today: todayAttendance ? toAttendanceView(todayAttendance, policy) : null,
-      policy,
+      policy: toPersonalPolicyView(policy, req.user._id),
       summary,
       attendance,
     };

@@ -29,6 +29,8 @@ router.get("/users/:userId", attendanceController.getUserAttendanceForAdmin);
 router.get("/daily", attendanceController.getDailyAttendanceForAdmin);
 router.get("/policy", attendanceController.getAttendancePolicy);
 router.patch("/policy", writeLimiter, attendanceController.upsertAttendancePolicy);
+router.get("/offices", attendanceController.getAttendanceOffices);
+router.put("/offices", writeLimiter, attendanceController.updateAttendanceOffices);
 
 router.get("/leave-balance/my", attendanceController.getMyLeaveBalance);
 router.get("/leave-balance/:userId", attendanceController.getLeaveBalanceForAdmin);

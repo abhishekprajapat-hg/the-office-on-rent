@@ -303,6 +303,10 @@ export const AttendanceScreen = () => {
 
   const geofenced = Boolean((policy as { geofenceEnabled?: boolean } | null)?.geofenceEnabled);
   const radiusMeters = Number((policy as { officeRadiusMeters?: number } | null)?.officeRadiusMeters || 0);
+  // Further offices this person may check in from; the server sends only theirs.
+  const otherOffices = ((policy as { offices?: Array<{ name?: string }> } | null)?.offices || [])
+    .map((office) => String(office.name || "").trim())
+    .filter(Boolean);
 
   const run = useCallback(
     async (
@@ -509,9 +513,11 @@ export const AttendanceScreen = () => {
             <View style={styles.grow}>
               <Text style={styles.locTitle}>Office</Text>
               <Text style={styles.locNote} numberOfLines={1}>
-                {geofenced
-                  ? `Check in within ${radiusMeters || 0} m of the office`
-                  : "Location check is off for your company"}
+                {!geofenced
+                  ? "Location check is off for your company"
+                  : otherOffices.length
+                    ? `Check in at the main office or ${otherOffices.join(", ")}`
+                    : `Check in within ${radiusMeters || 0} m of the office`}
               </Text>
             </View>
           </View>
