@@ -9,9 +9,43 @@ const externalId = (companyId, type, id) => `toor:${String(companyId).toLowerCas
 const modelFor = (type) => type === 'lead' ? Lead : type === 'coworking-client' ? Client : null;
 const validBookedCabin = (cabin) => cabin?.status === 'BOOKED'
   && Boolean(String(cabin.client?.name || cabin.client?.companyName || '').trim());
-// Presence and validity are separate from value: an intentional zero is valid.
 const suppliedAmount = value => (typeof value === 'number' || (typeof value === 'string' && value.trim() !== ''))
   && Number.isFinite(Number(value)) && Number(value) >= 0;
+
+function extractCustomerName(entity, type) {
+  if (!entity) return type === 'lead' ? 'Valued Lead' : 'Valued Customer';
+  const companyName = String(entity.companyName || '').trim();
+  const name = String(entity.name || '').trim();
+  const contactPerson = String(entity.contactPerson || '').trim();
+  return companyName || name || contactPerson || (type === 'lead' ? 'Valued Lead' : 'Valued Customer');
+}
+
+function normalizeIntegrationEmail(raw) {
+  if (!raw || typeof raw !== 'string') return '';
+  let str = raw.trim();
+  const mailtoMatch = str.match(/mailto:([^\s>)]+)/i);
+  if (mailtoMatch) str = mailtoMatch[1];
+  const angleMatch = str.match(/<([^>]+)>/);
+  if (angleMatch) str = angleMatch[1];
+  str = str.trim().toLowerCase();
+  const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+  if (emailRegex.test(str)) return str;
+  const match = str.match(/[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}/);
+  if (match && emailRegex.test(match[0].toLowerCase())) return match[0].toLowerCase();
+  return '';
+}
+
+function normalizeIntegrationPhone(raw) {
+  if (!raw) return '';
+  const digits = String(raw).replace(/\D/g, '');
+  if (digits.length >= 7 && digits.length <= 15) return digits;
+  return '';
+}
+
+function normalizeIntegrationGstin(raw) {
+  if (!raw || typeof raw !== 'string') return '';
+  return raw.trim().toUpperCase();
+}
 
 async function loadEligible(companyId, type, id) {
   const Model = modelFor(type);
@@ -22,34 +56,34 @@ async function loadEligible(companyId, type, id) {
   if (type === 'lead') {
     if (entity.status !== 'CLOSED') throw createHttpError(409, 'Only closed customers are eligible');
   } else {
-    // For coworking clients, if entity exists in database, it is eligible
     const board = await Board.findOne({ companyId }).lean();
     const booked = board?.state?.cabins?.some(c => validBookedCabin(c) && (String(c.client?.canonicalClientId) === String(id) || String(c.client?.id) === String(id)));
     const operational = booked || await Booking.exists({ companyId, clientId: id, status: { $in: ['ACTIVE', 'COMPLETED'] } })
       || await Contract.exists({ companyId, clientId: id, status: { $in: ['ACTIVE', 'EXPIRING', 'EXPIRED', 'TERMINATED'] } });
-    // If neither booked nor operational, still allow billing as a general client
+    if (!operational) {
+      return entity;
+    }
   }
   return entity;
 }
 
 function customerPayload(companyId, type, entity) {
   const address = entity.address || {};
-  // Priority: Company name first; if absent, use client name or contact person
-  const name = String(
-    (type === 'lead'
-      ? (entity.companyName || entity.name)
-      : (entity.companyName || entity.name || entity.contactPerson)) || ''
-  ).trim() || 'Valued Customer';
+  const name = extractCustomerName(entity, type);
+  const phone = normalizeIntegrationPhone(entity.phone);
+  const email = normalizeIntegrationEmail(entity.email);
+  const gstNumber = normalizeIntegrationGstin(entity.gstNumber || entity.gstin);
 
   const payload = {
     externalId: externalId(companyId, type, entity._id),
     source: 'THE_OFFICE_ON_RENT_CRM',
     name,
-    phone: String(entity.phone || '').trim(),
-    email: String(entity.email || '').trim(),
+    phone,
+    email,
     billingAddress: type === 'lead' ? '' : ['line1', 'line2', 'city', 'state', 'pincode', 'country'].map(k => address[k]).filter(Boolean).join(', '),
-    gstNumber: String(entity.gstNumber || '').trim(),
+    gstNumber,
   };
+  if (!payload.name) throw createHttpError(409, 'Customer needs a name before billing');
   return payload;
 }
 
@@ -137,6 +171,8 @@ async function buildBillingContextInner(companyId, type, entity, cabinCode) {
       propDesc = entity.projectInterested;
     }
 
+    const serviceName = `Brokerage Services - ${isResidential ? 'Residential' : 'Commercial'}`;
+
     return {
       billingType,
       billingEntityCode,
@@ -152,7 +188,8 @@ async function buildBillingContextInner(companyId, type, entity, cabinCode) {
         reference: entity.dealPayment?.paymentReference || (inventory?.propertyId ? `PropID: ${inventory.propertyId}` : ''),
         lineItems: [
           {
-            productName: `Brokerage Services - ${isResidential ? 'Residential' : 'Commercial'}`,
+            productName: serviceName,
+            serviceName,
             quantity: 1,
             rate: brokerage,
             rateReliable: suppliedAmount(entity.brokerageReceived),
@@ -204,6 +241,7 @@ async function buildBillingContextInner(companyId, type, entity, cabinCode) {
           lineItems: [
             {
               productName: `Coworking Space Rental (${currentPeriod})`,
+              serviceName: 'Coworking Space Rental',
               quantity: 1,
               rate: rent,
               rateReliable: suppliedAmount(contract.rent),
@@ -232,6 +270,7 @@ async function buildBillingContextInner(companyId, type, entity, cabinCode) {
           lineItems: [
             {
               productName: `Coworking Booking - ${booking.bookingCode || ''}`,
+              serviceName: 'Coworking Booking',
               quantity: 1,
               rate: price,
               rateReliable: suppliedAmount(booking.price),
@@ -273,6 +312,7 @@ async function buildBillingContextInner(companyId, type, entity, cabinCode) {
           lineItems: [
             {
               productName: `Coworking Space Rental - Cabin ${cabinLabel} (${cabin.seats} Seats) - ${currentPeriod}`,
+              serviceName: 'Coworking Space Rental',
               quantity: 1,
               rate: rent,
               rateReliable: suppliedAmount(amount),
@@ -299,9 +339,11 @@ async function buildBillingContextInner(companyId, type, entity, cabinCode) {
         lineItems: [
           {
             productName: 'Coworking Space Rental / Service',
+            serviceName: 'Coworking Space Rental',
             quantity: 1,
             rate: 0,
             rateReliable: false,
+            hsnSac: '997212',
           },
         ],
       },
@@ -334,4 +376,8 @@ module.exports = {
   customerPayload,
   fingerprint,
   buildBillingContext,
+  extractCustomerName,
+  normalizeIntegrationEmail,
+  normalizeIntegrationPhone,
+  normalizeIntegrationGstin,
 };

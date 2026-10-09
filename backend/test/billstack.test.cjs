@@ -785,3 +785,75 @@ test('sparse Billing grant preserves role defaults, legacy behavior and unrelate
     assert.ok(!revoked.permissions.includes('page.billing.create_invoice'));
   }
 });
+
+test('customer normalization: email extracts valid address from display-name and mailto formats', () => {
+  const { normalizeIntegrationEmail } = load('services/billstackCustomer.service.js');
+  assert.equal(normalizeIntegrationEmail('nowfloats business support <bizsupport@nowfloats.com>'), 'bizsupport@nowfloats.com');
+  assert.equal(normalizeIntegrationEmail('nowfloats business support [bizsupport@nowfloats.com](mailto:bizsupport@nowfloats.com)'), 'bizsupport@nowfloats.com');
+  assert.equal(normalizeIntegrationEmail('mailto:support@example.com'), 'support@example.com');
+  assert.equal(normalizeIntegrationEmail('  SUPPORT@EXAMPLE.COM  '), 'support@example.com');
+  assert.equal(normalizeIntegrationEmail('not-an-email'), '');
+  assert.equal(normalizeIntegrationEmail(''), '');
+  assert.equal(normalizeIntegrationEmail(null), '');
+});
+
+test('customer normalization: phone extracts 7-15 digits and clears malformed numbers', () => {
+  const { normalizeIntegrationPhone } = load('services/billstackCustomer.service.js');
+  assert.equal(normalizeIntegrationPhone('8143283203'), '8143283203');
+  assert.equal(normalizeIntegrationPhone('+91 8143283203'), '918143283203');
+  assert.equal(normalizeIntegrationPhone('(080) 1234567'), '0801234567');
+  assert.equal(normalizeIntegrationPhone('12345'), ''); // < 7 digits
+  assert.equal(normalizeIntegrationPhone('1234567890123456'), ''); // > 15 digits
+  assert.equal(normalizeIntegrationPhone('invalid-phone'), '');
+  assert.equal(normalizeIntegrationPhone(''), '');
+  assert.equal(normalizeIntegrationPhone(null), '');
+});
+
+test('customer normalization: customer name prioritizes companyName > name > contactPerson', () => {
+  const { extractCustomerName } = load('services/billstackCustomer.service.js');
+  assert.equal(extractCustomerName({ companyName: 'NOWFLOATS TECHNOLOGIES LIMITED', name: 'Ashish', contactPerson: 'Resham' }), 'NOWFLOATS TECHNOLOGIES LIMITED');
+  assert.equal(extractCustomerName({ name: 'Ashish', contactPerson: 'Resham' }), 'Ashish');
+  assert.equal(extractCustomerName({ contactPerson: 'Resham Kathuria' }), 'Resham Kathuria');
+  assert.equal(extractCustomerName({}, 'lead'), 'Valued Lead');
+  assert.equal(extractCustomerName({}, 'coworking-client'), 'Valued Customer');
+});
+
+test('customer normalization: GSTIN trims and uppercases without silent alteration', () => {
+  const { normalizeIntegrationGstin } = load('services/billstackCustomer.service.js');
+  assert.equal(normalizeIntegrationGstin(' 36AAECN0044J1ZN '), '36AAECN0044J1ZN');
+  assert.equal(normalizeIntegrationGstin('36aaecn0044j1zn'), '36AAECN0044J1ZN');
+  assert.equal(normalizeIntegrationGstin('INVALID_GST_123'), 'INVALID_GST_123');
+  assert.equal(normalizeIntegrationGstin(''), '');
+  assert.equal(normalizeIntegrationGstin(null), '');
+});
+
+test('customerPayload builds production NowFloats example with extracted email and company name', () => {
+  const { customerPayload } = load('services/billstackCustomer.service.js');
+  const entity = {
+    _id: entityId,
+    companyName: 'NOWFLOATS TECHNOLOGIES LIMITED',
+    contactPerson: 'Resham Kathuria',
+    phone: '8143283203',
+    email: 'nowfloats business support <bizsupport@nowfloats.com>',
+    gstNumber: '36AAECN0044J1ZN',
+  };
+  const payload = customerPayload(companyId, 'coworking-client', entity);
+  assert.equal(payload.name, 'NOWFLOATS TECHNOLOGIES LIMITED');
+  assert.equal(payload.email, 'bizsupport@nowfloats.com');
+  assert.equal(payload.phone, '8143283203');
+  assert.equal(payload.gstNumber, '36AAECN0044J1ZN');
+});
+
+test('customerPayload allows optional email and phone when only customer name is present', () => {
+  const { customerPayload } = load('services/billstackCustomer.service.js');
+  const entity = {
+    _id: entityId,
+    name: 'Sole Proprietor Name',
+    phone: 'invalid',
+    email: 'not-an-email',
+  };
+  const payload = customerPayload(companyId, 'coworking-client', entity);
+  assert.equal(payload.name, 'Sole Proprietor Name');
+  assert.equal(payload.email, '');
+  assert.equal(payload.phone, '');
+});
