@@ -15,6 +15,7 @@ import { EmptyState, Skeleton, cn } from "../ui";
  * @param {Function} onSelectionChange (nextKeys) => void.
  * @param {Function} onRowClick        (row) => void. Also makes rows keyboard-activatable.
  * @param {Function} rowActions        (row, index) => node. Shown on hover and focus-within.
+ * @param {boolean}  alwaysShowActions Keep row actions visible for dense operational tables.
  * @param {boolean}  loading           Render skeleton rows instead of content.
  * @param {node}     emptyState        Rendered in place of the table when there are no rows.
  * @param {boolean}  stickyHeader      Default true.
@@ -30,6 +31,7 @@ const DataTable = ({
   onSelectionChange,
   onRowClick,
   rowActions,
+  alwaysShowActions = false,
   loading = false,
   emptyState,
   stickyHeader = true,
@@ -184,7 +186,10 @@ const DataTable = ({
                         onClick={(event) => event.stopPropagation()}
                       >
                         {/* Keyboard users reach these through focus-within, never hover. */}
-                        <div className="flex items-center justify-end gap-1 opacity-0 transition-opacity group-hover/row:opacity-100 group-focus-within/row:opacity-100">
+                        <div className={cn(
+                          "flex items-center justify-end gap-1 transition-opacity",
+                          alwaysShowActions ? "opacity-100" : "opacity-0 group-hover/row:opacity-100 group-focus-within/row:opacity-100",
+                        )}>
                           {rowActions(row, index)}
                         </div>
                       </td>

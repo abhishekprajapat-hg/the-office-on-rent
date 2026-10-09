@@ -223,7 +223,7 @@ test("page permissions imply view and always keep profile reachable", () => {
   // left is the pages every account keeps (salary: everybody sees their own).
   sameShape(
     pages.toPagePermissions([{ pageKey: "not_a_page", actions: ["view"] }]).sort(),
-    ["page.dashboard.view", "page.profile.view", "page.salary.view"],
+    ["page.dashboard.view", "page.performance.view", "page.profile.view", "page.salary.view"],
   );
   assert.ok(!pages.toPagePermissions([{ pageKey: "leads", actions: ["approve"] }])
     .includes("page.leads.approve"));

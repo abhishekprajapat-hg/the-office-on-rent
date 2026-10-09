@@ -171,11 +171,7 @@ const getLeadFilterDateRange = (preset, type) => {
 };
 
 const EXECUTIVE_ROLES = ["INSIDE_EXECUTIVE", "EXECUTIVE", "FIELD_EXECUTIVE"];
-const LEAD_OWNER_ROLES = ["INSIDE_EXECUTIVE", "EXECUTIVE"];
-// Any sales user can hand a lead to any other sales user (Lead Assignment Workflow).
-const MANUAL_LEAD_TRANSFER_TARGET_ROLES = ["ADMIN", "MANAGER", ...LEAD_OWNER_ROLES, "FIELD_EXECUTIVE"];
 const MANAGEMENT_ROLES = ["MANAGER"];
-const MANUAL_LEAD_TRANSFER_ACTOR_ROLES = MANUAL_LEAD_TRANSFER_TARGET_ROLES;
 const SITE_VISIT_RADIUS_METERS = 200;
 const CUSTOM_NUMBER_OPTION_VALUE = "__CUSTOM_NUMBER__";
 const DEAL_PAYMENT_MODES = [
@@ -1617,6 +1613,7 @@ const LeadsMatrix = () => {
     status: statusFilter,
     source: advancedFilters.source || "",
     assignedTo: advancedFilters.assignedTo || "",
+    inventoryType: advancedFilters.inventoryType || "",
     propertyType: advancedFilters.subtype || "",
     budgetRange: advancedFilters.budgetRange || "",
     followUpDate: advancedFilters.followUpDate || "",
@@ -1626,7 +1623,7 @@ const LeadsMatrix = () => {
 
   const applyToolbarFilters = useCallback((next) => {
     const nextAdvanced = { ...advancedFilters };
-    const map = { source: "source", assignedTo: "assignedTo", propertyType: "subtype" };
+    const map = { source: "source", assignedTo: "assignedTo", inventoryType: "inventoryType", propertyType: "subtype" };
     Object.entries(map).forEach(([from, to]) => { nextAdvanced[to] = next[from] || ""; });
     const budgetMap = { UNDER_50L: ["", "5000000"], "50L_1CR": ["5000000", "10000000"], "1CR_3CR": ["10000000", "30000000"], "3CR_5CR": ["30000000", "50000000"], ABOVE_5CR: ["50000000", ""] };
     const range = budgetMap[next.budgetRange] || ["", ""];
@@ -1673,7 +1670,7 @@ const LeadsMatrix = () => {
     const range = budgetMap[next.budgetRange] || ["", ""];
     const updated = {
       ...advancedFilters,
-      source: next.source || "", assignedTo: next.assignedTo || "", subtype: next.propertyType || "",
+      source: next.source || "", assignedTo: next.assignedTo || "", inventoryType: next.inventoryType || "", subtype: next.propertyType || "",
       budgetMin: range[0], budgetMax: range[1],
       budgetRange: next.budgetRange || "", followUpDate: next.followUpDate || "", createdDate: next.createdDate || "",
     };
@@ -1771,7 +1768,6 @@ const LeadsMatrix = () => {
     || userRole === "CHANNEL_PARTNER";
   const canBulkUploadLeads =
     userRole === "ADMIN" || MANAGEMENT_ROLES.includes(userRole) || isExecutiveUser;
-  const canAssignLeadByRole = MANUAL_LEAD_TRANSFER_ACTOR_ROLES.includes(userRole);
   const canEditLead = canPageAction(currentPageKey, "edit");
   // Same gate as the API: Admin deletes, Manager requests Admin approval, and
   // anyone else only with an explicit Delete grant from an Admin.
@@ -1781,7 +1777,9 @@ const LeadsMatrix = () => {
   const canFollowUpLead = canPageAction(currentPageKey, "follow_up");
   const canAddLeadByPage = canPageAction(currentPageKey, "create");
   const canBulkUploadByPage = canPageAction(currentPageKey, "create");
-  const canAssignLead = canAssignLeadByRole && canPageAction(currentPageKey, "assign");
+  // Pipeline users may manually reassign any company lead to any active teammate.
+  // The API still enforces company tenancy for both the lead and target user.
+  const canAssignLead = true;
   // An explicit page grant is the Admin's per-employee override. It can widen
   // the old role-based button visibility, while the API remains authoritative.
   const canAddLeadAllowed = canAddLeadByPage && (canAddLead || enforcePageAccess);
@@ -1923,19 +1921,14 @@ const LeadsMatrix = () => {
         fields: "_id,name,role,roleType,isActive,lastAssignedAt",
       });
       const users = response?.users || [];
-      const list = users.filter(
-        (user) =>
-          user.isActive !== false
-          && MANUAL_LEAD_TRANSFER_TARGET_ROLES.includes(user.role)
-          && (canChooseLeadRoleType || [userRoleType, "BOTH"].includes(String(user.roleType || "COMMERCIAL").toUpperCase())),
-      );
+      const list = users.filter((user) => user.isActive !== false);
       setExecutives(list);
     } catch (fetchError) {
       const message = toErrorMessage(fetchError, "Failed to load transfer users");
       console.error(`Load transfer users failed: ${message}`);
       setExecutives([]);
     }
-  }, [canAssignLead, canChooseLeadRoleType, userRoleType]);
+  }, [canAssignLead]);
 
   const fetchInventoryOptions = useCallback(async () => {
     if (!canManageLeadProperties) return;
@@ -2201,6 +2194,24 @@ const LeadsMatrix = () => {
   }, [debouncedQuery, leads, nowMs, propertySubtypeFilter, sortBy, statusFilter, view]);
 
   const needsActionCount = useMemo(() => countNeedsAction(leads, nowMs), [leads, nowMs]);
+  const pipelineMetrics = useMemo(() => {
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    const tomorrow = new Date(today);
+    tomorrow.setDate(tomorrow.getDate() + 1);
+    let todayCount = 0;
+    let overdue = 0;
+    let unassigned = 0;
+    leads.forEach((lead) => {
+      if (!lead?.assignedTo?._id && !lead?.assignedTo?.name) unassigned += 1;
+      if (!lead?.nextFollowUp) return;
+      const followUp = new Date(lead.nextFollowUp);
+      if (Number.isNaN(followUp.getTime())) return;
+      if (followUp >= today && followUp < tomorrow) todayCount += 1;
+      if (followUp < today && !["CLOSED", "LOST", "INVALID"].includes(String(lead?.status || "").toUpperCase())) overdue += 1;
+    });
+    return { total: leadPagination?.totalItems ?? leadPagination?.total ?? leadPagination?.totalCount ?? leads.length, today: todayCount, overdue, unassigned };
+  }, [leadPagination, leads]);
 
   // Filter state lives in the URL so a filtered pipeline can be shared and
   // survives a reload.
@@ -2484,6 +2495,35 @@ const LeadsMatrix = () => {
     />
   ) : undefined;
 
+  const handlePipelineLeadTransfer = async (lead, assignedTo, reason) => {
+    if (!canAssignLead || !lead?._id) return false;
+    if (!assignedTo) {
+      setError("Select a user to transfer this lead");
+      return false;
+    }
+    if (!String(reason || "").trim()) {
+      setError("Enter a reason before transferring this lead");
+      return false;
+    }
+    try {
+      setError("");
+      const updatedLead = await assignLead(lead._id, { assignedTo, reason: String(reason).trim() });
+      if (updatedLead) {
+        setLeads((previous) => previous.map((row) => (row._id === updatedLead._id ? updatedLead : row)));
+        if (String(selectedLead?._id || "") === String(updatedLead._id)) setSelectedLead(updatedLead);
+      } else {
+        await fetchLeads(true);
+      }
+      setSuccess("Lead transferred");
+      return true;
+    } catch (transferError) {
+      const message = toErrorMessage(transferError, "Failed to transfer lead");
+      console.error(`Pipeline transfer failed: ${message}`);
+      setError(message);
+      return false;
+    }
+  };
+
   const pipelineListProps = {
     leads: filteredLeads,
     emptyState: pipelineEmptyState,
@@ -2512,6 +2552,9 @@ const LeadsMatrix = () => {
     statusOptions: canEditLead ? LEAD_STATUSES : [],
     onStatusChange: canEditLead ? handleInlineLeadStatusChange : undefined,
     updatingStatusId,
+    canAssignLead,
+    assignees: executives,
+    onTransferLead: handlePipelineLeadTransfer,
   };
 
   useEffect(() => {
@@ -3393,8 +3436,10 @@ const LeadsMatrix = () => {
       setError("Select a user to transfer this lead");
       return;
     }
-
-    if (!window.confirm("Are you sure you want to transfer this lead?")) return;
+    if (!String(transferReasonDraft || "").trim()) {
+      setError("Enter a reason before transferring this lead");
+      return;
+    }
     try {
       setAssigning(true);
       setError("");
@@ -3651,10 +3696,10 @@ const LeadsMatrix = () => {
   return (
     <div
       className={`ui-page-shell relative h-full w-full overflow-x-hidden overflow-y-auto custom-scrollbar ${
-        isRouteDetailsView ? "route-details-page" : ""
+        isRouteDetailsView ? "route-details-page" : "pipeline-list-page"
       } ${isDark ? "bg-slate-950" : ""}`}
     >
-      <div className={`relative z-10 flex flex-col gap-4 ${isRouteDetailsView ? "px-5" : "flex-1 p-5"}`}>
+      <div className={isRouteDetailsView ? "contents" : "relative z-10 flex flex-1 flex-col gap-4 p-5"}>
         {isRouteDetailsView ? (
           <>
             <LeadsMatrixAlerts isDark={isDark} error={error} success={success} />
@@ -3702,6 +3747,7 @@ const LeadsMatrix = () => {
               onResetFilters={resetAllLeadFilters}
               employees={executives}
               propertySubtypes={ALL_PROPERTY_SUBTYPE_OPTIONS}
+              metrics={pipelineMetrics}
             />
 
             <LeadsMatrixAlerts isDark={isDark} error={error} success={success} />
@@ -3712,6 +3758,7 @@ const LeadsMatrix = () => {
               status={statusFilter}
               source={advancedFilters.source}
               assignedTo={advancedFilters.assignedTo}
+              inventoryType={advancedFilters.inventoryType}
               propertyType={advancedFilters.subtype}
               budgetRange={advancedFilters.budgetRange || ""}
               followUpDate={advancedFilters.followUpDate || ""}
@@ -3735,7 +3782,7 @@ const LeadsMatrix = () => {
               </div>
             ) : null}
 
-            {view !== PIPELINE_VIEWS.TEAM ? <div className="rounded-xl border border-slate-200 bg-white dark:border-slate-700 dark:bg-slate-900">
+            {view !== PIPELINE_VIEWS.TEAM ? <div className="lg:rounded-xl lg:border lg:border-slate-200 lg:bg-white lg:dark:border-slate-700 lg:dark:bg-slate-900">
               {/*
                 Same data, same callbacks, two presentations: a table needs
                 columns a phone does not have, and cards waste a wide screen.
@@ -3856,9 +3903,7 @@ const LeadsMatrix = () => {
 
       <AnimatePresence>
         {isRouteDetailsView && isDetailsOpen && selectedLead && (
-          <div
-            className="w-full"
-          >
+          <div className="lead-details-route-content w-full">
             <div
               className="w-full"
             >

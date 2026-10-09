@@ -12,7 +12,7 @@ const applyLeadAdvancedFilters = (query, values = {}) => {
     if (value) clauses.push({ [field]: { $regex: value.slice(0, 100).replace(/[.*+?^${}()|[\]\\]/g, "\\$&"), $options: "i" } });
   }
   for (const [key, field, allowed] of [
-    ["inventoryType", "requirements.inventoryType", ["COMMERCIAL", "RESIDENTIAL"]],
+    ["inventoryType", "requirements.inventoryType", ["COMMERCIAL", "RESIDENTIAL", "COWORKING"]],
     ["transactionType", "requirements.transactionType", ["SALE", "RENT", "LEASE"]],
   ]) {
     const value = text(key).toUpperCase();

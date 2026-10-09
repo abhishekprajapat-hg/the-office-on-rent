@@ -50,6 +50,8 @@ export const statusTone = (status?: string): StatusTone => {
       return { label: "Half Day", color: c.amber[700], bg: c.amber[50] };
     case "LEAVE":
       return { label: "Leave", color: c.violet[700], bg: c.violet[50] };
+    case "WEEK_OFF":
+      return { label: "Week Off", color: c.slate[600], bg: c.slate[100] };
     case "MISSED_CHECK_OUT":
       return { label: "No Check-out", color: c.rose[600], bg: c.rose[50] };
     case "ABSENT":
@@ -60,7 +62,7 @@ export const statusTone = (status?: string): StatusTone => {
 };
 
 /*
- * The six the comp's status sheet offers. `kind` is what routes the call:
+ * The comp's six, plus Week Off (WO), on the status sheet. `kind` is what routes the call:
  * "live" goes to the break endpoint, "status" to the status patch.
  */
 export const STATUS_CHOICES: Array<{
@@ -75,6 +77,8 @@ export const STATUS_CHOICES: Array<{
   { id: "PRESENT", label: "Present", icon: "people", kind: "status" },
   { id: "ABSENT", label: "Absent", icon: "close-circle", kind: "status" },
   { id: "LEAVE", label: "Leave", icon: "calendarDays", kind: "status" },
+  // A weekly off on a day that is not the company's - never absent, never deducted.
+  { id: "WEEK_OFF", label: "Week Off (WO)", icon: "calendar-outline", kind: "status" },
 ];
 
 /* ------------------------------------------------------------- formatting -- */

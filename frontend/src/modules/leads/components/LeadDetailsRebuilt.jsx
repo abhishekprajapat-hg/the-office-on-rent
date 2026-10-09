@@ -6,29 +6,48 @@ import { motion as Motion } from "framer-motion";
 import { createInventoryShareLink } from "../../../services/inventoryService";
 import { uploadFile } from "../../../services/uploadService";
 import {
+  AlertCircle,
   ArrowLeft,
+  ArrowRight,
+  ArrowRightLeft,
+  Briefcase,
   Building2,
   Calendar,
   CalendarClock,
   Check,
+  CheckCircle2,
+  ChevronDown,
+  ChevronRight,
+  ChevronUp,
+  Circle,
   Copy,
   Download,
   Eye,
   FileText,
   Flame,
   History,
+  Home,
   Image,
+  Layers,
+  Link2,
   Loader,
   Mail,
   MapPin,
+  MessageCircle,
   Mic,
   MicOff,
+  MoreHorizontal,
+  MoreVertical,
   Phone,
   PencilLine,
   Plus,
   Save,
+  Search,
   Send,
+  Star,
   Trash2,
+  User,
+  Users,
 } from "lucide-react";
 import {
   getTasks as apiGetTasks,
@@ -48,6 +67,7 @@ import {
   getPropertySubtypeLabel,
   getPropertySubtypeOptions,
 } from "../../../config/propertyRequirementConfig";
+import "./LeadDetailsMobile.css";
 
 const CUSTOM_NUMBER_OPTION_VALUE = "__CUSTOM_NUMBER__";
 
@@ -610,9 +630,6 @@ const LeadDetailsRebuiltContent = ({
   toObjectIdString,
   WhatsAppIcon,
 }) => {
-  const card = isDark
-    ? "ui-soft-panel border-slate-700/85 bg-slate-950/70 shadow-[inset_0_1px_0_rgba(148,163,184,0.08)]"
-    : "ui-soft-panel border-slate-200 bg-white shadow-[inset_0_1px_0_rgba(148,163,184,0.2)]";
   const softCard = isDark
     ? "ui-soft-panel border-slate-700/90 bg-slate-900/80"
     : "ui-soft-panel border-slate-200 bg-slate-50/85";
@@ -622,10 +639,6 @@ const LeadDetailsRebuiltContent = ({
   const button = isDark
     ? "border-slate-600 bg-slate-900 text-slate-100 hover:border-sky-300/55 hover:bg-slate-800 hover:text-sky-100"
     : "border-slate-300 bg-white text-slate-700 hover:border-sky-300 hover:bg-sky-50 hover:text-sky-700";
-  const primaryBtn = isDark
-    ? "bg-gradient-to-r from-sky-600 to-emerald-600 hover:from-sky-500 hover:to-emerald-500"
-    : "bg-gradient-to-r from-slate-900 to-sky-700 hover:from-slate-800 hover:to-sky-600";
-
   const isClosedDealFlow =
     ["CLOSED", "REQUESTED"].includes(statusDraft)
     || ["CLOSED", "REQUESTED"].includes(String(selectedLead?.status || ""));
@@ -699,6 +712,7 @@ const LeadDetailsRebuiltContent = ({
     try {
       const payload = {
         title: newTaskTitle.trim(),
+        description: newTaskDescription.trim(),
         status: "TODO",
         priority: newTaskPriority,
         dueDate: newTaskDueDate || null,
@@ -708,6 +722,7 @@ const LeadDetailsRebuiltContent = ({
       const created = await apiCreateTask(payload);
       if (created) {
         setNewTaskTitle("");
+        setNewTaskDescription("");
         setNewTaskDueDate("");
         setNewTaskPriority("MEDIUM");
         setNewTaskAssignedTo("");
@@ -799,10 +814,35 @@ const LeadDetailsRebuiltContent = ({
   const [visibleProposalOptionsCount, setVisibleProposalOptionsCount] = React.useState(
     INITIAL_PROPOSAL_OPTIONS_RENDER_COUNT,
   );
-  const [visibleDiaryCount, setVisibleDiaryCount] = React.useState(INITIAL_DIARY_RENDER_COUNT);
   const [visibleActivityCount, setVisibleActivityCount] = React.useState(INITIAL_ACTIVITY_RENDER_COUNT);
   const [customNumberFields, setCustomNumberFields] = React.useState({});
   const [isManualBudgetRange, setIsManualBudgetRange] = React.useState(false);
+  const [activeTab, setActiveTab] = React.useState("overview");
+  const [headerMenuOpen, setHeaderMenuOpen] = React.useState(false);
+  const [mobileStatusOpen, setMobileStatusOpen] = React.useState(false);
+  const [assigneeMenuOpen, setAssigneeMenuOpen] = React.useState(false);
+  const [transferConfirmOpen, setTransferConfirmOpen] = React.useState(false);
+  const [emailEditorOpen, setEmailEditorOpen] = React.useState(false);
+  const [contactEditorOpen, setContactEditorOpen] = React.useState(false);
+  const [followUpEditorOpen, setFollowUpEditorOpen] = React.useState(false);
+  const [propertyPane, setPropertyPane] = React.useState("linked");
+  const [linkedPropertyFilter, setLinkedPropertyFilter] = React.useState("ALL");
+  const [linkedPropertySearch, setLinkedPropertySearch] = React.useState("");
+  const [openPropertyMenuId, setOpenPropertyMenuId] = React.useState("");
+  const [siteVisitDateDraft, setSiteVisitDateDraft] = React.useState("");
+  const [siteVisitTimeDraft, setSiteVisitTimeDraft] = React.useState("");
+  const [scheduleVisitMessage, setScheduleVisitMessage] = React.useState("");
+  const [locationDetailsOpen, setLocationDetailsOpen] = React.useState(true);
+  const [showAllPropertyImages, setShowAllPropertyImages] = React.useState(false);
+  const [proposalStep, setProposalStep] = React.useState(1);
+  const [shareMenuOpen, setShareMenuOpen] = React.useState(false);
+  const [includeProposalImages, setIncludeProposalImages] = React.useState(true);
+  const [excludedProposalImageUrls, setExcludedProposalImageUrls] = React.useState([]);
+  const [activityFilter, setActivityFilter] = React.useState("ALL");
+  const [logActivityMode, setLogActivityMode] = React.useState("NOTE");
+  const [newTaskFormOpen, setNewTaskFormOpen] = React.useState(false);
+  const [newTaskDescription, setNewTaskDescription] = React.useState("");
+  const [transferPanelOpen, setTransferPanelOpen] = React.useState(false);
   const proposalMessageTimerRef = React.useRef(null);
   const pdfImageSourceCacheRef = React.useRef(new Map());
   const normalizedRequirementInventoryType = String(
@@ -968,12 +1008,12 @@ const LeadDetailsRebuiltContent = ({
         && !selectOptions.includes(normalizedValue);
       const isCustomNumberMode = Boolean(customNumberFields[field.key] || isCustomNumberValue);
       const selectValue = isCustomNumberMode ? CUSTOM_NUMBER_OPTION_VALUE : normalizedValue;
-      const labelClass = `text-[10px] font-bold uppercase tracking-wider ${isDark ? "text-slate-400" : "text-slate-500"}`;
-      const inputClassName = `h-9 w-full rounded-lg border px-2.5 text-sm ${input}`;
+      const labelClass = `mb-1.5 block text-[13px] font-medium ${isDark ? "text-slate-300" : "text-slate-700"}`;
+      const inputClassName = `h-10 w-full rounded-lg border px-3 text-sm outline-none transition focus:border-blue-500 focus:ring-2 focus:ring-blue-500/15 ${input}`;
 
       if (field.type === "checkbox") {
         return (
-          <label key={field.key} className={`inline-flex min-h-9 items-center gap-1.5 rounded-lg border px-2.5 py-1.5 text-xs ${isDark ? "border-slate-700 bg-slate-950 text-slate-200" : "border-slate-300 bg-white text-slate-700"}`}>
+          <label key={field.key} className={`inline-flex min-h-10 items-center gap-2 rounded-lg border px-3 py-2 text-[13px] ${isDark ? "border-slate-700 bg-slate-950 text-slate-200" : "border-slate-300 bg-white text-slate-700"}`}>
             <input
               type="checkbox"
               checked={Boolean(value)}
@@ -985,7 +1025,7 @@ const LeadDetailsRebuiltContent = ({
       }
 
       return (
-        <label key={field.key} className={`space-y-1 ${field.fullWidth ? "sm:col-span-2" : ""}`}>
+        <label key={field.key} className={`block ${field.fullWidth ? "sm:col-span-2" : ""}`}>
           <span className={labelClass}>{field.label}</span>
           {field.type === "select" ? (
             <>
@@ -1123,8 +1163,29 @@ const LeadDetailsRebuiltContent = ({
     setLinkableInventoryTypeFilter("ALL");
     setVisiblePropertiesCount(INITIAL_PROPERTIES_RENDER_COUNT);
     setVisibleProposalOptionsCount(INITIAL_PROPOSAL_OPTIONS_RENDER_COUNT);
-    setVisibleDiaryCount(INITIAL_DIARY_RENDER_COUNT);
     setVisibleActivityCount(INITIAL_ACTIVITY_RENDER_COUNT);
+    setActiveTab("overview");
+    setHeaderMenuOpen(false);
+    setEmailEditorOpen(false);
+    setContactEditorOpen(false);
+    setFollowUpEditorOpen(false);
+    setPropertyPane("linked");
+    setLinkedPropertyFilter("ALL");
+    setLinkedPropertySearch("");
+    setOpenPropertyMenuId("");
+    setSiteVisitDateDraft("");
+    setSiteVisitTimeDraft("");
+    setScheduleVisitMessage("");
+    setShowAllPropertyImages(false);
+    setProposalStep(1);
+    setShareMenuOpen(false);
+    setIncludeProposalImages(true);
+    setExcludedProposalImageUrls([]);
+    setActivityFilter("ALL");
+    setLogActivityMode("NOTE");
+    setNewTaskFormOpen(false);
+    setNewTaskDescription("");
+    setTransferPanelOpen(false);
     pdfImageSourceCacheRef.current.clear();
   }, [selectedLead?._id]);
 
@@ -1282,10 +1343,22 @@ const LeadDetailsRebuiltContent = ({
     () => new Set(proposalSelectedPropertyIds),
     [proposalSelectedPropertyIds],
   );
-  const selectedProposalProperties = React.useMemo(() => {
+  const selectedProposalPropertiesRaw = React.useMemo(() => {
     if (!proposalPropertyOptions.length || !selectedProposalPropertyIdSet.size) return [];
     return proposalPropertyOptions.filter((row) => selectedProposalPropertyIdSet.has(row.id));
   }, [proposalPropertyOptions, selectedProposalPropertyIdSet]);
+
+  // Everything that leaves the app - preview, links, PDF, shares - reads the images the picker kept.
+  const selectedProposalProperties = React.useMemo(
+    () =>
+      selectedProposalPropertiesRaw.map((row) => ({
+        ...row,
+        imageUrls: includeProposalImages
+          ? row.imageUrls.filter((url) => !excludedProposalImageUrls.includes(url))
+          : [],
+      })),
+    [excludedProposalImageUrls, includeProposalImages, selectedProposalPropertiesRaw],
+  );
 
   const visibleProposalPropertyOptions = React.useMemo(
     () => proposalPropertyOptions.slice(0, visibleProposalOptionsCount),
@@ -1307,16 +1380,6 @@ const LeadDetailsRebuiltContent = ({
     () => (Array.isArray(activities) ? activities : []),
     [activities],
   );
-  const visibleDiaryEntries = React.useMemo(
-    () => normalizedDiaryEntries.slice(0, visibleDiaryCount),
-    [normalizedDiaryEntries, visibleDiaryCount],
-  );
-  const visibleActivities = React.useMemo(
-    () => normalizedActivities.slice(0, visibleActivityCount),
-    [normalizedActivities, visibleActivityCount],
-  );
-  const hasMoreDiaryEntries = normalizedDiaryEntries.length > visibleDiaryEntries.length;
-  const hasMoreActivities = normalizedActivities.length > visibleActivities.length;
   const normalizedLeadStatus = String(statusDraft || selectedLead?.status || "").trim().toUpperCase();
   const showQualifiedTransferHelper =
     normalizedLeadStatus === "QUALIFIED_LEAD" || normalizedLeadStatus === "SITE_VISIT_REQUIRED";
@@ -1340,6 +1403,30 @@ const LeadDetailsRebuiltContent = ({
       return haystack.includes(assigneeSearch);
     });
   }, [assigneeSearch, executives]);
+  const selectedTransferAssignee = (Array.isArray(executives) ? executives : []).find(
+    (user) => String(user?._id || "") === String(executiveDraft || ""),
+  );
+  const openAssigneePicker = () => {
+    if (!canAssignLead) return;
+    setAssigneeSearchDraft("");
+    setAssigneeMenuOpen((open) => !open);
+  };
+  const selectTransferAssignee = (user) => {
+    if (!user?._id) return;
+    if (String(user._id) === String(selectedLead?.assignedTo?._id || "")) {
+      setAssigneeMenuOpen(false);
+      return;
+    }
+    setExecutiveDraft(user._id);
+    setTransferReasonDraft("");
+    setAssigneeMenuOpen(false);
+    setTransferConfirmOpen(true);
+  };
+  const cancelTransferConfirmation = () => {
+    setExecutiveDraft(selectedLead?.assignedTo?._id || "");
+    setTransferReasonDraft("");
+    setTransferConfirmOpen(false);
+  };
   const sortedLinkableInventoryOptions = React.useMemo(
     () =>
       [...(Array.isArray(availableRelatedInventoryOptions) ? availableRelatedInventoryOptions : [])]
@@ -1396,16 +1483,22 @@ const LeadDetailsRebuiltContent = ({
         .replace(/^-+|-+$/g, "") || "client",
     [selectedLead?.name],
   );
+  const toProposalImageEntries = (properties) =>
+    properties.flatMap((property) =>
+      property.imageUrls.slice(0, PROPOSAL_MAX_IMAGES_PER_PROPERTY).map((url, index) => ({
+        url,
+        propertyId: property.id,
+        propertyLabel: property.clientLabel,
+        imageIndex: index + 1,
+      })),
+    );
+  // The picker lists every image; proposalImageEntries is only the ones that ship.
+  const allProposalImageEntries = React.useMemo(
+    () => toProposalImageEntries(selectedProposalPropertiesRaw),
+    [selectedProposalPropertiesRaw],
+  );
   const proposalImageEntries = React.useMemo(
-    () =>
-      selectedProposalProperties.flatMap((property) =>
-        property.imageUrls.slice(0, PROPOSAL_MAX_IMAGES_PER_PROPERTY).map((url, index) => ({
-          url,
-          propertyId: property.id,
-          propertyLabel: property.clientLabel,
-          imageIndex: index + 1,
-        })),
-      ),
+    () => toProposalImageEntries(selectedProposalProperties),
     [selectedProposalProperties],
   );
   const proposalPreviewImageEntries = React.useMemo(
@@ -2092,1033 +2185,7 @@ const LeadDetailsRebuiltContent = ({
     }
   };
 
-  return (
-    <Motion.section
-      initial={{ opacity: 0, y: 16 }}
-      animate={{ opacity: 1, y: 0 }}
-      exit={{ opacity: 0, y: 16 }}
-      className={`ui-soft-panel relative z-10 w-full overflow-x-hidden rounded-[26px] shadow-[0_28px_90px_-56px_rgba(15,23,42,0.75)] sm:rounded-[30px] ${
-        isDark ? "border-slate-700 bg-slate-900/95" : "border-slate-200 bg-white/95"
-      }`}
-    >
-      {selectedLead?.status === 'CLOSED' && <BillstackSection key={selectedLead._id} entityType="lead" entityId={selectedLead._id} />}
-      <div className="pointer-events-none absolute inset-0 overflow-hidden rounded-[inherit]">
-        <div className={`absolute -left-10 top-0 h-36 w-36 rounded-full blur-3xl ${
-          isDark ? "bg-sky-500/20" : "bg-sky-300/45"
-        }`} />
-        <div className={`absolute right-0 top-6 h-40 w-40 rounded-full blur-3xl ${
-          isDark ? "bg-emerald-500/15" : "bg-emerald-300/35"
-        }`} />
-      </div>
-      <div
-        className={`ui-hero-card relative border-b px-3 py-3 sm:px-6 sm:py-5 ${
-          isDark ? "border-slate-700 bg-slate-900/90" : "border-slate-200 bg-slate-50/95"
-        }`}
-      >
-        <div className="flex flex-wrap items-start justify-between gap-2">
-          <div className="min-w-0">
-            <p className={`text-[10px] font-semibold uppercase tracking-[0.18em] ${
-              isDark ? "text-sky-200" : "text-sky-700"
-            }`}>
-              Lead Profile
-            </p>
-            <h2 className={`truncate text-2xl font-bold tracking-tight sm:text-3xl ${isDark ? "text-slate-100" : "text-slate-900"}`}>
-              {String(nameDraft || "").trim() || selectedLead?.name || "Lead"}
-            </h2>
-            <p className={`mt-1 truncate text-xs sm:text-sm ${isDark ? "text-slate-300" : "text-slate-600"}`}>
-              {String(projectInterestedDraft || "").trim() || selectedLead?.projectInterested || "Project not tagged yet"}
-            </p>
-            <div className="mt-2 flex flex-wrap items-end gap-2">
-              <button
-                type="button"
-                disabled={!canEditLead}
-                aria-pressed={Boolean(selectedLead?.hotClient)}
-                onClick={onToggleHotClient}
-                title="High-intent client who is ready to transact and mainly needs the right inventory"
-                className={`inline-flex items-center gap-1.5 rounded-xl border px-3 py-2 text-xs font-semibold disabled:cursor-not-allowed disabled:opacity-60 ${
-                  selectedLead?.hotClient
-                    ? "border-orange-300 bg-orange-100 text-orange-800"
-                    : isDark
-                      ? "border-slate-700 text-slate-300"
-                      : "border-slate-300 text-slate-600"
-                }`}
-              >
-                <Flame size={13} className={selectedLead?.hotClient ? "" : "opacity-50"} />
-                Hot Client
-              </button>
-              <BrokerPhoneHint phone={phoneDraft} />
-              {canAssignLead && <button type="button" onClick={() => document.getElementById("lead-transfer-panel")?.scrollIntoView({ behavior: "smooth", block: "center" })} className="rounded-xl border px-3 py-2 text-xs font-semibold">Transfer</button>}
-              {selectedLead?.brokerContactId && <span className="text-xs font-semibold text-violet-600">Known broker</span>}
-
-              <label className="min-w-[168px]">
-                <span className={`mb-1 block text-[9px] font-bold uppercase tracking-[0.14em] ${
-                  isDark ? "text-slate-400" : "text-slate-500"
-                }`}>
-                  Status
-                </span>
-                <select
-                  value={statusDraft}
-                  disabled={!canEditLead}
-                  onChange={(event) => setStatusDraft(event.target.value)}
-                  className={`h-9 w-full rounded-xl border px-3 text-xs font-bold uppercase tracking-[0.08em] ${input}`}
-                >
-                  {leadStatuses.map((status) => (
-                    <option key={status} value={status} disabled={!canReviewDealPayment && status === "REQUESTED"}>
-                      {String(status).replaceAll("_", " ")}
-                    </option>
-                  ))}
-                </select>
-              </label>
-              <span className={`rounded-full border px-2 py-1 text-[9px] font-semibold sm:px-2.5 sm:text-[10px] ${
-                isDark ? "border-slate-700 bg-slate-800 text-slate-300" : "border-slate-300 bg-white text-slate-600"
-              }`}>
-                ID: {String(selectedLead?._id || "").slice(-6).toUpperCase()}
-              </span>
-            </div>
-          </div>
-          <div className="flex flex-wrap items-center justify-end gap-2">
-            <button
-              type="button"
-              onClick={onClose}
-              className={`inline-flex h-9 items-center gap-1 rounded-xl border px-3 text-[11px] font-semibold uppercase tracking-[0.1em] sm:px-3.5 sm:text-xs sm:tracking-[0.12em] ${button}`}
-            >
-              <ArrowLeft size={12} />
-              Back
-            </button>
-            {canEditLead ? <button
-              type="button"
-              onClick={onOpenEditLeadForm}
-              className={`inline-flex h-9 items-center gap-1 rounded-xl border px-3 text-[11px] font-semibold uppercase tracking-[0.1em] sm:px-3.5 sm:text-xs sm:tracking-[0.12em] ${button}`}
-            >
-              <PencilLine size={12} />
-              Edit Lead
-            </button> : null}
-            {canEditLead ? <button
-              type="button"
-              onClick={onUpdateLead}
-              disabled={savingUpdates}
-              className={`inline-flex h-9 items-center gap-1 rounded-xl px-3 text-[11px] font-semibold uppercase tracking-[0.1em] text-white shadow-sm transition disabled:cursor-not-allowed disabled:opacity-60 sm:px-3.5 sm:text-xs sm:tracking-[0.12em] ${primaryBtn}`}
-            >
-              {savingUpdates ? <Loader size={12} className="animate-spin" /> : <Save size={12} />}
-              {savingUpdates ? "Saving..." : "Save"}
-            </button> : null}
-            {canDeleteLead && onDeleteLead ? <button
-              type="button"
-              onClick={onDeleteLead}
-              className={`inline-flex h-9 items-center gap-1 rounded-xl border px-3 text-[11px] font-semibold uppercase tracking-[0.1em] sm:px-3.5 sm:text-xs sm:tracking-[0.12em] ${isDark ? "border-rose-500/40 text-rose-300 hover:bg-rose-500/10" : "border-rose-200 text-rose-700 hover:bg-rose-50"}`}
-            >
-              <Trash2 size={12} />
-              Delete
-            </button> : null}
-          </div>
-        </div>
-
-        <div className="mt-4 grid grid-cols-2 gap-2 xl:grid-cols-3">
-          <div className={`rounded-2xl border px-2.5 py-2 sm:px-3 sm:py-2.5 ${card}`}>
-            <p className={`text-[9px] uppercase tracking-[0.1em] sm:text-[10px] sm:tracking-[0.12em] ${isDark ? "text-slate-400" : "text-slate-500"}`}>Assigned</p>
-            <p className={`mt-0.5 truncate text-[11px] font-semibold sm:mt-1 sm:text-xs ${isDark ? "text-slate-100" : "text-slate-800"}`}>
-              {selectedLead?.assignedTo?.name || "Unassigned"}
-            </p>
-          </div>
-          <div className={`rounded-2xl border px-2.5 py-2 sm:px-3 sm:py-2.5 ${card}`}>
-            <p className={`text-[9px] uppercase tracking-[0.1em] sm:text-[10px] sm:tracking-[0.12em] ${isDark ? "text-slate-400" : "text-slate-500"}`}>Follow-up</p>
-            <p className={`mt-0.5 truncate text-[11px] font-semibold sm:mt-1 sm:text-xs ${isDark ? "text-slate-100" : "text-slate-800"}`}>
-              {formatDate(canHaveFollowUp ? followUpDraft || selectedLead?.nextFollowUp : null)}
-            </p>
-          </div>
-          <div className={`rounded-2xl border px-2.5 py-2 sm:px-3 sm:py-2.5 ${card}`}>
-            <p className={`text-[9px] uppercase tracking-[0.1em] sm:text-[10px] sm:tracking-[0.12em] ${isDark ? "text-slate-400" : "text-slate-500"}`}>Primary Property</p>
-            <p className={`mt-0.5 truncate text-[11px] font-semibold sm:mt-1 sm:text-xs ${isDark ? "text-slate-100" : "text-slate-800"}`}>
-              {activePropertyLabel}
-            </p>
-          </div>
-          <div className={`rounded-2xl border px-2.5 py-2 sm:px-3 sm:py-2.5 ${card}`}>
-            <p className={`text-[9px] uppercase tracking-[0.1em] sm:text-[10px] sm:tracking-[0.12em] ${isDark ? "text-slate-400" : "text-slate-500"}`}>Lead Source</p>
-            <p className={`mt-0.5 truncate text-[11px] font-semibold sm:mt-1 sm:text-xs ${isDark ? "text-slate-100" : "text-slate-800"}`}>
-              {leadSourceLabel}
-            </p>
-          </div>
-        </div>
-      </div>
-
-      <div className="relative grid grid-cols-1 gap-3 p-2.5 sm:gap-4 sm:p-6 xl:grid-cols-12">
-        <div className="space-y-4 xl:col-span-5">
-          <section
-            className={`rounded-3xl border p-4 ${card}`}
-            style={{ contentVisibility: "auto", containIntrinsicSize: "320px" }}
-          >
-            <div className={`text-xs font-bold uppercase tracking-widest ${isDark ? "text-slate-400" : "text-slate-500"}`}>Contact</div>
-            <div className="mt-3 grid grid-cols-2 gap-2">
-              {selectedLeadDialerHref ? (
-                <a href={selectedLeadDialerHref} className={`inline-flex h-9 items-center justify-center gap-1 rounded-lg border text-xs font-semibold ${button}`}>
-                  <Phone size={13} /> Call
-                </a>
-              ) : <button type="button" disabled className={`h-9 rounded-lg border text-xs font-semibold opacity-50 ${input}`}>Call</button>}
-              {selectedLeadWhatsAppHref ? (
-                <a href={selectedLeadWhatsAppHref} target="_blank" rel="noreferrer" className={`inline-flex h-9 items-center justify-center gap-1 rounded-lg border text-xs font-semibold ${button}`}>
-                  {WhatsAppIcon ? <WhatsAppIcon size={12} /> : null} WhatsApp
-                </a>
-              ) : <button type="button" disabled className={`h-9 rounded-lg border text-xs font-semibold opacity-50 ${input}`}>WhatsApp</button>}
-              {selectedLeadMailHref ? (
-                <a href={selectedLeadMailHref} className={`inline-flex h-9 items-center justify-center gap-1 rounded-lg border text-xs font-semibold ${button}`}>
-                  <Mail size={13} /> Email
-                </a>
-              ) : <button type="button" disabled className={`h-9 rounded-lg border text-xs font-semibold opacity-50 ${input}`}>Email</button>}
-              {selectedLeadMapsHref ? (
-                <a href={selectedLeadMapsHref} target="_blank" rel="noreferrer" className={`inline-flex h-9 items-center justify-center gap-1 rounded-lg border text-xs font-semibold ${button}`}>
-                  <MapPin size={13} /> Maps
-                </a>
-              ) : <button type="button" disabled className={`h-9 rounded-lg border text-xs font-semibold opacity-50 ${input}`}>Maps</button>}
-            </div>
-            <div className="mt-3 grid grid-cols-1 gap-2 sm:grid-cols-2">
-              <label className="space-y-1">
-                <span className={`text-[10px] font-bold uppercase tracking-wider ${isDark ? "text-slate-400" : "text-slate-500"}`}>
-                  Name
-                </span>
-                <input
-                  type="text"
-                  value={nameDraft}
-                  onChange={(event) => setNameDraft(event.target.value)}
-                  placeholder="Lead name"
-                  className={`h-9 w-full rounded-lg border px-2.5 text-sm ${input}`}
-                />
-              </label>
-              <label className="space-y-1">
-                <span className={`text-[10px] font-bold uppercase tracking-wider ${isDark ? "text-slate-400" : "text-slate-500"}`}>
-                  Phone
-                </span>
-                <input
-                  type="text"
-                  inputMode="numeric"
-                  value={phoneDraft}
-                  onChange={(event) => setPhoneDraft(event.target.value)}
-                  placeholder="Phone"
-                  className={`h-9 w-full rounded-lg border px-2.5 text-sm ${input}`}
-                />
-              </label>
-              <label className="space-y-1 sm:col-span-2">
-                <span className={`text-[10px] font-bold uppercase tracking-wider ${isDark ? "text-slate-400" : "text-slate-500"}`}>
-                  Email
-                </span>
-                <input
-                  type="email"
-                  value={emailDraft}
-                  onChange={(event) => setEmailDraft(event.target.value)}
-                  placeholder="Email"
-                  className={`h-9 w-full rounded-lg border px-2.5 text-sm ${input}`}
-                />
-              </label>
-              <label className="space-y-1">
-                <span className={`text-[10px] font-bold uppercase tracking-wider ${isDark ? "text-slate-400" : "text-slate-500"}`}>
-                  City
-                </span>
-                <input
-                  type="text"
-                  value={cityDraft}
-                  onChange={(event) => setCityDraft(event.target.value)}
-                  placeholder="City"
-                  className={`h-9 w-full rounded-lg border px-2.5 text-sm ${input}`}
-                />
-              </label>
-            </div>
-          </section>
-
-          <section className={`rounded-3xl border p-4 ${card}`}>
-            <div className={`text-xs font-bold uppercase tracking-widest ${isDark ? "text-slate-400" : "text-slate-500"}`}>
-              Lead Requirements
-            </div>
-            {normalizedRequirementPropertySubtype ? (
-              <div className={`mt-2 inline-flex rounded-full border px-2.5 py-1 text-[11px] font-semibold ${isDark ? "border-cyan-300/40 bg-cyan-500/10 text-cyan-100" : "border-cyan-200 bg-cyan-50 text-cyan-700"}`}>
-                {getPropertySubtypeLabel(normalizedRequirementInventoryType, normalizedRequirementPropertySubtype) || normalizedRequirementPropertySubtype}
-              </div>
-            ) : null}
-            <div className="mt-2 grid grid-cols-1 gap-2 sm:grid-cols-2">
-              <label className="space-y-1 sm:col-span-2">
-                <span className={`text-[10px] font-bold uppercase tracking-wider ${isDark ? "text-slate-400" : "text-slate-500"}`}>
-                  Work Profile
-                </span>
-                <input
-                  type="text"
-                  value={clientProfessionDraft}
-                  onChange={(event) => setClientProfessionDraft(event.target.value)}
-                  placeholder="e.g. Marketing, Lawyer, DSA"
-                  maxLength={120}
-                  className={`h-9 w-full rounded-lg border px-2.5 text-sm ${input}`}
-                />
-              </label>
-              <label className="space-y-1">
-                <span className={`text-[10px] font-bold uppercase tracking-wider ${isDark ? "text-slate-400" : "text-slate-500"}`}>
-                  Inventory Type
-                </span>
-                <select
-                  value={requirementsDraft?.inventoryType || ""}
-                  onChange={(event) => updateRequirementInventoryType(event.target.value)}
-                  className={`h-9 w-full rounded-lg border px-2.5 text-sm ${input}`}
-                >
-                  <option value="">Any</option>
-                  <option value="COMMERCIAL">Commercial</option>
-                  <option value="RESIDENTIAL">Residential</option>
-                  <option value="COWORKING">Coworking</option>
-                </select>
-              </label>
-              {normalizedRequirementInventoryType && !isCoworkingRequirement ? (
-                <label className="space-y-1">
-                  <span className={`text-[10px] font-bold uppercase tracking-wider ${isDark ? "text-slate-400" : "text-slate-500"}`}>
-                    {normalizedRequirementInventoryType === "COMMERCIAL" ? "Commercial Property Type" : "Residential Property Type"}
-                  </span>
-                  <select
-                    value={requirementsDraft?.propertySubtype || ""}
-                    onChange={(event) => updateRequirementPropertySubtype(event.target.value)}
-                    className={`h-9 w-full rounded-lg border px-2.5 text-sm ${input}`}
-                  >
-                    <option value="">Any</option>
-                    {propertySubtypeOptions.map((option) => (
-                      <option key={option.value} value={option.value}>{option.label}</option>
-                    ))}
-                  </select>
-                </label>
-              ) : null}
-              <label className="space-y-1">
-                <span className={`text-[10px] font-bold uppercase tracking-wider ${isDark ? "text-slate-400" : "text-slate-500"}`}>
-                  Deal Type
-                </span>
-                <select
-                  value={transactionTypeValue}
-                  onChange={(event) => updateTransactionType(event.target.value)}
-                  className={`h-9 w-full rounded-lg border px-2.5 text-sm ${input}`}
-                >
-                  <option value="">Any</option>
-                  {canPurchaseRequirement ? <option value="SALE">Purchase</option> : null}
-                  {canRentRequirement ? <option value="RENT">Rent</option> : null}
-                  <option value="LEASE">Lease</option>
-                </select>
-              </label>
-              {showFurnishing ? (
-                <label className="space-y-1">
-                  <span className={`text-[10px] font-bold uppercase tracking-wider ${isDark ? "text-slate-400" : "text-slate-500"}`}>
-                    Furnishing
-                  </span>
-                  <select
-                    value={furnishingValue}
-                    onChange={(event) => updateRequirementRootField("furnishingStatus", event.target.value)}
-                    className={`h-9 w-full rounded-lg border px-2.5 text-sm ${input}`}
-                  >
-                    {furnishingOptions.map((option) => (
-                      <option key={option.value || "any-furnishing"} value={option.value}>
-                        {option.label}
-                      </option>
-                    ))}
-                  </select>
-                </label>
-              ) : null}
-              {isPlotRequirement ? (
-                <>
-                  <label className="space-y-1">
-                    <span className={`text-[10px] font-bold uppercase tracking-wider ${isDark ? "text-slate-400" : "text-slate-500"}`}>
-                      Project Interested
-                    </span>
-                    <input
-                      type="text"
-                      value={projectInterestedDraft}
-                      onChange={(event) => setProjectInterestedDraft(event.target.value)}
-                      placeholder="Project Interested"
-                      className={`h-9 w-full rounded-lg border px-2.5 text-sm ${input}`}
-                    />
-                  </label>
-                  <label className="space-y-1">
-                    <span className={`text-[10px] font-bold uppercase tracking-wider ${isDark ? "text-slate-400" : "text-slate-500"}`}>
-                      Budget Range
-                    </span>
-                    <select
-                      value={selectedBudgetRangeValue}
-                      onChange={(event) => updateBudgetRange(event.target.value)}
-                      className={`h-9 w-full rounded-lg border px-2.5 text-sm ${input}`}
-                    >
-                      {budgetRangeOptions.map((option) => (
-                        <option key={option.value || "any-plot-budget"} value={option.value}>
-                          {option.label}
-                        </option>
-                      ))}
-                    </select>
-                  </label>
-                  {isCustomBudgetRange ? (
-                    <>
-                      <label className="space-y-1">
-                        <span className={`text-[10px] font-bold uppercase tracking-wider ${isDark ? "text-slate-400" : "text-slate-500"}`}>
-                          Budget Min
-                        </span>
-                        <input
-                          type="number"
-                          step="any"
-                          value={requirementsDraft?.budgetMin || ""}
-                          onChange={(event) => updateRequirementRootField("budgetMin", event.target.value)}
-                          placeholder="Budget Min"
-                          className={`h-9 w-full rounded-lg border px-2.5 text-sm ${input}`}
-                        />
-                      </label>
-                      <label className="space-y-1">
-                        <span className={`text-[10px] font-bold uppercase tracking-wider ${isDark ? "text-slate-400" : "text-slate-500"}`}>
-                          Budget Max
-                        </span>
-                        <input
-                          type="number"
-                          step="any"
-                          value={requirementsDraft?.budgetMax || ""}
-                          onChange={(event) => updateRequirementRootField("budgetMax", event.target.value)}
-                          placeholder="Budget Max"
-                          className={`h-9 w-full rounded-lg border px-2.5 text-sm ${input}`}
-                        />
-                      </label>
-                    </>
-                  ) : null}
-                  <label className="space-y-1">
-                    <span className={`text-[10px] font-bold uppercase tracking-wider ${isDark ? "text-slate-400" : "text-slate-500"}`}>
-                      Plot Location
-                    </span>
-                    <select
-                      value={plotLocationValue}
-                      onChange={(event) => updateRequirementSubtypeField("plotLocation", event.target.value)}
-                      className={`h-9 w-full rounded-lg border px-2.5 text-sm ${input}`}
-                    >
-                      <option value="">Location</option>
-                      {PLOT_LOCATION_OPTIONS.map((location) => (
-                        <option key={location} value={location}>
-                          {location}
-                        </option>
-                      ))}
-                    </select>
-                  </label>
-                  <label className="space-y-1">
-                    <span className={`text-[10px] font-bold uppercase tracking-wider ${isDark ? "text-slate-400" : "text-slate-500"}`}>
-                      Occupancy
-                    </span>
-                    <select
-                      value={plotOccupancyValue}
-                      onChange={(event) => updateRequirementSubtypeField("plotOccupancy", event.target.value)}
-                      className={`h-9 w-full rounded-lg border px-2.5 text-sm ${input}`}
-                    >
-                      <option value="">Occupancy</option>
-                      {PLOT_OCCUPANCY_OPTIONS.map((occupancy) => (
-                        <option key={occupancy} value={occupancy}>
-                          {occupancy}
-                        </option>
-                      ))}
-                    </select>
-                  </label>
-                  <label className="space-y-1">
-                    <span className={`text-[10px] font-bold uppercase tracking-wider ${isDark ? "text-slate-400" : "text-slate-500"}`}>
-                      Purpose
-                    </span>
-                    <select
-                      value={plotPurposeValue}
-                      onChange={(event) => updateRequirementSubtypeField("plotPurpose", event.target.value)}
-                      className={`h-9 w-full rounded-lg border px-2.5 text-sm ${input}`}
-                    >
-                      <option value="">Purpose</option>
-                      {PLOT_PURPOSE_OPTIONS.map((purpose) => (
-                        <option key={purpose} value={purpose}>
-                          {purpose}
-                        </option>
-                      ))}
-                    </select>
-                  </label>
-                </>
-              ) : (
-                <>
-                  <label className="space-y-1">
-                    <span className={`text-[10px] font-bold uppercase tracking-wider ${isDark ? "text-slate-400" : "text-slate-500"}`}>
-                      Budget Range
-                    </span>
-                    <select
-                      value={selectedBudgetRangeValue}
-                      onChange={(event) => updateBudgetRange(event.target.value)}
-                      className={`h-9 w-full rounded-lg border px-2.5 text-sm ${input}`}
-                    >
-                      {budgetRangeOptions.map((option) => (
-                        <option key={option.value || "any-budget"} value={option.value}>
-                          {option.label}
-                        </option>
-                      ))}
-                    </select>
-                  </label>
-                  {isCustomBudgetRange ? (
-                    <>
-                      <label className="space-y-1">
-                        <span className={`text-[10px] font-bold uppercase tracking-wider ${isDark ? "text-slate-400" : "text-slate-500"}`}>
-                          Budget Min
-                        </span>
-                        <input
-                          type="number"
-                          step="any"
-                          value={requirementsDraft?.budgetMin || ""}
-                          onChange={(event) => updateRequirementRootField("budgetMin", event.target.value)}
-                          placeholder="Budget Min"
-                          className={`h-9 w-full rounded-lg border px-2.5 text-sm ${input}`}
-                        />
-                      </label>
-                      <label className="space-y-1">
-                        <span className={`text-[10px] font-bold uppercase tracking-wider ${isDark ? "text-slate-400" : "text-slate-500"}`}>
-                          Budget Max
-                        </span>
-                        <input
-                          type="number"
-                          step="any"
-                          value={requirementsDraft?.budgetMax || ""}
-                          onChange={(event) => updateRequirementRootField("budgetMax", event.target.value)}
-                          placeholder="Budget Max"
-                          className={`h-9 w-full rounded-lg border px-2.5 text-sm ${input}`}
-                        />
-                      </label>
-                    </>
-                  ) : null}
-                </>
-              )}
-            </div>
-
-            {isCoworkingRequirement ? (
-              <div className={`mt-3 rounded-xl border p-2.5 ${softCard}`}>
-                <div className={`text-[10px] font-bold uppercase tracking-wider ${isDark ? "text-slate-400" : "text-slate-500"}`}>
-                  Coworking Requirement
-                </div>
-                <div className="mt-2">
-                  <CoworkingRequirementFields
-                    value={requirementsDraft?.coworking || {}}
-                    onChange={(next) => updateRequirementRootField("coworking", next)}
-                    inputClass={`h-9 w-full rounded-lg border px-2.5 text-sm ${input}`}
-                    labelClass={`mb-1 block text-[10px] font-bold uppercase tracking-wider ${isDark ? "text-slate-400" : "text-slate-500"}`}
-                  />
-                </div>
-              </div>
-            ) : null}
-
-            {propertySubtypeConfig ? (
-              <div className={`mt-3 rounded-xl border p-2.5 ${softCard}`}>
-                <div className={`text-[10px] font-bold uppercase tracking-wider ${isDark ? "text-slate-400" : "text-slate-500"}`}>
-                  {propertySubtypeConfig.label} Preferences
-                </div>
-                <div className="mt-2 grid grid-cols-1 gap-2 sm:grid-cols-2">
-                  {(propertySubtypeConfig.fields || [])
-                    .filter((field) => field.type !== "checkbox" && !PLOT_INLINE_FIELD_KEYS.has(field.key))
-                    .map(renderSubtypeField)}
-                </div>
-                <div className="mt-2 flex flex-wrap gap-1.5">
-                  {(propertySubtypeConfig.fields || [])
-                    .filter((field) => field.type === "checkbox" && !PLOT_INLINE_FIELD_KEYS.has(field.key))
-                    .map(renderSubtypeField)}
-                </div>
-              </div>
-            ) : null}
-          </section>
-
-          <section className={`rounded-3xl border p-4 ${card}`}>
-            <div className="flex items-center justify-between">
-              <div className={`text-xs font-bold uppercase tracking-widest ${isDark ? "text-slate-400" : "text-slate-500"}`}>Properties</div>
-              <span className={`text-[11px] ${isDark ? "text-slate-400" : "text-slate-500"}`}>{relatedInventoryRows.length} linked</span>
-            </div>
-            {relatedInventoryRows.length === 0 ? (
-              <p className={`mt-2 text-xs ${isDark ? "text-slate-400" : "text-slate-500"}`}>No linked property.</p>
-            ) : (
-              <div className="mt-2 space-y-2">
-                {visibleRelatedInventoryRows.map((inventoryRow, rowIndex) => {
-                  const inventoryId = inventoryRow.id;
-                  const inventoryLabel = inventoryRow.label;
-                  const inventoryLocation = inventoryRow.location;
-                  const inventoryQuickInfo = inventoryRow.quickInfo;
-                  const inventoryStatusLabel = inventoryRow.statusLabel;
-                  const inventoryPriceLabel = formatInventoryAmountInr(inventoryRow?.inventory);
-                  const inventoryAmountLabel = getInventoryAmountLabel(inventoryRow?.inventory);
-                  const isActiveProperty = normalizedActiveInventoryId === inventoryId;
-                  const isSelectingThisProperty = propertyActionType === "select" && String(propertyActionInventoryId || "") === String(inventoryId || "");
-                  const isRemovingThisProperty = propertyActionType === "remove" && String(propertyActionInventoryId || "") === String(inventoryId || "");
-                  return (
-                    <div
-                      key={inventoryId || `${inventoryLabel || "inventory"}-${rowIndex}`}
-                      onClick={() => {
-                        if (!inventoryId || isSelectingThisProperty || isRemovingThisProperty) return;
-                        onSelectRelatedProperty(inventoryId);
-                      }}
-                      className={`rounded-lg border px-2.5 py-2 text-xs ${
-                        isActiveProperty
-                          ? isDark ? "border-emerald-400/45 bg-emerald-500/12" : "border-emerald-300 bg-emerald-50/60"
-                          : isDark ? "border-slate-700 bg-slate-900 hover:border-emerald-400/35" : "border-slate-200 bg-white hover:border-emerald-200"
-                      } ${inventoryId && !isSelectingThisProperty && !isRemovingThisProperty ? "cursor-pointer" : ""}`}
-                    >
-                      <div className="flex items-start justify-between gap-2">
-                        <div className="min-w-0">
-                          <div className={`break-words font-semibold ${isDark ? "text-slate-100" : "text-slate-700"}`}>
-                            {inventoryLabel || "Inventory"}{inventoryLocation ? ` (${inventoryLocation})` : ""}
-                          </div>
-                          <div className={`mt-0.5 text-[10px] ${isDark ? "text-slate-400" : "text-slate-500"}`}>Status: {inventoryStatusLabel || "-"}</div>
-                          {inventoryQuickInfo ? (
-                            <div className={`mt-0.5 text-[10px] ${isDark ? "text-slate-400" : "text-slate-500"}`}>
-                              {inventoryQuickInfo}
-                            </div>
-                          ) : null}
-                          <div className={`mt-0.5 text-[10px] ${isDark ? "text-slate-400" : "text-slate-500"}`}>{inventoryAmountLabel}: {inventoryPriceLabel}</div>
-                        </div>
-                        {canManageLeadProperties && inventoryId ? (
-                          <div className="flex items-center gap-1">
-                            <button type="button" onClick={(e) => { e.stopPropagation(); onOpenRelatedProperty(inventoryId); }} className={`inline-flex h-7 w-7 items-center justify-center rounded border ${button}`}>
-                              {isSelectingThisProperty ? <Loader size={12} className="animate-spin" /> : <Eye size={12} />}
-                            </button>
-                            <button type="button" onClick={(e) => { e.stopPropagation(); onRemoveRelatedProperty(inventoryId); }} className={`inline-flex h-7 w-7 items-center justify-center rounded border ${button}`}>
-                              {isRemovingThisProperty ? <Loader size={12} className="animate-spin" /> : <Trash2 size={12} />}
-                            </button>
-                          </div>
-                        ) : null}
-                      </div>
-                    </div>
-                  );
-                })}
-                {hasMoreRelatedInventories ? (
-                  <button
-                    type="button"
-                    onClick={() => setVisiblePropertiesCount((previous) => previous + RENDER_STEP_COUNT)}
-                    className={`h-8 rounded-lg border px-3 text-[11px] font-semibold ${button}`}
-                  >
-                    Show More Properties ({relatedInventoryRows.length - visibleRelatedInventoryRows.length} left)
-                  </button>
-                ) : null}
-              </div>
-            )}
-            {canManageLeadProperties ? (
-              <div className={`mt-3 rounded-xl border p-2.5 ${softCard}`}>
-                <div className="mb-2 flex items-center gap-1.5">
-                  <button
-                    type="button"
-                    onClick={() => setLinkableInventoryTypeFilter("ALL")}
-                    className={`inline-flex h-7 items-center rounded border px-2 text-[10px] font-semibold ${
-                      linkableInventoryTypeFilter === "ALL"
-                        ? "border-transparent bg-emerald-600 text-white hover:bg-emerald-500"
-                        : button
-                    }`}
-                  >
-                    All
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setLinkableInventoryTypeFilter("SALE")}
-                    className={`inline-flex h-7 items-center rounded border px-2 text-[10px] font-semibold ${
-                      linkableInventoryTypeFilter === "SALE"
-                        ? "border-transparent bg-emerald-600 text-white hover:bg-emerald-500"
-                        : button
-                    }`}
-                  >
-                    For Sale
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setLinkableInventoryTypeFilter("RENT")}
-                    className={`inline-flex h-7 items-center rounded border px-2 text-[10px] font-semibold ${
-                      linkableInventoryTypeFilter === "RENT"
-                        ? "border-transparent bg-emerald-600 text-white hover:bg-emerald-500"
-                        : button
-                    }`}
-                  >
-                    Rental
-                  </button>
-                </div>
-                <div className="flex min-w-0 items-center gap-2">
-                  <select
-                    value={relatedInventoryDraft}
-                    onChange={(event) => setRelatedInventoryDraft(String(event.target.value || ""))}
-                    className={`h-9 min-w-0 flex-1 rounded-lg border px-2 text-xs ${input}`}
-                  >
-                    <option value="">
-                      {sortedLinkableInventoryOptions.length
-                        ? "Select property to link"
-                        : "No properties found"}
-                    </option>
-                    {sortedLinkableInventoryOptions.map((inventory) => {
-                      const inventoryId = String(inventory?._id || "");
-                      const inventoryLabel = getInventoryLeadLabel(inventory)
-                        || String(inventory?.title || "").trim()
-                        || inventoryId;
-                      const inventoryLocation = getInventoryLocationLabel(inventory);
-                      const inventoryQuickInfo = getInventoryQuickInfo(inventory);
-                      const inventoryPriceLabel = formatInventoryAmountInr(inventory);
-                      const inventoryAmountLabel = getInventoryAmountLabel(inventory);
-                      const inventoryTypeLabel = getInventoryListingLabel(inventory);
-
-                      return (
-                        <option key={inventoryId} value={inventoryId}>
-                          {[
-                            inventoryLabel,
-                            inventoryLocation ? `(${inventoryLocation})` : "",
-                            inventoryQuickInfo,
-                            `Type: ${inventoryTypeLabel}`,
-                            `${inventoryAmountLabel}: ${inventoryPriceLabel}`,
-                          ]
-                            .filter(Boolean)
-                            .join(" ")}
-                        </option>
-                      );
-                    })}
-                  </select>
-                  <button
-                    type="button"
-                    onClick={() => onLinkPropertyToLead(relatedInventoryDraft)}
-                    disabled={!relatedInventoryDraft || linkingProperty}
-                    className={`inline-flex h-9 shrink-0 items-center gap-1 rounded-lg px-3 text-[11px] font-semibold text-white disabled:opacity-60 ${primaryBtn}`}
-                  >
-                    {linkingProperty ? <Loader size={12} className="animate-spin" /> : <Plus size={12} />}
-                    Add
-                  </button>
-                </div>
-              </div>
-            ) : null}
-          </section>
-
-          <section className={`rounded-3xl border p-4 ${card}`}>
-            <div className="flex items-center justify-between gap-2">
-              <div className={`inline-flex items-center gap-1 text-xs font-bold uppercase tracking-widest ${isDark ? "text-slate-400" : "text-slate-500"}`}>
-                <FileText size={12} />
-                Proposal Generator
-              </div>
-              <span className={`min-w-0 text-right text-[10px] ${isDark ? "text-slate-400" : "text-slate-500"}`}>
-                Single or multiple properties
-              </span>
-            </div>
-
-            {proposalPropertyOptions.length === 0 ? (
-              <p className={`mt-2 text-xs ${isDark ? "text-slate-400" : "text-slate-500"}`}>
-                Link at least one property first to generate proposal.
-              </p>
-            ) : (
-              <>
-                <div className={`mt-2 rounded-xl border p-2.5 ${softCard}`}>
-                  <div className="flex items-center justify-between gap-2">
-                    <div className={`min-w-0 text-[10px] font-semibold uppercase tracking-[0.12em] ${isDark ? "text-slate-400" : "text-slate-500"}`}>
-                      Select Properties ({selectedPropertyCount}/{proposalPropertyOptions.length})
-                    </div>
-                    <div className="flex shrink-0 items-center gap-1">
-                      <button
-                        type="button"
-                        onClick={handleSelectAllProposalProperties}
-                        disabled={selectedPropertyCount === proposalPropertyOptions.length}
-                        className={`inline-flex h-7 items-center rounded border px-2 text-[10px] font-semibold disabled:opacity-55 ${button}`}
-                      >
-                        All
-                      </button>
-                      <button
-                        type="button"
-                        onClick={handleResetProposalSelection}
-                        className={`inline-flex h-7 items-center rounded border px-2 text-[10px] font-semibold ${button}`}
-                      >
-                        Reset
-                      </button>
-                    </div>
-                  </div>
-                  <div className="mt-2 max-h-32 space-y-1 overflow-y-auto custom-scrollbar pr-1">
-                    {visibleProposalPropertyOptions.map((property) => {
-                      const checked = selectedProposalPropertyIdSet.has(property.id);
-                      return (
-                        <label
-                          key={property.id}
-                          className={`flex cursor-pointer items-start gap-2 rounded-lg border px-2 py-1.5 text-[11px] ${
-                            checked
-                              ? isDark ? "border-emerald-400/45 bg-emerald-500/12" : "border-emerald-300 bg-emerald-50/70"
-                              : isDark ? "border-slate-700 bg-slate-900" : "border-slate-200 bg-white"
-                          }`}
-                        >
-                          <input
-                            type="checkbox"
-                            className="mt-0.5"
-                            checked={checked}
-                            onChange={() => toggleProposalProperty(property.id)}
-                          />
-                          <div className="min-w-0">
-                            <div className={`truncate font-semibold ${isDark ? "text-slate-100" : "text-slate-700"}`}>
-                              {property.label}
-                            </div>
-                            <div className={`${isDark ? "text-slate-400" : "text-slate-500"}`}>
-                              {property.statusLabel || "-"} | {property.imageUrls.length} image(s)
-                            </div>
-                          </div>
-                        </label>
-                      );
-                    })}
-                  </div>
-                  {hasMoreProposalPropertyOptions ? (
-                    <button
-                      type="button"
-                      onClick={() => setVisibleProposalOptionsCount((previous) => previous + RENDER_STEP_COUNT)}
-                      className={`mt-2 h-7 rounded-lg border px-2.5 text-[10px] font-semibold ${button}`}
-                    >
-                      Show More Options ({proposalPropertyOptions.length - visibleProposalPropertyOptions.length} left)
-                    </button>
-                  ) : null}
-                </div>
-
-                <div className="mt-2 grid grid-cols-1 gap-2 sm:grid-cols-2">
-                  <div className={`rounded-lg border px-2.5 py-2 text-xs ${softCard}`}>
-                    <div className={`${isDark ? "text-slate-400" : "text-slate-500"}`}>Selected Properties</div>
-                    <div className={`mt-0.5 font-semibold ${isDark ? "text-slate-100" : "text-slate-700"}`}>
-                      {selectedPropertyCount}
-                    </div>
-                  </div>
-                  <div className={`rounded-lg border px-2.5 py-2 text-xs ${softCard}`}>
-                    <div className={`${isDark ? "text-slate-400" : "text-slate-500"}`}>Images Included</div>
-                    <div className={`mt-0.5 font-semibold ${isDark ? "text-slate-100" : "text-slate-700"}`}>
-                      {proposalImageEntries.length}
-                    </div>
-                  </div>
-                </div>
-
-                <div className="mt-2 grid grid-cols-1 gap-2 sm:grid-cols-2">
-                  <label className="text-[11px]">
-                    <span className={`font-semibold uppercase tracking-[0.12em] ${isDark ? "text-slate-400" : "text-slate-500"}`}>Validity (Days)</span>
-                    <input
-                      type="number"
-                      min="1"
-                      max="90"
-                      value={proposalValidityDays}
-                      onChange={(event) => setProposalValidityDays(event.target.value)}
-                      className={`mt-1 h-9 w-full rounded-lg border px-3 text-sm ${input}`}
-                    />
-                  </label>
-                  <label className="text-[11px]">
-                    <span className={`font-semibold uppercase tracking-[0.12em] ${isDark ? "text-slate-400" : "text-slate-500"}`}>Special Note</span>
-                    <input
-                      type="text"
-                      value={proposalSpecialNote}
-                      onChange={(event) => setProposalSpecialNote(event.target.value)}
-                      placeholder="Optional client note"
-                      className={`mt-1 h-9 w-full rounded-lg border px-3 text-sm ${input}`}
-                    />
-                  </label>
-                </div>
-
-                <div className={`mt-2 rounded-xl border p-2.5 ${softCard}`}>
-                  <div className={`inline-flex items-center gap-1 text-[10px] font-semibold uppercase tracking-[0.12em] ${isDark ? "text-slate-400" : "text-slate-500"}`}>
-                    <Image size={12} />
-                    Property Images ({proposalImageEntries.length})
-                  </div>
-                  {proposalImageEntries.length ? (
-                    <div className="mt-2 grid grid-cols-2 gap-2">
-                      {proposalPreviewImageEntries.map((entry, index) => (
-                        <a
-                          key={`${entry.propertyId}-${entry.url}-${index}`}
-                          href={entry.url}
-                          target="_blank"
-                          rel="noreferrer"
-                          className={`group relative overflow-hidden rounded-lg border ${isDark ? "border-slate-700" : "border-slate-200"}`}
-                        >
-                          <img
-                            src={entry.url}
-                            alt={`Property ${index + 1}`}
-                            className="h-24 w-full object-cover transition-transform duration-200 group-hover:scale-[1.03]"
-                            loading="lazy"
-                          />
-                          <div className={`absolute inset-x-0 bottom-0 bg-black/45 px-1.5 py-0.5 text-[10px] text-white`}>
-                            {entry.propertyLabel}
-                          </div>
-                        </a>
-                      ))}
-                    </div>
-                  ) : (
-                    <p className={`mt-2 text-xs ${isDark ? "text-slate-400" : "text-slate-500"}`}>
-                      No images attached for selected properties.
-                    </p>
-                  )}
-                </div>
-
-                <textarea
-                  value={proposalText}
-                  readOnly
-                  className={`mt-2 min-h-[220px] w-full rounded-xl border px-3 py-2 text-xs leading-5 ${input}`}
-                />
-
-                <div className="mt-2 grid grid-cols-2 gap-2 sm:grid-cols-3">
-                  <button
-                    type="button"
-                    onClick={handleCopyProposal}
-                    disabled={!selectedPropertyCount}
-                    className={`inline-flex h-9 items-center justify-center gap-1 rounded-lg border text-xs font-semibold ${button}`}
-                  >
-                    <Copy size={12} />
-                    Copy
-                  </button>
-                  <button
-                    type="button"
-                    onClick={handleDownloadProposal}
-                    disabled={isGeneratingProposalPdf || !selectedPropertyCount}
-                    className={`inline-flex h-9 items-center justify-center gap-1 rounded-lg border text-xs font-semibold ${
-                      isGeneratingProposalPdf || !selectedPropertyCount
-                        ? `${input} cursor-not-allowed opacity-60`
-                        : button
-                    }`}
-                  >
-                    {isGeneratingProposalPdf ? <Loader size={12} className="animate-spin" /> : <Download size={12} />}
-                    PDF
-                  </button>
-                  {proposalImageEntries.length ? (
-                    <button
-                      type="button"
-                      onClick={handleCopyImageLinks}
-                      className={`inline-flex h-9 items-center justify-center gap-1 rounded-lg border text-xs font-semibold ${button}`}
-                    >
-                      <Copy size={12} />
-                      Img Links
-                    </button>
-                  ) : null}
-                  <button
-                    type="button"
-                    onClick={handleShareToWhatsApp}
-                    disabled={isGeneratingProposalPdf || (!proposalWhatsAppHref && !canUseNativeShare) || !selectedPropertyCount}
-                    className={`inline-flex h-9 items-center justify-center gap-1 rounded-lg border text-xs font-semibold ${
-                      !isGeneratingProposalPdf && selectedPropertyCount && (proposalWhatsAppHref || canUseNativeShare)
-                        ? button
-                        : `${input} cursor-not-allowed opacity-60`
-                    }`}
-                  >
-                    {WhatsAppIcon ? <WhatsAppIcon size={12} /> : null}
-                    WhatsApp
-                  </button>
-                  <button
-                    type="button"
-                    onClick={handleShareByEmail}
-                    disabled={!selectedPropertyCount}
-                    className={`inline-flex h-9 items-center justify-center gap-1 rounded-lg border text-xs font-semibold ${
-                      selectedPropertyCount ? button : `${input} cursor-not-allowed opacity-60`
-                    }`}
-                  >
-                    <Mail size={12} />
-                    Email
-                  </button>
-                  <button
-                    type="button"
-                    onClick={handleNativeShareProposal}
-                    disabled={isGeneratingProposalPdf || !selectedPropertyCount}
-                    className={`inline-flex h-9 items-center justify-center gap-1 rounded-lg border text-xs font-semibold ${
-                      isGeneratingProposalPdf || !selectedPropertyCount
-                        ? `${input} cursor-not-allowed opacity-60`
-                        : button
-                    }`}
-                  >
-                    {isGeneratingProposalPdf ? <Loader size={12} className="animate-spin" /> : <Send size={12} />}
-                    Share PDF
-                  </button>
-                  {canUseNativeShare && proposalImageEntries.length ? (
-                    <button
-                      type="button"
-                      onClick={handleNativeShareImages}
-                      className={`inline-flex h-9 items-center justify-center gap-1 rounded-lg border text-xs font-semibold ${button}`}
-                    >
-                      <Image size={12} />
-                      Share Images
-                    </button>
-                  ) : null}
-                </div>
-
-                {isGeneratingProposalPdf ? (
-                  <div className={`mt-2 text-[11px] ${isDark ? "text-slate-300" : "text-slate-600"}`}>
-                    Generating PDF with property images...
-                  </div>
-                ) : null}
-                {proposalActionMessage ? (
-                  <div className={`mt-2 text-[11px] font-semibold ${isDark ? "text-emerald-200" : "text-emerald-700"}`}>
-                    {proposalActionMessage}
-                  </div>
-                ) : null}
-              </>
-            )}
-          </section>
-
-        </div>
-
-        <div className="space-y-4 xl:col-span-7">
-          <section className={`rounded-3xl border p-4 ${card}`}>
-            <div className={`text-xs font-bold uppercase tracking-widest ${isDark ? "text-slate-400" : "text-slate-500"}`}>Lead Controls</div>
-            <div className="mt-2">
-              <label className={`inline-flex items-center gap-1 text-[10px] uppercase tracking-wider font-bold ${isDark ? "text-slate-400" : "text-slate-500"}`}>
-                <CalendarClock size={12} />
-                {requiresRemainingPaymentFollowUp ? "Remaining Payment Follow-up" : "Next Follow-up"}
-                {requiresRemainingPaymentFollowUp ? (
-                  <span className={isDark ? "text-amber-200" : "text-amber-700"}>*</span>
-                ) : null}
-              </label>
-              {canHaveFollowUp ? (
-                <input type="datetime-local" value={followUpDraft} onChange={(event) => setFollowUpDraft(event.target.value)} className={`mt-1 h-10 w-full rounded-xl border px-3 text-sm ${input}`} />
-              ) : (
-                <div className={`mt-1 rounded-xl border px-3 py-2 text-xs ${softCard}`}>
-                  {statusLabel(effectiveStatus)} leads don&apos;t get follow-ups. Any follow-up on this lead is removed when you save.
-                </div>
-              )}
-              {requiresRemainingPaymentFollowUp ? (
-                <div className={`mt-1 text-[10px] ${isDark ? "text-amber-200" : "text-amber-700"}`}>
-                  Required for collection of pending amount
-                  {remainingAmountForCollection ? ` (${formatCurrencyInr(remainingAmountForCollection)})` : ""}.
-                </div>
-              ) : null}
-              {requiresRemainingPaymentFollowUp ? (
-                <button
-                  type="button"
-                  onClick={handleCreateRemainingPaymentFollowUp}
-                  className={`mt-2 inline-flex h-8 items-center gap-1 rounded-lg border px-3 text-[11px] font-semibold ${button}`}
-                >
-                  <CalendarClock size={12} />
-                  {hasFollowUpDraft ? "Recreate Follow-up" : "Create Follow-up"}
-                  {remainingAmountForCollection ? ` (${formatCurrencyInr(remainingAmountForCollection)})` : ""}
-                </button>
-              ) : null}
-            </div>
-
-            <div className={`mt-3 rounded-xl border p-3 ${softCard}`}>
-              <div className={`mb-2 text-xs font-bold uppercase tracking-widest ${isDark ? "text-slate-400" : "text-slate-500"}`}>Lead Diary</div>
-              <textarea
-                value={diaryDraft}
-                onChange={(event) => setDiaryDraft(event.target.value)}
-                placeholder="Add conversation notes, visit details, objections, or next steps..."
-                className={`min-h-[120px] w-full resize-y rounded-xl border px-3 py-2 text-sm ${input}`}
-                maxLength={2000}
-              />
-              <div className="mt-2 flex flex-wrap items-center justify-between gap-2">
-                <div className={`text-[10px] ${isDark ? "text-slate-400" : "text-slate-500"}`}>{diaryDraft.length}/2000</div>
-                <div className="flex items-center gap-2">
-                  <button type="button" onClick={onDiaryVoiceToggle} disabled={savingDiary || !isDiaryMicSupported} className={`inline-flex h-9 items-center gap-1 rounded-lg border px-3 text-xs font-semibold disabled:opacity-60 ${button}`}>
-                    {isDiaryListening ? <MicOff size={13} /> : <Mic size={13} />} {isDiaryListening ? "Stop Mic" : "Voice"}
-                  </button>
-                  <button type="button" onClick={onAddDiary} disabled={savingDiary || !diaryDraft.trim()} className={`inline-flex h-9 items-center gap-1 rounded-lg px-3 text-xs font-semibold text-white disabled:opacity-60 ${primaryBtn}`}>
-                    {savingDiary ? <Loader size={13} className="animate-spin" /> : <Save size={13} />} Add Note
-                  </button>
-                </div>
-              </div>
-              {!isDiaryMicSupported ? (
-                <div className={`mt-2 text-[10px] ${isDark ? "text-amber-200" : "text-amber-700"}`}>Voice input not supported in this browser.</div>
-              ) : null}
-              <div className="mt-3">
-                {diaryLoading ? (
-                  <div className={`flex h-16 items-center justify-center gap-2 text-sm ${isDark ? "text-slate-400" : "text-slate-500"}`}>
-                    <Loader size={14} className="animate-spin" /> Loading diary...
-                  </div>
-                ) : normalizedDiaryEntries.length === 0 ? (
-                  <div className={`text-sm ${isDark ? "text-slate-400" : "text-slate-500"}`}>No diary notes yet</div>
-                ) : (
-                  <div className="space-y-2">
-                    {visibleDiaryEntries.map((entry) => (
-                      <div key={entry._id} className={`rounded-lg border p-2 ${softCard}`}>
-                        <div className={`whitespace-pre-wrap break-words text-sm ${isDark ? "text-slate-100" : "text-slate-800"}`}>{entry.note}</div>
-                        <div className={`mt-1 text-[11px] ${isDark ? "text-slate-400" : "text-slate-500"}`}>
-                          {formatDate(entry.createdAt)}{entry.createdBy?.name ? ` - ${entry.createdBy.name}` : ""}
-                        </div>
-                      </div>
-                    ))}
-                    {hasMoreDiaryEntries ? (
-                      <button
-                        type="button"
-                        onClick={() => setVisibleDiaryCount((previous) => previous + RENDER_STEP_COUNT)}
-                        className={`h-8 rounded-lg border px-3 text-[11px] font-semibold ${button}`}
-                      >
-                        Show More Notes ({normalizedDiaryEntries.length - visibleDiaryEntries.length} left)
-                      </button>
-                    ) : null}
-                  </div>
-                )}
-              </div>
-            </div>
-
-            {isClosedStatusSelected ? (
+  const closureDocumentsBlock = (
               <div className={`mt-3 rounded-xl border p-3 space-y-3 ${softCard}`}>
                 <div className={`flex items-center justify-between gap-2 ${isDark ? "text-slate-300" : "text-slate-600"}`}>
                   <div className={`text-[10px] uppercase tracking-wider font-bold ${isDark ? "text-slate-400" : "text-slate-500"}`}>Document Submission</div>
@@ -3196,9 +2263,9 @@ const LeadDetailsRebuiltContent = ({
                   </div>
                 )}
               </div>
-            ) : null}
+  );
 
-            {isClosedDealFlow ? (
+  const dealPaymentBlock = (
               <div className={`mt-3 rounded-xl border p-3 space-y-3 ${softCard}`}>
                 <div className={`text-[10px] uppercase tracking-wider font-bold ${isDark ? "text-slate-400" : "text-slate-500"}`}>Deal Payment & Approval</div>
                 <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
@@ -3336,362 +2403,3024 @@ const LeadDetailsRebuiltContent = ({
                   </div>
                 ) : null}
               </div>
-            ) : null}
+  );
 
-            <div className={`mt-3 rounded-xl border p-3 ${softCard}`}>
-              <div className={`text-[10px] uppercase tracking-wider font-bold ${isDark ? "text-slate-400" : "text-slate-500"}`}>Site Location</div>
-              {canConfigureSiteLocation ? (
-                <div className="mt-2 grid grid-cols-1 gap-2 sm:grid-cols-2">
-                  <input type="number" step="any" value={siteLatDraft} onChange={(event) => setSiteLatDraft(event.target.value)} placeholder="Latitude" className={`h-9 rounded-lg border px-3 text-sm ${input}`} />
-                  <input type="number" step="any" value={siteLngDraft} onChange={(event) => setSiteLngDraft(event.target.value)} placeholder="Longitude" className={`h-9 rounded-lg border px-3 text-sm ${input}`} />
-                </div>
-              ) : (
-                <div className={`mt-2 text-xs ${isDark ? "text-slate-300" : "text-slate-600"}`}>
-                  {selectedLeadSiteLat !== null && selectedLeadSiteLng !== null ? `${selectedLeadSiteLat}, ${selectedLeadSiteLng}` : "Not configured by admin/manager"}
-                </div>
-              )}
-              <div className={`mt-2 text-[10px] ${isDark ? "text-slate-400" : "text-slate-500"}`}>Site visit status is verified within {siteVisitRadiusMeters} meters.</div>
-            </div>
+  const shellSurface = isDark ? "border-slate-800 bg-slate-900" : "border-slate-200 bg-white";
+  const shellCard = `rounded-xl border ${shellSurface} ${isDark ? "" : "shadow-[0_1px_2px_rgba(16,24,40,0.05)]"}`;
+  const headingText = isDark ? "text-slate-100" : "text-slate-900";
+  const mutedText = isDark ? "text-slate-400" : "text-slate-500";
+  const dividerBorder = isDark ? "border-slate-800" : "border-slate-200";
+  const fieldCls = `h-10 w-full rounded-lg border px-3 text-sm outline-none transition focus:border-blue-500 focus:ring-2 focus:ring-blue-500/15 ${
+    isDark
+      ? "border-slate-700 bg-slate-950 text-slate-100 placeholder:text-slate-500"
+      : "border-slate-300 bg-white text-slate-800 placeholder:text-slate-400"
+  }`;
+  const areaCls = `w-full rounded-lg border px-3 py-2.5 text-sm outline-none transition focus:border-blue-500 focus:ring-2 focus:ring-blue-500/15 ${
+    isDark
+      ? "border-slate-700 bg-slate-950 text-slate-100 placeholder:text-slate-500"
+      : "border-slate-300 bg-white text-slate-800 placeholder:text-slate-400"
+  }`;
+  const ghostBtn = `inline-flex h-10 items-center justify-center gap-2 rounded-lg border px-3.5 text-[13px] font-semibold transition ${
+    isDark
+      ? "border-slate-700 bg-slate-900 text-slate-200 hover:bg-slate-800"
+      : "border-slate-300 bg-white text-slate-700 hover:bg-slate-50"
+  }`;
+  const smallGhostBtn = `inline-flex h-8 items-center justify-center gap-1.5 rounded-lg border px-2.5 text-xs font-semibold transition ${
+    isDark
+      ? "border-slate-700 bg-slate-900 text-slate-200 hover:bg-slate-800"
+      : "border-slate-300 bg-white text-slate-700 hover:bg-slate-50"
+  }`;
+  const blueBtn =
+    "inline-flex h-10 items-center justify-center gap-2 rounded-lg bg-blue-600 px-4 text-[13px] font-semibold text-white transition hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-50";
+  const smallBlueBtn =
+    "inline-flex h-8 items-center justify-center gap-1.5 rounded-lg bg-blue-600 px-3 text-xs font-semibold text-white transition hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-50";
+  const labelCls = `mb-1.5 block text-[13px] font-medium ${isDark ? "text-slate-300" : "text-slate-700"}`;
+  const cardTitle = `text-[15px] font-bold ${headingText}`;
 
-            {userRole === "FIELD_EXECUTIVE" && statusDraft === "SITE_VISIT" ? (
-              <div className={`mt-2 rounded-lg border p-2 text-[11px] ${
-                isDark ? "border-amber-500/35 bg-amber-500/15 text-amber-100" : "border-amber-200 bg-amber-50 text-amber-800"
-              }`}>
-                SITE_VISIT requires your live location within {siteVisitRadiusMeters} meters.
-              </div>
-            ) : null}
+  const toneClass = (tone) => {
+    const tones = {
+      emerald: isDark ? "border-emerald-500/35 bg-emerald-500/10 text-emerald-200" : "border-emerald-200 bg-emerald-50 text-emerald-700",
+      blue: isDark ? "border-blue-500/35 bg-blue-500/10 text-blue-200" : "border-blue-200 bg-blue-50 text-blue-700",
+      indigo: isDark ? "border-indigo-500/35 bg-indigo-500/10 text-indigo-200" : "border-indigo-200 bg-indigo-50 text-indigo-700",
+      violet: isDark ? "border-violet-500/35 bg-violet-500/10 text-violet-200" : "border-violet-200 bg-violet-50 text-violet-700",
+      amber: isDark ? "border-amber-500/35 bg-amber-500/10 text-amber-200" : "border-amber-200 bg-amber-50 text-amber-700",
+      rose: isDark ? "border-rose-500/35 bg-rose-500/10 text-rose-200" : "border-rose-200 bg-rose-50 text-rose-700",
+      orange: isDark ? "border-orange-500/35 bg-orange-500/10 text-orange-200" : "border-orange-200 bg-orange-50 text-orange-700",
+      slate: isDark ? "border-slate-700 bg-slate-800 text-slate-300" : "border-slate-200 bg-slate-100 text-slate-600",
+    };
+    return tones[tone] || tones.slate;
+  };
+  const pillCls = (tone) =>
+    `inline-flex items-center gap-1 rounded-md border px-2 py-0.5 text-[11px] font-semibold ${toneClass(tone)}`;
 
-          </section>
+  const leadDisplayName = String(nameDraft || "").trim() || selectedLead?.name || "Lead";
+  const leadInitials =
+    leadDisplayName
+      .split(/\s+/)
+      .filter(Boolean)
+      .slice(0, 2)
+      .map((part) => part.charAt(0).toUpperCase())
+      .join("") || "L";
+  const leadIdLabel = String(selectedLead?._id || "").slice(-6).toUpperCase();
+  const assignedToName = selectedLead?.assignedTo?.name || "Unassigned";
+  const assignedToInitials =
+    String(assignedToName)
+      .split(/\s+/)
+      .filter(Boolean)
+      .slice(0, 2)
+      .map((part) => part.charAt(0).toUpperCase())
+      .join("") || "NA";
+  const leadPhoneLabel = String(phoneDraft || selectedLead?.phone || "").trim();
+  const leadEmailLabel = String(emailDraft || selectedLead?.email || "").trim();
+  const leadProjectLabel = String(projectInterestedDraft || selectedLead?.projectInterested || "").trim();
 
-          {/* Lead Tasks integration */}
-          <section className={`rounded-3xl border p-4 ${card}`}>
-            <div className="flex items-center justify-between">
-              <div className={`text-xs font-bold uppercase tracking-widest ${isDark ? "text-slate-400" : "text-slate-500"}`}>Lead Tasks</div>
-              <span className={`text-[11px] ${isDark ? "text-slate-400" : "text-slate-500"}`}>{leadTasks.filter(t => t.status !== "COMPLETED").length} pending</span>
-            </div>
+  const savedFollowUpValue = toDateTimeInputValue(selectedLead?.nextFollowUp);
+  const savedSiteLat = selectedLead?.siteLocation?.lat ?? selectedLeadSiteLat;
+  const savedSiteLng = selectedLead?.siteLocation?.lng ?? selectedLeadSiteLng;
+  // The save bar only shows up once something on this page actually differs from the saved lead.
+  const hasPendingLeadEdits =
+    String(statusDraft || "") !== String(selectedLead?.status || "")
+    || String(followUpDraft || "") !== String(savedFollowUpValue || "")
+    || String(siteLatDraft ?? "") !== String(savedSiteLat ?? "")
+    || String(siteLngDraft ?? "") !== String(savedSiteLng ?? "")
+    || String(nameDraft || "") !== String(selectedLead?.name || "")
+    || String(phoneDraft || "") !== String(selectedLead?.phone || "")
+    || String(emailDraft || "") !== String(selectedLead?.email || "")
+    || String(cityDraft || "") !== String(selectedLead?.city || "")
+    || String(clientProfessionDraft || "") !== String(selectedLead?.clientProfession || "")
+    || String(projectInterestedDraft || "") !== String(selectedLead?.projectInterested || "")
+    || contactEditorOpen
+    || emailEditorOpen;
 
-            {/* Quick add task form */}
-            <form onSubmit={handleAddLeadTask} className="mt-3 space-y-2">
-              <div className="flex gap-2">
-                <input
-                  type="text"
-                  placeholder="Add a new task for this lead..."
-                  value={newTaskTitle}
-                  onChange={(e) => setNewTaskTitle(e.target.value)}
-                  className={`h-9 flex-1 rounded-lg border px-3 text-xs ${input}`}
-                />
-                <button
-                  type="submit"
-                  disabled={addingTask || !newTaskTitle.trim()}
-                  className={`inline-flex h-9 shrink-0 items-center justify-center rounded-lg px-3 text-xs font-semibold text-white disabled:opacity-55 ${primaryBtn}`}
-                >
-                  {addingTask ? "Adding..." : "Add"}
-                </button>
-              </div>
-              
-              <div className="grid grid-cols-3 gap-2">
-                <select
-                  value={newTaskPriority}
-                  onChange={(e) => setNewTaskPriority(e.target.value)}
-                  className={`h-8 rounded-lg border px-2 text-[10px] font-semibold ${input}`}
-                >
-                  <option value="LOW">Low Priority</option>
-                  <option value="MEDIUM">Med Priority</option>
-                  <option value="HIGH">High Priority</option>
-                </select>
+  const followUpDate = followUpDraft ? new Date(followUpDraft) : null;
+  const hasValidFollowUp = Boolean(followUpDate) && !Number.isNaN(followUpDate.getTime());
+  const isFollowUpOverdue = hasValidFollowUp && followUpDate.getTime() < Date.now();
 
-                <select
-                  value={newTaskAssignedTo}
-                  onChange={(e) => setNewTaskAssignedTo(e.target.value)}
-                  className={`h-8 rounded-lg border px-2 text-[10px] font-semibold ${input}`}
-                >
-                  <option value="">Unassigned</option>
-                  {executives.map(u => (
-                    <option key={u._id} value={u._id}>{u.name}</option>
-                  ))}
-                </select>
+  const handleCopyLeadId = async () => {
+    try {
+      await navigator.clipboard.writeText(leadIdLabel);
+      showProposalActionMessage("Lead ID copied");
+    } catch {
+      showProposalActionMessage("Could not copy lead ID");
+    }
+  };
 
-                <input
-                  type="date"
-                  value={newTaskDueDate}
-                  onChange={(e) => setNewTaskDueDate(e.target.value)}
-                  className={`h-8 rounded-lg border px-2 text-[10px] font-semibold ${input}`}
-                />
-              </div>
-            </form>
+  const handleScheduleSiteVisit = () => {
+    if (!siteVisitDateDraft) {
+      setScheduleVisitMessage("Pick a visit date first.");
+      return;
+    }
+    const time = siteVisitTimeDraft || "11:00";
+    setFollowUpDraft(`${siteVisitDateDraft}T${time}`);
+    if ((leadStatuses || []).includes("SITE_VISIT")) setStatusDraft("SITE_VISIT");
+    setScheduleVisitMessage("Site visit set. Save changes to confirm.");
+  };
 
-            {/* Tasks list */}
-            <div className="mt-3 space-y-2 max-h-60 overflow-y-auto custom-scrollbar">
-              {loadingTasks ? (
-                <div className={`text-xs py-4 text-center ${isDark ? "text-slate-400" : "text-slate-500"}`}>
-                  Loading tasks...
-                </div>
-              ) : leadTasks.length === 0 ? (
-                <div className={`text-xs py-4 text-center ${isDark ? "text-slate-400" : "text-slate-500"}`}>
-                  No tasks linked to this lead.
-                </div>
-              ) : (
-                leadTasks.map((task) => {
-                  const isCompleted = task.status === "COMPLETED";
-                  const expired = !isCompleted && task.dueDate && new Date(task.dueDate) < new Date().setHours(0,0,0,0);
-                  
-                  return (
-                    <div 
-                      key={task._id} 
-                      className={`flex items-start justify-between gap-2.5 rounded-lg border p-2.5 text-xs transition-all ${
-                        isCompleted
-                          ? isDark ? "border-slate-800 bg-slate-950/35 opacity-60" : "border-slate-100 bg-slate-50/60 opacity-60"
-                          : isDark ? "border-slate-700 bg-slate-900/60 hover:border-slate-600" : "border-slate-200 bg-white hover:border-slate-300"
-                      }`}
-                    >
-                      <div className="flex items-start gap-2.5 min-w-0">
-                        <button
-                          type="button"
-                          onClick={() => handleToggleLeadTaskStatus(task)}
-                          className={`mt-0.5 flex h-4 w-4 shrink-0 items-center justify-center rounded border transition-colors ${
-                            isCompleted
-                              ? "border-emerald-500 bg-emerald-500 text-white"
-                              : isDark ? "border-slate-700 hover:border-sky-400" : "border-slate-350 hover:border-sky-500"
-                          }`}
-                        >
-                          {isCompleted && <Check size={11} strokeWidth={3} />}
-                        </button>
+  const activityIconFor = (activity) => {
+    const text = String(activity?.action || "").toLowerCase();
+    if (text.includes("call")) return { Icon: Phone, tone: "emerald" };
+    if (text.includes("visit")) return { Icon: MapPin, tone: "blue" };
+    if (text.includes("assign") || text.includes("transfer")) return { Icon: Users, tone: "amber" };
+    if (text.includes("propert") || text.includes("inventory")) return { Icon: Building2, tone: "violet" };
+    if (text.includes("created")) return { Icon: User, tone: "orange" };
+    return { Icon: FileText, tone: "indigo" };
+  };
 
-                        <div className="min-w-0">
-                          <p className={`font-semibold leading-normal break-words ${
-                            isCompleted ? "line-through text-slate-500" : isDark ? "text-slate-100" : "text-slate-800"
-                          }`}>
-                            {task.title}
-                          </p>
-                          <div className="mt-1 flex flex-wrap items-center gap-1.5 text-[9px] font-semibold">
-                            <span className={`px-1.5 py-0.5 rounded border uppercase tracking-wider ${
-                              task.priority === "HIGH"
-                                ? "bg-rose-500/10 text-rose-400 border-rose-500/20"
-                                : task.priority === "MEDIUM"
-                                  ? "bg-amber-500/10 text-amber-400 border-amber-500/20"
-                                  : "bg-blue-500/10 text-blue-400 border-blue-500/20"
-                            }`}>
-                              {task.priority}
-                            </span>
+  const activityMatchesFilter = (activity) => {
+    const text = String(activity?.action || "").toLowerCase();
+    if (activityFilter === "ALL") return true;
+    if (activityFilter === "NOTES") return text.includes("note") || text.includes("diary");
+    if (activityFilter === "CALLS") return text.includes("call");
+    if (activityFilter === "VISITS") return text.includes("visit");
+    if (activityFilter === "ASSIGNMENTS") return text.includes("assign") || text.includes("transfer");
+    if (activityFilter === "PROPERTIES") return text.includes("propert") || text.includes("inventory");
+    return true;
+  };
+  const combinedTimelineEntries = [
+    ...normalizedActivities.map((activity) => ({
+      key: `activity-${activity._id}`,
+      title: activity.action,
+      detail: "",
+      author: activity.performedBy?.name || "",
+      at: activity.createdAt,
+    })),
+    ...normalizedDiaryEntries.map((entry) => ({
+      key: `note-${entry._id}`,
+      title: "Note added",
+      detail: entry.note,
+      author: entry.createdBy?.name || "",
+      at: entry.createdAt,
+    })),
+  ]
+    .filter((entry) => activityMatchesFilter({ action: `${entry.title} ${entry.detail}` }))
+    .sort((left, right) => new Date(right.at || 0).getTime() - new Date(left.at || 0).getTime());
+  const visibleTimelineEntries = combinedTimelineEntries.slice(0, visibleActivityCount);
+  const hasMoreTimelineEntries = combinedTimelineEntries.length > visibleTimelineEntries.length;
 
-                            {task.assignedTo && (
-                              <span className={`px-1.5 py-0.5 rounded border ${
-                                isDark ? "bg-slate-800 text-slate-300 border-slate-700" : "bg-slate-100 text-slate-600 border-slate-200"
-                              }`}>
-                                Assigned: {task.assignedTo.name}
-                              </span>
-                            )}
+  const handleLogActivityMode = (mode) => {
+    setLogActivityMode(mode);
+    const prefixes = { NOTE: "", CALL: "Call: ", VISIT: "Visit: " };
+    const nextPrefix = prefixes[mode] || "";
+    const currentNote = String(diaryDraft || "");
+    const withoutPrefix = currentNote.replace(/^(Call|Visit):\s*/, "");
+    setDiaryDraft(`${nextPrefix}${withoutPrefix}`);
+  };
 
-                            {task.dueDate && (
-                              <span className={`px-1.5 py-0.5 rounded border flex items-center gap-0.5 ${
-                                expired 
-                                  ? "bg-rose-500/15 text-rose-500 border-rose-500/20 font-bold" 
-                                  : isDark ? "bg-slate-800 text-slate-300 border-slate-700" : "bg-slate-100 text-slate-600 border-slate-200"
-                              }`}>
-                                <Calendar size={8} />
-                                {new Date(task.dueDate).toLocaleDateString("en-IN", { day: "numeric", month: "short" })}
-                                {expired && " (Overdue)"}
-                              </span>
-                            )}
-                          </div>
-                        </div>
-                      </div>
+  const propertyMatchesFilters = (row) => {
+    const listingType = getInventoryListingType(row?.inventory);
+    if (linkedPropertyFilter === "SALE" && listingType !== "SALE") return false;
+    if (linkedPropertyFilter === "RENT" && listingType !== "RENT") return false;
+    const term = String(linkedPropertySearch || "").trim().toLowerCase();
+    if (!term) return true;
+    return [row.label, row.location, row.id, row?.inventory?.projectName]
+      .map((value) => String(value || "").toLowerCase())
+      .some((value) => value.includes(term));
+  };
+  const filteredLinkedRows = visibleRelatedInventoryRows.filter(propertyMatchesFilters);
 
-                      <button
-                        type="button"
-                        onClick={() => handleDeleteLeadTask(task._id)}
-                        className={`h-6 w-6 rounded border flex items-center justify-center shrink-0 border-transparent text-rose-550 hover:bg-rose-500/10`}
-                      >
-                        <Trash2 size={11} />
-                      </button>
-                    </div>
-                  );
-                })
-              )}
-            </div>
-          </section>
+  const selectedPropertyRow = activeRelatedPropertyRow || relatedInventoryRows[0] || null;
+  const selectedPropertyInventory = selectedPropertyRow?.inventory || {};
+  const selectedPropertyImages = selectedPropertyRow?.imageUrls || [];
+  const hasSiteCoordinates =
+    savedSiteLat !== null && savedSiteLat !== undefined && savedSiteLng !== null && savedSiteLng !== undefined;
+  const selectedPropertyMapsHref = hasSiteCoordinates
+    ? `https://www.google.com/maps/search/?api=1&query=${savedSiteLat},${savedSiteLng}`
+    : selectedLeadMapsHref;
 
-          {canAssignLead ? (
-            <section id="lead-transfer-panel" className={`rounded-3xl border p-4 ${card}`}>
-              <div className="flex items-start justify-between gap-3">
-                <div>
-                  <div className={`text-xs font-bold uppercase tracking-widest ${isDark ? "text-slate-400" : "text-slate-500"}`}>Assign / Transfer Lead</div>
-                  <p className={`mt-1 text-xs ${isDark ? "text-slate-400" : "text-slate-500"}`}>
-                    Current owner: <span className={isDark ? "font-semibold text-slate-100" : "font-semibold text-slate-800"}>{currentOwnerName}</span>
-                    {currentOwnerRole ? ` (${statusLabel(currentOwnerRole)})` : ""}
-                  </p>
-                </div>
-              </div>
-              {showQualifiedTransferHelper ? (
-                <div className={`mt-3 rounded-2xl border px-3 py-2 text-xs font-medium ${
-                  isDark ? "border-emerald-400/35 bg-emerald-500/10 text-emerald-100" : "border-emerald-200 bg-emerald-50 text-emerald-800"
-                }`}>
-                  This lead is qualified. You can assign it to a Field Executive for site visit or deal handling.
-                </div>
-              ) : null}
-              <input
-                type="search"
-                value={assigneeSearchDraft}
-                onChange={(event) => setAssigneeSearchDraft(event.target.value)}
-                placeholder="Search by name or role"
-                className={`mt-3 h-11 w-full rounded-xl border px-3 text-sm ${input}`}
-              />
-              <select
-                value={executiveDraft}
-                onChange={(event) => setExecutiveDraft(event.target.value)}
-                className={`mt-2 h-11 w-full rounded-xl border px-3 text-sm ${input}`}
-              >
-                <option value="">Select user</option>
-                {filteredAssignees.map((user) => (
-                  <option key={user._id} value={user._id}>
-                    {user.name} ({statusLabel(user.role)})
-                    {user.lastAssignedAt ? ` - last ${formatDate(user.lastAssignedAt)}` : ""}
-                  </option>
-                ))}
-              </select>
-              <textarea
-                value={transferReasonDraft}
-                onChange={(event) => setTransferReasonDraft(event.target.value)}
-                placeholder="Transfer reason (optional)"
-                rows={3}
-                className={`mt-2 min-h-24 w-full resize-y rounded-xl border px-3 py-2 text-sm ${input}`}
-              />
-              <div className="sticky bottom-0 -mx-1 mt-3 flex gap-2 bg-inherit pt-2">
-                <button
-                  type="button"
-                  onClick={() => {
-                    setExecutiveDraft(selectedLead?.assignedTo?._id || "");
-                    setTransferReasonDraft("");
-                    setAssigneeSearchDraft("");
-                  }}
-                  className={`h-11 flex-1 rounded-xl border text-sm font-semibold ${button}`}
-                >
-                  Cancel
-                </button>
-                <button
-                  type="button"
-                  onClick={onAssignLead}
-                  disabled={!executiveDraft || assigning}
-                  className={`inline-flex h-11 flex-1 items-center justify-center gap-2 rounded-xl border text-sm font-semibold disabled:opacity-60 ${button}`}
-                >
-                  {assigning ? <Loader size={14} className="animate-spin" /> : <Send size={14} />}
-                  {assigning ? "Transferring..." : "Save Transfer"}
-                </button>
-              </div>
-            </section>
-          ) : null}
+  const requirementSummaryRows = [
+    { label: "Inventory type", value: toTitleCaseLabel(normalizedRequirementInventoryType), Icon: Building2 },
+    {
+      label: normalizedRequirementInventoryType === "COMMERCIAL" ? "Commercial type" : "Residential type",
+      value:
+        getPropertySubtypeLabel(normalizedRequirementInventoryType, normalizedRequirementPropertySubtype)
+        || toTitleCaseLabel(normalizedRequirementPropertySubtype),
+      Icon: Home,
+    },
+    {
+      label: "Deal type",
+      value: transactionTypeValue === "SALE" ? "Purchase" : toTitleCaseLabel(transactionTypeValue),
+      Icon: FileText,
+    },
+    {
+      label: "Budget",
+      value:
+        requirementsDraft?.budgetMin || requirementsDraft?.budgetMax
+          ? [requirementsDraft?.budgetMin, requirementsDraft?.budgetMax]
+              .filter((amount) => amount !== "" && amount !== null && amount !== undefined)
+              .map((amount) => formatCurrencyInr(amount))
+              .join(" - ")
+          : "",
+      Icon: FileText,
+    },
+    { label: "Preferred location", value: plotLocationValue || String(cityDraft || "").trim(), Icon: MapPin },
+    { label: "Occupancy", value: plotOccupancyValue, Icon: Users },
+    { label: "Purpose", value: plotPurposeValue, Icon: FileText },
+    { label: "Work profile", value: String(clientProfessionDraft || "").trim(), Icon: Briefcase },
+  ];
+  const missingRequirementItems = [
+    { label: "Work profile", done: Boolean(String(clientProfessionDraft || "").trim()) },
+    { label: "Budget range", done: Boolean(requirementsDraft?.budgetMin || requirementsDraft?.budgetMax) },
+    { label: "Preferred location", done: Boolean(plotLocationValue || String(cityDraft || "").trim()) },
+    { label: "Occupancy", done: Boolean(plotOccupancyValue) },
+    { label: "Purpose", done: Boolean(plotPurposeValue) },
+    { label: "Project interested", done: Boolean(leadProjectLabel) },
+    { label: "Inventory type", done: Boolean(normalizedRequirementInventoryType) },
+    { label: "Property type", done: Boolean(normalizedRequirementPropertySubtype) },
+    { label: "Deal type", done: Boolean(transactionTypeValue) },
+  ];
+  const missingRequirementCount = missingRequirementItems.filter((item) => !item.done).length;
 
-          <section className={`rounded-3xl border p-4 ${card}`}>
-            <div className={`mb-3 flex items-center gap-1.5 text-xs font-bold uppercase tracking-widest ${isDark ? "text-slate-400" : "text-slate-500"}`}>
-              <History size={12} /> Assignment History
-            </div>
-            {assignmentHistoryEvents.length === 0 ? (
-              <div className={`rounded-2xl border border-dashed px-3 py-4 text-sm ${isDark ? "border-slate-700 text-slate-400" : "border-slate-300 text-slate-500"}`}>
-                No assignment history yet
-              </div>
-            ) : (
-              <div className="space-y-0">
-                {assignmentHistoryEvents.map((event, index) => {
-                  const hasConnector = index < assignmentHistoryEvents.length - 1;
-                  const fromUser = getUserDisplayName(event.fromUser);
-                  const toUser = getUserDisplayName(event.toUser);
-                  const createdBy = getUserDisplayName(event.createdBy, event.synthetic ? "System" : "-");
-                  const reason = String(event.reason || "").trim();
-                  const statusAtTransfer = String(event.statusAtTransfer || "").trim();
+  const detailTabs = [
+    { key: "overview", label: "Overview" },
+    { key: "requirements", label: "Requirements" },
+    { key: "properties", label: "Properties" },
+    { key: "proposals", label: "Proposals" },
+    { key: "activity", label: "Activity & Tasks" },
+  ];
+  const mobilePropertyLabel = selectedPropertyRow?.label || leadProjectLabel || "Property not selected";
+  const mobilePropertyLocation = selectedPropertyRow?.location || String(cityDraft || "").trim() || "Location not set";
 
-                  return (
-                    <div key={event._id || `${event.action}-${index}`} className="grid grid-cols-[18px_minmax(0,1fr)] gap-3">
-                      <div className="flex flex-col items-center">
-                        <span className={`mt-1 h-3 w-3 rounded-full border-2 ${
-                          isDark ? "border-cyan-300 bg-slate-950" : "border-cyan-600 bg-white"
-                        }`} />
-                        {hasConnector ? (
-                          <span className={`mt-1 h-full min-h-12 w-px ${isDark ? "bg-slate-700" : "bg-slate-200"}`} />
-                        ) : null}
-                      </div>
+  const proposalDateLabel = new Date().toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "numeric" });
+  const proposalValidTillLabel = (() => {
+    const days = Number(proposalValidityDays) || 7;
+    const date = new Date();
+    date.setDate(date.getDate() + days);
+    return date.toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "numeric" });
+  })();
 
-                      <div className={`min-w-0 pb-3 ${hasConnector ? "" : "pb-0"}`}>
-                        <div className={`rounded-2xl border p-3 ${softCard}`}>
-                          <div className="flex min-w-0 flex-col gap-1 sm:flex-row sm:items-start sm:justify-between">
-                            <div className="min-w-0">
-                              <div className={`text-sm font-bold ${isDark ? "text-slate-100" : "text-slate-800"}`}>
-                                {getAssignmentActionLabel(event.action)}
-                              </div>
-                              <div className={`mt-0.5 text-[11px] ${isDark ? "text-slate-400" : "text-slate-500"}`}>
-                                {formatDate(event.createdAt)}
-                              </div>
-                            </div>
-                            {statusAtTransfer ? (
-                              <span className={`w-fit rounded-full border px-2 py-0.5 text-[10px] font-bold uppercase tracking-[0.08em] ${
-                                isDark ? "border-slate-700 bg-slate-950 text-slate-300" : "border-slate-200 bg-white text-slate-600"
-                              }`}>
-                                {statusLabel(statusAtTransfer)}
-                              </span>
-                            ) : null}
-                          </div>
+  return (
+    <Motion.section
+      initial={{ opacity: 0, y: 12 }}
+      animate={{ opacity: 1, y: 0 }}
+      exit={{ opacity: 0, y: 12 }}
+      className={`relative z-10 w-full overflow-x-hidden pb-6 ${headingText}`}
+    >
+      {selectedLead?.status === "CLOSED" && (
+        <BillstackSection key={selectedLead._id} entityType="lead" entityId={selectedLead._id} />
+      )}
 
-                          <div className="mt-2 grid min-w-0 grid-cols-1 gap-1.5 text-[11px] sm:grid-cols-2">
-                            <div className={isDark ? "text-slate-400" : "text-slate-500"}>
-                              From: <span className={isDark ? "font-semibold text-slate-200" : "font-semibold text-slate-700"}>{fromUser}</span>
-                            </div>
-                            <div className={isDark ? "text-slate-400" : "text-slate-500"}>
-                              To: <span className={isDark ? "font-semibold text-slate-200" : "font-semibold text-slate-700"}>{toUser}</span>
-                            </div>
-                            <div className={`min-w-0 sm:col-span-2 ${isDark ? "text-slate-400" : "text-slate-500"}`}>
-                              Created by: <span className={isDark ? "font-semibold text-slate-200" : "font-semibold text-slate-700"}>{createdBy}</span>
-                            </div>
-                            {reason ? (
-                              <div className={`min-w-0 break-words sm:col-span-2 ${isDark ? "text-slate-300" : "text-slate-600"}`}>
-                                Reason: {reason}
-                              </div>
-                            ) : null}
-                          </div>
-                        </div>
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
-            )}
-          </section>
+      <div className={`lead-details-breadcrumb mb-3 flex items-center gap-2 text-[13px] ${mutedText}`}>
+        <button
+          type="button"
+          onClick={onClose}
+          className={`inline-flex items-center gap-1.5 font-medium transition hover:text-blue-600 ${mutedText}`}
+        >
+          <ArrowLeft size={14} />
+          Pipeline
+        </button>
+        <span className={isDark ? "text-slate-600" : "text-slate-300"}>/</span>
+        <span className={`font-semibold ${headingText}`}>Lead details</span>
+      </div>
 
-          <section
-            className={`rounded-3xl border p-4 ${card}`}
-            style={{ contentVisibility: "auto", containIntrinsicSize: "280px" }}
+      <section className={`lead-details-mobile-hero md:hidden ${shellCard}`}>
+        <div className="lead-details-mobile-identity">
+          <span
+            className={`lead-details-mobile-avatar ${isDark ? "bg-blue-500/15 text-blue-200" : "bg-blue-50 text-blue-700"}`}
           >
-            <div className={`mb-2 flex items-center gap-1 text-xs font-bold uppercase tracking-widest ${isDark ? "text-slate-400" : "text-slate-500"}`}>
-              <History size={12} /> Activity Timeline
-            </div>
-            {activityLoading ? (
-              <div className={`flex h-24 items-center justify-center gap-2 text-sm ${isDark ? "text-slate-400" : "text-slate-500"}`}>
-                <Loader size={14} className="animate-spin" /> Loading timeline...
+            {leadInitials}
+          </span>
+          <h1>{leadDisplayName}</h1>
+          <button
+            type="button"
+            disabled={!canEditLead}
+            aria-pressed={Boolean(selectedLead?.hotClient)}
+            onClick={onToggleHotClient}
+            className={`lead-details-mobile-hot ${selectedLead?.hotClient ? toneClass("orange") : toneClass("slate")}`}
+          >
+            <Flame size={16} className={selectedLead?.hotClient ? "" : "opacity-50"} />
+            Hot lead
+          </button>
+          <button
+            type="button"
+            onClick={() => setHeaderMenuOpen((open) => !open)}
+            className="lead-details-mobile-more"
+            aria-label="More lead actions"
+          >
+            <MoreHorizontal size={22} />
+          </button>
+        </div>
+
+        <div className={`lead-details-mobile-contact ${mutedText}`}>
+          <span>Lead ID: <strong>{leadIdLabel}</strong></span>
+          <button type="button" onClick={handleCopyLeadId} title="Copy lead ID" aria-label="Copy lead ID"><Copy size={18} /></button>
+          <i aria-hidden="true" />
+          <span>{leadPhoneLabel || "Not provided"}</span>
+          {selectedLeadDialerHref ? <a href={selectedLeadDialerHref} aria-label="Call lead"><Phone size={20} /></a> : null}
+        </div>
+
+        <div className="lead-details-mobile-selects">
+          <div className="lead-details-mobile-status">
+            <button type="button" disabled={!canEditLead} aria-expanded={mobileStatusOpen} onClick={() => setMobileStatusOpen((open) => !open)} className={fieldCls}>
+              <Calendar size={18} />
+              <span>{statusLabel(statusDraft)}</span>
+              <ChevronDown size={17} />
+            </button>
+            {mobileStatusOpen ? <div className={`lead-details-mobile-status-menu ${shellSurface}`}>
+              {leadStatuses.map((status) => <button key={status} type="button" disabled={!canReviewDealPayment && status === "REQUESTED"} onClick={() => { setStatusDraft(status); setMobileStatusOpen(false); }} className={status === statusDraft ? "is-selected" : ""}>{statusLabel(status)}</button>)}
+            </div> : null}
+          </div>
+          <div className="lead-details-mobile-assignee-picker">
+            <button type="button" disabled={!canAssignLead} onClick={openAssigneePicker} className={fieldCls} aria-expanded={assigneeMenuOpen}>
+              <span className={`lead-details-mobile-assignee ${isDark ? "bg-emerald-500/15 text-emerald-200" : "bg-emerald-50 text-emerald-700"}`}>{assignedToInitials}</span>
+              <span>{assignedToName}</span>
+              <ChevronDown size={17} />
+            </button>
+            {assigneeMenuOpen ? <div className={`lead-details-mobile-assignee-menu ${shellSurface}`}>
+              <div className="lead-details-mobile-assignee-search"><Search size={15} /><input type="search" value={assigneeSearchDraft} onChange={(event) => setAssigneeSearchDraft(event.target.value)} placeholder="Search user..." /></div>
+              <div className="lead-details-mobile-assignee-list">
+                {filteredAssignees.length ? filteredAssignees.map((user) => <button key={user._id} type="button" onClick={() => selectTransferAssignee(user)}><span>{String(user.name || "?").split(/\s+/).map((part) => part[0]).slice(0, 2).join("").toUpperCase()}</span><strong>{user.name}</strong><small>{statusLabel(user.role)}</small></button>) : <p>No matching users</p>}
               </div>
-            ) : normalizedActivities.length === 0 ? (
-              <div className={`text-sm ${isDark ? "text-slate-400" : "text-slate-500"}`}>No activity yet</div>
-            ) : (
-              <div className="space-y-2">
-                {visibleActivities.map((activity) => (
-                  <div key={activity._id} className={`rounded-lg border p-2 ${softCard}`}>
-                    <div className={`text-sm ${isDark ? "text-slate-100" : "text-slate-800"}`}>{activity.action}</div>
-                    <div className={`mt-1 text-[11px] ${isDark ? "text-slate-400" : "text-slate-500"}`}>
-                      {formatDate(activity.createdAt)}{activity.performedBy?.name ? ` - ${activity.performedBy.name}` : ""}
-                    </div>
-                  </div>
-                ))}
-                {hasMoreActivities ? (
+            </div> : null}
+          </div>
+        </div>
+
+        <button type="button" className={`lead-details-mobile-property ${dividerBorder}`} onClick={() => setActiveTab("properties")}>
+          <span className={isDark ? "bg-slate-800 text-blue-300" : "bg-blue-50 text-blue-600"}><Building2 size={28} /></span>
+          <span><strong>{mobilePropertyLabel}</strong><small>{mobilePropertyLocation}</small></span>
+          <ChevronRight size={24} />
+        </button>
+
+        <div className="lead-details-mobile-actions">
+          {selectedLeadDialerHref ? <a href={selectedLeadDialerHref}><Phone size={26} />Call</a> : <button type="button" disabled><Phone size={26} />Call</button>}
+          {selectedLeadWhatsAppHref ? <a href={selectedLeadWhatsAppHref} target="_blank" rel="noreferrer">{WhatsAppIcon ? <WhatsAppIcon size={26} /> : <MessageCircle size={26} />}WhatsApp</a> : <button type="button" disabled>WhatsApp</button>}
+          <button type="button" disabled={!canEditLead} onClick={onOpenEditLeadForm}><PencilLine size={26} />Edit</button>
+          <button type="button" onClick={() => setHeaderMenuOpen((open) => !open)}><MoreHorizontal size={26} />More</button>
+        </div>
+
+        {headerMenuOpen ? (
+          <div className={`lead-details-mobile-menu ${shellSurface}`}>
+            {canAssignLead ? <button type="button" onClick={() => { setHeaderMenuOpen(false); openAssigneePicker(); }}><ArrowRightLeft size={16} />Transfer lead</button> : null}
+            {canDeleteLead && onDeleteLead ? <button type="button" className="text-rose-600" onClick={() => { setHeaderMenuOpen(false); onDeleteLead(); }}><Trash2 size={16} />Delete</button> : null}
+          </div>
+        ) : null}
+      </section>
+
+      <nav className={`lead-details-mobile-tabs md:hidden ${shellCard}`} aria-label="Lead detail sections">
+        {detailTabs.map((tab) => {
+          const isActive = activeTab === tab.key;
+          return <button key={tab.key} type="button" onClick={() => setActiveTab(tab.key)} className={isActive ? "is-active" : ""}>{tab.key === "activity" ? "Activity" : tab.label}</button>;
+        })}
+        <ChevronRight size={20} aria-hidden="true" />
+      </nav>
+
+      <div className={`${shellCard} lead-details-desktop-hero hidden md:block`}>
+        <div className="px-4 py-4 sm:px-5">
+          <div className="flex flex-wrap items-start justify-between gap-4">
+            <div className="flex min-w-0 flex-1 items-start gap-3.5">
+              <div
+                className={`flex h-14 w-14 shrink-0 items-center justify-center rounded-full text-base font-bold ${
+                  isDark ? "bg-blue-500/15 text-blue-200" : "bg-blue-50 text-blue-700"
+                }`}
+              >
+                {leadInitials}
+              </div>
+              <div className="min-w-0">
+                <div className="flex flex-wrap items-center gap-2.5">
+                  <h1 className={`truncate text-[22px] font-bold tracking-tight ${headingText}`}>{leadDisplayName}</h1>
                   <button
                     type="button"
-                    onClick={() => setVisibleActivityCount((previous) => previous + RENDER_STEP_COUNT)}
-                    className={`h-8 rounded-lg border px-3 text-[11px] font-semibold ${button}`}
+                    disabled={!canEditLead}
+                    aria-pressed={Boolean(selectedLead?.hotClient)}
+                    onClick={onToggleHotClient}
+                    title="High-intent client who is ready to transact and mainly needs the right inventory"
+                    className={`inline-flex items-center gap-1.5 rounded-md border px-2.5 py-1 text-[12px] font-semibold transition disabled:cursor-not-allowed disabled:opacity-60 ${
+                      selectedLead?.hotClient ? toneClass("orange") : toneClass("slate")
+                    }`}
                   >
-                    Show More Activity ({normalizedActivities.length - visibleActivities.length} left)
+                    <Flame size={13} className={selectedLead?.hotClient ? "" : "opacity-50"} />
+                    Hot lead
+                  </button>
+                  <div className="relative">
+                    <Calendar size={15} className={`pointer-events-none absolute left-2.5 top-1/2 z-10 -translate-y-1/2 ${mutedText}`} />
+                    <ChevronDown size={15} className={`pointer-events-none absolute right-2.5 top-1/2 z-10 -translate-y-1/2 ${mutedText}`} />
+                    <select
+                      value={statusDraft}
+                      disabled={!canEditLead}
+                      onChange={(event) => setStatusDraft(event.target.value)}
+                      className={`h-9 w-auto appearance-none pl-8 pr-8 text-[13px] font-semibold ${fieldCls}`}
+                    >
+                      {leadStatuses.map((status) => (
+                        <option key={status} value={status} disabled={!canReviewDealPayment && status === "REQUESTED"}>
+                          {statusLabel(status)}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                </div>
+                <div className={`mt-1.5 flex flex-wrap items-center gap-x-2.5 gap-y-1 text-[13px] ${mutedText}`}>
+                  <span className="inline-flex items-center gap-1.5">
+                    Lead ID: <span className="font-semibold">{leadIdLabel}</span>
+                    <button
+                      type="button"
+                      onClick={handleCopyLeadId}
+                      title="Copy lead ID"
+                      className={`transition hover:text-blue-600 ${mutedText}`}
+                    >
+                      <Copy size={13} />
+                    </button>
+                  </span>
+                  {leadPhoneLabel ? (
+                    <>
+                      <span className={isDark ? "text-slate-700" : "text-slate-300"}>|</span>
+                      <span>{leadPhoneLabel}</span>
+                    </>
+                  ) : null}
+                  {leadEmailLabel ? (
+                    <>
+                      <span className={isDark ? "text-slate-700" : "text-slate-300"}>|</span>
+                      <span className="truncate">{leadEmailLabel}</span>
+                    </>
+                  ) : null}
+                  {leadProjectLabel ? (
+                    <>
+                      <span className={isDark ? "text-slate-700" : "text-slate-300"}>|</span>
+                      <span className="truncate">{leadProjectLabel}</span>
+                    </>
+                  ) : null}
+                  <BrokerPhoneHint phone={phoneDraft} />
+                  {selectedLead?.brokerContactId ? (
+                    <span className="font-semibold text-violet-600">Known broker</span>
+                  ) : null}
+                </div>
+              </div>
+            </div>
+
+            <div className="flex flex-wrap items-center justify-end gap-3">
+              <div className="relative mr-1">
+                <button type="button" disabled={!canAssignLead} onClick={openAssigneePicker} aria-expanded={assigneeMenuOpen} className="rounded-lg px-1.5 py-1 text-left transition hover:bg-slate-50 disabled:cursor-default dark:hover:bg-slate-800">
+                  <div className={`text-[12px] ${mutedText}`}>Assigned to</div>
+                  <div className="mt-1 flex items-center gap-2">
+                    <span className={`flex h-7 w-7 items-center justify-center rounded-full text-[11px] font-bold ${isDark ? "bg-emerald-500/15 text-emerald-200" : "bg-emerald-50 text-emerald-700"}`}>{assignedToInitials}</span>
+                    <span className={`max-w-[150px] truncate text-[13px] font-semibold ${headingText}`}>{assignedToName}</span>
+                    {canAssignLead ? <ChevronDown size={14} className={mutedText} /> : null}
+                  </div>
+                </button>
+                {assigneeMenuOpen ? <div className={`absolute right-0 top-[calc(100%+8px)] z-40 w-72 overflow-hidden rounded-xl border shadow-xl ${shellSurface}`}>
+                  <div className={`border-b p-2 ${dividerBorder}`}><div className="relative"><Search size={15} className={`pointer-events-none absolute left-2.5 top-1/2 -translate-y-1/2 ${mutedText}`} /><input type="search" value={assigneeSearchDraft} onChange={(event) => setAssigneeSearchDraft(event.target.value)} placeholder="Search user, email or role..." className={`${fieldCls} h-9 pl-8 text-[12px]`} /></div></div>
+                  <div className="max-h-64 overflow-y-auto p-1.5 custom-scrollbar">{filteredAssignees.length ? filteredAssignees.map((user) => <button key={user._id} type="button" onClick={() => selectTransferAssignee(user)} className={`flex w-full items-center gap-2.5 rounded-lg px-2.5 py-2 text-left hover:bg-slate-50 dark:hover:bg-slate-800 ${String(user._id) === String(selectedLead?.assignedTo?._id || "") ? "bg-blue-50 dark:bg-blue-500/10" : ""}`}><span className={`flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-[10px] font-bold ${isDark ? "bg-emerald-500/15 text-emerald-200" : "bg-emerald-50 text-emerald-700"}`}>{String(user.name || "?").split(/\s+/).map((part) => part[0]).slice(0, 2).join("").toUpperCase()}</span><span className="min-w-0"><span className={`block truncate text-[12px] font-semibold ${headingText}`}>{user.name}</span><span className={`block truncate text-[10px] ${mutedText}`}>{statusLabel(user.role)}</span></span></button>) : <p className={`px-2.5 py-3 text-[12px] ${mutedText}`}>No matching users</p>}</div>
+                </div> : null}
+              </div>
+
+              {selectedLeadDialerHref ? (
+                <a href={selectedLeadDialerHref} className={ghostBtn}>
+                  <Phone size={15} className="text-blue-600" />
+                  Call
+                </a>
+              ) : (
+                <button type="button" disabled className={`${ghostBtn} cursor-not-allowed opacity-50`}>
+                  <Phone size={15} />
+                  Call
+                </button>
+              )}
+              {selectedLeadWhatsAppHref ? (
+                <a href={selectedLeadWhatsAppHref} target="_blank" rel="noreferrer" className={ghostBtn}>
+                  {WhatsAppIcon ? <WhatsAppIcon size={15} className="text-emerald-600" /> : null}
+                  WhatsApp
+                </a>
+              ) : (
+                <button type="button" disabled className={`${ghostBtn} cursor-not-allowed opacity-50`}>
+                  WhatsApp
+                </button>
+              )}
+              {canEditLead ? (
+                <button type="button" onClick={onOpenEditLeadForm} className={ghostBtn}>
+                  <PencilLine size={15} className="text-blue-600" />
+                  Edit lead
+                </button>
+              ) : null}
+
+              <div className="relative">
+                <button
+                  type="button"
+                  onClick={() => setHeaderMenuOpen((open) => !open)}
+                  aria-label="More lead actions"
+                  className={`${ghostBtn} w-10 px-0`}
+                >
+                  <MoreHorizontal size={16} />
+                </button>
+                {headerMenuOpen ? (
+                  <>
+                    <div className="fixed inset-0 z-20" onClick={() => setHeaderMenuOpen(false)} />
+                    <div className={`absolute right-0 top-11 z-30 w-48 overflow-hidden rounded-xl border py-1 shadow-lg ${shellSurface}`}>
+                      {canAssignLead ? (
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setHeaderMenuOpen(false);
+                            openAssigneePicker();
+                          }}
+                          className={`flex w-full items-center gap-2.5 px-3.5 py-2.5 text-left text-[13px] font-medium ${
+                            isDark ? "text-slate-200 hover:bg-slate-800" : "text-slate-700 hover:bg-slate-50"
+                          }`}
+                        >
+                          <ArrowRightLeft size={15} />
+                          Transfer lead
+                        </button>
+                      ) : null}
+                      {canDeleteLead && onDeleteLead ? (
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setHeaderMenuOpen(false);
+                            onDeleteLead();
+                          }}
+                          className={`flex w-full items-center gap-2.5 px-3.5 py-2.5 text-left text-[13px] font-medium text-rose-600 ${
+                            isDark ? "hover:bg-rose-500/10" : "hover:bg-rose-50"
+                          }`}
+                        >
+                          <Trash2 size={15} />
+                          Delete
+                        </button>
+                      ) : null}
+                    </div>
+                  </>
+                ) : null}
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div className={`border-t px-4 sm:px-5 ${dividerBorder}`}>
+          <nav className="-mb-px flex gap-7 overflow-x-auto">
+            {detailTabs.map((tab) => {
+              const isActive = activeTab === tab.key;
+              return (
+                <button
+                  key={tab.key}
+                  type="button"
+                  onClick={() => setActiveTab(tab.key)}
+                  className={`whitespace-nowrap border-b-2 px-0.5 py-3 text-[14px] font-semibold transition ${
+                    isActive ? "border-blue-600 text-blue-600" : `border-transparent ${mutedText} hover:text-blue-600`
+                  }`}
+                >
+                  {tab.label}
+                </button>
+              );
+            })}
+          </nav>
+        </div>
+      </div>
+
+      {activeTab === "overview" ? (
+        <div className="lead-details-overview-grid mt-4 grid grid-cols-1 gap-4 xl:grid-cols-12">
+          <div className="space-y-4 xl:col-span-5">
+            <section className={`${shellCard} p-4 sm:p-5`}>
+              <div className="flex items-center justify-between gap-2">
+                <div className="flex items-center gap-2">
+                  <User size={17} className="text-blue-600" />
+                  <h2 className={cardTitle}>Contact details</h2>
+                </div>
+                {canEditLead ? (
+                  <button
+                    type="button"
+                    onClick={() => setContactEditorOpen((open) => !open)}
+                    className="text-[13px] font-semibold text-blue-600"
+                  >
+                    {contactEditorOpen ? "Done" : "Edit"}
                   </button>
                 ) : null}
               </div>
+              <dl className="mt-4 space-y-3 text-[13px]">
+                <div className="flex items-start justify-between gap-3">
+                  <dt className={mutedText}>Name</dt>
+                  <dd className="text-right">
+                    {contactEditorOpen ? (
+                      <input
+                        type="text"
+                        value={nameDraft}
+                        onChange={(event) => setNameDraft(event.target.value)}
+                        placeholder="Lead name"
+                        className={`h-8 w-56 ${fieldCls}`}
+                      />
+                    ) : (
+                      <span className={`font-semibold ${headingText}`}>{leadDisplayName}</span>
+                    )}
+                  </dd>
+                </div>
+                <div className="flex items-start justify-between gap-3">
+                  <dt className={mutedText}>Phone</dt>
+                  <dd className="flex items-center gap-2 text-right">
+                    {contactEditorOpen ? (
+                      <input
+                        type="text"
+                        inputMode="numeric"
+                        value={phoneDraft}
+                        onChange={(event) => setPhoneDraft(event.target.value)}
+                        placeholder="Phone"
+                        className={`h-8 w-56 ${fieldCls}`}
+                      />
+                    ) : (
+                      <>
+                        <span className={`font-semibold ${headingText}`}>{leadPhoneLabel || "Not provided"}</span>
+                        {selectedLeadDialerHref ? (
+                          <a href={selectedLeadDialerHref} title="Call lead" className="text-blue-600">
+                            <Phone size={14} />
+                          </a>
+                        ) : null}
+                      </>
+                    )}
+                  </dd>
+                </div>
+                <div className="flex items-start justify-between gap-3">
+                  <dt className={mutedText}>Email</dt>
+                  <dd className="flex min-w-0 items-center gap-2 text-right">
+                    {leadEmailLabel && !emailEditorOpen && !contactEditorOpen ? (
+                      <>
+                        <span className={`truncate font-semibold ${headingText}`}>{leadEmailLabel}</span>
+                        {selectedLeadMailHref ? (
+                          <a href={selectedLeadMailHref} title="Email lead" className="text-blue-600">
+                            <Mail size={14} />
+                          </a>
+                        ) : null}
+                      </>
+                    ) : emailEditorOpen || contactEditorOpen ? (
+                      <input
+                        type="email"
+                        autoFocus
+                        value={emailDraft}
+                        onChange={(event) => setEmailDraft(event.target.value)}
+                        onBlur={() => setEmailEditorOpen(false)}
+                        placeholder="name@company.com"
+                        className={`h-8 w-56 ${fieldCls}`}
+                      />
+                    ) : (
+                      <>
+                        <span className={mutedText}>Not provided</span>
+                        {canEditLead ? (
+                          <button
+                            type="button"
+                            onClick={() => setEmailEditorOpen(true)}
+                            className="inline-flex items-center gap-1 text-[13px] font-semibold text-blue-600"
+                          >
+                            <Plus size={13} />
+                            Add email
+                          </button>
+                        ) : null}
+                      </>
+                    )}
+                  </dd>
+                </div>
+                <div className="flex items-start justify-between gap-3">
+                  <dt className={mutedText}>City</dt>
+                  <dd className="text-right">
+                    {contactEditorOpen ? (
+                      <input
+                        type="text"
+                        value={cityDraft}
+                        onChange={(event) => setCityDraft(event.target.value)}
+                        placeholder="City"
+                        className={`h-8 w-56 ${fieldCls}`}
+                      />
+                    ) : (
+                      <span className={`font-semibold ${headingText}`}>
+                        {String(cityDraft || "").trim() || "Not provided"}
+                      </span>
+                    )}
+                  </dd>
+                </div>
+                <div className="flex items-start justify-between gap-3">
+                  <dt className={mutedText}>Source</dt>
+                  <dd className={`text-right font-semibold ${headingText}`}>{leadSourceLabel || "Not set"}</dd>
+                </div>
+              </dl>
+            </section>
+
+            <section className={`${shellCard} p-4 sm:p-5`}>
+              <div className="flex items-center justify-between gap-2">
+                <div className="flex items-center gap-2">
+                  <FileText size={17} className="text-blue-600" />
+                  <h2 className={cardTitle}>Requirements summary</h2>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setActiveTab("requirements")}
+                  className="text-[13px] font-semibold text-blue-600"
+                >
+                  Edit
+                </button>
+              </div>
+              <dl className="mt-4 space-y-3 text-[13px]">
+                {requirementSummaryRows.slice(0, 5).map((row) => (
+                  <div key={row.label} className="flex items-start justify-between gap-3">
+                    <dt className={mutedText}>{row.label}</dt>
+                    <dd className="text-right">
+                      {row.value ? (
+                        <span className={`font-semibold ${headingText}`}>{row.value}</span>
+                      ) : (
+                        <span className={pillCls("rose")}>Not provided</span>
+                      )}
+                    </dd>
+                  </div>
+                ))}
+              </dl>
+              <button
+                type="button"
+                onClick={() => setActiveTab("requirements")}
+                className="mt-4 inline-flex items-center gap-1.5 text-[13px] font-semibold text-blue-600"
+              >
+                View requirements
+                <ArrowRight size={14} />
+              </button>
+            </section>
+
+            <section className={`${shellCard} p-4 sm:p-5`}>
+              <div className="flex items-center gap-2">
+                <History size={17} className="text-blue-600" />
+                <h2 className={cardTitle}>Recent activity</h2>
+              </div>
+              {activityLoading ? (
+                <div className={`mt-4 flex h-20 items-center justify-center gap-2 text-sm ${mutedText}`}>
+                  <Loader size={15} className="animate-spin" /> Loading activity...
+                </div>
+              ) : normalizedActivities.length === 0 ? (
+                <p className={`mt-4 text-[13px] ${mutedText}`}>No activity yet.</p>
+              ) : (
+                <ol className="mt-4 space-y-4">
+                  {normalizedActivities.slice(0, 4).map((activity, index, list) => {
+                    const { Icon, tone } = activityIconFor(activity);
+                    return (
+                      <li key={activity._id} className="grid grid-cols-[28px_minmax(0,1fr)] gap-3">
+                        <div className="flex flex-col items-center">
+                          <span className={`flex h-7 w-7 items-center justify-center rounded-full border ${toneClass(tone)}`}>
+                            <Icon size={13} />
+                          </span>
+                          {index < list.length - 1 ? (
+                            <span className={`mt-1 w-px flex-1 ${isDark ? "bg-slate-800" : "bg-slate-200"}`} />
+                          ) : null}
+                        </div>
+                        <div className="min-w-0 pb-1">
+                          <div className="flex items-start justify-between gap-3">
+                            <p className={`text-[13px] font-semibold ${headingText}`}>{activity.action}</p>
+                            <span className={`shrink-0 text-[12px] ${mutedText}`}>{formatDate(activity.createdAt)}</span>
+                          </div>
+                          {activity.performedBy?.name ? (
+                            <p className={`mt-0.5 text-[12px] ${mutedText}`}>By {activity.performedBy.name}</p>
+                          ) : null}
+                        </div>
+                      </li>
+                    );
+                  })}
+                </ol>
+              )}
+            </section>
+          </div>
+
+          <div className="space-y-4 xl:col-span-7">
+            {canHaveFollowUp ? (
+              <section
+                className={`rounded-xl border p-4 sm:p-5 ${
+                  isDark ? "border-amber-500/35 bg-amber-500/10" : "border-amber-200 bg-amber-50"
+                }`}
+              >
+                <div className="flex flex-wrap items-start justify-between gap-3">
+                  <div className="flex min-w-0 items-start gap-3">
+                    <span
+                      className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-full ${
+                        isDark ? "bg-amber-500/20 text-amber-200" : "bg-amber-100 text-amber-700"
+                      }`}
+                    >
+                      <CalendarClock size={17} />
+                    </span>
+                    <div className="min-w-0">
+                      <div className="flex flex-wrap items-center gap-2">
+                        <h2 className={`text-[15px] font-bold ${isDark ? "text-amber-100" : "text-amber-900"}`}>
+                          {requiresRemainingPaymentFollowUp ? "Remaining payment follow-up" : "Next follow-up"}
+                        </h2>
+                        {isFollowUpOverdue ? <span className={pillCls("rose")}>Overdue</span> : null}
+                      </div>
+                      <p
+                        className={`mt-1.5 text-[17px] font-bold ${
+                          isFollowUpOverdue ? "text-rose-600" : isDark ? "text-amber-100" : "text-amber-900"
+                        }`}
+                      >
+                        {hasValidFollowUp ? formatDate(followUpDraft) : "No follow-up scheduled"}
+                      </p>
+                      <p className={`mt-1 text-[13px] ${isDark ? "text-amber-200/90" : "text-amber-800"}`}>
+                        {requiresRemainingPaymentFollowUp
+                          ? `Collect the pending amount${
+                              remainingAmountForCollection ? ` (${formatCurrencyInr(remainingAmountForCollection)})` : ""
+                            }.`
+                          : "Follow up with client on property options."}
+                      </p>
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <button
+                      type="button"
+                      onClick={() => setFollowUpEditorOpen((open) => !open)}
+                      className={ghostBtn}
+                    >
+                      <Calendar size={15} />
+                      Reschedule
+                    </button>
+                    <button
+                      type="button"
+                      disabled={!hasValidFollowUp}
+                      onClick={() => setFollowUpDraft("")}
+                      className={blueBtn}
+                    >
+                      <Check size={15} />
+                      Mark complete
+                    </button>
+                  </div>
+                </div>
+                {followUpEditorOpen ? (
+                  <div className="mt-3">
+                    <input
+                      type="datetime-local"
+                      value={followUpDraft}
+                      onChange={(event) => setFollowUpDraft(event.target.value)}
+                      className={`${fieldCls} max-w-xs`}
+                    />
+                  </div>
+                ) : null}
+                {requiresRemainingPaymentFollowUp ? (
+                  <button
+                    type="button"
+                    onClick={handleCreateRemainingPaymentFollowUp}
+                    className={`mt-3 ${smallGhostBtn}`}
+                  >
+                    <CalendarClock size={13} />
+                    {hasFollowUpDraft ? "Recreate follow-up" : "Create follow-up"}
+                  </button>
+                ) : null}
+              </section>
+            ) : (
+              <section className={`${shellCard} p-4 sm:p-5`}>
+                <div className="flex items-center gap-2">
+                  <CalendarClock size={17} className="text-blue-600" />
+                  <h2 className={cardTitle}>Next follow-up</h2>
+                </div>
+                <p className={`mt-3 text-[13px] ${mutedText}`}>
+                  {statusLabel(effectiveStatus)} leads do not get follow-ups. Any follow-up on this lead is removed when you save.
+                </p>
+              </section>
             )}
-          </section>
+
+            <section className={`${shellCard} p-4 sm:p-5`}>
+              <div className="flex items-center gap-2">
+                <MapPin size={17} className="text-blue-600" />
+                <h2 className={cardTitle}>Next site visit</h2>
+              </div>
+              <div
+                className={`mt-4 flex flex-wrap items-center justify-between gap-3 rounded-lg border p-3 ${
+                  isDark ? "border-slate-800 bg-slate-950/50" : "border-slate-200 bg-slate-50"
+                }`}
+              >
+                <div className="flex min-w-0 items-center gap-3">
+                  <span
+                    className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-full ${
+                      isDark ? "bg-slate-800 text-slate-300" : "bg-slate-200 text-slate-500"
+                    }`}
+                  >
+                    <Home size={18} />
+                  </span>
+                  <div className="min-w-0">
+                    <p className={`truncate text-[13px] font-semibold ${headingText}`}>
+                      {selectedPropertyRow ? selectedPropertyRow.label : "Property not selected"}
+                    </p>
+                    <p className={`mt-0.5 truncate text-[12px] ${mutedText}`}>
+                      {selectedPropertyRow
+                        ? selectedPropertyRow.location || "Location not set"
+                        : "Select a property from inventory to schedule a site visit."}
+                    </p>
+                  </div>
+                </div>
+                <div className="flex items-center gap-2">
+                  <button type="button" onClick={() => setActiveTab("properties")} className={ghostBtn}>
+                    <Search size={15} />
+                    Choose property
+                  </button>
+                  <button type="button" onClick={() => setActiveTab("properties")} className={blueBtn}>
+                    <Calendar size={15} />
+                    Schedule visit
+                  </button>
+                </div>
+              </div>
+            </section>
+
+            <section className={`${shellCard} p-4 sm:p-5`}>
+              <div className="flex items-center gap-2">
+                <FileText size={17} className="text-blue-600" />
+                <h2 className={cardTitle}>Quick note</h2>
+              </div>
+              <textarea
+                value={diaryDraft}
+                onChange={(event) => setDiaryDraft(event.target.value)}
+                placeholder="Add a note about this lead..."
+                maxLength={2000}
+                className={`mt-4 min-h-[96px] resize-y ${areaCls}`}
+              />
+              <div className="mt-3 flex flex-wrap items-center justify-between gap-2">
+                <span className={`text-[12px] ${mutedText}`}>{diaryDraft.length}/2000</span>
+                <div className="flex items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={onDiaryVoiceToggle}
+                    disabled={savingDiary || !isDiaryMicSupported}
+                    className={`${ghostBtn} disabled:opacity-50`}
+                  >
+                    {isDiaryListening ? <MicOff size={15} /> : <Mic size={15} />}
+                    {isDiaryListening ? "Stop mic" : "Voice"}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={onAddDiary}
+                    disabled={savingDiary || !diaryDraft.trim()}
+                    className={blueBtn}
+                  >
+                    {savingDiary ? <Loader size={15} className="animate-spin" /> : <FileText size={15} />}
+                    Add note
+                  </button>
+                </div>
+              </div>
+            </section>
+
+            <section className={`${shellCard} p-4 sm:p-5`}>
+              <div className="flex items-center justify-between gap-2">
+                <div className="flex items-center gap-2">
+                  <Building2 size={17} className="text-blue-600" />
+                  <h2 className={cardTitle}>Linked properties</h2>
+                </div>
+                {relatedInventoryRows.length ? (
+                  <button
+                    type="button"
+                    onClick={() => setActiveTab("properties")}
+                    className="text-[13px] font-semibold text-blue-600"
+                  >
+                    View all
+                  </button>
+                ) : null}
+              </div>
+              {relatedInventoryRows.length === 0 ? (
+                <div className="mt-4 flex flex-col items-center justify-center px-4 py-8 text-center">
+                  <span
+                    className={`flex h-12 w-12 items-center justify-center rounded-full ${
+                      isDark ? "bg-slate-800 text-slate-400" : "bg-slate-100 text-slate-400"
+                    }`}
+                  >
+                    <Home size={22} />
+                  </span>
+                  <p className={`mt-3 text-[14px] font-semibold ${headingText}`}>No properties linked yet</p>
+                  <p className={`mt-1 text-[13px] ${mutedText}`}>
+                    Link relevant properties from inventory to keep track of client interest.
+                  </p>
+                  <button type="button" onClick={() => setActiveTab("properties")} className={`mt-4 ${blueBtn}`}>
+                    <Search size={15} />
+                    Browse inventory
+                  </button>
+                </div>
+              ) : (
+                <div className="mt-4 space-y-2">
+                  {relatedInventoryRows.slice(0, 3).map((row) => (
+                    <button
+                      key={row.id}
+                      type="button"
+                      onClick={() => {
+                        setActiveTab("properties");
+                        if (row.id) onSelectRelatedProperty(row.id);
+                      }}
+                      className={`flex w-full items-center justify-between gap-3 rounded-lg border p-3 text-left transition ${
+                        isDark ? "border-slate-800 hover:border-slate-700" : "border-slate-200 hover:border-blue-300"
+                      }`}
+                    >
+                      <div className="min-w-0">
+                        <p className={`truncate text-[13px] font-semibold ${headingText}`}>{row.label || "Property"}</p>
+                        <p className={`mt-0.5 truncate text-[12px] ${mutedText}`}>{row.location || "Location not set"}</p>
+                      </div>
+                      <span className={pillCls("emerald")}>{row.statusLabel || "-"}</span>
+                    </button>
+                  ))}
+                </div>
+              )}
+            </section>
+
+            {isClosedDealFlow ? <section className={`${shellCard} p-4 sm:p-5`}>{dealPaymentBlock}</section> : null}
+
+            {isClosedStatusSelected ? (
+              <section className={`${shellCard} p-4 sm:p-5`}>{closureDocumentsBlock}</section>
+            ) : null}
+          </div>
         </div>
-      </div>
+      ) : null}
+
+      {activeTab === "requirements" ? (
+        <div className="mt-4 grid grid-cols-1 gap-4 xl:grid-cols-12">
+          <div className="xl:col-span-8">
+            <section className={`${shellCard} p-4 sm:p-5`}>
+              <div className="flex flex-wrap items-center gap-3">
+                <h2 className={`text-[18px] font-bold ${headingText}`}>Property requirements</h2>
+                <span className={pillCls("blue")}>
+                  <PencilLine size={12} />
+                  Edit mode
+                </span>
+              </div>
+              <p className={`mt-1 text-[13px] ${mutedText}`}>
+                Capture the client&apos;s property requirements. Property-specific fields change with inventory type.
+              </p>
+
+              <div className={`mt-5 rounded-xl border p-4 ${isDark ? "border-slate-800" : "border-slate-200"}`}>
+                <div className="flex items-center gap-2.5">
+                  <span className="flex h-6 w-6 items-center justify-center rounded-full bg-blue-600 text-[12px] font-bold text-white">
+                    1
+                  </span>
+                  <h3 className={`text-[14px] font-bold ${headingText}`}>General</h3>
+                </div>
+                <div className="mt-4 grid grid-cols-1 gap-4 sm:grid-cols-2">
+                  <label className="block">
+                    <span className={labelCls}>
+                      Work profile <span className="text-rose-500">*</span>
+                    </span>
+                    <input
+                      type="text"
+                      value={clientProfessionDraft}
+                      onChange={(event) => setClientProfessionDraft(event.target.value)}
+                      placeholder="Select work profile"
+                      maxLength={120}
+                      className={fieldCls}
+                    />
+                  </label>
+                  <label className="block">
+                    <span className={labelCls}>
+                      Inventory type <span className="text-rose-500">*</span>
+                    </span>
+                    <select
+                      value={requirementsDraft?.inventoryType || ""}
+                      onChange={(event) => updateRequirementInventoryType(event.target.value)}
+                      className={fieldCls}
+                    >
+                      <option value="">Any</option>
+                      <option value="COMMERCIAL">Commercial</option>
+                      <option value="RESIDENTIAL">Residential</option>
+                      <option value="COWORKING">Coworking</option>
+                    </select>
+                  </label>
+                  {normalizedRequirementInventoryType && !isCoworkingRequirement ? (
+                    <label className="block">
+                      <span className={labelCls}>
+                        {normalizedRequirementInventoryType === "COMMERCIAL" ? "Commercial type" : "Residential type"}{" "}
+                        <span className="text-rose-500">*</span>
+                      </span>
+                      <select
+                        value={requirementsDraft?.propertySubtype || ""}
+                        onChange={(event) => updateRequirementPropertySubtype(event.target.value)}
+                        className={fieldCls}
+                      >
+                        <option value="">Any</option>
+                        {propertySubtypeOptions.map((option) => (
+                          <option key={option.value} value={option.value}>
+                            {option.label}
+                          </option>
+                        ))}
+                      </select>
+                    </label>
+                  ) : null}
+                  <label className="block">
+                    <span className={labelCls}>
+                      Deal type <span className="text-rose-500">*</span>
+                    </span>
+                    <select
+                      value={transactionTypeValue}
+                      onChange={(event) => updateTransactionType(event.target.value)}
+                      className={fieldCls}
+                    >
+                      <option value="">Any</option>
+                      {canPurchaseRequirement ? <option value="SALE">Purchase</option> : null}
+                      {canRentRequirement ? <option value="RENT">Rent</option> : null}
+                      <option value="LEASE">Lease</option>
+                    </select>
+                  </label>
+                  {showFurnishing ? (
+                    <label className="block">
+                      <span className={labelCls}>Furnishing</span>
+                      <select
+                        value={furnishingValue}
+                        onChange={(event) => updateRequirementRootField("furnishingStatus", event.target.value)}
+                        className={fieldCls}
+                      >
+                        {furnishingOptions.map((option) => (
+                          <option key={option.value || "any-furnishing"} value={option.value}>
+                            {option.label}
+                          </option>
+                        ))}
+                      </select>
+                    </label>
+                  ) : null}
+                  <label className="block sm:col-span-2">
+                    <span className={labelCls}>Project interested</span>
+                    <input
+                      type="text"
+                      value={projectInterestedDraft}
+                      onChange={(event) => setProjectInterestedDraft(event.target.value)}
+                      placeholder="Search and select project (optional)"
+                      className={fieldCls}
+                    />
+                  </label>
+                </div>
+              </div>
+
+              <div className={`mt-4 rounded-xl border p-4 ${isDark ? "border-slate-800" : "border-slate-200"}`}>
+                <div className="flex items-center gap-2.5">
+                  <span className="flex h-6 w-6 items-center justify-center rounded-full bg-blue-600 text-[12px] font-bold text-white">
+                    2
+                  </span>
+                  <h3 className={`text-[14px] font-bold ${headingText}`}>Budget &amp; location</h3>
+                </div>
+                <div className="mt-4 grid grid-cols-1 gap-4 sm:grid-cols-2">
+                  <label className="block sm:col-span-2">
+                    <span className={labelCls}>Budget range</span>
+                    <select
+                      value={selectedBudgetRangeValue}
+                      onChange={(event) => updateBudgetRange(event.target.value)}
+                      className={fieldCls}
+                    >
+                      {budgetRangeOptions.map((option) => (
+                        <option key={option.value || "any-budget"} value={option.value}>
+                          {option.label}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+                  <label className="block">
+                    <span className={labelCls}>
+                      Budget (Min) <span className="text-rose-500">*</span>
+                    </span>
+                    <RequirementAdornedInput
+                      type="number"
+                      step="any"
+                      min="0"
+                      value={requirementsDraft?.budgetMin || ""}
+                      onChange={(event) => updateRequirementRootField("budgetMin", event.target.value)}
+                      placeholder="Enter minimum budget"
+                      adornment="&#8377;"
+                      inputClassName={fieldCls}
+                      isDark={isDark}
+                    />
+                  </label>
+                  <label className="block">
+                    <span className={labelCls}>
+                      Budget (Max) <span className="text-rose-500">*</span>
+                    </span>
+                    <RequirementAdornedInput
+                      type="number"
+                      step="any"
+                      min="0"
+                      value={requirementsDraft?.budgetMax || ""}
+                      onChange={(event) => updateRequirementRootField("budgetMax", event.target.value)}
+                      placeholder="Enter maximum budget"
+                      adornment="&#8377;"
+                      inputClassName={fieldCls}
+                      isDark={isDark}
+                    />
+                  </label>
+                  {isPlotRequirement ? (
+                    <>
+                      <label className="block">
+                        <span className={labelCls}>
+                          Preferred plot location <span className="text-rose-500">*</span>
+                        </span>
+                        <select
+                          value={plotLocationValue}
+                          onChange={(event) => updateRequirementSubtypeField("plotLocation", event.target.value)}
+                          className={fieldCls}
+                        >
+                          <option value="">Search and select location</option>
+                          {PLOT_LOCATION_OPTIONS.map((location) => (
+                            <option key={location} value={location}>
+                              {location}
+                            </option>
+                          ))}
+                        </select>
+                      </label>
+                      <label className="block">
+                        <span className={labelCls}>
+                          Occupancy <span className="text-rose-500">*</span>
+                        </span>
+                        <select
+                          value={plotOccupancyValue}
+                          onChange={(event) => updateRequirementSubtypeField("plotOccupancy", event.target.value)}
+                          className={fieldCls}
+                        >
+                          <option value="">Select occupancy</option>
+                          {PLOT_OCCUPANCY_OPTIONS.map((occupancy) => (
+                            <option key={occupancy} value={occupancy}>
+                              {occupancy}
+                            </option>
+                          ))}
+                        </select>
+                      </label>
+                      <label className="block">
+                        <span className={labelCls}>
+                          Purpose <span className="text-rose-500">*</span>
+                        </span>
+                        <select
+                          value={plotPurposeValue}
+                          onChange={(event) => updateRequirementSubtypeField("plotPurpose", event.target.value)}
+                          className={fieldCls}
+                        >
+                          <option value="">Select purpose</option>
+                          {PLOT_PURPOSE_OPTIONS.map((purpose) => (
+                            <option key={purpose} value={purpose}>
+                              {purpose}
+                            </option>
+                          ))}
+                        </select>
+                      </label>
+                    </>
+                  ) : (
+                    <label className="block sm:col-span-2">
+                      <span className={labelCls}>Preferred location</span>
+                      <input
+                        type="text"
+                        value={cityDraft}
+                        onChange={(event) => setCityDraft(event.target.value)}
+                        placeholder="Search and select location"
+                        className={fieldCls}
+                      />
+                    </label>
+                  )}
+                </div>
+              </div>
+
+              {propertySubtypeConfig || isCoworkingRequirement ? (
+                <div className={`mt-4 rounded-xl border p-4 ${isDark ? "border-slate-800" : "border-slate-200"}`}>
+                  <div className="flex items-center gap-2.5">
+                    <span className="flex h-6 w-6 items-center justify-center rounded-full bg-blue-600 text-[12px] font-bold text-white">
+                      3
+                    </span>
+                    <h3 className={`text-[14px] font-bold ${headingText}`}>
+                      {isCoworkingRequirement
+                        ? "Coworking preferences"
+                        : `${propertySubtypeConfig?.label || "Property"} preferences`}
+                    </h3>
+                  </div>
+                  {isCoworkingRequirement ? (
+                    <div className="mt-4">
+                      <CoworkingRequirementFields
+                        value={requirementsDraft?.coworking || {}}
+                        onChange={(next) => updateRequirementRootField("coworking", next)}
+                        inputClass={fieldCls}
+                        labelClass={labelCls}
+                      />
+                    </div>
+                  ) : null}
+                  {propertySubtypeConfig ? (
+                    <>
+                      <div className="mt-4 grid grid-cols-1 gap-4 sm:grid-cols-2">
+                        {(propertySubtypeConfig.fields || [])
+                          .filter((field) => field.type !== "checkbox" && !PLOT_INLINE_FIELD_KEYS.has(field.key))
+                          .map(renderSubtypeField)}
+                      </div>
+                      {(propertySubtypeConfig.fields || []).some(
+                        (field) => field.type === "checkbox" && !PLOT_INLINE_FIELD_KEYS.has(field.key),
+                      ) ? (
+                        <div className="mt-4">
+                          <div className={`mb-2 text-[13px] font-medium ${mutedText}`}>Additional preferences</div>
+                          <div className="flex flex-wrap gap-2">
+                            {(propertySubtypeConfig.fields || [])
+                              .filter((field) => field.type === "checkbox" && !PLOT_INLINE_FIELD_KEYS.has(field.key))
+                              .map(renderSubtypeField)}
+                          </div>
+                        </div>
+                      ) : null}
+                    </>
+                  ) : null}
+                </div>
+              ) : null}
+            </section>
+          </div>
+
+          <div className="space-y-4 xl:col-span-4">
+            <section className={`${shellCard} p-4 sm:p-5`}>
+              <div className="flex items-center gap-2">
+                <FileText size={17} className="text-blue-600" />
+                <h2 className={cardTitle}>Requirements summary</h2>
+              </div>
+              <dl className="mt-4 space-y-3 text-[13px]">
+                {requirementSummaryRows.map((row) => (
+                  <div key={row.label} className="flex items-start justify-between gap-3">
+                    <dt className={`inline-flex items-center gap-2 ${mutedText}`}>
+                      <row.Icon size={14} />
+                      {row.label}
+                    </dt>
+                    <dd className="text-right">
+                      {row.value ? (
+                        <span className={`font-semibold ${headingText}`}>{row.value}</span>
+                      ) : (
+                        <span className={mutedText}>Not specified</span>
+                      )}
+                    </dd>
+                  </div>
+                ))}
+              </dl>
+            </section>
+
+            <section className={`${shellCard} p-4 sm:p-5`}>
+              <div className="flex items-center gap-2">
+                <AlertCircle size={17} className="text-rose-500" />
+                <h2 className={cardTitle}>Missing details checklist</h2>
+              </div>
+              <p className={`mt-1 text-[13px] ${mutedText}`}>
+                {missingRequirementCount
+                  ? "Add the following details to complete requirements."
+                  : "All requirement details are captured."}
+              </p>
+              <ul className="mt-4 space-y-2.5 text-[13px]">
+                {missingRequirementItems.map((item) => (
+                  <li key={item.label} className="flex items-center gap-2.5">
+                    {item.done ? (
+                      <CheckCircle2 size={16} className="shrink-0 text-emerald-500" />
+                    ) : (
+                      <Circle size={16} className="shrink-0 text-rose-400" />
+                    )}
+                    <span className={item.done ? mutedText : headingText}>{item.label}</span>
+                  </li>
+                ))}
+              </ul>
+            </section>
+          </div>
+        </div>
+      ) : null}
+
+      {activeTab === "properties" ? (
+        <div className="mt-4 grid grid-cols-1 gap-4 xl:grid-cols-12">
+          <div className="xl:col-span-8">
+            <section className={`${shellCard} p-4 sm:p-5`}>
+              <div className="flex flex-wrap items-start justify-between gap-3">
+                <div>
+                  <h2 className={`text-[17px] font-bold ${headingText}`}>
+                    Linked properties ({relatedInventoryRows.length})
+                  </h2>
+                  <p className={`mt-1 text-[13px] ${mutedText}`}>
+                    Properties linked to this lead and other potential options
+                  </p>
+                </div>
+                {canManageLeadProperties ? (
+                  <button type="button" onClick={() => setPropertyPane("browse")} className={blueBtn}>
+                    <Plus size={15} />
+                    Link property
+                  </button>
+                ) : null}
+              </div>
+
+              <div className={`mt-4 flex gap-6 border-b ${dividerBorder}`}>
+                <button
+                  type="button"
+                  onClick={() => setPropertyPane("linked")}
+                  className={`-mb-px border-b-2 px-0.5 pb-2.5 text-[13px] font-semibold transition ${
+                    propertyPane === "linked" ? "border-blue-600 text-blue-600" : `border-transparent ${mutedText}`
+                  }`}
+                >
+                  Linked ({relatedInventoryRows.length})
+                </button>
+                {canManageLeadProperties ? (
+                  <button
+                    type="button"
+                    onClick={() => setPropertyPane("browse")}
+                    className={`-mb-px border-b-2 px-0.5 pb-2.5 text-[13px] font-semibold transition ${
+                      propertyPane === "browse" ? "border-blue-600 text-blue-600" : `border-transparent ${mutedText}`
+                    }`}
+                  >
+                    Browse inventory
+                  </button>
+                ) : null}
+              </div>
+
+              {propertyPane === "linked" ? (
+                <>
+                  <div className="mt-4 flex flex-wrap items-center gap-2">
+                    {[
+                      { value: "ALL", label: "All" },
+                      { value: "SALE", label: "For sale" },
+                      { value: "RENT", label: "Rental" },
+                    ].map((chip) => (
+                      <button
+                        key={chip.value}
+                        type="button"
+                        onClick={() => setLinkedPropertyFilter(chip.value)}
+                        className={`inline-flex h-9 items-center rounded-lg border px-4 text-[13px] font-semibold transition ${
+                          linkedPropertyFilter === chip.value
+                            ? isDark
+                              ? "border-blue-500/50 bg-blue-500/15 text-blue-200"
+                              : "border-blue-200 bg-blue-50 text-blue-700"
+                            : isDark
+                              ? "border-slate-700 bg-slate-900 text-slate-300"
+                              : "border-slate-300 bg-white text-slate-600"
+                        }`}
+                      >
+                        {chip.label}
+                      </button>
+                    ))}
+                    <div className="relative min-w-[200px] flex-1">
+                      <Search size={15} className={`pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 ${mutedText}`} />
+                      <input
+                        type="search"
+                        value={linkedPropertySearch}
+                        onChange={(event) => setLinkedPropertySearch(event.target.value)}
+                        placeholder="Search by property name, ID or location..."
+                        className={`${fieldCls} h-9 pl-9`}
+                      />
+                    </div>
+                  </div>
+
+                  {relatedInventoryRows.length === 0 ? (
+                    <div className="mt-6 flex flex-col items-center justify-center px-4 py-10 text-center">
+                      <span
+                        className={`flex h-12 w-12 items-center justify-center rounded-full ${
+                          isDark ? "bg-slate-800 text-slate-400" : "bg-slate-100 text-slate-400"
+                        }`}
+                      >
+                        <Home size={22} />
+                      </span>
+                      <p className={`mt-3 text-[14px] font-semibold ${headingText}`}>No properties linked yet</p>
+                      <p className={`mt-1 text-[13px] ${mutedText}`}>
+                        Link relevant properties from inventory to keep track of client interest.
+                      </p>
+                    </div>
+                  ) : filteredLinkedRows.length === 0 ? (
+                    <p className={`mt-6 text-[13px] ${mutedText}`}>No linked property matches these filters.</p>
+                  ) : (
+                    <div className="mt-4 space-y-3">
+                      {filteredLinkedRows.map((row) => {
+                        const inventoryId = row.id;
+                        const inventory = row.inventory || {};
+                        const isActiveProperty = normalizedActiveInventoryId === inventoryId;
+                        const isSelectingThisProperty =
+                          propertyActionType === "select" && String(propertyActionInventoryId || "") === String(inventoryId || "");
+                        const isRemovingThisProperty =
+                          propertyActionType === "remove" && String(propertyActionInventoryId || "") === String(inventoryId || "");
+                        const listingType = getInventoryListingType(inventory);
+                        const coverImage = row.imageUrls[0] || "";
+                        const specs = [
+                          getInventoryAreaLabel(inventory),
+                          getInventorySubtypeLabel(inventory),
+                          String(inventory?.buildingName || inventory?.projectName || "").trim(),
+                          getInventoryQuickInfo(inventory),
+                        ].filter(Boolean);
+
+                        return (
+                          <div
+                            key={inventoryId || row.label}
+                            className={`rounded-xl border p-3 transition ${
+                              isActiveProperty
+                                ? isDark
+                                  ? "border-blue-500/50 bg-blue-500/5"
+                                  : "border-blue-300 bg-blue-50/40"
+                                : isDark
+                                  ? "border-slate-800 hover:border-slate-700"
+                                  : "border-slate-200 hover:border-blue-200"
+                            }`}
+                          >
+                            <div className="flex flex-col gap-3 sm:flex-row">
+                              <button
+                                type="button"
+                                onClick={() => inventoryId && onSelectRelatedProperty(inventoryId)}
+                                className={`relative h-[150px] w-full shrink-0 overflow-hidden rounded-lg sm:w-[270px] ${
+                                  isDark ? "bg-slate-800" : "bg-slate-100"
+                                }`}
+                              >
+                                {coverImage ? (
+                                  <img src={coverImage} alt={row.label || "Property"} loading="lazy" className="h-full w-full object-cover" />
+                                ) : (
+                                  <span className={`flex h-full w-full items-center justify-center ${mutedText}`}>
+                                    <Building2 size={28} />
+                                  </span>
+                                )}
+                                {isActiveProperty ? (
+                                  <span
+                                    className={`absolute left-2 top-2 rounded-md px-2 py-1 text-[11px] font-semibold ${
+                                      isDark ? "bg-emerald-500/90 text-white" : "bg-emerald-100 text-emerald-800"
+                                    }`}
+                                  >
+                                    Linked property
+                                  </span>
+                                ) : null}
+                              </button>
+
+                              <div className="min-w-0 flex-1">
+                                <div className="flex items-start justify-between gap-2">
+                                  <div className="min-w-0">
+                                    <h3 className={`truncate text-[15px] font-bold ${headingText}`}>
+                                      {row.label || "Property"}
+                                    </h3>
+                                    <p className={`mt-0.5 text-[12px] ${mutedText}`}>
+                                      Property ID: {String(inventoryId || "").slice(-6).toUpperCase()}
+                                    </p>
+                                  </div>
+                                  <div className="flex shrink-0 items-center gap-2">
+                                    {isActiveProperty ? (
+                                      <span className={pillCls("blue")}>
+                                        <Star size={12} />
+                                        Primary option
+                                      </span>
+                                    ) : canManageLeadProperties && inventoryId ? (
+                                      <button
+                                        type="button"
+                                        onClick={() => onSelectRelatedProperty(inventoryId)}
+                                        className={smallGhostBtn}
+                                      >
+                                        {isSelectingThisProperty ? <Loader size={12} className="animate-spin" /> : <Star size={12} />}
+                                        Primary option
+                                      </button>
+                                    ) : null}
+                                    {canManageLeadProperties && inventoryId ? (
+                                      <div className="relative">
+                                        <button
+                                          type="button"
+                                          aria-label="Property actions"
+                                          onClick={() =>
+                                            setOpenPropertyMenuId((current) => (current === inventoryId ? "" : inventoryId))
+                                          }
+                                          className={`inline-flex h-8 w-8 items-center justify-center rounded-lg border ${
+                                            isDark ? "border-slate-700 text-slate-300" : "border-slate-300 text-slate-600"
+                                          }`}
+                                        >
+                                          <MoreHorizontal size={15} />
+                                        </button>
+                                        {openPropertyMenuId === inventoryId ? (
+                                          <>
+                                            <div className="fixed inset-0 z-20" onClick={() => setOpenPropertyMenuId("")} />
+                                            <div
+                                              className={`absolute right-0 top-9 z-30 w-44 overflow-hidden rounded-xl border py-1 shadow-lg ${shellSurface}`}
+                                            >
+                                              <button
+                                                type="button"
+                                                onClick={() => {
+                                                  setOpenPropertyMenuId("");
+                                                  onOpenRelatedProperty(inventoryId);
+                                                }}
+                                                className={`flex w-full items-center gap-2.5 px-3.5 py-2.5 text-left text-[13px] font-medium ${
+                                                  isDark ? "text-slate-200 hover:bg-slate-800" : "text-slate-700 hover:bg-slate-50"
+                                                }`}
+                                              >
+                                                <Eye size={15} />
+                                                View details
+                                              </button>
+                                              <button
+                                                type="button"
+                                                onClick={() => {
+                                                  setOpenPropertyMenuId("");
+                                                  onRemoveRelatedProperty(inventoryId);
+                                                }}
+                                                className={`flex w-full items-center gap-2.5 px-3.5 py-2.5 text-left text-[13px] font-medium text-rose-600 ${
+                                                  isDark ? "hover:bg-rose-500/10" : "hover:bg-rose-50"
+                                                }`}
+                                              >
+                                                {isRemovingThisProperty ? (
+                                                  <Loader size={15} className="animate-spin" />
+                                                ) : (
+                                                  <Trash2 size={15} />
+                                                )}
+                                                Remove from lead
+                                              </button>
+                                            </div>
+                                          </>
+                                        ) : null}
+                                      </div>
+                                    ) : null}
+                                  </div>
+                                </div>
+
+                                <div className="mt-2 flex flex-wrap items-center gap-2">
+                                  <span className={pillCls("emerald")}>{row.statusLabel || "-"}</span>
+                                  {getInventorySubtypeLabel(inventory) ? (
+                                    <span className={pillCls("blue")}>{getInventorySubtypeLabel(inventory)}</span>
+                                  ) : null}
+                                  <span className={pillCls(listingType === "RENT" ? "indigo" : "violet")}>
+                                    {getInventoryListingLabel(inventory)}
+                                  </span>
+                                </div>
+
+                                {row.location ? (
+                                  <p className={`mt-2 inline-flex items-center gap-1.5 text-[13px] ${mutedText}`}>
+                                    <MapPin size={14} />
+                                    {row.location}
+                                  </p>
+                                ) : null}
+
+                                {specs.length ? (
+                                  <div className={`mt-2 flex flex-wrap items-center gap-x-5 gap-y-1.5 text-[13px] ${mutedText}`}>
+                                    {specs.map((spec, specIndex) => (
+                                      <span key={`${spec}-${specIndex}`} className="inline-flex items-center gap-1.5">
+                                        <Layers size={14} />
+                                        {spec}
+                                      </span>
+                                    ))}
+                                  </div>
+                                ) : null}
+
+                                <div className={`mt-2 text-[13px] ${mutedText}`}>
+                                  {getInventoryAmountLabel(inventory)}:{" "}
+                                  <span className={`font-semibold ${headingText}`}>{formatInventoryAmountInr(inventory)}</span>
+                                </div>
+
+                                <div className="mt-3 flex flex-wrap items-center justify-end gap-2">
+                                  <button
+                                    type="button"
+                                    onClick={() => inventoryId && onOpenRelatedProperty(inventoryId)}
+                                    className={ghostBtn}
+                                  >
+                                    {isSelectingThisProperty ? <Loader size={14} className="animate-spin" /> : <Eye size={14} />}
+                                    View details
+                                  </button>
+                                  <button
+                                    type="button"
+                                    onClick={() => {
+                                      if (inventoryId) setProposalSelectedPropertyIds([inventoryId]);
+                                      setProposalStep(2);
+                                      setActiveTab("proposals");
+                                    }}
+                                    className={blueBtn}
+                                  >
+                                    <FileText size={14} />
+                                    Create proposal
+                                  </button>
+                                </div>
+                              </div>
+                            </div>
+                          </div>
+                        );
+                      })}
+
+                      {hasMoreRelatedInventories ? (
+                        <button
+                          type="button"
+                          onClick={() => setVisiblePropertiesCount((previous) => previous + RENDER_STEP_COUNT)}
+                          className={ghostBtn}
+                        >
+                          Show more properties ({relatedInventoryRows.length - visibleRelatedInventoryRows.length} left)
+                        </button>
+                      ) : null}
+                    </div>
+                  )}
+                </>
+              ) : (
+                <div className="mt-4">
+                  <div className="flex flex-wrap items-center gap-2">
+                    {[
+                      { value: "ALL", label: "All" },
+                      { value: "SALE", label: "For sale" },
+                      { value: "RENT", label: "Rental" },
+                    ].map((chip) => (
+                      <button
+                        key={chip.value}
+                        type="button"
+                        onClick={() => setLinkableInventoryTypeFilter(chip.value)}
+                        className={`inline-flex h-9 items-center rounded-lg border px-4 text-[13px] font-semibold transition ${
+                          linkableInventoryTypeFilter === chip.value
+                            ? isDark
+                              ? "border-blue-500/50 bg-blue-500/15 text-blue-200"
+                              : "border-blue-200 bg-blue-50 text-blue-700"
+                            : isDark
+                              ? "border-slate-700 bg-slate-900 text-slate-300"
+                              : "border-slate-300 bg-white text-slate-600"
+                        }`}
+                      >
+                        {chip.label}
+                      </button>
+                    ))}
+                  </div>
+                  <div className="mt-3 flex flex-wrap items-center gap-2">
+                    <select
+                      value={relatedInventoryDraft}
+                      onChange={(event) => setRelatedInventoryDraft(String(event.target.value || ""))}
+                      className={`${fieldCls} min-w-0 flex-1`}
+                    >
+                      <option value="">
+                        {sortedLinkableInventoryOptions.length ? "Select property to link" : "No properties found"}
+                      </option>
+                      {sortedLinkableInventoryOptions.map((inventory) => {
+                        const inventoryId = String(inventory?._id || "");
+                        const inventoryLabel =
+                          getInventoryLeadLabel(inventory) || String(inventory?.title || "").trim() || inventoryId;
+                        const inventoryLocation = getInventoryLocationLabel(inventory);
+                        const inventoryQuickInfo = getInventoryQuickInfo(inventory);
+                        const inventoryPriceLabel = formatInventoryAmountInr(inventory);
+                        const inventoryAmountLabel = getInventoryAmountLabel(inventory);
+                        const inventoryTypeLabel = getInventoryListingLabel(inventory);
+                        return (
+                          <option key={inventoryId} value={inventoryId}>
+                            {[
+                              inventoryLabel,
+                              inventoryLocation ? `(${inventoryLocation})` : "",
+                              inventoryQuickInfo,
+                              `Type: ${inventoryTypeLabel}`,
+                              `${inventoryAmountLabel}: ${inventoryPriceLabel}`,
+                            ]
+                              .filter(Boolean)
+                              .join(" ")}
+                          </option>
+                        );
+                      })}
+                    </select>
+                    <button
+                      type="button"
+                      onClick={() => onLinkPropertyToLead(relatedInventoryDraft)}
+                      disabled={!relatedInventoryDraft || linkingProperty}
+                      className={blueBtn}
+                    >
+                      {linkingProperty ? <Loader size={15} className="animate-spin" /> : <Plus size={15} />}
+                      Link property
+                    </button>
+                  </div>
+                </div>
+              )}
+            </section>
+          </div>
+
+          <div className="xl:col-span-4">
+            <section className={`${shellCard} p-4 sm:p-5`}>
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <h2 className={cardTitle}>Selected property</h2>
+                {selectedPropertyRow ? (
+                  <span className={pillCls("blue")}>
+                    <Star size={12} />
+                    Primary property
+                  </span>
+                ) : null}
+              </div>
+
+              {!selectedPropertyRow ? (
+                <p className={`mt-4 text-[13px] ${mutedText}`}>
+                  Select a linked property to schedule a site visit and review its location.
+                </p>
+              ) : (
+                <>
+                  <div className="mt-4 flex gap-3">
+                    <div className={`h-[70px] w-[90px] shrink-0 overflow-hidden rounded-lg ${isDark ? "bg-slate-800" : "bg-slate-100"}`}>
+                      {selectedPropertyImages[0] ? (
+                        <img src={selectedPropertyImages[0]} alt={selectedPropertyRow.label || "Property"} loading="lazy" className="h-full w-full object-cover" />
+                      ) : (
+                        <span className={`flex h-full w-full items-center justify-center ${mutedText}`}>
+                          <Building2 size={20} />
+                        </span>
+                      )}
+                    </div>
+                    <div className="min-w-0">
+                      <h3 className={`truncate text-[14px] font-bold ${headingText}`}>{selectedPropertyRow.label}</h3>
+                      <p className={`mt-0.5 text-[12px] ${mutedText}`}>
+                        Property ID: {String(selectedPropertyRow.id || "").slice(-6).toUpperCase()}
+                      </p>
+                      <div className="mt-1.5 flex flex-wrap items-center gap-1.5">
+                        <span className={pillCls("emerald")}>{selectedPropertyRow.statusLabel || "-"}</span>
+                        {getInventorySubtypeLabel(selectedPropertyInventory) ? (
+                          <span className={pillCls("blue")}>{getInventorySubtypeLabel(selectedPropertyInventory)}</span>
+                        ) : null}
+                        <span className={pillCls("indigo")}>{getInventoryListingLabel(selectedPropertyInventory)}</span>
+                      </div>
+                    </div>
+                  </div>
+                  {selectedPropertyRow.location ? (
+                    <p className={`mt-2.5 inline-flex items-center gap-1.5 text-[13px] ${mutedText}`}>
+                      <MapPin size={14} />
+                      {selectedPropertyRow.location}
+                    </p>
+                  ) : null}
+
+                  <h4 className={`mt-5 text-[14px] font-bold ${headingText}`}>Site visit</h4>
+                  <div
+                    className={`mt-2 flex flex-wrap items-center justify-between gap-2 rounded-lg border px-3 py-2 ${
+                      isDark ? "border-amber-500/35 bg-amber-500/10" : "border-amber-200 bg-amber-50"
+                    }`}
+                  >
+                    <span className={`inline-flex items-center gap-2 text-[12px] ${isDark ? "text-amber-200" : "text-amber-800"}`}>
+                      <AlertCircle size={14} />
+                      Visit verification uses a {siteVisitRadiusMeters} m radius around this location.
+                    </span>
+                    <span className={pillCls(statusDraft === "SITE_VISIT" ? "emerald" : "rose")}>
+                      {statusDraft === "SITE_VISIT" ? "Scheduled" : "Not verified"}
+                    </span>
+                  </div>
+                  <div className="mt-3 grid grid-cols-1 gap-3 sm:grid-cols-2">
+                    <label className="block">
+                      <span className={labelCls}>Visit date</span>
+                      <input
+                        type="date"
+                        value={siteVisitDateDraft}
+                        onChange={(event) => setSiteVisitDateDraft(event.target.value)}
+                        className={fieldCls}
+                      />
+                    </label>
+                    <label className="block">
+                      <span className={labelCls}>Visit time</span>
+                      <input
+                        type="time"
+                        value={siteVisitTimeDraft}
+                        onChange={(event) => setSiteVisitTimeDraft(event.target.value)}
+                        className={fieldCls}
+                      />
+                    </label>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={handleScheduleSiteVisit}
+                    disabled={!canEditLead}
+                    className={`mt-3 w-full ${blueBtn}`}
+                  >
+                    Schedule visit
+                  </button>
+                  {scheduleVisitMessage ? (
+                    <p className={`mt-2 text-[12px] font-semibold ${isDark ? "text-emerald-200" : "text-emerald-700"}`}>
+                      {scheduleVisitMessage}
+                    </p>
+                  ) : null}
+                  {userRole === "FIELD_EXECUTIVE" && statusDraft === "SITE_VISIT" ? (
+                    <p
+                      className={`mt-2 rounded-lg border px-3 py-2 text-[12px] ${
+                        isDark ? "border-amber-500/35 bg-amber-500/15 text-amber-100" : "border-amber-200 bg-amber-50 text-amber-800"
+                      }`}
+                    >
+                      Site visit requires your live location within {siteVisitRadiusMeters} meters.
+                    </p>
+                  ) : null}
+
+                  <div className="mt-5 flex items-center justify-between gap-2">
+                    <h4 className={`text-[14px] font-bold ${headingText}`}>Location</h4>
+                    {selectedPropertyMapsHref ? (
+                      <a href={selectedPropertyMapsHref} target="_blank" rel="noreferrer" className={smallGhostBtn}>
+                        <MapPin size={13} className="text-blue-600" />
+                        Open in Maps
+                      </a>
+                    ) : null}
+                  </div>
+                  <div
+                    className={`mt-2 flex h-[140px] items-center justify-center overflow-hidden rounded-lg border text-center ${
+                      isDark ? "border-slate-800 bg-slate-950/60" : "border-slate-200 bg-slate-100"
+                    }`}
+                  >
+                    <div className={`px-4 text-[12px] ${mutedText}`}>
+                      <MapPin size={20} className="mx-auto mb-1.5 text-rose-500" />
+                      <div className={`font-semibold ${headingText}`}>{selectedPropertyRow.label}</div>
+                      <div>{hasSiteCoordinates ? `${savedSiteLat}, ${savedSiteLng}` : "Site location not configured"}</div>
+                    </div>
+                  </div>
+
+                  <button
+                    type="button"
+                    onClick={() => setLocationDetailsOpen((open) => !open)}
+                    className={`mt-3 inline-flex items-center gap-1.5 text-[13px] font-semibold ${headingText}`}
+                  >
+                    {locationDetailsOpen ? <ChevronUp size={15} /> : <ChevronDown size={15} />}
+                    Location details
+                  </button>
+                  {locationDetailsOpen ? (
+                    canConfigureSiteLocation ? (
+                      <div className="mt-2 grid grid-cols-1 gap-3 sm:grid-cols-2">
+                        <label className="block">
+                          <span className={labelCls}>Latitude</span>
+                          <input
+                            type="number"
+                            step="any"
+                            value={siteLatDraft}
+                            onChange={(event) => setSiteLatDraft(event.target.value)}
+                            placeholder="Latitude"
+                            className={fieldCls}
+                          />
+                        </label>
+                        <label className="block">
+                          <span className={labelCls}>Longitude</span>
+                          <input
+                            type="number"
+                            step="any"
+                            value={siteLngDraft}
+                            onChange={(event) => setSiteLngDraft(event.target.value)}
+                            placeholder="Longitude"
+                            className={fieldCls}
+                          />
+                        </label>
+                      </div>
+                    ) : (
+                      <p className={`mt-2 text-[13px] ${mutedText}`}>
+                        {hasSiteCoordinates ? `${savedSiteLat}, ${savedSiteLng}` : "Not configured by admin/manager"}
+                      </p>
+                    )
+                  ) : null}
+
+                  <div className="mt-5 flex items-center justify-between gap-2">
+                    <h4 className={`text-[14px] font-bold ${headingText}`}>
+                      Property images ({selectedPropertyImages.length})
+                    </h4>
+                    {selectedPropertyImages.length > 5 ? (
+                      <button
+                        type="button"
+                        onClick={() => setShowAllPropertyImages((open) => !open)}
+                        className="text-[13px] font-semibold text-blue-600"
+                      >
+                        {showAllPropertyImages ? "Show less" : "View all"}
+                      </button>
+                    ) : null}
+                  </div>
+                  {selectedPropertyImages.length === 0 ? (
+                    <p className={`mt-2 text-[13px] ${mutedText}`}>No images uploaded for this property.</p>
+                  ) : (
+                    <div className="mt-2 grid grid-cols-5 gap-2">
+                      {(showAllPropertyImages ? selectedPropertyImages : selectedPropertyImages.slice(0, 5)).map(
+                        (imageUrl, imageIndex) => {
+                          const isLastVisible =
+                            !showAllPropertyImages && imageIndex === 4 && selectedPropertyImages.length > 5;
+                          return (
+                            <a
+                              key={`${imageUrl}-${imageIndex}`}
+                              href={imageUrl}
+                              target="_blank"
+                              rel="noreferrer"
+                              className={`relative block h-14 overflow-hidden rounded-md border ${
+                                isDark ? "border-slate-800" : "border-slate-200"
+                              }`}
+                            >
+                              <img src={imageUrl} alt={`Property ${imageIndex + 1}`} loading="lazy" className="h-full w-full object-cover" />
+                              {isLastVisible ? (
+                                <span className="absolute inset-0 flex items-center justify-center bg-slate-900/60 text-[12px] font-bold text-white">
+                                  +{selectedPropertyImages.length - 5}
+                                </span>
+                              ) : null}
+                            </a>
+                          );
+                        },
+                      )}
+                    </div>
+                  )}
+                </>
+              )}
+            </section>
+          </div>
+        </div>
+      ) : null}
+
+      {activeTab === "proposals" ? (
+        <div className="mt-4 space-y-4">
+          <section className={`${shellCard} p-4 sm:p-5`}>
+            <ol className="flex flex-wrap items-center gap-4">
+              {[
+                { step: 1, title: "Select properties", hint: "Choose properties to include" },
+                { step: 2, title: "Configure proposal", hint: "Set details and preferences" },
+                { step: 3, title: "Preview & share", hint: "Review and send to client" },
+              ].map((item, index, list) => {
+                const isActive = proposalStep === item.step;
+                const isDone = proposalStep > item.step;
+                return (
+                  <li key={item.step} className="flex min-w-[210px] flex-1 items-center gap-3">
+                    <button
+                      type="button"
+                      onClick={() => setProposalStep(item.step)}
+                      className="flex min-w-0 items-center gap-3 text-left"
+                    >
+                      <span
+                        className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-[13px] font-bold ${
+                          isActive || isDone
+                            ? "bg-blue-600 text-white"
+                            : isDark
+                              ? "bg-slate-800 text-slate-400"
+                              : "bg-slate-100 text-slate-500"
+                        }`}
+                      >
+                        {isDone ? <Check size={15} /> : item.step}
+                      </span>
+                      <span className="min-w-0">
+                        <span
+                          className={`block truncate text-[13px] font-bold ${isActive ? "text-blue-600" : headingText}`}
+                        >
+                          {item.title}
+                        </span>
+                        <span className={`block truncate text-[12px] ${mutedText}`}>{item.hint}</span>
+                      </span>
+                    </button>
+                    {index < list.length - 1 ? (
+                      <span className={`hidden h-px flex-1 sm:block ${isDark ? "bg-slate-800" : "bg-slate-200"}`} />
+                    ) : null}
+                  </li>
+                );
+              })}
+            </ol>
+          </section>
+
+          {proposalPropertyOptions.length === 0 ? (
+            <section className={`${shellCard} p-6 text-center`}>
+              <span
+                className={`mx-auto flex h-12 w-12 items-center justify-center rounded-full ${
+                  isDark ? "bg-slate-800 text-slate-400" : "bg-slate-100 text-slate-400"
+                }`}
+              >
+                <FileText size={22} />
+              </span>
+              <p className={`mt-3 text-[14px] font-semibold ${headingText}`}>No properties linked yet</p>
+              <p className={`mt-1 text-[13px] ${mutedText}`}>Link at least one property before generating a proposal.</p>
+              <button type="button" onClick={() => setActiveTab("properties")} className={`mt-4 ${blueBtn} mx-auto`}>
+                <Search size={15} />
+                Browse inventory
+              </button>
+            </section>
+          ) : (
+            <div className="grid grid-cols-1 gap-4 xl:grid-cols-12">
+              <div className="space-y-4 xl:col-span-4">
+                <section className={`${shellCard} p-4 sm:p-5`}>
+                  <div className="flex items-center justify-between gap-2">
+                    <h2 className={`text-[14px] font-bold ${headingText}`}>
+                      Selected properties ({selectedPropertyCount})
+                    </h2>
+                    <div className="flex items-center gap-1.5">
+                      <button
+                        type="button"
+                        onClick={handleSelectAllProposalProperties}
+                        disabled={selectedPropertyCount === proposalPropertyOptions.length}
+                        className={`${smallGhostBtn} disabled:opacity-50`}
+                      >
+                        All
+                      </button>
+                      <button type="button" onClick={handleResetProposalSelection} className={smallGhostBtn}>
+                        Reset
+                      </button>
+                    </div>
+                  </div>
+                  <div className="mt-3 space-y-2">
+                    {visibleProposalPropertyOptions.map((property) => {
+                      const checked = selectedProposalPropertyIdSet.has(property.id);
+                      const coverImage = property.imageUrls[0] || "";
+                      return (
+                        <button
+                          key={property.id}
+                          type="button"
+                          onClick={() => toggleProposalProperty(property.id)}
+                          className={`flex w-full items-center gap-3 rounded-lg border p-2.5 text-left transition ${
+                            checked
+                              ? isDark
+                                ? "border-blue-500/50 bg-blue-500/10"
+                                : "border-blue-300 bg-blue-50"
+                              : isDark
+                                ? "border-slate-800 hover:border-slate-700"
+                                : "border-slate-200 hover:border-blue-200"
+                          }`}
+                        >
+                          <span
+                            className={`h-11 w-14 shrink-0 overflow-hidden rounded-md ${
+                              isDark ? "bg-slate-800" : "bg-slate-100"
+                            }`}
+                          >
+                            {coverImage ? (
+                              <img src={coverImage} alt={property.label} loading="lazy" className="h-full w-full object-cover" />
+                            ) : (
+                              <span className={`flex h-full w-full items-center justify-center ${mutedText}`}>
+                                <Building2 size={16} />
+                              </span>
+                            )}
+                          </span>
+                          <span className="min-w-0 flex-1">
+                            <span className={`block text-[12px] font-bold ${headingText}`}>
+                              {String(property.id || "").slice(-6).toUpperCase()}
+                            </span>
+                            <span className={`block truncate text-[12px] ${mutedText}`}>{property.label}</span>
+                          </span>
+                          {checked ? (
+                            <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-blue-600 text-white">
+                              <Check size={13} />
+                            </span>
+                          ) : (
+                            <span
+                              className={`h-5 w-5 shrink-0 rounded-full border ${
+                                isDark ? "border-slate-700" : "border-slate-300"
+                              }`}
+                            />
+                          )}
+                        </button>
+                      );
+                    })}
+                    {hasMoreProposalPropertyOptions ? (
+                      <button
+                        type="button"
+                        onClick={() => setVisibleProposalOptionsCount((previous) => previous + RENDER_STEP_COUNT)}
+                        className={smallGhostBtn}
+                      >
+                        Show more options ({proposalPropertyOptions.length - visibleProposalPropertyOptions.length} left)
+                      </button>
+                    ) : null}
+                  </div>
+                </section>
+
+                <section className={`${shellCard} p-4 sm:p-5`}>
+                  <h2 className={`text-[14px] font-bold ${headingText}`}>
+                    Images included ({proposalImageEntries.length})
+                  </h2>
+                  <p className={`mt-1 text-[12px] ${mutedText}`}>Select property images to include in proposal</p>
+                  {allProposalImageEntries.length === 0 ? (
+                    <p className={`mt-3 text-[13px] ${mutedText}`}>No images attached for selected properties.</p>
+                  ) : (
+                    <div className="mt-3 grid grid-cols-3 gap-2">
+                      {allProposalImageEntries.map((entry, index) => {
+                        const isExcluded = excludedProposalImageUrls.includes(entry.url);
+                        const isIncluded = includeProposalImages && !isExcluded;
+                        return (
+                          <button
+                            key={`${entry.propertyId}-${entry.url}-${index}`}
+                            type="button"
+                            onClick={() =>
+                              setExcludedProposalImageUrls((previous) =>
+                                previous.includes(entry.url)
+                                  ? previous.filter((url) => url !== entry.url)
+                                  : [...previous, entry.url],
+                              )
+                            }
+                            className={`relative h-20 overflow-hidden rounded-lg border ${
+                              isIncluded ? "border-blue-500" : isDark ? "border-slate-800" : "border-slate-200"
+                            }`}
+                          >
+                            <img
+                              src={entry.url}
+                              alt={entry.propertyLabel}
+                              loading="lazy"
+                              className={`h-full w-full object-cover ${isIncluded ? "" : "opacity-50"}`}
+                            />
+                            <span
+                              className={`absolute left-1.5 top-1.5 flex h-4 w-4 items-center justify-center rounded border ${
+                                isIncluded ? "border-blue-600 bg-blue-600 text-white" : "border-white/80 bg-white/70"
+                              }`}
+                            >
+                              {isIncluded ? <Check size={11} strokeWidth={3} /> : null}
+                            </span>
+                          </button>
+                        );
+                      })}
+                      <button
+                        type="button"
+                        onClick={() => setActiveTab("properties")}
+                        className={`flex h-20 flex-col items-center justify-center gap-1 rounded-lg border border-dashed text-[11px] font-semibold ${
+                          isDark ? "border-slate-700 text-slate-400" : "border-slate-300 text-slate-500"
+                        }`}
+                      >
+                        <Plus size={16} />
+                        Add more images
+                      </button>
+                    </div>
+                  )}
+                </section>
+
+                <section className={`${shellCard} p-4 sm:p-5`}>
+                  <label className="block">
+                    <span className={labelCls}>Validity period</span>
+                    <select
+                      value={proposalValidityDays}
+                      onChange={(event) => setProposalValidityDays(event.target.value)}
+                      className={fieldCls}
+                    >
+                      {["3", "7", "15", "30", "45", "60", "90"].map((days) => (
+                        <option key={days} value={days}>
+                          {days} days
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+
+                  <label className="mt-4 block">
+                    <span className={labelCls}>
+                      Special note <span className={mutedText}>(optional)</span>
+                    </span>
+                    <textarea
+                      value={proposalSpecialNote}
+                      maxLength={500}
+                      onChange={(event) => setProposalSpecialNote(event.target.value)}
+                      placeholder="Add any special note for this proposal..."
+                      className={`min-h-[90px] resize-y ${areaCls}`}
+                    />
+                    <span className={`mt-1 block text-right text-[12px] ${mutedText}`}>
+                      {proposalSpecialNote.length}/500
+                    </span>
+                  </label>
+
+                  <div className="mt-3 flex items-start gap-3">
+                    <button
+                      type="button"
+                      role="switch"
+                      aria-checked={includeProposalImages}
+                      onClick={() => setIncludeProposalImages((value) => !value)}
+                      className={`mt-0.5 flex h-6 w-11 shrink-0 items-center rounded-full px-0.5 transition ${
+                        includeProposalImages ? "bg-blue-600" : isDark ? "bg-slate-700" : "bg-slate-300"
+                      }`}
+                    >
+                      <span
+                        className={`h-5 w-5 rounded-full bg-white transition ${
+                          includeProposalImages ? "translate-x-5" : "translate-x-0"
+                        }`}
+                      />
+                    </button>
+                    <div>
+                      <p className={`text-[13px] font-semibold ${headingText}`}>Include property images in proposal</p>
+                      <p className={`mt-0.5 text-[12px] ${mutedText}`}>
+                        Selected images will be shown in the proposal document
+                      </p>
+                    </div>
+                  </div>
+                </section>
+              </div>
+
+              <div className="space-y-4 xl:col-span-8">
+                <section className={`${shellCard} p-4 sm:p-5`}>
+                  <div className="flex flex-wrap items-center justify-between gap-2">
+                    <h2 className={cardTitle}>Proposal preview</h2>
+                    <span className={pillCls("slate")}>
+                      <Image size={12} />
+                      {proposalImageEntries.length} images
+                    </span>
+                  </div>
+
+                  <div
+                    className={`mt-3 rounded-xl border p-5 ${
+                      isDark ? "border-slate-800 bg-slate-950/50" : "border-slate-200 bg-white"
+                    }`}
+                  >
+                    <div className="flex flex-wrap items-start justify-between gap-3">
+                      <div>
+                        <div className={`text-[17px] font-bold tracking-tight ${headingText}`}>THE OFFICE ON RENT</div>
+                        <div className={`text-[12px] ${mutedText}`}>Commercial &amp; residential property advisory</div>
+                      </div>
+                      <div className={`inline-flex items-center gap-2 text-[14px] font-bold ${headingText}`}>
+                        <Building2 size={18} className="text-blue-600" />
+                        Office on Rent
+                      </div>
+                    </div>
+
+                    <h3 className={`mt-5 text-[16px] font-bold tracking-tight ${headingText}`}>PROPERTY PROPOSAL</h3>
+                    <div className={`mt-3 grid grid-cols-2 gap-3 border-b pb-3 sm:grid-cols-4 ${dividerBorder}`}>
+                      <div>
+                        <div className={`text-[12px] ${mutedText}`}>Client name</div>
+                        <div className={`mt-0.5 text-[13px] font-bold ${headingText}`}>{leadDisplayName}</div>
+                      </div>
+                      <div>
+                        <div className={`text-[12px] ${mutedText}`}>Lead ID</div>
+                        <div className={`mt-0.5 text-[13px] font-bold ${headingText}`}>{leadIdLabel}</div>
+                      </div>
+                      <div>
+                        <div className={`text-[12px] ${mutedText}`}>Date</div>
+                        <div className={`mt-0.5 text-[13px] font-bold ${headingText}`}>{proposalDateLabel}</div>
+                      </div>
+                      <div>
+                        <div className={`text-[12px] ${mutedText}`}>Valid till</div>
+                        <div className={`mt-0.5 text-[13px] font-bold ${headingText}`}>
+                          {proposalValidTillLabel} ({proposalValidityDays} days)
+                        </div>
+                      </div>
+                    </div>
+
+                    <p className={`mt-3 text-[13px] ${isDark ? "text-slate-300" : "text-slate-600"}`}>
+                      Thank you for considering The Office on Rent. We are pleased to present the following property
+                      options as per your requirements.
+                    </p>
+
+                    {selectedProposalProperties.length === 0 ? (
+                      <p className={`mt-4 text-[13px] ${mutedText}`}>
+                        Select at least one linked property to generate the proposal.
+                      </p>
+                    ) : (
+                      <div className="mt-4 space-y-5">
+                        {selectedProposalProperties.map((property) => {
+                          const inventory = property.inventory || {};
+                          const images = includeProposalImages
+                            ? property.imageUrls.filter((url) => !excludedProposalImageUrls.includes(url)).slice(0, 3)
+                            : [];
+                          return (
+                            <div key={property.id} className="grid grid-cols-1 gap-4 lg:grid-cols-2">
+                              {images.length ? (
+                                <div className="space-y-2">
+                                  <div className={`h-[170px] overflow-hidden rounded-lg ${isDark ? "bg-slate-800" : "bg-slate-100"}`}>
+                                    <img src={images[0]} alt={property.clientLabel} loading="lazy" className="h-full w-full object-cover" />
+                                  </div>
+                                  {images.length > 1 ? (
+                                    <div className="grid grid-cols-2 gap-2">
+                                      {images.slice(1, 3).map((imageUrl, imageIndex) => (
+                                        <div
+                                          key={`${imageUrl}-${imageIndex}`}
+                                          className={`h-[75px] overflow-hidden rounded-lg ${isDark ? "bg-slate-800" : "bg-slate-100"}`}
+                                        >
+                                          <img src={imageUrl} alt={property.clientLabel} loading="lazy" className="h-full w-full object-cover" />
+                                        </div>
+                                      ))}
+                                    </div>
+                                  ) : null}
+                                </div>
+                              ) : null}
+
+                              <div className={images.length ? "" : "lg:col-span-2"}>
+                                <div className="flex flex-wrap items-start justify-between gap-2">
+                                  <h4 className={`text-[15px] font-bold ${headingText}`}>{property.clientLabel}</h4>
+                                  <span className={pillCls("slate")}>{String(property.id || "").slice(-6).toUpperCase()}</span>
+                                </div>
+                                <p className={`mt-1 inline-flex items-center gap-1.5 text-[13px] ${mutedText}`}>
+                                  <MapPin size={14} />
+                                  {getInventoryLocationLabel(inventory) || String(selectedLead?.city || "").trim() || "-"}
+                                </p>
+                                <dl className="mt-3 text-[13px]">
+                                  {[
+                                    ["Property type", getInventorySubtypeLabel(inventory) || toTitleCaseLabel(inventory?.inventoryType) || "-"],
+                                    ["Transaction type", getInventoryListingLabel(inventory)],
+                                    ["Project", String(inventory?.projectName || selectedLead?.projectInterested || "-").trim() || "-"],
+                                    ["Location", getInventoryLocationLabel(inventory) || "-"],
+                                    [getInventoryAmountLabel(inventory), formatInventoryAmountInr(inventory)],
+                                  ].map(([term, value]) => (
+                                    <div key={term} className={`flex items-center justify-between gap-3 border-b py-2 ${dividerBorder}`}>
+                                      <dt className={mutedText}>{term}</dt>
+                                      <dd className={`text-right font-semibold ${headingText}`}>{value}</dd>
+                                    </div>
+                                  ))}
+                                </dl>
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    )}
+
+                    {proposalSpecialNote ? (
+                      <p className={`mt-4 rounded-lg border px-3 py-2 text-[13px] ${toneClass("amber")}`}>
+                        {proposalSpecialNote}
+                      </p>
+                    ) : null}
+                  </div>
+
+                  <details className="mt-3">
+                    <summary className={`cursor-pointer text-[13px] font-semibold ${mutedText}`}>
+                      Proposal text (shared on WhatsApp and email)
+                    </summary>
+                    <textarea value={proposalText} readOnly className={`mt-2 min-h-[200px] text-[12px] leading-5 ${areaCls}`} />
+                  </details>
+
+                  <div className="mt-4 flex flex-wrap items-center justify-between gap-2">
+                    <div className="flex flex-wrap items-center gap-2">
+                      <button
+                        type="button"
+                        onClick={handleCopyProposal}
+                        disabled={!selectedPropertyCount}
+                        className={`${ghostBtn} disabled:opacity-50`}
+                      >
+                        <Copy size={15} />
+                        Copy text
+                      </button>
+                      <button
+                        type="button"
+                        onClick={handleDownloadProposal}
+                        disabled={isGeneratingProposalPdf || !selectedPropertyCount}
+                        className={`${ghostBtn} disabled:opacity-50`}
+                      >
+                        {isGeneratingProposalPdf ? <Loader size={15} className="animate-spin" /> : <Download size={15} />}
+                        Download PDF
+                      </button>
+                      {proposalImageEntries.length ? (
+                        <button type="button" onClick={handleCopyImageLinks} className={ghostBtn}>
+                          <Link2 size={15} />
+                          Image links
+                        </button>
+                      ) : null}
+                      {canUseNativeShare && proposalImageEntries.length ? (
+                        <button type="button" onClick={handleNativeShareImages} className={ghostBtn}>
+                          <Image size={15} />
+                          Share images
+                        </button>
+                      ) : null}
+                    </div>
+
+                    <div className="relative">
+                      <button
+                        type="button"
+                        onClick={() => setShareMenuOpen((open) => !open)}
+                        disabled={!selectedPropertyCount}
+                        className={`${blueBtn} pr-3`}
+                      >
+                        <Send size={15} />
+                        Share
+                        <ChevronDown size={15} />
+                      </button>
+                      {shareMenuOpen ? (
+                        <>
+                          <div className="fixed inset-0 z-20" onClick={() => setShareMenuOpen(false)} />
+                          <div
+                            className={`absolute bottom-12 right-0 z-30 w-44 overflow-hidden rounded-xl border py-1 shadow-lg ${shellSurface}`}
+                          >
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setShareMenuOpen(false);
+                                handleShareToWhatsApp();
+                              }}
+                              disabled={isGeneratingProposalPdf || (!proposalWhatsAppHref && !canUseNativeShare)}
+                              className={`flex w-full items-center gap-2.5 px-3.5 py-2.5 text-left text-[13px] font-medium disabled:opacity-50 ${
+                                isDark ? "text-slate-200 hover:bg-slate-800" : "text-slate-700 hover:bg-slate-50"
+                              }`}
+                            >
+                              {WhatsAppIcon ? <WhatsAppIcon size={15} className="text-emerald-600" /> : null}
+                              WhatsApp
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setShareMenuOpen(false);
+                                handleShareByEmail();
+                              }}
+                              className={`flex w-full items-center gap-2.5 px-3.5 py-2.5 text-left text-[13px] font-medium ${
+                                isDark ? "text-slate-200 hover:bg-slate-800" : "text-slate-700 hover:bg-slate-50"
+                              }`}
+                            >
+                              <Mail size={15} />
+                              Email
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setShareMenuOpen(false);
+                                handleNativeShareProposal();
+                              }}
+                              disabled={isGeneratingProposalPdf}
+                              className={`flex w-full items-center gap-2.5 px-3.5 py-2.5 text-left text-[13px] font-medium disabled:opacity-50 ${
+                                isDark ? "text-slate-200 hover:bg-slate-800" : "text-slate-700 hover:bg-slate-50"
+                              }`}
+                            >
+                              <FileText size={15} />
+                              Share PDF
+                            </button>
+                          </div>
+                        </>
+                      ) : null}
+                    </div>
+                  </div>
+
+                  {isGeneratingProposalPdf ? (
+                    <p className={`mt-2 text-[12px] ${mutedText}`}>Generating PDF with property images...</p>
+                  ) : null}
+                  {proposalActionMessage ? (
+                    <p className={`mt-2 text-[12px] font-semibold ${isDark ? "text-emerald-200" : "text-emerald-700"}`}>
+                      {proposalActionMessage}
+                    </p>
+                  ) : null}
+                </section>
+
+                <section className={`${shellCard} p-4 sm:p-5`}>
+                  <h2 className={cardTitle}>Previous proposals</h2>
+                  <div className="mt-4 flex flex-col items-center justify-center gap-2 py-6 text-center">
+                    <span
+                      className={`flex h-11 w-11 items-center justify-center rounded-full ${
+                        isDark ? "bg-slate-800 text-slate-400" : "bg-slate-100 text-slate-400"
+                      }`}
+                    >
+                      <FileText size={20} />
+                    </span>
+                    <p className={`text-[13px] font-semibold ${headingText}`}>No previous proposals</p>
+                    <p className={`text-[12px] ${mutedText}`}>Proposals you create for this lead will appear here.</p>
+                  </div>
+                </section>
+              </div>
+            </div>
+          )}
+        </div>
+      ) : null}
+
+      {activeTab === "activity" ? (
+        <div className="mt-4 grid grid-cols-1 gap-4 xl:grid-cols-12">
+          <div className="space-y-4 xl:col-span-7">
+            <section className={`${shellCard} p-4 sm:p-5`}>
+              <h2 className={cardTitle}>Log activity</h2>
+              <div className="mt-3 flex flex-wrap gap-2">
+                {[
+                  { value: "NOTE", label: "Add note", Icon: FileText },
+                  { value: "CALL", label: "Log call", Icon: Phone },
+                  { value: "VISIT", label: "Log visit", Icon: Calendar },
+                ].map((mode) => {
+                  const isActive = logActivityMode === mode.value;
+                  return (
+                    <button
+                      key={mode.value}
+                      type="button"
+                      onClick={() => handleLogActivityMode(mode.value)}
+                      className={`inline-flex h-10 flex-1 items-center justify-center gap-2 rounded-lg border px-3 text-[13px] font-semibold transition ${
+                        isActive
+                          ? isDark
+                            ? "border-blue-500/50 bg-blue-500/15 text-blue-200"
+                            : "border-blue-300 bg-blue-50 text-blue-700"
+                          : isDark
+                            ? "border-slate-700 bg-slate-900 text-slate-300"
+                            : "border-slate-300 bg-white text-slate-600"
+                      }`}
+                    >
+                      <mode.Icon size={15} />
+                      {mode.label}
+                    </button>
+                  );
+                })}
+              </div>
+
+              <div className="relative mt-3">
+                <textarea
+                  value={diaryDraft}
+                  onChange={(event) => setDiaryDraft(event.target.value)}
+                  maxLength={2000}
+                  placeholder={
+                    logActivityMode === "CALL"
+                      ? "Write what was discussed on this call..."
+                      : logActivityMode === "VISIT"
+                        ? "Write how the site visit went..."
+                        : "Write a note about this lead..."
+                  }
+                  className={`min-h-[110px] resize-y pb-12 ${areaCls}`}
+                />
+                <button
+                  type="button"
+                  onClick={onDiaryVoiceToggle}
+                  disabled={savingDiary || !isDiaryMicSupported}
+                  className={`absolute bottom-3 right-3 ${smallGhostBtn} disabled:opacity-50`}
+                >
+                  {isDiaryListening ? <MicOff size={13} /> : <Mic size={13} />}
+                  {isDiaryListening ? "Stop mic" : "Voice"}
+                </button>
+              </div>
+              <div className="mt-3 flex items-center justify-between gap-2">
+                <span className={`text-[12px] ${mutedText}`}>{diaryDraft.length}/2000</span>
+                <button
+                  type="button"
+                  onClick={onAddDiary}
+                  disabled={savingDiary || !diaryDraft.trim()}
+                  className={blueBtn}
+                >
+                  {savingDiary ? <Loader size={15} className="animate-spin" /> : null}
+                  Save note
+                </button>
+              </div>
+              {!isDiaryMicSupported ? (
+                <p className={`mt-2 text-[12px] ${isDark ? "text-amber-200" : "text-amber-700"}`}>
+                  Voice input is not supported in this browser.
+                </p>
+              ) : null}
+            </section>
+
+            <section className={`${shellCard} p-4 sm:p-5`}>
+              <h2 className={cardTitle}>Activity timeline</h2>
+              <div className="mt-3 flex flex-wrap gap-2">
+                {[
+                  { value: "ALL", label: "All" },
+                  { value: "NOTES", label: "Notes" },
+                  { value: "CALLS", label: "Calls" },
+                  { value: "VISITS", label: "Visits" },
+                  { value: "ASSIGNMENTS", label: "Assignments" },
+                  { value: "PROPERTIES", label: "Properties" },
+                ].map((chip) => {
+                  const isActive = activityFilter === chip.value;
+                  return (
+                    <button
+                      key={chip.value}
+                      type="button"
+                      onClick={() => setActivityFilter(chip.value)}
+                      className={`inline-flex h-8 items-center rounded-full border px-3.5 text-[12px] font-semibold transition ${
+                        isActive
+                          ? "border-blue-600 bg-blue-600 text-white"
+                          : isDark
+                            ? "border-slate-700 bg-slate-900 text-slate-300"
+                            : "border-slate-300 bg-white text-slate-600"
+                      }`}
+                    >
+                      {chip.label}
+                    </button>
+                  );
+                })}
+              </div>
+
+              {activityLoading || diaryLoading ? (
+                <div className={`mt-5 flex h-24 items-center justify-center gap-2 text-sm ${mutedText}`}>
+                  <Loader size={15} className="animate-spin" /> Loading timeline...
+                </div>
+              ) : visibleTimelineEntries.length === 0 ? (
+                <p className={`mt-5 text-[13px] ${mutedText}`}>No activity for this filter yet.</p>
+              ) : (
+                <ol className="mt-5 space-y-5">
+                  {visibleTimelineEntries.map((entry, index) => {
+                    const { Icon, tone } = activityIconFor({ action: `${entry.title} ${entry.detail}` });
+                    return (
+                      <li key={entry.key} className="grid grid-cols-[32px_minmax(0,1fr)] gap-3">
+                        <div className="flex flex-col items-center">
+                          <span className={`flex h-8 w-8 items-center justify-center rounded-lg border ${toneClass(tone)}`}>
+                            <Icon size={14} />
+                          </span>
+                          {index < visibleTimelineEntries.length - 1 ? (
+                            <span className={`mt-1.5 w-px flex-1 ${isDark ? "bg-slate-800" : "bg-slate-200"}`} />
+                          ) : null}
+                        </div>
+                        <div className="min-w-0 pb-1">
+                          <div className="flex flex-wrap items-start justify-between gap-2">
+                            <p className={`text-[13px] font-bold ${headingText}`}>{entry.title}</p>
+                            <span className={`shrink-0 text-[12px] ${mutedText}`}>{formatDate(entry.at)}</span>
+                          </div>
+                          {entry.detail ? (
+                            <p className={`mt-1 whitespace-pre-wrap break-words text-[13px] ${isDark ? "text-slate-300" : "text-slate-600"}`}>
+                              {entry.detail}
+                            </p>
+                          ) : null}
+                          {entry.author ? <p className={`mt-1 text-[12px] ${mutedText}`}>By {entry.author}</p> : null}
+                        </div>
+                      </li>
+                    );
+                  })}
+                </ol>
+              )}
+              {hasMoreTimelineEntries ? (
+                <button
+                  type="button"
+                  onClick={() => setVisibleActivityCount((previous) => previous + RENDER_STEP_COUNT)}
+                  className={`mt-4 ${ghostBtn}`}
+                >
+                  Show more activity ({combinedTimelineEntries.length - visibleTimelineEntries.length} left)
+                </button>
+              ) : null}
+            </section>
+
+            <section className={`${shellCard} p-4 sm:p-5`}>
+              <h2 className={cardTitle}>Assignment history</h2>
+              {assignmentHistoryEvents.length === 0 ? (
+                <p className={`mt-3 text-[13px] ${mutedText}`}>No assignment history yet.</p>
+              ) : (
+                <div className="mt-3 overflow-x-auto">
+                  <table className="w-full min-w-[520px] border-collapse text-left text-[13px]">
+                    <thead>
+                      <tr className={isDark ? "bg-slate-950/60" : "bg-slate-50"}>
+                        {["From", "To", "Assigned on", "Reason"].map((columnLabel) => (
+                          <th
+                            key={columnLabel}
+                            className={`border-b px-3 py-2.5 font-semibold ${dividerBorder} ${mutedText}`}
+                          >
+                            {columnLabel}
+                          </th>
+                        ))}
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {assignmentHistoryEvents.map((event, index) => (
+                        <tr key={event._id || `${event.action}-${index}`}>
+                          <td className={`border-b px-3 py-2.5 ${dividerBorder} ${headingText}`}>
+                            {getUserDisplayName(event.fromUser)}
+                          </td>
+                          <td className={`border-b px-3 py-2.5 ${dividerBorder} ${headingText}`}>
+                            {getUserDisplayName(event.toUser)}
+                          </td>
+                          <td className={`border-b px-3 py-2.5 ${dividerBorder} ${mutedText}`}>
+                            {formatDate(event.createdAt)}
+                          </td>
+                          <td className={`border-b px-3 py-2.5 ${dividerBorder} ${mutedText}`}>
+                            {String(event.reason || "").trim() || getAssignmentActionLabel(event.action)}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </section>
+          </div>
+
+          <div className="space-y-4 xl:col-span-5">
+            <section className={`${shellCard} p-4 sm:p-5`}>
+              <div className="flex items-center justify-between gap-2">
+                <h2 className={cardTitle}>Tasks</h2>
+                <button type="button" onClick={() => setNewTaskFormOpen((open) => !open)} className={smallBlueBtn}>
+                  <Plus size={13} />
+                  Add task
+                </button>
+              </div>
+
+              <div className="mt-4 space-y-2">
+                {loadingTasks ? (
+                  <p className={`py-3 text-center text-[13px] ${mutedText}`}>Loading tasks...</p>
+                ) : leadTasks.length === 0 ? (
+                  <p className={`py-3 text-center text-[13px] ${mutedText}`}>No tasks linked to this lead.</p>
+                ) : (
+                  leadTasks.map((task) => {
+                    const isCompleted = task.status === "COMPLETED";
+                    const expired =
+                      !isCompleted && task.dueDate && new Date(task.dueDate) < new Date().setHours(0, 0, 0, 0);
+                    const priorityTone =
+                      task.priority === "HIGH" ? "rose" : task.priority === "MEDIUM" ? "amber" : "blue";
+                    return (
+                      <div
+                        key={task._id}
+                        className={`flex items-start gap-3 rounded-lg border p-3 ${
+                          isCompleted
+                            ? isDark
+                              ? "border-slate-800 opacity-60"
+                              : "border-slate-200 bg-slate-50 opacity-70"
+                            : isDark
+                              ? "border-slate-800"
+                              : "border-slate-200"
+                        }`}
+                      >
+                        <button
+                          type="button"
+                          onClick={() => handleToggleLeadTaskStatus(task)}
+                          aria-label={isCompleted ? "Mark task as pending" : "Mark task as complete"}
+                          className={`mt-0.5 flex h-[18px] w-[18px] shrink-0 items-center justify-center rounded border transition ${
+                            isCompleted
+                              ? "border-emerald-500 bg-emerald-500 text-white"
+                              : isDark
+                                ? "border-slate-600 hover:border-blue-400"
+                                : "border-slate-300 hover:border-blue-500"
+                          }`}
+                        >
+                          {isCompleted ? <Check size={12} strokeWidth={3} /> : null}
+                        </button>
+
+                        <div className="min-w-0 flex-1">
+                          <p
+                            className={`text-[13px] font-bold ${
+                              isCompleted ? `line-through ${mutedText}` : headingText
+                            }`}
+                          >
+                            {task.title}
+                          </p>
+                          {task.description ? (
+                            <p className={`mt-0.5 break-words text-[12px] ${mutedText}`}>{task.description}</p>
+                          ) : null}
+                          <div className="mt-2 flex flex-wrap items-center gap-2">
+                            <span className={pillCls(priorityTone)}>{statusLabel(task.priority)}</span>
+                            {task.assignedTo?.name ? (
+                              <span className={`inline-flex items-center gap-1.5 text-[12px] ${mutedText}`}>
+                                <span
+                                  className={`flex h-5 w-5 items-center justify-center rounded-full text-[10px] font-bold ${
+                                    isDark ? "bg-slate-800 text-slate-300" : "bg-slate-100 text-slate-600"
+                                  }`}
+                                >
+                                  {String(task.assignedTo.name)
+                                    .split(/\s+/)
+                                    .filter(Boolean)
+                                    .slice(0, 2)
+                                    .map((part) => part.charAt(0).toUpperCase())
+                                    .join("")}
+                                </span>
+                                {task.assignedTo.name}
+                              </span>
+                            ) : null}
+                            {task.dueDate ? (
+                              <span
+                                className={`inline-flex items-center gap-1.5 text-[12px] ${
+                                  expired ? "font-semibold text-rose-600" : mutedText
+                                }`}
+                              >
+                                <Calendar size={13} />
+                                {new Date(task.dueDate).toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric" })}
+                                {expired ? " (Overdue)" : ""}
+                              </span>
+                            ) : null}
+                          </div>
+                        </div>
+
+                        <button
+                          type="button"
+                          onClick={() => handleDeleteLeadTask(task._id)}
+                          aria-label="Delete task"
+                          className={`shrink-0 rounded-lg p-1.5 transition ${
+                            isDark ? "text-slate-400 hover:bg-rose-500/10 hover:text-rose-300" : "text-slate-400 hover:bg-rose-50 hover:text-rose-600"
+                          }`}
+                        >
+                          <Trash2 size={15} />
+                        </button>
+                      </div>
+                    );
+                  })
+                )}
+              </div>
+
+              {newTaskFormOpen ? (
+                <form
+                  onSubmit={(event) => {
+                    handleAddLeadTask(event);
+                    setNewTaskFormOpen(false);
+                  }}
+                  className={`mt-4 rounded-xl border p-4 ${isDark ? "border-slate-800 bg-slate-950/40" : "border-slate-200 bg-slate-50"}`}
+                >
+                  <div className="flex items-center justify-between gap-2">
+                    <h3 className={`text-[14px] font-bold ${headingText}`}>New task</h3>
+                    <button
+                      type="button"
+                      onClick={() => setNewTaskFormOpen(false)}
+                      aria-label="Close new task form"
+                      className={mutedText}
+                    >
+                      <ChevronUp size={16} />
+                    </button>
+                  </div>
+                  <label className="mt-3 block">
+                    <span className={labelCls}>
+                      Title <span className="text-rose-500">*</span>
+                    </span>
+                    <input
+                      type="text"
+                      value={newTaskTitle}
+                      onChange={(event) => setNewTaskTitle(event.target.value)}
+                      placeholder="e.g. Follow up with client"
+                      className={fieldCls}
+                    />
+                  </label>
+                  <label className="mt-3 block">
+                    <span className={labelCls}>Description</span>
+                    <textarea
+                      value={newTaskDescription}
+                      onChange={(event) => setNewTaskDescription(event.target.value)}
+                      placeholder="Add task details..."
+                      className={`min-h-[70px] resize-y ${areaCls}`}
+                    />
+                  </label>
+                  <div className="mt-3 grid grid-cols-1 gap-3 sm:grid-cols-3">
+                    <label className="block">
+                      <span className={labelCls}>
+                        Priority <span className="text-rose-500">*</span>
+                      </span>
+                      <select
+                        value={newTaskPriority}
+                        onChange={(event) => setNewTaskPriority(event.target.value)}
+                        className={fieldCls}
+                      >
+                        <option value="LOW">Low</option>
+                        <option value="MEDIUM">Medium</option>
+                        <option value="HIGH">High</option>
+                      </select>
+                    </label>
+                    <label className="block">
+                      <span className={labelCls}>
+                        Assign to <span className="text-rose-500">*</span>
+                      </span>
+                      <select
+                        value={newTaskAssignedTo}
+                        onChange={(event) => setNewTaskAssignedTo(event.target.value)}
+                        className={fieldCls}
+                      >
+                        <option value="">Unassigned</option>
+                        {executives.map((user) => (
+                          <option key={user._id} value={user._id}>
+                            {user.name}
+                          </option>
+                        ))}
+                      </select>
+                    </label>
+                    <label className="block">
+                      <span className={labelCls}>
+                        Due date <span className="text-rose-500">*</span>
+                      </span>
+                      <input
+                        type="date"
+                        value={newTaskDueDate}
+                        onChange={(event) => setNewTaskDueDate(event.target.value)}
+                        className={fieldCls}
+                      />
+                    </label>
+                  </div>
+                  <div className="mt-4 flex items-center justify-end gap-2">
+                    <button type="button" onClick={() => setNewTaskFormOpen(false)} className={ghostBtn}>
+                      Cancel
+                    </button>
+                    <button type="submit" disabled={addingTask || !newTaskTitle.trim()} className={blueBtn}>
+                      {addingTask ? <Loader size={15} className="animate-spin" /> : null}
+                      Create task
+                    </button>
+                  </div>
+                </form>
+              ) : null}
+            </section>
+
+            <section className={`${shellCard} p-4 sm:p-5`}>
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <h2 className={cardTitle}>Current owner</h2>
+                {canAssignLead ? (
+                  <button type="button" onClick={() => setTransferPanelOpen((open) => !open)} className={ghostBtn}>
+                    <ArrowRightLeft size={15} />
+                    Transfer lead
+                  </button>
+                ) : null}
+              </div>
+              <div className="mt-4 flex items-center gap-3">
+                <span
+                  className={`flex h-10 w-10 items-center justify-center rounded-full text-[13px] font-bold ${
+                    isDark ? "bg-emerald-500/15 text-emerald-200" : "bg-emerald-50 text-emerald-700"
+                  }`}
+                >
+                  {assignedToInitials}
+                </span>
+                <div className="min-w-0">
+                  <p className={`truncate text-[14px] font-bold ${headingText}`}>{currentOwnerName}</p>
+                  <p className={`truncate text-[12px] ${mutedText}`}>
+                    {selectedLead?.assignedTo?.email || (currentOwnerRole ? statusLabel(currentOwnerRole) : "Not assigned")}
+                  </p>
+                </div>
+              </div>
+
+              {canAssignLead && transferPanelOpen ? (
+                <div
+                  id="lead-transfer-panel"
+                  className={`mt-4 rounded-xl border p-4 ${isDark ? "border-slate-800 bg-slate-950/40" : "border-slate-200 bg-slate-50"}`}
+                >
+                  <h3 className={`text-[14px] font-bold ${headingText}`}>Transfer lead</h3>
+                  {showQualifiedTransferHelper ? (
+                    <p className={`mt-2 rounded-lg border px-3 py-2 text-[12px] ${toneClass("emerald")}`}>
+                      This lead is qualified. You can assign it to a Field Executive for site visit or deal handling.
+                    </p>
+                  ) : null}
+                  <div className="mt-3 grid grid-cols-1 gap-3 sm:grid-cols-2">
+                    <label className="block">
+                      <span className={labelCls}>
+                        Search user or role <span className="text-rose-500">*</span>
+                      </span>
+                      <div className="relative">
+                        <Search size={15} className={`pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 ${mutedText}`} />
+                        <input
+                          type="search"
+                          value={assigneeSearchDraft}
+                          onChange={(event) => setAssigneeSearchDraft(event.target.value)}
+                          placeholder="Search by name, email or role..."
+                          className={`${fieldCls} pl-9`}
+                        />
+                      </div>
+                    </label>
+                    <label className="block">
+                      <span className={labelCls}>Selected assignee</span>
+                      <select
+                        value={executiveDraft}
+                        onChange={(event) => setExecutiveDraft(event.target.value)}
+                        className={fieldCls}
+                      >
+                        <option value="">Select user</option>
+                        {filteredAssignees.map((user) => (
+                          <option key={user._id} value={user._id}>
+                            {user.name} ({statusLabel(user.role)})
+                            {user.lastAssignedAt ? ` - last ${formatDate(user.lastAssignedAt)}` : ""}
+                          </option>
+                        ))}
+                      </select>
+                    </label>
+                  </div>
+                  <label className="mt-3 block">
+                    <span className={labelCls}>
+                      Reason <span className="text-rose-500">*</span>
+                    </span>
+                    <textarea
+                      value={transferReasonDraft}
+                      onChange={(event) => setTransferReasonDraft(event.target.value)}
+                      placeholder="e.g. Client location change, better coverage, etc."
+                      className={`min-h-[70px] resize-y ${areaCls}`}
+                    />
+                  </label>
+                  <div className="mt-4 flex items-center justify-end gap-2">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setExecutiveDraft(selectedLead?.assignedTo?._id || "");
+                        setTransferReasonDraft("");
+                        setAssigneeSearchDraft("");
+                        setTransferPanelOpen(false);
+                      }}
+                      className={ghostBtn}
+                    >
+                      Cancel
+                    </button>
+                    <button type="button" onClick={onAssignLead} disabled={!executiveDraft || !String(transferReasonDraft || "").trim() || assigning} className={blueBtn}>
+                      {assigning ? <Loader size={15} className="animate-spin" /> : <Send size={15} />}
+                      {assigning ? "Transferring..." : "Confirm transfer"}
+                    </button>
+                  </div>
+                </div>
+              ) : null}
+            </section>
+          </div>
+        </div>
+      ) : null}
+
+      {transferConfirmOpen ? (
+        <div className="fixed inset-0 z-[90] flex items-center justify-center bg-slate-950/45 p-4" role="dialog" aria-modal="true" aria-labelledby="transfer-lead-title">
+          <div className={`w-full max-w-md rounded-2xl border p-5 shadow-2xl ${shellSurface}`}>
+            <div className="flex items-start justify-between gap-3">
+              <div>
+                <p className={`text-[12px] font-semibold uppercase tracking-wide ${mutedText}`}>Transfer lead</p>
+                <h2 id="transfer-lead-title" className={`mt-1 text-[19px] font-bold ${headingText}`}>Assign to {selectedTransferAssignee?.name || "selected user"}</h2>
+              </div>
+              <button type="button" onClick={cancelTransferConfirmation} aria-label="Close transfer dialog" className={`rounded-lg p-1.5 ${mutedText}`}><ChevronUp size={18} /></button>
+            </div>
+            <label className="mt-4 block">
+              <span className={labelCls}>Reason for transfer <span className="text-rose-500">*</span></span>
+              <textarea value={transferReasonDraft} onChange={(event) => setTransferReasonDraft(event.target.value)} placeholder="Why is this lead being reassigned?" className={`min-h-[92px] resize-y ${areaCls}`} autoFocus />
+            </label>
+            <div className="mt-5 flex justify-end gap-2">
+              <button type="button" onClick={cancelTransferConfirmation} className={ghostBtn}>Cancel</button>
+              <button type="button" onClick={onAssignLead} disabled={!String(transferReasonDraft || "").trim() || assigning} className={blueBtn}>
+                {assigning ? <Loader size={15} className="animate-spin" /> : <ArrowRightLeft size={15} />}
+                {assigning ? "Transferring..." : "Confirm transfer"}
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : null}
+
+      {canEditLead && (activeTab === "requirements" || hasPendingLeadEdits) ? (
+        <div
+          className={`sticky bottom-0 z-10 mt-4 flex flex-wrap items-center justify-end gap-2 rounded-xl border px-4 py-3 ${
+            isDark ? "border-slate-800 bg-slate-900/95" : "border-slate-200 bg-white/95"
+          }`}
+        >
+          <button type="button" onClick={onClose} className={ghostBtn}>
+            Cancel
+          </button>
+          <button type="button" onClick={onUpdateLead} disabled={savingUpdates} className={blueBtn}>
+            {savingUpdates ? <Loader size={15} className="animate-spin" /> : <Save size={15} />}
+            {savingUpdates ? "Saving..." : activeTab === "requirements" ? "Save requirements" : "Save changes"}
+          </button>
+        </div>
+      ) : null}
     </Motion.section>
   );
 };
@@ -3700,4 +5429,3 @@ export const LeadDetailsRebuilt = (props) => {
   if (!props.selectedLead) return null;
   return <LeadDetailsRebuiltContent {...props} />;
 };
-

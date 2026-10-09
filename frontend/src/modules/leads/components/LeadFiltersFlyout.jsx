@@ -1,5 +1,6 @@
 /* eslint-disable react-hooks/set-state-in-effect */
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef } from "react";
+import { createPortal } from "react-dom";
 import { X, SlidersHorizontal, Zap, Clock, Users as UsersIcon, Calendar } from "lucide-react";
 import { Button, cn } from "../../../components/ui";
 import { QUICK_FILTER_KEYS } from "./leadFilterConstants";
@@ -10,6 +11,7 @@ export default function LeadFiltersFlyout({
   status = "ALL",
   source = "",
   assignedTo = "",
+  inventoryType = "",
   propertyType = "",
   budgetRange = "",
   followUpDate = "",
@@ -25,11 +27,31 @@ export default function LeadFiltersFlyout({
   const [draftStatus, setDraftStatus] = useState(status || "ALL");
   const [draftSource, setDraftSource] = useState(source || "");
   const [draftAssignedTo, setDraftAssignedTo] = useState(assignedTo || "");
+  const [draftInventoryType, setDraftInventoryType] = useState(inventoryType || "");
   const [draftPropertyType, setDraftPropertyType] = useState(propertyType || "");
   const [draftBudgetRange, setDraftBudgetRange] = useState(budgetRange || "");
   const [draftFollowUpDate, setDraftFollowUpDate] = useState(followUpDate || "");
   const [draftCreatedDate, setDraftCreatedDate] = useState(createdDate || "");
   const [draftQuickFilter, setDraftQuickFilter] = useState(quickFilter || "");
+  const dialogRef = useRef(null);
+
+  useEffect(() => {
+    if (!isOpen) return undefined;
+    const previousFocus = document.activeElement;
+    const dialog = dialogRef.current;
+    dialog?.focus();
+    const handleKey = (event) => {
+      if (event.key === "Escape") { event.preventDefault(); onClose?.(); }
+      if (event.key !== "Tab") return;
+      const controls = Array.from(dialog.querySelectorAll('button:not([disabled]), select:not([disabled]), input:not([disabled]), [tabindex="0"]'));
+      const first = controls[0];
+      const last = controls[controls.length - 1];
+      if (event.shiftKey && (document.activeElement === first || document.activeElement === dialog)) { event.preventDefault(); last?.focus(); }
+      else if (!event.shiftKey && document.activeElement === last) { event.preventDefault(); first?.focus(); }
+    };
+    dialog?.addEventListener("keydown", handleKey);
+    return () => { dialog?.removeEventListener("keydown", handleKey); previousFocus?.focus?.(); };
+  }, [isOpen, onClose]);
 
   // The draft mirrors the flyout's committed values whenever it opens or the
   // parent applies a filter from the compact toolbar.
@@ -37,12 +59,13 @@ export default function LeadFiltersFlyout({
     setDraftStatus(status || "ALL");
     setDraftSource(source || "");
     setDraftAssignedTo(assignedTo || "");
+    setDraftInventoryType(inventoryType || "");
     setDraftPropertyType(propertyType || "");
     setDraftBudgetRange(budgetRange || "");
     setDraftFollowUpDate(followUpDate || "");
     setDraftCreatedDate(createdDate || "");
     setDraftQuickFilter(quickFilter || "");
-  }, [status, source, assignedTo, propertyType, budgetRange, followUpDate, createdDate, quickFilter, isOpen]);
+  }, [status, source, assignedTo, inventoryType, propertyType, budgetRange, followUpDate, createdDate, quickFilter, isOpen]);
 
   if (!isOpen) return null;
 
@@ -51,6 +74,7 @@ export default function LeadFiltersFlyout({
   if (draftStatus && draftStatus !== "ALL") appliedCount++;
   if (draftSource && draftSource !== "ALL" && draftSource !== "") appliedCount++;
   if (draftAssignedTo && draftAssignedTo !== "ALL" && draftAssignedTo !== "") appliedCount++;
+  if (draftInventoryType && draftInventoryType !== "ALL") appliedCount++;
   if (draftPropertyType && draftPropertyType !== "ALL" && draftPropertyType !== "") appliedCount++;
   if (draftBudgetRange && draftBudgetRange !== "ALL" && draftBudgetRange !== "") appliedCount++;
   if (draftFollowUpDate && draftFollowUpDate !== "ALL" && draftFollowUpDate !== "") appliedCount++;
@@ -61,6 +85,7 @@ export default function LeadFiltersFlyout({
     setDraftStatus("ALL");
     setDraftSource("");
     setDraftAssignedTo("");
+    setDraftInventoryType("");
     setDraftPropertyType("");
     setDraftBudgetRange("");
     setDraftFollowUpDate("");
@@ -75,6 +100,7 @@ export default function LeadFiltersFlyout({
       status: draftStatus,
       source: draftSource,
       assignedTo: draftAssignedTo,
+      inventoryType: draftInventoryType,
       propertyType: draftPropertyType,
       budgetRange: draftBudgetRange,
       followUpDate: draftFollowUpDate,
@@ -93,44 +119,53 @@ export default function LeadFiltersFlyout({
 const selectStyle =
     "w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-[13px] text-slate-800 transition-colors focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-100";
 
-  return (
+  return createPortal(
     <>
       {/* Backdrop */}
       <div
-        className="fixed inset-0 z-40 bg-slate-900/20 backdrop-blur-sm transition-opacity"
+        className="fixed inset-0 z-[1000] bg-slate-900/30 backdrop-blur-sm"
         onClick={onClose}
         aria-hidden="true"
       />
 
       {/* Flyout panel */}
       <div
+        ref={dialogRef}
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="lead-filters-title"
+        tabIndex={-1}
         className={cn(
-          "fixed inset-y-0 right-0 z-50 flex w-full max-w-[340px] sm:max-w-[380px] flex-col border-l border-slate-200 bg-white shadow-2xl transition-all duration-300 dark:border-slate-800 dark:bg-slate-900",
+          "fixed inset-y-0 right-0 z-[1001] flex h-dvh w-full max-w-[380px] flex-col overflow-hidden border-l border-slate-200 bg-white text-slate-900 shadow-2xl outline-none dark:border-slate-800 dark:bg-slate-900 dark:text-slate-100",
         )}
       >
         {/* Header */}
-        <div className="flex items-center justify-between border-b border-slate-100 px-5 py-4 dark:border-slate-800">
+        <div className="flex shrink-0 items-center justify-between gap-2 border-b border-slate-100 px-4 py-3 dark:border-slate-800">
           <div className="flex items-center gap-2">
             <SlidersHorizontal size={17} className="text-slate-700 dark:text-slate-200" />
-            <h2 className="text-[15px] font-bold text-slate-900 dark:text-slate-100">Filters</h2>
+            <h2 id="lead-filters-title" className="text-[15px] font-bold text-slate-900 dark:text-slate-100">Filters</h2>
             {appliedCount > 0 && (
               <span className="flex h-5 min-w-[20px] items-center justify-center rounded-full bg-blue-600 px-1.5 text-[11px] font-bold text-white">
                 {appliedCount}
               </span>
             )}
           </div>
+          <div className="flex items-center gap-2">
+          <Button size="sm" onClick={handleApply} className="min-h-10 bg-blue-600 px-4 text-white">Apply</Button>
           <button
             type="button"
             onClick={onClose}
-            className="rounded-lg p-1 text-slate-400 hover:bg-slate-100 hover:text-slate-600 dark:hover:bg-slate-800 dark:hover:text-slate-200"
+            className="inline-flex min-h-10 items-center gap-1 rounded-lg border border-slate-200 px-2 text-sm dark:border-slate-700"
             aria-label="Close filters"
           >
             <X size={18} />
+            Close
           </button>
+          </div>
         </div>
 
         {/* Scrollable Content */}
-        <div className="custom-scrollbar flex-1 overflow-y-auto p-5 space-y-6">
+        <div className="custom-scrollbar min-h-0 flex-1 space-y-6 overflow-y-auto overscroll-contain p-4">
           {/* Quick filters section */}
           <div>
             <h3 className="mb-2.5 text-[12px] font-bold text-slate-700 dark:text-slate-300">
@@ -265,6 +300,23 @@ const selectStyle =
                 </select>
               </div>
 
+              {/* Lead category */}
+              <div>
+                <label className="mb-1 block text-[11px] font-semibold text-slate-600 dark:text-slate-400">
+                  Category
+                </label>
+                <select
+                  value={draftInventoryType}
+                  onChange={(e) => setDraftInventoryType(e.target.value)}
+                  className={selectStyle}
+                >
+                  <option value="">All categories</option>
+                  <option value="RESIDENTIAL">Residential</option>
+                  <option value="COMMERCIAL">Commercial</option>
+                  <option value="COWORKING">Coworking</option>
+                </select>
+              </div>
+
               {/* Property type */}
               <div>
                 <label className="mb-1 block text-[11px] font-semibold text-slate-600 dark:text-slate-400">
@@ -353,19 +405,22 @@ const selectStyle =
         </div>
 
         {/* Footer */}
-        <div className="flex items-center justify-between border-t border-slate-100 bg-slate-50/70 px-5 py-3.5 dark:border-slate-800 dark:bg-slate-900/80">
+        <div className="shrink-0 border-t border-slate-100 bg-white px-4 pt-3 pb-[max(12px,env(safe-area-inset-bottom))] dark:border-slate-800 dark:bg-slate-900">
           <span className="text-[12px] font-medium text-slate-500 dark:text-slate-400">
             {appliedCount > 0 ? `${appliedCount} filter${appliedCount > 1 ? "s" : ""} applied` : "No filters applied"}
           </span>
+          <div className="mt-2 grid grid-cols-2 gap-2">
+          <Button size="sm" variant="secondary" onClick={onClose} className="min-h-11">Close</Button>
           <Button
             size="sm"
             onClick={handleApply}
-            className="bg-blue-600 px-5 font-semibold text-white hover:bg-blue-700 shadow-sm"
+            className="min-h-11 bg-blue-600 px-5 font-semibold text-white hover:bg-blue-700 shadow-sm"
           >
             Apply
           </Button>
+          </div>
         </div>
       </div>
-    </>
+    </>, document.body
   );
 }

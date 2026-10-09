@@ -90,6 +90,7 @@ const statusLabel = (status?: string) => {
   if (normalized === "PRESENT") return "Present";
   if (normalized === "WORKING") return "Working";
   if (normalized === "BREAK") return "Break";
+  if (normalized === "WEEK_OFF") return "Week Off";
   return normalized.replace(/_/g, " ");
 };
 
@@ -100,6 +101,7 @@ const toneFor = (status?: string) => {
   if (normalized === "HALF_DAY") return { bg: themePalette.blue[50], ink: themePalette.blue[800] };
   if (normalized === "ABSENT") return { bg: themePalette.rose[50], ink: themePalette.rose[800] };
   if (normalized === "LEAVE") return { bg: themePalette.emerald[50], ink: themePalette.emerald[700] };
+  if (normalized === "WEEK_OFF") return { bg: themePalette.slate[100], ink: themePalette.slate[600] };
   return { bg: themePalette.amber[50], ink: themePalette.amber[800] };
 };
 

@@ -19,8 +19,6 @@ const {
   USER_ROLES,
   EXECUTIVE_ROLES,
   LEAD_OWNER_ROLES,
-  MANUAL_LEAD_TRANSFER_TARGET_ROLES,
-  MANUAL_LEAD_TRANSFER_ACTOR_ROLES,
   MANAGEMENT_ROLES,
   isManagementRole,
 } = require("../constants/role.constants");
@@ -3581,18 +3579,6 @@ exports.assignLead = async (req, res) => {
       return res.status(400).json({ message: "assignedTo must be a valid user id" });
     }
 
-    const access = await resolveAccessProfile(req.user);
-    const hasExplicitAssignGrant = access.enforcePageAccess
-      && access.permissions.includes("page.leads.assign");
-    if (!hasExplicitAssignGrant && !MANUAL_LEAD_TRANSFER_ACTOR_ROLES.includes(req.user?.role)) {
-      return res.status(403).json({ message: "You are not authorized to transfer leads" });
-    }
-
-    const accessibleLead = await findAccessibleLeadById({ leadId, user: req.user });
-    if (!accessibleLead) {
-      return res.status(404).json({ message: "Lead not found" });
-    }
-
     const lead = await Lead.findOne({
       _id: leadId,
       companyId: req.user.companyId,
@@ -3608,19 +3594,6 @@ exports.assignLead = async (req, res) => {
     });
     if (!targetUser) {
       return res.status(400).json({ message: "Target user must be active and in your company" });
-    }
-
-    if (!MANUAL_LEAD_TRANSFER_TARGET_ROLES.includes(targetUser.role)) {
-      return res.status(400).json({
-        message: "Lead can only be transferred to a sales user (Admin, Manager, Executive or Field Executive)",
-      });
-    }
-
-    const targetRoleTypeError = assertLeadTypeMatchesUser(lead, targetUser);
-    if (targetRoleTypeError) {
-      return res.status(400).json({
-        message: "Lead can only be assigned to a user with the same role type",
-      });
     }
 
     const topManager = await getAncestorByRoles({

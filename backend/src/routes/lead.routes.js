@@ -152,7 +152,6 @@ router.patch(
   "/:leadId/assign",
   writeLimiter,
   authMiddleware.protect,
-  requirePageAction("assign", "leads", "my_leads"),
   leadController.assignLead
 );
 

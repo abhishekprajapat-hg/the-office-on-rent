@@ -1,8 +1,28 @@
 import React from "react";
-import { MessageCircle, NotebookPen, Phone } from "lucide-react";
+import { CalendarDays, MessageCircle, NotebookPen, Phone } from "lucide-react";
 import { DataTable, StatusBadge } from "../../../components/crm";
 import { EmptyState, IconButton } from "../../../components/ui";
 import { formatBudgetRange } from "./pipelineViews";
+import PipelineAssigneePicker from "./PipelineAssigneePicker";
+
+const describeFollowUp = (value) => {
+  if (!value) return { label: "Not scheduled", overdue: false };
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return { label: "Not scheduled", overdue: false };
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  const day = new Date(date);
+  day.setHours(0, 0, 0, 0);
+  if (day < today) {
+    const days = Math.max(1, Math.round((today - day) / 86400000));
+    return { label: `Overdue ${days} day${days === 1 ? "" : "s"}`, overdue: true };
+  }
+  const time = date.toLocaleTimeString("en-IN", { hour: "numeric", minute: "2-digit" });
+  if (day.getTime() === today.getTime()) return { label: `Today ${time}`, overdue: false };
+  const tomorrow = new Date(today); tomorrow.setDate(tomorrow.getDate() + 1);
+  if (day.getTime() === tomorrow.getTime()) return { label: `Tomorrow ${time}`, overdue: false };
+  return { label: date.toLocaleDateString("en-IN", { day: "numeric", month: "short" }), overdue: false };
+};
 
 const initialsOf = (name) => {
   const parts = String(name || "").trim().split(/\s+/).filter(Boolean);
@@ -51,6 +71,9 @@ const PipelineTable = ({
   statusOptions = [],
   onStatusChange,
   updatingStatusId = "",
+  canAssignLead = false,
+  assignees = [],
+  onTransferLead,
   emptyState,
   className,
 }) => {
@@ -58,6 +81,7 @@ const PipelineTable = ({
     {
       key: "name",
       header: "LEAD",
+      width: "21%",
       render: (lead) => (
         <div className="flex items-center gap-2.5">
           <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-blue-100 text-[11px] font-bold text-blue-700 dark:bg-blue-500/20 dark:text-blue-200">
@@ -75,28 +99,9 @@ const PipelineTable = ({
       ),
     },
     {
-      key: "status",
-      header: "STATUS",
-      render: (lead) => (
-        <span className="relative inline-flex" onClick={(event) => event.stopPropagation()}>
-          <StatusBadge status={lead?.status} className="pointer-events-none" />
-          {onStatusChange ? (
-            <select
-              aria-label={`Change status for ${lead?.name || "lead"}`}
-              value={lead?.status || "NEW"}
-              disabled={updatingStatusId === String(lead?._id || "")}
-              onChange={(event) => onStatusChange(lead, event.target.value)}
-              className="absolute inset-0 h-full w-full cursor-pointer opacity-0 disabled:cursor-wait"
-            >
-              {statusOptions.map((status) => <option key={status} value={status}>{status.replace(/_/g, " ")}</option>)}
-            </select>
-          ) : null}
-        </span>
-      ),
-    },
-    {
       key: "requirement",
       header: "REQUIREMENT",
+      width: "22%",
       render: (lead) => {
         const requirements = lead?.requirements || {};
         const lead1 = [
@@ -136,6 +141,7 @@ const PipelineTable = ({
     {
       key: "budget",
       header: "BUDGET",
+      width: "11%",
       render: (lead) => (
         <span className="text-[12.5px] font-semibold text-slate-900 dark:text-slate-100">
           {formatBudgetRange(lead?.requirements)}
@@ -143,30 +149,32 @@ const PipelineTable = ({
       ),
     },
     {
-      key: "source",
-      header: "SOURCE",
+      key: "status",
+      header: "STATUS",
+      width: "12%",
       render: (lead) => {
-        const src = lead?.source ? titleCase(lead.source) : "Manual";
         return (
-          <span className="inline-flex items-center rounded-lg border border-slate-200 bg-slate-50 px-2.5 py-0.5 text-[11px] font-medium text-slate-700 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-300">
-            {src}
+          <span className="relative inline-flex" onClick={(event) => event.stopPropagation()}>
+            <StatusBadge status={lead?.status} className="pointer-events-none" />
+            {onStatusChange ? <select aria-label={`Change status for ${lead?.name || "lead"}`} value={lead?.status || "NEW"} disabled={updatingStatusId === String(lead?._id || "")} onChange={(event) => onStatusChange(lead, event.target.value)} className="absolute inset-0 h-full w-full cursor-pointer opacity-0 disabled:cursor-wait">{statusOptions.map((status) => <option key={status} value={status}>{status.replace(/_/g, " ")}</option>)}</select> : null}
           </span>
         );
       },
     },
     {
+      key: "followUp",
+      header: "NEXT FOLLOW-UP",
+      width: "15%",
+      render: (lead) => {
+        const followUp = describeFollowUp(lead?.nextFollowUp);
+        return <span className={`inline-flex items-center gap-1.5 text-[12px] font-semibold ${followUp.overdue ? "text-rose-600 dark:text-rose-400" : "text-blue-600 dark:text-blue-300"}`}><CalendarDays size={15} />{followUp.label}</span>;
+      },
+    },
+    {
       key: "assigned",
-      header: "ASSIGNED",
-      render: (lead) =>
-        lead?.assignedTo?.name ? (
-          <span className="text-[12.5px] font-medium text-slate-700 dark:text-slate-300">
-            {lead.assignedTo.name}
-          </span>
-        ) : (
-          <span className="text-[12px] font-semibold text-amber-600 dark:text-amber-400">
-            Unassigned
-          </span>
-        ),
+      header: "ASSIGNED TO",
+      width: "15%",
+      render: (lead) => <PipelineAssigneePicker lead={lead} assignees={assignees} canAssignLead={canAssignLead} onAssign={onTransferLead} />,
     },
   ];
 
@@ -211,6 +219,7 @@ const PipelineTable = ({
           />
         </>
       )}
+      alwaysShowActions
     />
   );
 };

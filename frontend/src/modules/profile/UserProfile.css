@@ -853,6 +853,13 @@ button.profile-avatar {
   color: var(--profile-gold);
 }
 
+/* A day off, not a problem: neutral, like the empty days around it. */
+.profile-calendar-status.week_off,
+.profile-day-status.week_off {
+  background: var(--profile-surface-muted);
+  color: var(--profile-muted);
+}
+
 .profile-calendar-no-record {
   display: block;
   margin-top: 13px;

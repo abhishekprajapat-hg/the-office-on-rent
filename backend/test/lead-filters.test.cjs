@@ -13,6 +13,12 @@ test("advanced filters retain tenant and assignment scope and escape text", () =
   assert.equal(query.$and.find((clause) => clause.projectInterested).projectInterested.$regex, "A\\+B");
 });
 
+test("inventory category filters include coworking", () => {
+  const query = {};
+  applyLeadAdvancedFilters(query, { inventoryType: "COWORKING" });
+  assert.deepEqual(query.$and, [{ "requirements.inventoryType": "COWORKING" }]);
+});
+
 test("date ranges cover whole India calendar days, including the final day", () => {
   const query = {};
   applyLeadAdvancedFilters(query, { createdFrom: "2026-09-10", createdTo: "2026-09-10", followUpDateTo: "2026-09-11" });

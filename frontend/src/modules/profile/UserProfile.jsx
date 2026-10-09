@@ -119,6 +119,7 @@ const formatAttendanceStatus = (status) => {
   if (normalized === "PRESENT") return "Present";
   if (normalized === "WORKING") return "Working";
   if (normalized === "BREAK") return "Break";
+  if (normalized === "WEEK_OFF") return "Week Off";
   if (!normalized) return "";
   return normalized.replaceAll("_", " ");
 };

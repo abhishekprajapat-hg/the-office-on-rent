@@ -317,6 +317,9 @@ const buildAttendanceSummary = ({
   if (firstKey <= lastKey) {
     buildDateKeysInRange(firstKey, lastKey).forEach((dateKey) => {
       if (isWeeklyOffDateKey(dateKey, policy)) return;
+      // A week off set by hand is a day off like the company's own weekly off:
+      // not a working day, so neither absent nor in the attendance percentage.
+      if (attendanceMap.get(dateKey)?.status === ATTENDANCE_STATUS.WEEK_OFF) return;
       if (dateKey === todayKey) {
         // Today is not over: it counts as a working day only once there is a record.
         if (attendanceMap.has(dateKey)) workingDaysElapsed += 1;
@@ -357,6 +360,7 @@ const buildAttendanceSummary = ({
   const absentDays = countWhere((row) => row.status === ATTENDANCE_STATUS.ABSENT);
   const unrecordedAbsentDays = countWhere((row) => row.source === "NO_RECORD");
   const leaveDays = countWhere((row) => row.status === ATTENDANCE_STATUS.LEAVE);
+  const weekOffDays = countWhere((row) => row.status === ATTENDANCE_STATUS.WEEK_OFF);
   const pendingDays = countWhere((row) => row.status === ATTENDANCE_STATUS.PENDING);
   const lateDays = countWhere(isLate);
   const checkedInDays = countWhere((row) => Boolean(row.checkInAt));
@@ -377,6 +381,7 @@ const buildAttendanceSummary = ({
       absentDays,
       unrecordedAbsentDays,
       leaveDays,
+      weekOffDays,
       pendingDays,
       attendancePercent: workingDaysElapsed
         ? Math.min(100, Math.round((attendedDays / workingDaysElapsed) * 100))
@@ -2731,18 +2736,24 @@ exports.manageUserBreak = async (req, res) => {
  * LEAVE marks the day off without the employee having to file a request for
  * it. It does not draw on their leave balance - that is counted from approved
  * leave requests only.
+ *
+ * WEEK_OFF (WO) is a weekly off on a day that is not the company's: somebody
+ * who works Sunday and is off on Tuesday. Like the company's own weekly off it
+ * is not a working day - never absent, never deducted from pay.
  */
 const MANUAL_ATTENDANCE_STATUSES = Object.freeze([
   ATTENDANCE_STATUS.PRESENT,
   ATTENDANCE_STATUS.HALF_DAY,
   ATTENDANCE_STATUS.ABSENT,
   ATTENDANCE_STATUS.LEAVE,
+  ATTENDANCE_STATUS.WEEK_OFF,
 ]);
 
 // Not a day worked: any check-in, check-out or breaks on the row go with it.
 const NOT_WORKED_MANUAL_STATUSES = new Set([
   ATTENDANCE_STATUS.ABSENT,
   ATTENDANCE_STATUS.LEAVE,
+  ATTENDANCE_STATUS.WEEK_OFF,
 ]);
 
 const MANUAL_STATUS_DEFAULT_NOTES = Object.freeze({
@@ -2750,6 +2761,7 @@ const MANUAL_STATUS_DEFAULT_NOTES = Object.freeze({
   [ATTENDANCE_STATUS.HALF_DAY]: "Marked half day manually",
   [ATTENDANCE_STATUS.ABSENT]: "Marked absent manually",
   [ATTENDANCE_STATUS.LEAVE]: "Marked on leave manually",
+  [ATTENDANCE_STATUS.WEEK_OFF]: "Marked week off manually",
 });
 
 const applyManualAttendanceStatus = (attendance, {
@@ -2809,7 +2821,7 @@ exports.updateUserAttendanceStatus = async (req, res) => {
       return res.status(400).json({ message: "date must be in YYYY-MM-DD format" });
     }
     if (!MANUAL_ATTENDANCE_STATUSES.includes(nextStatus)) {
-      return res.status(400).json({ message: "status must be PRESENT, HALF_DAY, ABSENT, or LEAVE" });
+      return res.status(400).json({ message: "status must be PRESENT, HALF_DAY, ABSENT, LEAVE, or WEEK_OFF" });
     }
 
     const canAccessTarget = await ensureUserInScope({
@@ -2941,6 +2953,7 @@ exports.getDailyAttendanceForAdmin = async (req, res) => {
       ATTENDANCE_STATUS.PENDING,
       ATTENDANCE_STATUS.ABSENT,
       ATTENDANCE_STATUS.LEAVE,
+      ATTENDANCE_STATUS.WEEK_OFF,
       LIVE_ATTENDANCE_STATUS.WORKING,
       LIVE_ATTENDANCE_STATUS.BREAK,
       "ON_BREAK",
@@ -3027,6 +3040,7 @@ exports.getDailyAttendanceForAdmin = async (req, res) => {
       Boolean(row.attendance.checkInAt) && !row.attendance.checkOutAt).length;
     const onBreak = rows.filter((row) => Boolean(row.attendance.isOnBreak)).length;
     const leave = rows.filter((row) => row.attendance.status === ATTENDANCE_STATUS.LEAVE).length;
+    const weekOff = rows.filter((row) => row.attendance.status === ATTENDANCE_STATUS.WEEK_OFF).length;
     const absent = rows.filter((row) => row.attendance.status === ATTENDANCE_STATUS.ABSENT).length;
 
     return res.json({
@@ -3040,6 +3054,7 @@ exports.getDailyAttendanceForAdmin = async (req, res) => {
         activeLogins,
         onBreak,
         leave,
+        weekOff,
         absent,
       },
       attendance: rows,

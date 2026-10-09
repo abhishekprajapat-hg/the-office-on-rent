@@ -161,6 +161,16 @@ const CRM_PAGES = Object.freeze([
     alwaysAccessible: true,
   },
   {
+    // Always available, like salary: everybody may see their own score. Whose
+    // else they may see is decided by role in the performance controller.
+    key: "performance",
+    label: "Performance",
+    group: "Workspace",
+    path: "/performance",
+    actions: [PAGE_ACTIONS.VIEW],
+    alwaysAccessible: true,
+  },
+  {
     key: "chat",
     label: "Team Chat",
     group: "Workspace",

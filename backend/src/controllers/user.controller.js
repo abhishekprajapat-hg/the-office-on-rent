@@ -15,8 +15,6 @@ const {
   USER_ROLES,
   EXECUTIVE_ROLES,
   LEAD_OWNER_ROLES,
-  MANUAL_LEAD_TRANSFER_TARGET_ROLES,
-  MANUAL_LEAD_TRANSFER_ACTOR_ROLES,
   PRODUCTION_ROLES,
   MANAGEMENT_ROLES,
   ROLE_LABELS,
@@ -964,12 +962,8 @@ exports.getUsers = async (req, res) => {
     let query = {};
 
     if (crmAssignableOnly) {
-      if (!MANUAL_LEAD_TRANSFER_ACTOR_ROLES.includes(req.user.role)) {
-        return res.status(403).json({ message: "Access denied" });
-      }
       query = {
         ...companyScope,
-        role: { $in: MANUAL_LEAD_TRANSFER_TARGET_ROLES },
         isActive: true,
       };
     } else if (req.user.role === USER_ROLES.ADMIN) {

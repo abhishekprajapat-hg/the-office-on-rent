@@ -8,6 +8,9 @@ const ATTENDANCE_STATUS = Object.freeze({
   LATE: "LATE",
   HALF_DAY: "HALF_DAY",
   LEAVE: "LEAVE",
+  // A day off set by hand - for somebody whose weekly off is not the company's
+  // (works Sunday, off Tuesday). Not a working day, so never absent.
+  WEEK_OFF: "WEEK_OFF",
   MISSED_CHECK_OUT: "MISSED_CHECK_OUT",
   ABSENT: "ABSENT",
 });

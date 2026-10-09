@@ -1,0 +1,125 @@
+/* Phone layout uses CSS pixels, independently of the reference image's resolution. */
+@media (max-width: 1023px) {
+  .workspace-main-content:not(.workspace-main-content-chat) > .ui-page-shell.pipeline-list-page {
+    padding: 16px 16px 24px !important;
+  }
+  .pipeline-list-page > div:first-child { padding: 0; gap: 14px; }
+  .pipeline-mobile-overview > div:first-child { gap: 10px; }
+  .pipeline-mobile-overview h1 { font-size: 28px; line-height: 34px; letter-spacing: -.04em; }
+  .pipeline-mobile-overview h1 + p { margin-top: 4px; font-size: 13px; line-height: 19px; }
+  .pipeline-mobile-overview > div:first-child > button {
+    height: 42px; padding: 0 12px; font-size: 13px; border-radius: 10px; gap: 6px;
+    box-shadow: 0 3px 8px #2563eb18;
+  }
+  .pipeline-mobile-overview > div:first-child > button svg { width: 20px; height: 20px; }
+  .pipeline-mobile-overview > div:nth-child(2) { margin-top: 8px; gap: 8px; }
+  .pipeline-mobile-overview > div:nth-child(2) button { height: 36px; padding: 0 12px; font-size: 12px; border-radius: 9px; }
+  .pipeline-mobile-overview > div:nth-child(2) button:last-child { width: 38px; padding: 0; }
+  .pipeline-mobile-overview > div:nth-child(2) svg { width: 19px; height: 19px; }
+  .pipeline-mobile-overview > div:nth-child(3) { margin-top: 14px; gap: 8px; }
+  .pipeline-mobile-overview > div:nth-child(3) > div {
+    min-height: 76px; gap: 9px; padding: 10px; border-radius: 12px;
+  }
+  .pipeline-mobile-overview > div:nth-child(3) > div > span:first-child {
+    width: 42px; height: 42px; border-radius: 10px;
+  }
+  .pipeline-mobile-overview > div:nth-child(3) svg { width: 25px; height: 25px; }
+  .pipeline-mobile-overview > div:nth-child(3) > div > span:last-child > span {
+    font-size: 12px; line-height: 16px; overflow-wrap: anywhere;
+  }
+  .pipeline-mobile-overview > div:nth-child(3) strong { font-size: 25px; line-height: 28px; margin-top: 1px; }
+  .pipeline-tabs { margin-top: 16px; gap: 8px; scrollbar-width: none; }
+  .pipeline-tabs::-webkit-scrollbar { display: none; }
+  .pipeline-tabs > button { padding: 10px 7px; font-size: 13px; }
+  .pipeline-tabs > button > span > span { min-width: 22px; height: 22px; font-size: 11px; }
+  .pipeline-search-controls { margin-top: 12px; }
+  .pipeline-search-controls > div:first-child > input { height: 44px; border-radius: 11px; padding-left: 38px; font-size: 14px; }
+  .pipeline-search-controls > div:first-child > svg { left: 12px; width: 20px; height: 20px; }
+  .pipeline-filter-buttons { grid-template-columns: minmax(0, 1.2fr) minmax(0, 1fr) 42px; gap: 8px; margin-top: 10px; }
+  .pipeline-filter-buttons > button, .pipeline-filter-buttons > div > button {
+    height: 42px; border-radius: 10px; gap: 7px; font-size: 13px;
+  }
+  .pipeline-filter-buttons svg { width: 20px; height: 20px; }
+  .pipeline-chips { margin-top: 10px; gap: 6px; }
+  .pipeline-chips > button { height: auto; min-height: 32px; padding: 6px 9px; font-size: 12px; border-radius: 9px; }
+  .pipeline-chips svg { width: 15px; height: 15px; }
+  .pipeline-card-count { font-size: 19px; line-height: 26px; padding: 0 0 8px; }
+  .pipeline-mobile-card { border-radius: 12px; }
+  .pipeline-mobile-card > div:first-child { padding: 12px 10px 6px; gap: 8px; }
+  .pipeline-mobile-card > div:first-child > input { width: 16px; height: 16px; }
+  .pipeline-mobile-card > div:first-child strong { font-size: 16px; line-height: 21px; }
+  .pipeline-mobile-card > div:first-child > button > span { font-size: 13px; gap: 5px; }
+  .pipeline-mobile-card > div:first-child > button svg { width: 15px; height: 15px; }
+  .pipeline-mobile-card > div:first-child > div { gap: 2px; max-width: 43%; }
+  .pipeline-mobile-card > div:first-child > div > span { min-width: 0; }
+  .pipeline-mobile-card > div:first-child > div > span > span { padding: 4px 7px; font-size: 10px; white-space: normal; }
+  .pipeline-mobile-card > div:first-child > div > button svg { width: 18px; height: 18px; }
+  .pipeline-mobile-card > button { padding: 0 12px 10px 34px; }
+  .pipeline-mobile-card > button > span { font-size: 13px; line-height: 18px; }
+  .pipeline-mobile-card > div:nth-last-child(2) { padding: 10px 12px; border-top: 0; gap: 8px; }
+  .pipeline-mobile-card > div:nth-last-child(2) > div:last-child { min-width: 0; padding-left: 12px; }
+  .pipeline-mobile-card > div:nth-last-child(2) p { font-size: 12px; line-height: 18px; white-space: normal; overflow-wrap: anywhere; }
+  .pipeline-mobile-card > div:nth-last-child(2) svg { width: 17px; height: 17px; flex-shrink: 0; }
+  .pipeline-mobile-card > div:last-child { padding: 6px; }
+  .pipeline-mobile-card > div:last-child button { height: 36px; gap: 5px; font-size: 12px; }
+  .pipeline-mobile-card > div:last-child svg { width: 19px; height: 19px; }
+}
+
+/* The Pipeline switches to cards under `lg`; phones need a denser pass than tablets. */
+@media (max-width: 639px) {
+  .workspace-main-content:not(.workspace-main-content-chat) > .ui-page-shell.pipeline-list-page {
+    padding: 12px 12px 18px !important;
+  }
+  .pipeline-list-page > div:first-child { gap: 10px; }
+  .pipeline-mobile-overview > div:first-child { gap: 7px; }
+  .pipeline-mobile-overview h1 { font-size: 25px; line-height: 30px; }
+  .pipeline-mobile-overview h1 + p { margin-top: 2px; font-size: 12px; line-height: 16px; }
+  .pipeline-mobile-overview > div:first-child > button {
+    height: 38px; padding: 0 10px; font-size: 12px; border-radius: 9px;
+  }
+  .pipeline-mobile-overview > div:first-child > button svg { width: 18px; height: 18px; }
+  .pipeline-mobile-overview > div:nth-child(2) { margin-top: 5px; gap: 6px; }
+  .pipeline-mobile-overview > div:nth-child(2) button { height: 34px; padding: 0 10px; font-size: 11px; }
+  .pipeline-mobile-overview > div:nth-child(2) button:last-child { width: 36px; }
+  .pipeline-mobile-overview > div:nth-child(2) svg { width: 17px; height: 17px; }
+  .pipeline-mobile-overview > div:nth-child(3) { margin-top: 10px; gap: 7px; }
+  .pipeline-mobile-overview > div:nth-child(3) > div {
+    min-height: 64px; gap: 7px; padding: 8px; border-radius: 10px;
+  }
+  .pipeline-mobile-overview > div:nth-child(3) > div > span:first-child {
+    width: 36px; height: 36px; border-radius: 9px;
+  }
+  .pipeline-mobile-overview > div:nth-child(3) svg { width: 22px; height: 22px; }
+  .pipeline-mobile-overview > div:nth-child(3) > div > span:last-child > span { font-size: 11px; line-height: 13px; }
+  .pipeline-mobile-overview > div:nth-child(3) strong { font-size: 22px; line-height: 24px; }
+  .pipeline-tabs { margin-top: 12px; gap: 5px; }
+  .pipeline-tabs > button { padding: 8px 6px; font-size: 12px; }
+  .pipeline-tabs > button > span > span { min-width: 20px; height: 20px; font-size: 10px; }
+  .pipeline-search-controls { margin-top: 10px; }
+  .pipeline-search-controls > div:first-child > input { height: 40px; border-radius: 10px; padding-left: 35px; font-size: 12px; }
+  .pipeline-search-controls > div:first-child > svg { left: 11px; width: 18px; height: 18px; }
+  .pipeline-filter-buttons { grid-template-columns: minmax(0, 1.16fr) minmax(0, 1fr) 38px; gap: 7px; margin-top: 8px; }
+  .pipeline-filter-buttons > button, .pipeline-filter-buttons > div > button {
+    height: 38px; border-radius: 9px; gap: 6px; font-size: 12px;
+  }
+  .pipeline-filter-buttons svg { width: 18px; height: 18px; }
+  .pipeline-chips { margin-top: 8px; gap: 5px; }
+  .pipeline-chips > button { min-height: 30px; padding: 5px 8px; font-size: 11px; border-radius: 8px; }
+  .pipeline-card-count { font-size: 17px; line-height: 22px; padding-bottom: 6px; }
+  .pipeline-mobile-card { border-radius: 11px; }
+  .pipeline-mobile-card > div:first-child { padding: 9px 8px 4px; gap: 6px; }
+  .pipeline-mobile-card > div:first-child > input { width: 15px; height: 15px; }
+  .pipeline-mobile-card > div:first-child strong { font-size: 14px; line-height: 18px; }
+  .pipeline-mobile-card > div:first-child > button > span { font-size: 12px; }
+  .pipeline-mobile-card > div:first-child > div > span > span { padding: 3px 6px; font-size: 9px; }
+  .pipeline-mobile-card > div:first-child > div > button svg { width: 16px; height: 16px; }
+  .pipeline-mobile-card > button { padding: 0 10px 8px 29px; }
+  .pipeline-mobile-card > button > span { font-size: 12px; line-height: 16px; }
+  .pipeline-mobile-card > div:nth-last-child(2) { padding: 8px 10px; gap: 6px; }
+  .pipeline-mobile-card > div:nth-last-child(2) > div:last-child { padding-left: 10px; }
+  .pipeline-mobile-card > div:nth-last-child(2) p { font-size: 11px; line-height: 15px; }
+  .pipeline-mobile-card > div:nth-last-child(2) svg { width: 15px; height: 15px; }
+  .pipeline-mobile-card > div:last-child { padding: 4px; }
+  .pipeline-mobile-card > div:last-child button { height: 32px; gap: 4px; font-size: 11px; }
+  .pipeline-mobile-card > div:last-child svg { width: 17px; height: 17px; }
+}

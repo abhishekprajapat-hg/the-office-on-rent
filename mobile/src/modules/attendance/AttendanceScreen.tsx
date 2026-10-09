@@ -112,6 +112,8 @@ const toneOf = (status: string): Tone => {
       return { label: "No check out", bg: b.warnTint, fg: b.warnInk, dot: "#e8a92a" };
     case "LEAVE":
       return { label: "On Leave", bg: b.alertTint, fg: b.alertInk, dot: "#e8433e" };
+    case "WEEK_OFF":
+      return { label: "Week Off", bg: b.neutralBadge, fg: b.textSecondary, dot: b.placeholder };
     case "ABSENT":
       return { label: "Absent", bg: b.alertTint, fg: b.alertInk, dot: "#e8433e" };
     default:

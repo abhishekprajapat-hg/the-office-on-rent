@@ -65,6 +65,7 @@ const STATUS_STYLES = {
   LATE: "bg-yellow-100 text-yellow-700 border-yellow-200",
   HALF_DAY: "bg-blue-100 text-blue-700 border-blue-200",
   LEAVE: "bg-teal-100 text-teal-700 border-teal-200",
+  WEEK_OFF: "bg-slate-100 text-slate-600 border-slate-300",
   PENDING: "bg-amber-100 text-amber-700 border-amber-200",
   ABSENT: "bg-rose-100 text-rose-700 border-rose-200",
   MISSED_CHECK_OUT: "bg-orange-100 text-orange-700 border-orange-200",
@@ -232,6 +233,7 @@ const formatAttendanceStatus = (status) => {
   if (normalized === "WORKING") return "Working";
   if (normalized === "BREAK") return "Break";
   if (normalized === "LATE") return "Working";
+  if (normalized === "WEEK_OFF") return "Week Off";
   return normalized.replaceAll("_", " ");
 };
 
@@ -1307,6 +1309,7 @@ const AttendanceHub = () => {
                       <option value="HALF_DAY">Half Day</option>
                       <option value="PENDING">Pending</option>
                       <option value="LEAVE">Leave</option>
+                      <option value="WEEK_OFF">Week Off (WO)</option>
                       <option value="ABSENT">Absent</option>
                     </select>
                   </div>

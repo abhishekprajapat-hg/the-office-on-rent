@@ -62,7 +62,7 @@ test('every status the backend accepts is offered', () => {
   // returns belongs to that context's realm - so compare structure, not identity.
   assert.equal(
     JSON.stringify(MANUAL_ATTENDANCE_STATUS_OPTIONS.map((option) => option.value).sort()),
-    JSON.stringify(['ABSENT', 'HALF_DAY', 'LEAVE', 'PRESENT']),
+    JSON.stringify(['ABSENT', 'HALF_DAY', 'LEAVE', 'PRESENT', 'WEEK_OFF']),
   );
   MANUAL_ATTENDANCE_STATUS_OPTIONS.forEach((option) => {
     assert.ok(option.label, `${option.value} needs a label`);
@@ -90,9 +90,10 @@ test('leave is offered alongside present, half day and absent', () => {
   assert.equal(leave.label, 'Leave');
 });
 
-test('absent and leave clear the check-in; present and half day keep it', () => {
+test('absent, leave and week off clear the check-in; present and half day keep it', () => {
   assert.equal(statusClearsCheckIn('ABSENT'), true);
   assert.equal(statusClearsCheckIn('LEAVE'), true);
+  assert.equal(statusClearsCheckIn('WEEK_OFF'), true);
   assert.equal(statusClearsCheckIn('leave'), true);
   assert.equal(statusClearsCheckIn('PRESENT'), false);
   assert.equal(statusClearsCheckIn('HALF_DAY'), false);
@@ -128,4 +129,14 @@ test('the calendar only makes days clickable through the date helper', () => {
     /canSetDayStatus && canSetAttendanceOnDate\(day\.dateKey, attendanceTodayKey\)/,
     'a future day must not open the status dialog',
   );
+});
+
+test('week off is offered, labelled so people recognise WO', () => {
+  const weekOff = MANUAL_ATTENDANCE_STATUS_OPTIONS.find((option) => option.value === 'WEEK_OFF');
+  assert.ok(weekOff, 'WEEK_OFF must be selectable');
+  assert.equal(weekOff.label, 'Week Off (WO)');
+});
+
+test('a day set as week off shows it in the row dropdown', () => {
+  assert.equal(manualStatusSelectValue({ checkInAt: null, source: 'MANUAL', status: 'WEEK_OFF' }), 'WEEK_OFF');
 });

@@ -252,6 +252,7 @@ const DAY_KIND = Object.freeze({
   HALF_DAY: "HALF_DAY",
   UNPAID_LEAVE: "UNPAID_LEAVE",
   PAID_LEAVE: "PAID_LEAVE",
+  WEEK_OFF: "WEEK_OFF",
   WORKED: "WORKED",
 });
 
@@ -270,6 +271,8 @@ const classifyDay = (row, unapprovedLeaveDates) => {
     return unapprovedLeaveDates.has(row.attendanceDate) ? DAY_KIND.UNAPPROVED_LEAVE : DAY_KIND.ABSENT;
   }
   if (status === "HALF_DAY") return DAY_KIND.HALF_DAY;
+  // A week off is a paid day off: there is no rule for it and nothing to take.
+  if (status === "WEEK_OFF") return DAY_KIND.WEEK_OFF;
   if (status === "LEAVE") {
     return String(row?.source || "").toUpperCase() === "UNPAID" ? DAY_KIND.UNPAID_LEAVE : DAY_KIND.PAID_LEAVE;
   }

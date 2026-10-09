@@ -1,6 +1,6 @@
 import { memo, useEffect, useRef, useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
-import { Bell, CalendarDays, LogOut, Menu, MessageCircle, Moon, Search, Sun, User } from "lucide-react";
+import { Bell, CalendarDays, LogOut, Menu, MessageCircle, Moon, MoreVertical, Search, Sun, User } from "lucide-react";
 import { PROFILE_ITEM, getAllVisibleMenuGroups, roleCanSeeItem } from "./workbenchNavigation";
 import AvatarFace from "../ui/AvatarFace";
 import { getMyProfile } from "../../services/userService";
@@ -12,7 +12,10 @@ const AppTopCommandBar = ({ pageHeader, theme, onToggleTheme, onMenuOpen, onLogo
   const searchRef = useRef(null);
   const [query, setQuery] = useState("");
   const [searchOpen, setSearchOpen] = useState(false);
+  const [detailsMenuOpen, setDetailsMenuOpen] = useState(false);
   const isInventory = location.pathname === "/inventory";
+  const isPipeline = location.pathname === "/leads" || location.pathname === "/my-leads";
+  const isLeadDetails = /^\/(?:leads|my-leads)\/[^/]+\/?$/.test(location.pathname);
   const role = userRole || user?.role;
   const isFieldHome = role === "FIELD_EXECUTIVE" && ["/", "/dashboard"].includes(location.pathname);
   const menuItems = getAllVisibleMenuGroups(role, user).flatMap((group) => group.items);
@@ -88,12 +91,14 @@ const AppTopCommandBar = ({ pageHeader, theme, onToggleTheme, onMenuOpen, onLogo
   };
 
   return (
-    <header className="app-context-header">
+    <header className={`app-context-header ${isPipeline ? "app-context-header-pipeline" : ""} ${isLeadDetails ? "app-context-header-lead-details" : ""}`}>
       <button type="button" className="app-header-menu app-header-icon" aria-label="Open navigation" onClick={onMenuOpen}><Menu size={20} /></button>
-      <div className="app-header-heading"><h1>{title}</h1><p>{isFieldHome ? "Here's what's happening with your pipeline today." : pageHeader?.subtitle || "Manage your workspace and daily activities."}</p></div>
+      {isPipeline && <div className="pipeline-mobile-title">Pipeline</div>}
+      {isLeadDetails && <div className="lead-details-header-title">Lead details</div>}
+      {!isPipeline && !isLeadDetails && <div className="app-header-heading"><h1>{title}</h1><p>{isFieldHome ? "Here's what's happening with your pipeline today." : pageHeader?.subtitle || "Manage your workspace and daily activities."}</p></div>}
       <div className="app-header-search" onBlur={(event) => { if (!event.currentTarget.contains(event.relatedTarget)) setSearchOpen(false); }}>
         <Search size={18} />
-        <input ref={searchRef} aria-label={isInventory ? "Search inventory" : "Search pages"} placeholder={isInventory ? "Search properties, projects, locations..." : "Search pages..."} value={query} onChange={(event) => search(event.target.value)} onFocus={() => setSearchOpen(true)} />
+        <input ref={searchRef} aria-label={isInventory ? "Search inventory" : "Search pages"} placeholder={isInventory ? "Search properties, projects, locations..." : isPipeline ? "Search pages, leads, projects..." : "Search pages..."} value={query} onChange={(event) => search(event.target.value)} onFocus={() => setSearchOpen(true)} />
         <kbd>Ctrl K</kbd>
         {!isInventory && searchOpen && <div className="app-header-search-results">
           {results.length ? results.map((item) => <button type="button" key={item.path} onClick={() => { navigate(item.path); setQuery(""); setSearchOpen(false); }}>{item.label}</button>) : <p>No matching pages</p>}
@@ -102,11 +107,12 @@ const AppTopCommandBar = ({ pageHeader, theme, onToggleTheme, onMenuOpen, onLogo
       <div className="app-header-controls">
         {actions}
         {canNotify && <button type="button" className="app-header-icon" aria-label="Open notifications" title="Notifications" onClick={() => navigate("/admin/notifications")}><Bell size={21} />{unreadAlerts > 0 && <span className="app-header-unread">{unreadAlerts > 99 ? "99+" : unreadAlerts}</span>}</button>}
-        {canChat && <button type="button" className="app-header-icon" aria-label="Open team chat" title="Chat" onClick={openChat}><MessageCircle size={21} />{unreadChats > 0 && <span className="app-header-unread">{unreadChats > 99 ? "99+" : unreadChats}</span>}</button>}
+        {canChat && <button type="button" className={`app-header-icon ${isPipeline ? "pipeline-mobile-optional" : ""} ${isLeadDetails ? "lead-details-mobile-hidden" : ""}`} aria-label="Open team chat" title="Chat" onClick={openChat}><MessageCircle size={21} />{unreadChats > 0 && <span className="app-header-unread">{unreadChats > 99 ? "99+" : unreadChats}</span>}</button>}
         <div className="app-header-date"><CalendarDays size={17} />{today}</div>
         {canProfile && <button type="button" className="app-header-avatar" aria-label="Open profile" title={user?.name || "Profile"} onClick={() => navigate("/profile")}><AvatarFace src={profilePhoto} initials={initials} fallback={<User size={18} />} /></button>}
-        <button type="button" className="app-header-icon" aria-label={theme === "dark" ? "Switch to light mode" : "Switch to dark mode"} onClick={onToggleTheme}>{theme === "dark" ? <Sun size={18} /> : <Moon size={18} />}</button>
-        <button type="button" className="app-header-logout" onClick={onLogout} aria-label="Logout" title="Logout"><LogOut size={18} /><span>Logout</span></button>
+        <button type="button" className={`app-header-icon ${isPipeline ? "pipeline-mobile-optional" : ""} ${isLeadDetails ? "lead-details-mobile-hidden" : ""}`} aria-label={theme === "dark" ? "Switch to light mode" : "Switch to dark mode"} onClick={onToggleTheme}>{theme === "dark" ? <Sun size={18} /> : <Moon size={18} />}</button>
+        <button type="button" className={`app-header-logout ${isPipeline ? "pipeline-mobile-optional" : ""} ${isLeadDetails ? "lead-details-mobile-hidden" : ""}`} onClick={onLogout} aria-label="Logout" title="Logout"><LogOut size={18} /><span>Logout</span></button>
+        {isLeadDetails && <div className="lead-details-header-menu"><button type="button" className="app-header-icon lead-details-header-more" aria-label="More workspace actions" onClick={() => setDetailsMenuOpen((open) => !open)}><MoreVertical size={20} /></button>{detailsMenuOpen && <div className="lead-details-header-popover"><button type="button" onClick={() => { setDetailsMenuOpen(false); onToggleTheme(); }}>{theme === "dark" ? <Sun size={15} /> : <Moon size={15} />} {theme === "dark" ? "Light mode" : "Dark mode"}</button><button type="button" onClick={onLogout}><LogOut size={15} /> Logout</button></div>}</div>}
       </div>
     </header>
   );

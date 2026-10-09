@@ -89,6 +89,7 @@ const ATTENDANCE_STATUS_STYLES = {
   HALF_DAY: "border-blue-200 bg-blue-50 text-blue-800",
   ABSENT: "border-rose-200 bg-rose-50 text-rose-800",
   LEAVE: "border-teal-200 bg-teal-50 text-teal-800",
+  WEEK_OFF: "border-slate-300 bg-slate-100 text-slate-700",
   PENDING: "border-amber-200 bg-amber-50 text-amber-800",
 };
 const TASK_STATUS_LABELS = {
@@ -223,6 +224,7 @@ const formatAttendanceStatus = (status) => {
   if (normalized === "PRESENT") return "Present";
   if (normalized === "WORKING") return "Working";
   if (normalized === "BREAK") return "Break";
+  if (normalized === "WEEK_OFF") return "Week Off";
   if (!normalized) return "";
   return normalized.replaceAll("_", " ");
 };
@@ -644,6 +646,7 @@ const UserDetailsEditor = ({ theme = "light" }) => {
       { label: "Half Day", value: Number(summary.halfDays || 0), tone: "blue" },
       { label: "Absent", value: Number(summary.absentDays || 0), tone: "rose" },
       { label: "Leave", value: Number(summary.leaveDays || 0), tone: "teal" },
+      { label: "Week Off", value: Number(summary.weekOffDays || 0), tone: "slate" },
       { label: "Hours", value: Number(summary.totalWorkedHours || 0), tone: "slate" },
     ];
   }, [attendanceData.summary]);
@@ -1753,7 +1756,7 @@ const UserDetailsEditor = ({ theme = "light" }) => {
               </button>
             </div>
 
-            <div className="mt-4 grid grid-cols-2 gap-2 sm:grid-cols-4 xl:grid-cols-7">
+            <div className="mt-4 grid grid-cols-2 gap-2 sm:grid-cols-4 xl:grid-cols-8">
               {attendanceSummaryCards.map((card) => (
                 <StatTile key={card.label} label={card.label} value={card.value} isDarkTheme={isDarkTheme} />
               ))}
@@ -1762,7 +1765,7 @@ const UserDetailsEditor = ({ theme = "light" }) => {
             {canSetDayStatus ? (
               <p className={`mt-3 flex items-center gap-1.5 text-xs ${isDarkTheme ? "text-slate-400" : "text-slate-500"}`}>
                 <Pencil aria-hidden="true" size={12} />
-                Click any day up to today to set it as Present, Half Day, Absent or Leave.
+                Click any day up to today to set it as Present, Half Day, Absent, Leave or Week Off (WO).
               </p>
             ) : null}
 

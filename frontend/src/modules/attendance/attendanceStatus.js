@@ -6,7 +6,7 @@
  * export components alone.
  */
 
-// The backend accepts exactly these four (attendance.controller's
+// The backend accepts exactly these five (attendance.controller's
 // MANUAL_ATTENDANCE_STATUSES rejects anything else), so this list and that one
 // have to stay in step.
 export const MANUAL_ATTENDANCE_STATUS_OPTIONS = [
@@ -14,14 +14,16 @@ export const MANUAL_ATTENDANCE_STATUS_OPTIONS = [
   { label: "Half Day", value: "HALF_DAY" },
   { label: "Absent", value: "ABSENT" },
   { label: "Leave", value: "LEAVE" },
+  // A weekly off on a day that is not the company's - works Sunday, off Tuesday.
+  { label: "Week Off (WO)", value: "WEEK_OFF" },
 ];
 
 /*
- * Neither is a day worked, so the server drops whatever check-in, check-out
- * and breaks the day had. Worth saying before somebody clicks Save on a day
- * that has them.
+ * None is a day worked, so the server drops whatever check-in, check-out and
+ * breaks the day had. Worth saying before somebody clicks Save on a day that
+ * has them.
  */
-const STATUSES_CLEARING_CHECK_IN = new Set(["ABSENT", "LEAVE"]);
+const STATUSES_CLEARING_CHECK_IN = new Set(["ABSENT", "LEAVE", "WEEK_OFF"]);
 
 export const statusClearsCheckIn = (status) =>
   STATUSES_CLEARING_CHECK_IN.has(String(status || "").toUpperCase());

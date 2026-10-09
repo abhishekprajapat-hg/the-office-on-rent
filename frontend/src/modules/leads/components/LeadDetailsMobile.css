@@ -1,0 +1,244 @@
+@media (max-width: 767px) {
+  .route-details-page .lead-details-route-content { padding: 16px 2px 30px; }
+
+  .lead-details-breadcrumb {
+    margin: 0 4px 18px !important;
+    gap: 10px !important;
+    font-size: 16px !important;
+    line-height: 24px;
+  }
+  .lead-details-breadcrumb button { font-size: 16px; }
+  .lead-details-breadcrumb button svg { width: 22px; height: 22px; }
+
+  .lead-details-mobile-hero {
+    position: relative;
+    overflow: visible;
+    border-radius: 16px;
+    padding: 14px;
+  }
+  .lead-details-mobile-identity {
+    display: grid;
+    grid-template-columns: 58px minmax(0, 1fr) auto;
+    align-items: center;
+    column-gap: 12px;
+  }
+  .lead-details-mobile-avatar {
+    display: grid;
+    grid-row: span 2;
+    width: 58px;
+    height: 58px;
+    place-items: center;
+    border-radius: 999px;
+    font-size: 20px;
+    font-weight: 800;
+  }
+  .lead-details-mobile-identity h1 {
+    overflow: hidden;
+    margin: 0;
+    color: inherit;
+    font-size: 24px;
+    font-weight: 800;
+    letter-spacing: -.04em;
+    line-height: 29px;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .lead-details-mobile-hot {
+    grid-column: 2;
+    justify-self: start;
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    height: 27px;
+    margin-top: 3px;
+    padding: 0 8px;
+    border-radius: 8px;
+    font-size: 11px;
+    font-weight: 700;
+  }
+  .lead-details-mobile-more {
+    grid-column: 3;
+    grid-row: 1 / span 2;
+    display: grid;
+    width: 38px;
+    height: 38px;
+    place-items: center;
+    border: 1px solid #e0e5ed;
+    border-radius: 10px;
+    color: #0c1938;
+  }
+  .lead-details-mobile-contact {
+    display: flex;
+    align-items: center;
+    gap: 7px;
+    margin-top: 15px;
+    font-size: 13px;
+    line-height: 18px;
+    white-space: nowrap;
+  }
+  .lead-details-mobile-contact strong { color: #0c1938; font-size: 14px; }
+  .lead-details-mobile-contact button,
+  .lead-details-mobile-contact a { color: #1d4ed8; }
+  .lead-details-mobile-contact i { width: 1px; height: 20px; background: #d6ddea; }
+
+  .lead-details-mobile-selects {
+    display: grid;
+    grid-template-columns: minmax(126px, .9fr) minmax(0, 1.22fr);
+    gap: 6px;
+    margin-top: 14px;
+  }
+  .lead-details-mobile-status > button,
+  .lead-details-mobile-assignee-picker > button,
+  .lead-details-mobile-selects > button {
+    display: flex;
+    align-items: center;
+    min-width: 0;
+    height: 43px;
+    padding: 0 7px !important;
+    border: 1px solid #dce3ee;
+    border-radius: 10px;
+    background: #fff;
+    color: #0c1938;
+    box-shadow: none;
+    font-size: 11px;
+    font-weight: 700;
+  }
+  .lead-details-mobile-status { position: relative; min-width: 0; }
+  .lead-details-mobile-status > button { width: 100%; gap: 5px; text-align: left; }
+  .lead-details-mobile-status > button > svg:first-child { flex: 0 0 auto; color: #65728b; }
+  .lead-details-mobile-status > button > span { min-width: 0; flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .lead-details-mobile-status > button > svg:last-child,
+  .lead-details-mobile-selects > button > svg:last-child { flex: 0 0 auto; color: #485976; }
+  .lead-details-mobile-selects > button { gap: 5px; text-align: left; }
+  .lead-details-mobile-selects > button > span:nth-child(2) { min-width: 0; flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .lead-details-mobile-selects > button:disabled { opacity: 1; }
+  .lead-details-mobile-assignee { display: grid; width: 28px; height: 28px; flex: 0 0 auto; place-items: center; border-radius: 50%; font-size: 11px; }
+  .lead-details-mobile-assignee-picker { position: relative; min-width: 0; }
+  .lead-details-mobile-assignee-picker > button { display: flex; width: 100%; align-items: center; gap: 5px; text-align: left; }
+  .lead-details-mobile-assignee-picker > button > span:nth-child(2) { min-width: 0; flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .lead-details-mobile-assignee-picker > button > svg { flex: 0 0 auto; color: #485976; }
+  .lead-details-mobile-assignee-menu { position: absolute; z-index: 35; top: calc(100% + 5px); right: 0; left: -132px; overflow: hidden; border: 1px solid #dce3ee; border-radius: 10px; box-shadow: 0 12px 28px rgba(15, 23, 42, .16); }
+  .lead-details-mobile-assignee-search { display: flex; align-items: center; gap: 7px; padding: 8px; border-bottom: 1px solid #e7ebf1; color: #66758f; }
+  .lead-details-mobile-assignee-search input { min-width: 0; flex: 1; border: 0; outline: 0; background: transparent; font-size: 12px; }
+  .lead-details-mobile-assignee-list { max-height: 210px; overflow-y: auto; padding: 4px; }
+  .lead-details-mobile-assignee-list button { display: grid; width: 100%; grid-template-columns: 26px minmax(0, 1fr); column-gap: 7px; align-items: center; padding: 7px; text-align: left; border-radius: 7px; }
+  .lead-details-mobile-assignee-list button:hover { background: #f4f7ff; }
+  .lead-details-mobile-assignee-list button > span { display: grid; grid-row: span 2; width: 26px; height: 26px; place-items: center; border-radius: 50%; background: #ecfdf3; color: #087443; font-size: 9px; font-weight: 800; }
+  .lead-details-mobile-assignee-list strong { overflow: hidden; font-size: 12px; text-overflow: ellipsis; white-space: nowrap; }
+  .lead-details-mobile-assignee-list small { color: #697790; font-size: 10px; }
+  .lead-details-mobile-assignee-list p { margin: 0; padding: 10px; color: #697790; font-size: 12px; }
+  .lead-details-mobile-status-menu {
+    position: absolute;
+    z-index: 30;
+    top: calc(100% + 5px);
+    left: 0;
+    min-width: 152px;
+    overflow: hidden;
+    border: 1px solid #dce3ee;
+    border-radius: 10px;
+    box-shadow: 0 12px 28px rgba(15, 23, 42, .16);
+  }
+  .lead-details-mobile-status-menu button { display: block; width: 100%; padding: 9px 11px; text-align: left; font-size: 12px; font-weight: 600; }
+  .lead-details-mobile-status-menu button.is-selected { color: #174be8; background: #eef3ff; }
+  .lead-details-mobile-status-menu button:disabled { cursor: not-allowed; opacity: .45; }
+
+  .lead-details-mobile-property {
+    display: grid;
+    width: 100%;
+    grid-template-columns: 43px minmax(0, 1fr) auto;
+    align-items: center;
+    gap: 10px;
+    margin-top: 14px;
+    padding: 13px 0;
+    border-top: 1px solid #e7ebf1;
+    text-align: left;
+  }
+  .lead-details-mobile-property > span:first-child { display: grid; width: 43px; height: 43px; place-items: center; border-radius: 10px; }
+  .lead-details-mobile-property > span:nth-child(2) { min-width: 0; }
+  .lead-details-mobile-property strong,
+  .lead-details-mobile-property small { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .lead-details-mobile-property strong { font-size: 13px; line-height: 18px; }
+  .lead-details-mobile-property small { margin-top: 2px; color: #6b7891; font-size: 12px; line-height: 16px; }
+  .lead-details-mobile-property > svg { color: #60708e; }
+
+  .lead-details-mobile-actions { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 7px; margin-top: 5px; }
+  .lead-details-mobile-actions > a,
+  .lead-details-mobile-actions > button {
+    display: flex;
+    min-width: 0;
+    height: 72px;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 5px;
+    border: 1px solid #dce3ee;
+    border-radius: 11px;
+    color: #0c1938;
+    font-size: 12px;
+    font-weight: 700;
+  }
+  .lead-details-mobile-actions > a:first-child,
+  .lead-details-mobile-actions > a:first-child svg,
+  .lead-details-mobile-actions > button:first-child svg,
+  .lead-details-mobile-actions > button:nth-child(3) svg,
+  .lead-details-mobile-actions > button:nth-child(4) svg { color: #174be8; }
+  .lead-details-mobile-actions > a:nth-child(2) svg { color: #00a63c; }
+  .lead-details-mobile-actions > button:disabled { opacity: .45; }
+  .lead-details-mobile-menu {
+    position: absolute;
+    z-index: 20;
+    right: 14px;
+    bottom: 68px;
+    display: grid;
+    min-width: 150px;
+    overflow: hidden;
+    border: 1px solid #dce3ee;
+    border-radius: 10px;
+    box-shadow: 0 12px 30px rgba(15, 23, 42, .14);
+  }
+  .lead-details-mobile-menu button { display: flex; align-items: center; gap: 8px; padding: 10px 12px; text-align: left; font-size: 12px; font-weight: 700; }
+
+  .lead-details-mobile-tabs {
+    display: flex;
+    align-items: stretch;
+    gap: 21px;
+    margin-top: 14px;
+    padding: 0 11px;
+    overflow-x: auto;
+    border-radius: 13px;
+    scrollbar-width: none;
+  }
+  .lead-details-mobile-tabs::-webkit-scrollbar { display: none; }
+  .lead-details-mobile-tabs button {
+    flex: 0 0 auto;
+    padding: 12px 0 10px;
+    border-bottom: 3px solid transparent;
+    color: #68768e;
+    font-size: 12px;
+    font-weight: 700;
+    white-space: nowrap;
+  }
+  .lead-details-mobile-tabs button.is-active { border-color: #1d4ed8; color: #174be8; }
+  .lead-details-mobile-tabs > svg { flex: 0 0 auto; align-self: center; color: #8fa0c5; }
+
+  .lead-details-overview-grid { margin-top: 14px !important; gap: 14px !important; }
+  .lead-details-overview-grid > div { gap: 14px !important; }
+  .lead-details-overview-grid section { border-radius: 16px !important; padding: 15px !important; }
+  .lead-details-overview-grid h2 { font-size: 16px !important; }
+  .lead-details-overview-grid dl { margin-top: 14px !important; gap: 12px !important; font-size: 13px !important; }
+  .lead-details-overview-grid dd { max-width: 66%; }
+  .lead-details-overview-grid input { width: 100% !important; max-width: 190px; }
+}
+
+@media (max-width: 390px) {
+  .lead-details-mobile-identity { grid-template-columns: 51px minmax(0, 1fr) 34px; gap: 9px; }
+  .lead-details-mobile-avatar { width: 51px; height: 51px; font-size: 18px; }
+  .lead-details-mobile-identity h1 { font-size: 21px; }
+  .lead-details-mobile-more { width: 34px; height: 34px; }
+  .lead-details-mobile-contact { gap: 5px; font-size: 12px; }
+  .lead-details-mobile-contact strong { font-size: 12px; }
+  .lead-details-mobile-selects { gap: 6px; }
+  .lead-details-mobile-status > button, .lead-details-mobile-assignee-picker > button, .lead-details-mobile-selects > button { padding-inline: 7px; font-size: 11px; }
+  .lead-details-mobile-actions { gap: 5px; }
+  .lead-details-mobile-actions > a, .lead-details-mobile-actions > button { height: 65px; font-size: 11px; }
+}
