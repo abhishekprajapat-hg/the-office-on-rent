@@ -58,14 +58,14 @@ const LEAD_STATUSES = [
   "FOLLOW_UP_2",
   "FOLLOW_UP_3",
   "QUALIFIED_LEAD",
-  "REQUIREMENT_AFTER_1_MONTH",
-  "REQUIREMENT_AFTER_2_MONTHS",
   "INTERESTED",
   "SITE_VISIT_SCHEDULED",
   "SITE_VISIT",
   "SITE_VISIT_OVERDUE",
   "MISSING_IN_ACTION",
-  "NOT_PICKING_CALLS",
+  "NPC_1",
+  "NPC_2",
+  "NPC_3",
   "INVALID",
   "OWNER",
   "BROKER",
@@ -834,7 +834,8 @@ const getStatusLabel = (status) =>
     .toLowerCase()
     .split("_")
     .map((chunk) => chunk.charAt(0).toUpperCase() + chunk.slice(1))
-    .join(" ");
+    .join(" ")
+    .replace(/^Npc\b/, "NPC");
 
 const getDateMs = (value) => {
   const parsed = new Date(value).getTime();
@@ -1219,7 +1220,9 @@ const resolveBulkLeadStatus = ({ sheetName = "", row = {} }) => {
   if (/\b(site\s*visit\s*(scheduled|schedule)|visit\s*(scheduled|schedule))\b/.test(haystack)) return "SITE_VISIT_SCHEDULED";
   if (/\b(site\s*visit\s*(overdue|over\s*due|over\s*deu)|visit\s*(overdue|over\s*due|over\s*deu))\b/.test(haystack)) return "SITE_VISIT_OVERDUE";
   if (/\b(missing\s*in\s*action|mia)\b/.test(haystack)) return "MISSING_IN_ACTION";
-  if (/\b(not\s*picking|not\s*pick|call\s*not\s*picked|no\s*answer)\b/.test(haystack)) return "NOT_PICKING_CALLS";
+  const npcCount = haystack.match(/\bnpc\s*-?\s*([123])\b/);
+  if (npcCount) return `NPC_${npcCount[1]}`;
+  if (/\b(npc|not\s*picking|not\s*pick|call\s*not\s*picked|no\s*answer)\b/.test(haystack)) return "NPC_1";
   if (/\b(invalid|invaild|wrong\s*number)\b/.test(haystack)) return "INVALID";
   if (/\b(owner)\b/.test(haystack)) return "OWNER";
   if (/\b(broker)\b/.test(haystack)) return "BROKER";

@@ -152,7 +152,8 @@ const statusLabel = (status) =>
     .toLowerCase()
     .split("_")
     .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
-    .join(" ");
+    .join(" ")
+    .replace(/^Npc\b/, "NPC");
 
 const getUserDisplayName = (user, fallback = "-") => {
   if (!user) return fallback;
@@ -338,6 +339,8 @@ const getInventoryQuickInfo = (inventory = {}) =>
     .join(" | ");
 
 const toDateTimeInputValue = (dateValue) => {
+  // Without this guard `new Date(null)` is the epoch, which reads as a real follow-up.
+  if (!dateValue) return "";
   const date = new Date(dateValue);
   if (Number.isNaN(date.getTime())) return "";
 

@@ -109,7 +109,7 @@ describe("breakdowns", () => {
     { assignedTo: a, status: "CLOSED", source: "META" },
     { assignedTo: a, status: "SITE_VISIT" },
     { assignedTo: b, status: "LOST", source: "MANUAL" },
-    { assignedTo: b, status: "NOT_PICKING_CALLS", assignmentHistory: [{ action: "MANUAL_TRANSFER" }] },
+    { assignedTo: b, status: "NPC_1", assignmentHistory: [{ action: "MANUAL_TRANSFER" }] },
     { status: "INVALID" },
   ];
 
@@ -121,7 +121,7 @@ describe("breakdowns", () => {
 
   test("lost reasons use web's labels", () => {
     const labels = buildLostRows(leads).map((row) => row.label).sort();
-    assert.deepEqual(labels, ["Invalid number", "Lost", "Not picking calls"]);
+    assert.deepEqual(labels, ["Invalid number", "Lost", "NPC 1"]);
   });
 
   test("sources are named as web names them", () => {

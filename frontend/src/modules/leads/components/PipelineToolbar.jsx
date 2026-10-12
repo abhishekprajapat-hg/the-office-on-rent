@@ -6,7 +6,7 @@ import { QUICK_FILTER_KEYS } from "./leadFilterConstants";
 import "./PipelineMobile.css";
 
 const titleCase = (value) => String(value || "").replace(/_/g, " ").toLowerCase().replace(/\b\w/g, (letter) => letter.toUpperCase());
-const statuses = ["NEW", "CONTACTED", "FOLLOW_UP_1", "FOLLOW_UP_2", "FOLLOW_UP_3", "QUALIFIED_LEAD", "REQUIREMENT_AFTER_1_MONTH", "REQUIREMENT_AFTER_2_MONTHS", "INTERESTED", "SITE_VISIT_SCHEDULED", "SITE_VISIT", "SITE_VISIT_OVERDUE", "MISSING_IN_ACTION", "NOT_PICKING_CALLS", "INVALID", "OWNER", "BROKER", "REQUESTED", "CLOSED", "LOST"];
+const statuses = ["NEW", "CONTACTED", "FOLLOW_UP_1", "FOLLOW_UP_2", "FOLLOW_UP_3", "QUALIFIED_LEAD", "INTERESTED", "SITE_VISIT_SCHEDULED", "SITE_VISIT", "SITE_VISIT_OVERDUE", "MISSING_IN_ACTION", "NPC_1", "NPC_2", "NPC_3", "INVALID", "OWNER", "BROKER", "REQUESTED", "CLOSED", "LOST"];
 const Dropdown = ({ open, children, className = "" }) => open ? <div className={cn("absolute left-0 top-full z-40 mt-2 max-h-72 min-w-44 overflow-y-auto rounded-xl border border-slate-200 bg-white p-1.5 shadow-xl dark:border-slate-700 dark:bg-slate-800", className)}>{children}</div> : null;
 
 const PipelineToolbar = ({
@@ -54,7 +54,6 @@ const PipelineToolbar = ({
   return <section className={cn("pipeline-reference", className)} ref={dropdownRef}>
     <div className="hidden lg:flex lg:flex-col lg:gap-4">
       <div className="flex items-center justify-between"><div><h1 className="text-[28px] font-bold leading-8 tracking-[-0.04em] text-slate-950 dark:text-slate-50">Pipeline</h1><p className="mt-1 text-sm text-slate-500 dark:text-slate-400">Manage leads, follow-ups and conversions.</p></div><div className="flex gap-2">{canBulkUploadLeads && <button type="button" onClick={onOpenBulkUploadModal} className="inline-flex h-10 items-center gap-2 rounded-lg border border-slate-200 bg-white px-3.5 text-[13px] font-semibold text-slate-700 shadow-sm dark:border-slate-700 dark:bg-slate-800 dark:text-slate-100"><Upload size={16} /> Import leads</button>}{canAddLead && <button type="button" onClick={onOpenAddModal} className="inline-flex h-10 items-center gap-2 rounded-lg bg-blue-600 px-4 text-[13px] font-semibold text-white shadow-sm"><Plus size={18} /> Add lead</button>}<button type="button" onClick={onRefresh} disabled={refreshing} aria-label="Refresh leads" className="grid h-10 w-10 place-items-center rounded-lg border border-slate-200 bg-white text-slate-700 shadow-sm dark:border-slate-700 dark:bg-slate-800 dark:text-slate-100"><RefreshCw size={17} className={refreshing ? "animate-spin" : ""} /></button></div></div>
-      <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">{metricCards.map(({ label, value, icon, panel, valueTone }) => <div key={label} className="flex min-h-[74px] items-center gap-3 rounded-xl border border-slate-200 bg-white px-3 py-2.5 shadow-sm dark:border-slate-700 dark:bg-slate-900"><span className={cn("grid h-12 w-12 place-items-center rounded-lg", panel)}>{React.createElement(icon, { size: 25 })}</span><span><span className="block text-[12px] text-slate-500">{label}</span><strong className={cn("block text-[24px]", valueTone)}>{value}</strong></span></div>)}</div>
     </div>
 
     <div className="pipeline-mobile-overview lg:hidden">

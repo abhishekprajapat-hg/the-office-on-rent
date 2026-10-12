@@ -9,6 +9,7 @@ const { runExpiredBookingSweep } = require("./services/coworkingBooking.service"
 const { runContractLifecycleSweep } = require("./services/coworkingContract.service");
 const { runInvoiceOverdueSweep } = require("./services/coworkingInvoice.service");
 const { clearStaleFollowUps } = require("./utils/leadFollowUp");
+const { migrateLegacyLeadStatuses } = require("./utils/legacyLeadStatuses");
 const logger = require("./config/logger");
 
 const PORT = process.env.PORT || 5000;
@@ -222,9 +223,14 @@ const startAttendanceViolationSweep = () => {
  const sweep = async () => { if (running) return; running = true; try { await require("./services/attendanceViolation.service").runViolationSweep(); } catch (error) { logger.error({ error: error.message, message: "Attendance violation sweep failed" }); } finally { running = false; } };
  const timer = setInterval(sweep, 60 * 60 * 1000); timer.unref(); sweep();
 };
-// Status changes clear these as they happen; this is for leads saved before that.
-const clearStaleLeadFollowUps = async () => {
+// One-off lead tidying at start: retired statuses move to their replacements,
+// then follow-ups left on dead leads are cleared (status changes do both live).
+const tidyStoredLeads = async () => {
   try {
+    const migratedCount = await migrateLegacyLeadStatuses();
+    if (migratedCount > 0) {
+      logger.info({ migratedCount, message: "Moved leads off retired statuses (Not picking calls, Requirement after 1/2 months)" });
+    }
     const clearedCount = await clearStaleFollowUps();
     if (clearedCount > 0) {
       logger.info({ clearedCount, message: "Cleared follow-ups from closed, lost, invalid and missing leads" });
@@ -235,7 +241,7 @@ const clearStaleLeadFollowUps = async () => {
 };
 const bootstrap = async () => {
   await connectDB();
-  clearStaleLeadFollowUps();
+  tidyStoredLeads();
   require('./services/billstackSync.service').startWorker();
   startAttendanceAutoCheckoutSweep();
   startAttendanceViolationSweep();

@@ -14,7 +14,9 @@ const RANGE_OPTIONS = [
 
 const SITE_VISIT_STATUSES = new Set(["SITE_VISIT", "SITE_VISIT_SCHEDULED", "SITE_VISIT_OVERDUE"]);
 const LOST_REASON_LABELS = {
-  NOT_PICKING_CALLS: "Not picking calls",
+  NPC_1: "NPC 1",
+  NPC_2: "NPC 2",
+  NPC_3: "NPC 3",
   MISSING_IN_ACTION: "Missing in action",
   SITE_VISIT_OVERDUE: "Visit no-show",
   INVALID: "Invalid number",

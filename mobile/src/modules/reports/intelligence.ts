@@ -24,7 +24,9 @@ export const RANGE_OPTIONS: Array<{ key: RangeKey; label: string }> = [
 export const SITE_VISIT_STATUSES = new Set(["SITE_VISIT", "SITE_VISIT_SCHEDULED", "SITE_VISIT_OVERDUE"]);
 
 export const LOST_REASON_LABELS: Record<string, string> = {
-  NOT_PICKING_CALLS: "Not picking calls",
+  NPC_1: "NPC 1",
+  NPC_2: "NPC 2",
+  NPC_3: "NPC 3",
   MISSING_IN_ACTION: "Missing in action",
   SITE_VISIT_OVERDUE: "Visit no-show",
   INVALID: "Invalid number",

@@ -23,15 +23,6 @@ export const STATUS_STYLES = {
     label: "Follow-Up 3",
     tone: "cyan",
   },
-  // Parked - a real requirement, but the client will buy later.
-  REQUIREMENT_AFTER_1_MONTH: {
-    label: "Requirement After 1 Month",
-    tone: "cyan",
-  },
-  REQUIREMENT_AFTER_2_MONTHS: {
-    label: "Requirement After 2 Months",
-    tone: "cyan",
-  },
   // Warm
   QUALIFIED_LEAD: {
     label: "Qualified Lead",
@@ -63,8 +54,17 @@ export const STATUS_STYLES = {
     label: "Missing In Action",
     tone: "rose",
   },
-  NOT_PICKING_CALLS: {
-    label: "Not Picking Calls",
+  // Not picking calls, counted: the first, second and third time running.
+  NPC_1: {
+    label: "NPC 1",
+    tone: "rose",
+  },
+  NPC_2: {
+    label: "NPC 2",
+    tone: "rose",
+  },
+  NPC_3: {
+    label: "NPC 3",
     tone: "rose",
   },
   // Won

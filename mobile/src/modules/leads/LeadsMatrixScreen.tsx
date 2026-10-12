@@ -77,14 +77,14 @@ const LEAD_STATUSES = [
   "FOLLOW_UP_2",
   "FOLLOW_UP_3",
   "QUALIFIED_LEAD",
-  "REQUIREMENT_AFTER_1_MONTH",
-  "REQUIREMENT_AFTER_2_MONTHS",
   "INTERESTED",
   "SITE_VISIT_SCHEDULED",
   "SITE_VISIT",
   "SITE_VISIT_OVERDUE",
   "MISSING_IN_ACTION",
-  "NOT_PICKING_CALLS",
+  "NPC_1",
+  "NPC_2",
+  "NPC_3",
   "INVALID",
   "OWNER",
   "BROKER",
@@ -102,7 +102,8 @@ const statusLabel = (status?: string) =>
   String(status || "")
     .replace(/_/g, " ")
     .toLowerCase()
-    .replace(/\b\w/g, (character) => character.toUpperCase());
+    .replace(/\b\w/g, (character) => character.toUpperCase())
+    .replace(/^Npc\b/, "NPC");
 
 /** How many a stage shows before "See all" takes over. */
 const BOARD_PREVIEW = 6;

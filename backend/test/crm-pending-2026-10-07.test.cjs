@@ -23,18 +23,27 @@ test("new qualification statuses are valid lead and status-request values", () =
   const LeadStatusRequest = require("../src/models/LeadStatusRequest");
   const leadStatuses = Lead.schema.path("status").enumValues;
   const requestStatuses = LeadStatusRequest.schema.path("proposedStatus").enumValues;
-  for (const status of ["QUALIFIED_LEAD", "REQUIREMENT_AFTER_1_MONTH", "REQUIREMENT_AFTER_2_MONTHS", "FOLLOW_UP_1", "FOLLOW_UP_3"]) {
+  for (const status of ["QUALIFIED_LEAD", "FOLLOW_UP_1", "FOLLOW_UP_3", "NPC_1", "NPC_2", "NPC_3"]) {
     assert.ok(leadStatuses.includes(status), `Lead accepts ${status}`);
     assert.ok(requestStatuses.includes(status), `Status request accepts ${status}`);
   }
 });
 
-test("Requirement After 1/2 Months schedules the callback that far out", () => {
-  const { getRequirementLaterFollowUpDate } = require("../src/controllers/lead.controller");
-  const from = new Date("2026-10-07T06:00:00.000Z");
-  assert.equal(getRequirementLaterFollowUpDate("REQUIREMENT_AFTER_1_MONTH", from).toISOString(), "2026-11-07T06:00:00.000Z");
-  assert.equal(getRequirementLaterFollowUpDate("REQUIREMENT_AFTER_2_MONTHS", from).toISOString(), "2026-12-07T06:00:00.000Z");
-  assert.equal(getRequirementLaterFollowUpDate("INTERESTED", from), null);
+// 12 Oct 2026: "Not picking calls" became NPC 1-3 and the two "Requirement
+// after" statuses were retired; old names still arriving are read as the new.
+test("retired statuses are refused by the schema and mapped to their replacements", () => {
+  const Lead = require("../src/models/Lead");
+  const LeadStatusRequest = require("../src/models/LeadStatusRequest");
+  const { LEGACY_LEAD_STATUSES } = require("../src/utils/legacyLeadStatuses");
+  const leadStatuses = Lead.schema.path("status").enumValues;
+  const requestStatuses = LeadStatusRequest.schema.path("proposedStatus").enumValues;
+  for (const [retired, replacement] of Object.entries(LEGACY_LEAD_STATUSES)) {
+    assert.ok(!leadStatuses.includes(retired), `Lead no longer accepts ${retired}`);
+    assert.ok(!requestStatuses.includes(retired), `Status request no longer accepts ${retired}`);
+    assert.ok(leadStatuses.includes(replacement), `${retired} maps to a live status`);
+  }
+  assert.equal(LEGACY_LEAD_STATUSES.NOT_PICKING_CALLS, "NPC_1");
+  assert.equal(LEGACY_LEAD_STATUSES.REQUIREMENT_AFTER_1_MONTH, "FOLLOW_UP_1");
 });
 
 test("attendance status follows the policy thresholds, defaulting to 4 h / 7 h 30 m", () => {

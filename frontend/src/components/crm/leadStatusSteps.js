@@ -30,8 +30,6 @@ export const statusToStep = (status) => {
     case "FOLLOW_UP_1":
     case "FOLLOW_UP_2":
     case "FOLLOW_UP_3":
-    case "REQUIREMENT_AFTER_1_MONTH":
-    case "REQUIREMENT_AFTER_2_MONTHS":
       return { stepKey: "CONTACTED", sideState: null };
     case "INTERESTED":
     case "QUALIFIED_LEAD":
@@ -41,7 +39,9 @@ export const statusToStep = (status) => {
     case "SITE_VISIT":
     case "SITE_VISIT_OVERDUE":
     case "MISSING_IN_ACTION":
-    case "NOT_PICKING_CALLS":
+    case "NPC_1":
+    case "NPC_2":
+    case "NPC_3":
       // Still at the visit stage - these say how it is going, not where it is.
       return { stepKey: "SITE_VISIT", sideState: null };
     case "CLOSED":

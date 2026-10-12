@@ -1,4 +1,5 @@
 const mongoose = require("mongoose");
+const { parseZonedDateInput } = require("../utils/zonedDateInput");
 
 const leadSchema = new mongoose.Schema(
   {
@@ -255,14 +256,14 @@ const leadSchema = new mongoose.Schema(
         "FOLLOW_UP_2",
         "FOLLOW_UP_3",
         "QUALIFIED_LEAD",
-        "REQUIREMENT_AFTER_1_MONTH",
-        "REQUIREMENT_AFTER_2_MONTHS",
         "INTERESTED",
         "SITE_VISIT_SCHEDULED",
         "SITE_VISIT",
         "SITE_VISIT_OVERDUE",
         "MISSING_IN_ACTION",
-        "NOT_PICKING_CALLS",
+        "NPC_1",
+        "NPC_2",
+        "NPC_3",
         "INVALID",
         "OWNER",
         "BROKER",
@@ -541,7 +542,10 @@ const leadSchema = new mongoose.Schema(
 
     nextFollowUp: {
       type: Date,
-      default: null
+      default: null,
+      // Any path that hands the raw "2026-10-12T12:00" from a datetime-local
+      // input to Mongoose would otherwise be cast in the server's zone (UTC).
+      set: (value) => parseZonedDateInput(value),
     },
 
     lastContactedAt: {

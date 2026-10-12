@@ -14,7 +14,7 @@ test("lost, invalid and missing leads clear pending follow-ups", () => {
   assert.equal(shouldClearTerminalFollowUp("missing_in_action", null), true);
   assert.equal(shouldClearTerminalFollowUp("CONTACTED", {}), false);
   assert.equal(shouldClearTerminalFollowUp("QUALIFIED_LEAD", {}), false);
-  assert.equal(shouldClearTerminalFollowUp("NOT_PICKING_CALLS", {}), false);
+  assert.equal(shouldClearTerminalFollowUp("NPC_2", {}), false);
 });
 
 test("closed partial-payment collection stays scheduled until paid", () => {

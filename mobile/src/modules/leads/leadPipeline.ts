@@ -21,7 +21,7 @@ export const STAGES: Stage[] = [
   {
     key: "CONTACTED",
     label: "Contacted",
-    statuses: ["CONTACTED", "FOLLOW_UP_1", "FOLLOW_UP_2", "FOLLOW_UP_3", "NOT_PICKING_CALLS", "REQUIREMENT_AFTER_1_MONTH", "REQUIREMENT_AFTER_2_MONTHS"],
+    statuses: ["CONTACTED", "FOLLOW_UP_1", "FOLLOW_UP_2", "FOLLOW_UP_3", "NPC_1", "NPC_2", "NPC_3"],
   },
   { key: "INTERESTED", label: "Interested", statuses: ["INTERESTED", "QUALIFIED_LEAD"] },
   { key: "VISIT", label: "Visit", statuses: ["SITE_VISIT_SCHEDULED", "SITE_VISIT", "SITE_VISIT_OVERDUE"] },

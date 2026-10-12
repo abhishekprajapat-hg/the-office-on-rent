@@ -256,7 +256,7 @@ const selectStyle =
                   onChange={(e) => setDraftStatus(e.target.value)}
                   className={selectStyle}
                 >
-                  {(statuses.length ? ["ALL", ...statuses.filter((item) => item !== "ALL")] : ["ALL", "INTERESTED", "NEW", "CONTACTED", "REQUESTED", "SITE_VISIT_SCHEDULED", "SITE_VISIT", "CLOSED", "LOST", "NOT_PICKING_CALLS", "INVALID"]).map((item) => (
+                  {(statuses.length ? ["ALL", ...statuses.filter((item) => item !== "ALL")] : ["ALL", "INTERESTED", "NEW", "CONTACTED", "REQUESTED", "SITE_VISIT_SCHEDULED", "SITE_VISIT", "CLOSED", "LOST", "NPC_1", "NPC_2", "NPC_3", "INVALID"]).map((item) => (
                     <option key={item} value={item}>
                       {item === "ALL" ? "All statuses" : item.replace(/_/g, " ").toLowerCase().replace(/\b\w/g, (character) => character.toUpperCase())}
                     </option>

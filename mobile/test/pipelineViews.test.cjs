@@ -176,7 +176,7 @@ describe("follow-up eligibility", () => {
     for (const status of ["CLOSED", "LOST", "INVALID", "MISSING_IN_ACTION"]) {
       assert.equal(canHaveFollowUp({ status }), false, status);
     }
-    for (const status of ["NEW", "CONTACTED", "QUALIFIED_LEAD", "NOT_PICKING_CALLS", "SITE_VISIT"]) {
+    for (const status of ["NEW", "CONTACTED", "QUALIFIED_LEAD", "NPC_3", "SITE_VISIT"]) {
       assert.equal(canHaveFollowUp({ status }), true, status);
     }
   });

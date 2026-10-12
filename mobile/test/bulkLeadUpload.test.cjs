@@ -71,7 +71,9 @@ describe("rules", () => {
 
   test("status is guessed from the sheet name and remarks", () => {
     assert.equal(resolveBulkLeadStatus({ sheetName: "Deal Closed", row: {} }), "CLOSED");
-    assert.equal(resolveBulkLeadStatus({ sheetName: "", row: { comment: "not picking" } }), "NOT_PICKING_CALLS");
+    assert.equal(resolveBulkLeadStatus({ sheetName: "", row: { comment: "not picking" } }), "NPC_1");
+    assert.equal(resolveBulkLeadStatus({ sheetName: "", row: { comment: "NPC 2" } }), "NPC_2");
+    assert.equal(resolveBulkLeadStatus({ sheetName: "", row: { comment: "npc-3" } }), "NPC_3");
     assert.equal(resolveBulkLeadStatus({ sheetName: "", row: {} }), "NEW");
   });
 

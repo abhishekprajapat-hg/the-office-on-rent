@@ -1,7 +1,7 @@
 const CLOSED_STATUSES = new Set(["CLOSED", "LOST", "INVALID"]);
 const VISIT_STATUSES = new Set(["SITE_VISIT_SCHEDULED", "SITE_VISIT", "SITE_VISIT_OVERDUE"]);
 const NEGOTIATION_STATUSES = new Set(["INTERESTED", "REQUESTED"]);
-const CONTACTED_STATUSES = new Set(["CONTACTED", "FOLLOW_UP_1", "FOLLOW_UP_2", "FOLLOW_UP_3", "NOT_PICKING_CALLS", "REQUIREMENT_AFTER_1_MONTH", "REQUIREMENT_AFTER_2_MONTHS"]);
+const CONTACTED_STATUSES = new Set(["CONTACTED", "FOLLOW_UP_1", "FOLLOW_UP_2", "FOLLOW_UP_3", "NPC_1", "NPC_2", "NPC_3"]);
 
 export const normalizeLeadStatus = (value) => String(value || "").trim().toUpperCase();
 

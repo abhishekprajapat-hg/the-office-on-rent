@@ -1,4 +1,5 @@
 const Lead = require("../models/Lead");
+const { parseZonedDateInput } = require("../utils/zonedDateInput");
 const User = require("../models/User");
 const Inventory = require("../models/Inventory");
 const LeadActivity = require("../models/leadActivity.model");
@@ -8,6 +9,7 @@ const logger = require("../config/logger");
 const { sendMongooseError } = require("../utils/mongooseError");
 const { createHttpError } = require("../utils/httpError");
 const { hasUnpaidPartialCollection, shouldClearTerminalFollowUp } = require("../utils/leadFollowUp");
+const { LEGACY_LEAD_STATUSES } = require("../utils/legacyLeadStatuses");
 const { resolveAccessProfile } = require("../services/access.service");
 const CrmContact = require("../models/CrmContact");
 const { findBrokerByPhone, recordBlockedLead, normalizePhone } = require("../services/crmContact.service");
@@ -186,17 +188,6 @@ const SITE_VISIT_REQUIRED_STATUS = "SITE_VISIT_REQUIRED";
 const QUALIFIED_LEAD_STATUS = "QUALIFIED_LEAD";
 const ROLE_TYPE_VALUES = Object.freeze(["COMMERCIAL", "RESIDENTIAL", "BOTH", "COWORKING"]);
 const REQUESTED_STATUS = "REQUESTED";
-const REQUIREMENT_LATER_FOLLOW_UP_MONTHS = Object.freeze({
-  REQUIREMENT_AFTER_1_MONTH: 1,
-  REQUIREMENT_AFTER_2_MONTHS: 2,
-});
-const getRequirementLaterFollowUpDate = (status, from = new Date()) => {
-  const months = REQUIREMENT_LATER_FOLLOW_UP_MONTHS[status];
-  if (!months) return null;
-  const date = new Date(from.getTime());
-  date.setMonth(date.getMonth() + months);
-  return date;
-};
 const CLOSED_STATUS = "CLOSED";
 const LEAD_STATUS_VALUES = Object.freeze([
   "NEW",
@@ -205,14 +196,14 @@ const LEAD_STATUS_VALUES = Object.freeze([
   "FOLLOW_UP_2",
   "FOLLOW_UP_3",
   "QUALIFIED_LEAD",
-  "REQUIREMENT_AFTER_1_MONTH",
-  "REQUIREMENT_AFTER_2_MONTHS",
   "INTERESTED",
   "SITE_VISIT_SCHEDULED",
   "SITE_VISIT",
   "SITE_VISIT_OVERDUE",
   "MISSING_IN_ACTION",
-  "NOT_PICKING_CALLS",
+  "NPC_1",
+  "NPC_2",
+  "NPC_3",
   "INVALID",
   "OWNER",
   "BROKER",
@@ -495,8 +486,10 @@ const normalizeRadiusMeters = (value) => {
 };
 
 const parseBulkLeadDate = (value) => {
-  if (value === undefined || value === null || value === "") return null;
-  const parsed = new Date(value);
+  // A sheet's "12/10/2026 12:00"-style text is a wall-clock time in India, not
+  // in whatever zone the server happens to run (see utils/zonedDateInput).
+  const parsed = parseZonedDateInput(value);
+  if (!parsed) return null;
   return Number.isNaN(parsed.getTime()) ? null : parsed;
 };
 
@@ -1004,7 +997,7 @@ const normalizeLeadStatusValue = (value) => {
     .replace(/^_+|_+$/g, "");
   if (normalized === "FOLLOWUP_REQUIRED") return "FOLLOW_UP_REQUIRED";
   if (normalized === "CALL_BACK_LATER") return "CALLBACK_LATER";
-  if (normalized === "REQUIREMENT_AFTER_2_MONTH") return "REQUIREMENT_AFTER_2_MONTHS";
+  if (LEGACY_LEAD_STATUSES[normalized]) return LEGACY_LEAD_STATUSES[normalized];
   if (normalized === "SITE_VISIT_REQUIRED") return SITE_VISIT_REQUIRED_STATUS;
   if (normalized === "SITE_VISIT") return SITE_VISIT_STATUS;
   return normalized;
@@ -4162,8 +4155,10 @@ exports.updateLeadStatus = async (req, res) => {
       normalizedNextFollowUp.length > 0 && !isClearNextFollowUpText;
     const clearNextFollowUp =
       hasNextFollowUpField && !hasNextFollowUpInput;
+    // Read in the company's zone: the server runs in UTC, and "12:00" from a
+    // datetime-local input used to be stored as 12:00 UTC - 5:30 PM in India.
     const parsedNextFollowUp = hasNextFollowUpInput
-      ? new Date(normalizedNextFollowUp)
+      ? parseZonedDateInput(normalizedNextFollowUp)
       : null;
     if (hasNextFollowUpInput && Number.isNaN(parsedNextFollowUp.getTime())) {
       return res.status(400).json({
@@ -4724,13 +4719,6 @@ exports.updateLeadStatus = async (req, res) => {
       lead.nextFollowUp = parsedNextFollowUp;
     } else if (clearNextFollowUp) {
       lead.nextFollowUp = null;
-    } else if (
-      previousLeadStatus !== nextLeadStatus
-      && REQUIREMENT_LATER_FOLLOW_UP_MONTHS[nextLeadStatus]
-    ) {
-      // "Requirement After 1/2 Months": put the callback on the calendar so the
-      // lead resurfaces on its own instead of being forgotten.
-      lead.nextFollowUp = getRequirementLaterFollowUpDate(nextLeadStatus);
     }
 
     if (isCloseRequestTransition) {
@@ -4970,7 +4958,7 @@ exports.requestLeadStatusChange = async (req, res) => {
 
     let proposedNextFollowUp = null;
     if (req.body?.nextFollowUp) {
-      const parsed = new Date(req.body.nextFollowUp);
+      const parsed = parseZonedDateInput(req.body.nextFollowUp);
       if (Number.isNaN(parsed.getTime())) {
         return res.status(400).json({ message: "Invalid nextFollowUp date" });
       }
@@ -5779,5 +5767,4 @@ exports.deleteLead = async (req, res) => {
   }
 };
 
-exports.getRequirementLaterFollowUpDate = getRequirementLaterFollowUpDate;
 exports.parseBrokeragePayload = parseBrokeragePayload;

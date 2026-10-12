@@ -351,7 +351,7 @@ const LEAD_ROWS = [
   ["Neha Kapoor", "9810001004", "SITE_VISIT_SCHEDULED", "COMMERCIAL", "Delhi", "executive2@test.com", [12000000, 18000000], [1500, 2200], "Retail Chain Owner"],
   ["Om Realty LLP", "9810001005", "SITE_VISIT", "COMMERCIAL", "Faridabad", "executive2@test.com", [25000000, 35000000], [6000, 9000], "Logistics"],
   ["Maya Consultants", "9810001006", "CLOSED", "COMMERCIAL", "Gurugram", "inside_executive@test.com", [10000000, 13000000], [1100, 1500], "Consulting"],
-  ["Devansh Rana", "9810001007", "NOT_PICKING_CALLS", "RESIDENTIAL", "Noida", "inside_executive2@test.com", [5000000, 7000000], [900, 1200], "Banking"],
+  ["Devansh Rana", "9810001007", "NPC_1", "RESIDENTIAL", "Noida", "inside_executive2@test.com", [5000000, 7000000], [900, 1200], "Banking"],
   ["Ishita Bhatt", "9810001008", "MISSING_IN_ACTION", "RESIDENTIAL", "Gurugram", "executive@test.com", [6500000, 8500000], [1000, 1400], "Architect"],
   ["Zenith Softworks", "9810001009", "INTERESTED", "COMMERCIAL", "Noida", "inside_executive@test.com", [14000000, 20000000], [2000, 2800], "SaaS"],
   ["Pooja Agarwal", "9810001010", "SITE_VISIT_OVERDUE", "RESIDENTIAL", "Delhi", "executive@test.com", [9000000, 12000000], [1300, 1700], "Lawyer"],

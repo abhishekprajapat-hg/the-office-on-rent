@@ -173,7 +173,9 @@ export const resolveBulkLeadStatus = ({ sheetName = "", row = {} as Row }) => {
   if (/\b(site\s*visit\s*(scheduled|schedule)|visit\s*(scheduled|schedule))\b/.test(haystack)) return "SITE_VISIT_SCHEDULED";
   if (/\b(site\s*visit\s*(overdue|over\s*due|over\s*deu)|visit\s*(overdue|over\s*due|over\s*deu))\b/.test(haystack)) return "SITE_VISIT_OVERDUE";
   if (/\b(missing\s*in\s*action|mia)\b/.test(haystack)) return "MISSING_IN_ACTION";
-  if (/\b(not\s*picking|not\s*pick|call\s*not\s*picked|no\s*answer)\b/.test(haystack)) return "NOT_PICKING_CALLS";
+  const npcCount = haystack.match(/\bnpc\s*-?\s*([123])\b/);
+  if (npcCount) return `NPC_${npcCount[1]}`;
+  if (/\b(npc|not\s*picking|not\s*pick|call\s*not\s*picked|no\s*answer)\b/.test(haystack)) return "NPC_1";
   if (/\b(invalid|invaild|wrong\s*number)\b/.test(haystack)) return "INVALID";
   if (/\b(owner)\b/.test(haystack)) return "OWNER";
   if (/\b(broker)\b/.test(haystack)) return "BROKER";
