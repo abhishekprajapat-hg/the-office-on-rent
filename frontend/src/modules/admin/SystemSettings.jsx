@@ -1,13 +1,18 @@
 import React, { useEffect, useMemo, useState } from "react";
 import {
   AlertTriangle,
+  Check,
   CheckCircle2,
   LayoutGrid,
+  Monitor,
   MonitorCog,
+  Moon,
+  Palette,
   RefreshCw,
   Save,
   Settings2,
   ShieldCheck,
+  Sun,
 } from "lucide-react";
 import {
   DEFAULT_SYSTEM_SETTINGS,
@@ -16,6 +21,7 @@ import {
   readSystemSettings,
   writeSystemSettings,
 } from "../../utils/systemSettings";
+import { COLOR_THEMES } from "../../utils/themePreferences";
 
 const Toggle = ({ value, onChange }) => (
   <button
@@ -49,7 +55,133 @@ const Section = ({ icon, title, subtitle, children }) => (
   </section>
 );
 
-const SystemSettings = () => {
+const MODE_OPTIONS = [
+  { id: "light", label: "Light", hint: "Bright and clear", icon: Sun },
+  { id: "dark", label: "Dark", hint: "Easy on the eyes", icon: Moon },
+  { id: "system", label: "System", hint: "Follow this device", icon: Monitor },
+];
+
+// A miniature of the workspace in a given mode, painted with the live accent so
+// the preview matches whichever colour theme is picked below it.
+const ModePreview = ({ mode }) => {
+  const pane = (bg, panel, line) => (
+    <span className="flex h-full flex-1 gap-1.5 p-2" style={{ background: bg }}>
+      <span className="w-3 rounded-sm" style={{ background: panel }} />
+      <span className="flex flex-1 flex-col gap-1.5">
+        <span className="h-2 w-2/3 rounded-sm bg-blue-600" />
+        <span className="flex-1 rounded-sm" style={{ background: panel, boxShadow: `inset 0 0 0 1px ${line}` }} />
+      </span>
+    </span>
+  );
+  const light = pane("#f5f7fa", "#ffffff", "#e0e5ed");
+  const dark = pane("#0d1219", "#1b222b", "#2a323d");
+  return (
+    <span className="flex h-20 overflow-hidden rounded-lg border border-slate-200">
+      {mode === "light" ? light : null}
+      {mode === "dark" ? dark : null}
+      {mode === "system" ? <>{light}{dark}</> : null}
+    </span>
+  );
+};
+
+const ThemeSection = ({ themeMode, resolvedTheme, onThemeModeChange, colorTheme, onColorThemeChange }) => (
+  <section className="ui-soft-panel rounded-2xl border border-slate-200 bg-white p-5 shadow-sm xl:col-span-2">
+    <div className="mb-4 flex items-start justify-between gap-3">
+      <div>
+        <h2 className="text-lg font-semibold text-slate-900">Theme</h2>
+        <p className="mt-1 text-xs uppercase tracking-[0.14em] text-slate-500">
+          Applies instantly on this device &middot; no save needed
+        </p>
+      </div>
+      <div className="rounded-lg border border-cyan-200 bg-cyan-50 p-2 text-cyan-700">
+        <Palette size={15} />
+      </div>
+    </div>
+
+    <h3 className="text-sm font-semibold text-slate-800">Mode</h3>
+    <div role="radiogroup" aria-label="Theme mode" className="mt-2 grid grid-cols-1 gap-3 sm:grid-cols-3">
+      {MODE_OPTIONS.map((option) => {
+        const active = themeMode === option.id;
+        return (
+          <button
+            key={option.id}
+            type="button"
+            role="radio"
+            aria-checked={active}
+            onClick={() => onThemeModeChange(option.id)}
+            className={`flex flex-col gap-3 rounded-xl border p-3 text-left transition ${
+              active
+                ? "border-blue-600 ring-2 ring-blue-500/30"
+                : "border-slate-200 hover:border-slate-300"
+            }`}
+          >
+            <ModePreview mode={option.id} />
+            <span className="flex items-center gap-2">
+              {React.createElement(option.icon, { size: 16, className: active ? "text-blue-600" : "text-slate-500" })}
+              <span className="min-w-0 flex-1">
+                <span className="block text-sm font-semibold text-slate-800">{option.label}</span>
+                <span className="block text-xs text-slate-500">
+                  {option.id === "system" ? `${option.hint} (now ${resolvedTheme})` : option.hint}
+                </span>
+              </span>
+              {active ? <Check size={16} className="text-blue-600" /> : null}
+            </span>
+          </button>
+        );
+      })}
+    </div>
+
+    <h3 className="mt-6 text-sm font-semibold text-slate-800">Colour theme</h3>
+    <p className="mt-0.5 text-xs text-slate-500">
+      Recolours buttons, links, highlights and charts&apos; accent across the CRM.
+    </p>
+    <div role="radiogroup" aria-label="Colour theme" className="mt-3 grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4 2xl:grid-cols-7">
+      {COLOR_THEMES.map((item) => {
+        const active = colorTheme === item.id;
+        const [main, light, deep] = item.swatch;
+        return (
+          <button
+            key={item.id}
+            type="button"
+            role="radio"
+            aria-checked={active}
+            onClick={() => onColorThemeChange(item.id)}
+            className={`flex flex-col gap-2.5 rounded-xl border p-3 text-left transition ${
+              active
+                ? "border-blue-600 ring-2 ring-blue-500/30"
+                : "border-slate-200 hover:border-slate-300"
+            }`}
+          >
+            <span className="relative flex h-14 overflow-hidden rounded-lg border border-slate-200">
+              <span className="w-1/4" style={{ background: deep }} />
+              <span className="flex flex-1 flex-col justify-between p-2">
+                <span className="h-1.5 w-3/4 rounded-full" style={{ background: light, opacity: 0.55 }} />
+                <span className="h-4 w-12 rounded" style={{ background: main }} />
+              </span>
+              {active ? (
+                <span className="absolute right-1.5 top-1.5 grid h-5 w-5 place-items-center rounded-full text-white" style={{ background: main }}>
+                  <Check size={12} strokeWidth={3} />
+                </span>
+              ) : null}
+            </span>
+            <span>
+              <span className="block text-sm font-semibold text-slate-800">{item.label}</span>
+              <span className="block text-xs leading-snug text-slate-500">{item.description}</span>
+            </span>
+          </button>
+        );
+      })}
+    </div>
+  </section>
+);
+
+const SystemSettings = ({
+  themeMode = "light",
+  resolvedTheme = "light",
+  onThemeModeChange = () => {},
+  colorTheme = "classic",
+  onColorThemeChange = () => {},
+}) => {
   const initial = useMemo(() => readSystemSettings(), []);
   const [settings, setSettings] = useState(initial);
   const [savedSnapshot, setSavedSnapshot] = useState(JSON.stringify(initial));
@@ -174,6 +306,16 @@ const SystemSettings = () => {
       </div>
 
       <div className="grid grid-cols-1 gap-5 xl:grid-cols-2">
+        {(activeSection === "ALL" || activeSection === "APPEARANCE") && (
+          <ThemeSection
+            themeMode={themeMode}
+            resolvedTheme={resolvedTheme}
+            onThemeModeChange={onThemeModeChange}
+            colorTheme={colorTheme}
+            onColorThemeChange={onColorThemeChange}
+          />
+        )}
+
         {(activeSection === "ALL" || activeSection === "APPEARANCE") && (
         <Section
           icon={MonitorCog}

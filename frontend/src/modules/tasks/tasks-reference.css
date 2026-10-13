@@ -57,7 +57,7 @@ html.theme-dark .tasks-reference-page .task-list-group-heading small { backgroun
 .task-subtask-editor > header button { border-radius: 7px; padding: 5px; color: #64748b; }
 .task-form-field { display: flex; min-width: 0; flex-direction: column; gap: 4px; margin-top: 8px; color: #475569; font-size: 10.5px; font-weight: 700; }
 .task-form-field input, .task-form-field textarea, .task-form-field select { width: 100%; min-width: 0; border: 1px solid #dbe1ea; border-radius: 8px; background: #fff; padding: 7px 8px; color: #172033; font-size: 12px; font-weight: 500; outline: none; }
-.task-form-field input:focus, .task-form-field textarea:focus, .task-form-field select:focus { border-color: #4d75ed; box-shadow: 0 0 0 2px rgba(49,91,232,.11); }
+.task-form-field input:focus, .task-form-field textarea:focus, .task-form-field select:focus { border-color: #4d75ed; box-shadow: 0 0 0 2px rgb(var(--blue-500) / .11); }
 .task-form-field textarea { min-height: 80px; resize: vertical; }
 .task-subtask-editor-grid { display: grid; grid-template-columns: repeat(2,minmax(0,1fr)); gap: 0 8px; }
 .task-subtask-permission-note { margin-top: 9px; color: #64748b; font-size: 10.5px; line-height: 1.35; }

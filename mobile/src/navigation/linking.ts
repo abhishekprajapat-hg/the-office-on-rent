@@ -1,69 +1,49 @@
-import type { LinkingOptions } from "@react-navigation/native";
 import * as Linking from "expo-linking";
-import { getWebAppOrigin } from "../services/api";
+import type { LinkingOptions } from "@react-navigation/native";
+import type { RootStackParamList } from "./types";
 
 /*
- * Deep links.
- *
- * Two jobs. A push notification carries a `url` in its payload - the same
- * relative path the web app would navigate to - and tapping it has to land on
- * the record rather than the home screen. And a share link opened on a phone
- * with the app installed should open in the app.
- *
- * The paths below are the web routes from workbenchNavigation.js, so one link
- * works on both apps.
+ * Deep links: theofficeonrent://leads/<id> opens a lead, and so on. The same
+ * map gives the web preview real URLs, which is how screens are checked.
  */
-
-const scheme = "theofficeonrent://";
-
-export const linking = {
-  prefixes: [Linking.createURL("/"), scheme, getWebAppOrigin()],
+export const linking: LinkingOptions<RootStackParamList> = {
+  prefixes: [Linking.createURL("/"), "theofficeonrent://"],
   config: {
     screens: {
-      // Signed out: the two documents a store reviewer looks for, plus a
-      // share link, all reachable without an account.
       Login: "login",
-      Privacy: "privacy-policy",
-      Terms: "terms-and-conditions",
-      SharedInventory: "shared/inventory/:shareToken",
-
-      MainTabs: {
+      Tabs: {
         screens: {
-          Dashboard: "dashboard",
+          Home: "",
           Leads: "leads",
-          Inventory: "inventory",
-          Chat: "chat",
+          Tasks: "tasks",
+          Attendance: "attendance",
           More: "more",
         },
       },
-
-      LeadDetails: "leads/:leadId",
-      InventoryDetails: "inventory/:assetId",
-      ProjectDetails: "projects/:projectId",
-      Projects: "projects",
-      OwnerDatabase: "inventory/owners",
-      BrokerDatabase: "inventory/brokers",
-      Tasks: "tasks",
-      Attendance: "attendance",
-      Calendar: "calendar",
-      Finance: "finance",
-      Reports: "reports",
-      Leaderboard: "leaderboard",
-      Targets: "targets",
-      "Field Ops": "map",
-      Users: "admin/users",
-      UserDetails: "admin/users/:userId",
-      Console: "admin/console",
-      MetaAds: "admin/meta-ads",
-      Notifications: "admin/notifications",
-      Settings: "settings",
+      AddLead: "leads/new",
+      TeamPipeline: "leads/team",
+      BulkUpload: "leads/upload",
+      PersonLeads: "leads/team/:assignedTo",
+      LeadDetail: "leads/:leadId",
+      UpdateLead: "leads/:leadId/update",
+      EditLead: "leads/:leadId/edit",
+      EditRequirements: "leads/:leadId/requirements",
+      TransferLead: "leads/:leadId/transfer",
+      PickProperty: "leads/:leadId/link-property",
+      NewTask: "tasks/new",
+      TeamWorkload: "tasks/team",
+      PersonTasks: "tasks/team/:assignedTo",
+      TaskDetail: "tasks/:taskId",
+      Leave: "attendance/leave",
       Profile: "profile",
-      // Web keeps the open cabin and client in the query string
-      // (?cabin=C12, ?client=nexbridge); React Navigation hands a query
-      // parameter to the screen as a route param of the same name.
-      CoworkingBooking: "coworking/booking-board",
-      CoworkingClients: "coworking/clients",
-      ChatConversation: "chat/:conversationId",
+      Schedule: "schedule",
+      Approvals: "approvals",
+      Chats: "chats",
+      NewChat: "chats/new",
+      Conversation: "chats/:id",
+      Inventory: "inventory",
+      AddProperty: "inventory/new",
+      PropertyDetail: "inventory/:id",
     },
   },
-} as LinkingOptions<Record<string, never>>;
+};

@@ -1,3 +1,9 @@
+// Accent families resolve through CSS variables so Settings > Theme can recolour
+// them at runtime. The stock values are in src/index.css (":root" under
+// "Colour themes"); <alpha-value> keeps modifiers like bg-blue-500/20 working.
+const SHADES = ["50", "100", "200", "300", "400", "500", "600", "700", "800", "900", "950"];
+const themedScale = (name) =>
+  Object.fromEntries(SHADES.map((shade) => [shade, `rgb(var(--${name}-${shade}) / <alpha-value>)`]));
 /** @type {import('tailwindcss').Config} */
 export default {
   darkMode: ['selector', 'html.theme-dark'],
@@ -21,11 +27,6 @@ export default {
           400: "#98a3b5", 500: "#6c7789", 600: "#4e5867", 700: "#39424f",
           800: "#242b35", 900: "#161c24", 950: "#0d1219",
         },
-        blue: {
-          50: "#eef3ff", 100: "#dde6ff", 200: "#bcd0ff", 300: "#8fb0ff",
-          400: "#5c87fb", 500: "#3a63f0", 600: "#2549d6", 700: "#1c37ab",
-          800: "#1a3088", 900: "#182a6d", 950: "#101c4a",
-        },
         emerald: {
           50: "#e8f7f0", 100: "#cdeee0", 200: "#a3e0c9", 300: "#6ecdaa",
           400: "#3ab98a", 500: "#12a06a", 600: "#0d8055", 700: "#0a6544",
@@ -46,11 +47,11 @@ export default {
           400: "#9376f7", 500: "#7a5af5", 600: "#6440dd", 700: "#4f31b0",
           800: "#3e278a", 900: "#32206e", 950: "#1c1140",
         },
-        cyan: {
-          50: "#e9f4fb", 100: "#d2e9f7", 200: "#a8d3ef", 300: "#79b9e3",
-          400: "#4c9dd3", 500: "#2b7fbf", 600: "#1f6499", 700: "#184f79",
-          800: "#133e5f", 900: "#10334d", 950: "#081d2c",
-        },
+
+        blue: themedScale("blue"),
+        indigo: themedScale("indigo"),
+        sky: themedScale("sky"),
+        cyan: themedScale("cyan"),
 
         crm: {
           bg: "#f5f7fa",

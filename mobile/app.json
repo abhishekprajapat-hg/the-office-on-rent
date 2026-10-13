@@ -3,7 +3,7 @@
     "name": "Office On Rent",
     "slug": "the-office-on-rent",
     "scheme": "theofficeonrent",
-    "version": "1.0.0",
+    "version": "2.0.0",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "automatic",
@@ -11,38 +11,34 @@
     "splash": {
       "image": "./assets/splash-icon.png",
       "resizeMode": "contain",
-      "backgroundColor": "#f5f7fa",
+      "backgroundColor": "#2549d6",
       "dark": {
         "image": "./assets/splash-icon.png",
         "resizeMode": "contain",
-        "backgroundColor": "#0d1219"
+        "backgroundColor": "#1b37a6"
       }
     },
     "ios": {
       "supportsTablet": true,
       "infoPlist": {
-        "NSCameraUsageDescription": "Take photos of properties and documents to attach to leads, inventory and chats, and for video calls with your team.",
-        "NSMicrophoneUsageDescription": "Record audio for voice and video calls with your team.",
-        "NSPhotoLibraryUsageDescription": "Attach photos from your library to leads, inventory records and chats.",
-        "NSLocationWhenInUseUsageDescription": "Confirm you are at the office when you check in or out, and share your position with your manager during field visits."
+        "NSLocationWhenInUseUsageDescription": "Confirm you are at the office when you check in or out, and share your position with your manager during field visits.",
+        "NSCameraUsageDescription": "Take photos of properties, documents and yourself to attach to leads, tasks, inventory and your profile.",
+        "NSPhotoLibraryUsageDescription": "Attach photos from your library to leads, tasks, inventory, chats and your profile."
       },
       "bundleIdentifier": "com.theofficeonrent.crm"
     },
     "android": {
       "adaptiveIcon": {
         "foregroundImage": "./assets/adaptive-icon.png",
-        "backgroundColor": "#f5f7fa"
+        "backgroundColor": "#ffffff"
       },
       "permissions": [
-        "CAMERA",
-        "RECORD_AUDIO",
-        "MODIFY_AUDIO_SETTINGS",
         "INTERNET",
-        "READ_MEDIA_IMAGES",
-        "READ_MEDIA_VIDEO",
-        "POST_NOTIFICATIONS",
         "ACCESS_COARSE_LOCATION",
-        "ACCESS_FINE_LOCATION"
+        "ACCESS_FINE_LOCATION",
+        "CAMERA",
+        "READ_MEDIA_IMAGES",
+        "POST_NOTIFICATIONS"
       ],
       "edgeToEdgeEnabled": false,
       "softwareKeyboardLayoutMode": "resize",
@@ -52,12 +48,23 @@
     "plugins": [
       "@react-native-community/datetimepicker",
       "expo-font",
-      "expo-mail-composer",
-      "expo-speech-recognition",
       [
         "expo-location",
         {
           "locationAlwaysAndWhenInUsePermission": "Confirm you are at the office when you check in or out."
+        }
+      ],
+      [
+        "expo-image-picker",
+        {
+          "photosPermission": "Attach photos from your library to leads, tasks, inventory, chats and your profile.",
+          "cameraPermission": "Take photos of properties, documents and yourself to attach to leads, tasks, inventory and your profile."
+        }
+      ],
+      [
+        "expo-notifications",
+        {
+          "color": "#02805d"
         }
       ]
     ],

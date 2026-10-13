@@ -78,7 +78,7 @@
   }
   .lead-details-mobile-contact strong { color: #0c1938; font-size: 14px; }
   .lead-details-mobile-contact button,
-  .lead-details-mobile-contact a { color: #1d4ed8; }
+  .lead-details-mobile-contact a { color: rgb(var(--blue-700)); }
   .lead-details-mobile-contact i { width: 1px; height: 20px; background: #d6ddea; }
 
   .lead-details-mobile-selects {
@@ -95,10 +95,10 @@
     min-width: 0;
     height: 43px;
     padding: 0 7px !important;
-    border: 1px solid #dce3ee;
+    border: 1px solid var(--clay-border);
     border-radius: 10px;
-    background: #fff;
-    color: #0c1938;
+    background: var(--clay-surface);
+    color: var(--clay-text);
     box-shadow: none;
     font-size: 11px;
     font-weight: 700;
@@ -139,7 +139,7 @@
     box-shadow: 0 12px 28px rgba(15, 23, 42, .16);
   }
   .lead-details-mobile-status-menu button { display: block; width: 100%; padding: 9px 11px; text-align: left; font-size: 12px; font-weight: 600; }
-  .lead-details-mobile-status-menu button.is-selected { color: #174be8; background: #eef3ff; }
+  .lead-details-mobile-status-menu button.is-selected { color: rgb(var(--blue-600)); background: rgb(var(--blue-50)); }
   .lead-details-mobile-status-menu button:disabled { cursor: not-allowed; opacity: .45; }
 
   .lead-details-mobile-property {
@@ -181,7 +181,7 @@
   .lead-details-mobile-actions > a:first-child svg,
   .lead-details-mobile-actions > button:first-child svg,
   .lead-details-mobile-actions > button:nth-child(3) svg,
-  .lead-details-mobile-actions > button:nth-child(4) svg { color: #174be8; }
+  .lead-details-mobile-actions > button:nth-child(4) svg { color: rgb(var(--blue-600)); }
   .lead-details-mobile-actions > a:nth-child(2) svg { color: #00a63c; }
   .lead-details-mobile-actions > button:disabled { opacity: .45; }
   .lead-details-mobile-menu {
@@ -218,7 +218,7 @@
     font-weight: 700;
     white-space: nowrap;
   }
-  .lead-details-mobile-tabs button.is-active { border-color: #1d4ed8; color: #174be8; }
+  .lead-details-mobile-tabs button.is-active { border-color: rgb(var(--blue-700)); color: rgb(var(--blue-600)); }
   .lead-details-mobile-tabs > svg { flex: 0 0 auto; align-self: center; color: #8fa0c5; }
 
   .lead-details-overview-grid { margin-top: 14px !important; gap: 14px !important; }

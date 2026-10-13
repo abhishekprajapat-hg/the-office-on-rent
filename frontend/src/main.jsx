@@ -3,7 +3,12 @@ import ReactDOM from 'react-dom/client'
 import { BrowserRouter } from 'react-router-dom'
 import App from './App.jsx'
 import { registerServiceWorker } from './services/pushService'
+import { applyStoredThemeToDocument } from './utils/themePreferences'
 import './index.css'
+
+// Before the first render, so a dark or colour-themed user does not get a
+// flash of the default light page while React boots.
+applyStoredThemeToDocument(window.location.pathname)
 
 /*
  * Registered up front, not when someone opens the notifications card: the

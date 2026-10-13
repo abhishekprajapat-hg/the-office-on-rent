@@ -54,7 +54,7 @@ html {
   --crm-text: #161c24;
   --crm-text-muted: #6c7789;
   --crm-accent: #2549d6;
-  --crm-focus-ring: rgba(37, 73, 214, 0.22);
+  --crm-focus-ring: rgb(var(--blue-600) / 0.22);
   --crm-radius-sm: 7px;
   --crm-radius-md: 10px;
   --crm-radius-lg: 14px;
@@ -456,7 +456,7 @@ html.ui-reduce-motion .app-loader-spinner div {
 }
 
 .theme-switch__checkbox:focus-visible + .theme-switch__container {
-  outline: 2px solid rgba(96, 165, 250, 0.85);
+  outline: 2px solid rgb(var(--blue-400) / 0.85);
   outline-offset: 3px;
 }
 
@@ -617,7 +617,7 @@ html.theme-dark .border-slate-300 {
 html.theme-dark input,
 html.theme-dark select,
 html.theme-dark textarea {
-  background: rgba(15, 23, 42, 0.92) !important;
+  background: var(--clay-surface-muted) !important;
   border-color: rgba(148, 163, 184, 0.35) !important;
   color: #e2e8f0 !important;
 }
@@ -804,7 +804,10 @@ html.theme-light .workspace-shell textarea {
 html.theme-dark .workspace-shell input,
 html.theme-dark .workspace-shell select,
 html.theme-dark .workspace-shell textarea {
-  background-color: rgba(2, 6, 23, 0.9) !important;
+  /* One step lighter than the card it sits on, not near-black: a field on a
+     dark card has to read as a field, not as a hole. */
+  background-color: var(--clay-surface-muted) !important;
+  border-color: var(--clay-border-strong) !important;
 }
 
 .workspace-shell .custom-scrollbar::-webkit-scrollbar {
@@ -1008,7 +1011,7 @@ html.theme-dark .workspace-shell .custom-scrollbar::-webkit-scrollbar-thumb {
 
 html.theme-dark .workspace-main-content:not(.workspace-main-content-chat) > .ui-page-shell:not(.chat-page) {
   background:
-    radial-gradient(circle at 12% 0%, rgba(37, 99, 235, 0.16), transparent 30%),
+    radial-gradient(circle at 12% 0%, rgb(var(--blue-500) / 0.16), transparent 30%),
     linear-gradient(180deg, #0f172a 0%, #020617 100%) !important;
 }
 
@@ -1064,8 +1067,8 @@ html.theme-dark .workspace-main-content:not(.workspace-main-content-chat) > .ui-
 }
 
 .inventory-route-page .inventory-filter-panel {
-  border-color: #e7ebf3;
-  box-shadow: 0 5px 18px rgba(30, 64, 175, 0.045);
+  border-color: var(--clay-border);
+  box-shadow: 0 5px 18px rgb(var(--blue-700) / 0.045);
 }
 
 .inventory-route-page .inventory-filter-panel select,
@@ -1077,19 +1080,21 @@ html.theme-dark .workspace-main-content:not(.workspace-main-content-chat) > .ui-
 .inventory-route-page .inventory-filter-panel input[type="text"],
 .inventory-route-page .inventory-filter-panel input[type="number"] {
   height: 2.5rem;
-  border: 1px solid #e3e8f1;
+  border: 1px solid var(--clay-border);
   border-radius: 0.75rem;
-  background: #fff;
+  /* Tokens, not literals: this selector outranks the dark override layer, so a
+     hardcoded colour here survived into dark mode and vanished on the field. */
+  background: var(--clay-surface);
   padding: 0 0.75rem;
-  color: #25345d;
+  color: var(--clay-text);
   font-size: 0.8125rem;
   outline: none;
 }
 
 .inventory-route-page .inventory-filter-panel select:focus,
 .inventory-route-page .inventory-filter-panel input:focus {
-  border-color: #3566ef;
-  box-shadow: 0 0 0 3px rgba(53, 102, 239, 0.1);
+  border-color: rgb(var(--blue-500));
+  box-shadow: 0 0 0 3px rgb(var(--blue-500) / 0.1);
 }
 
 .inventory-route-page .inventory-results-bar {
@@ -1098,7 +1103,7 @@ html.theme-dark .workspace-main-content:not(.workspace-main-content-chat) > .ui-
 
 .inventory-details-page .inventory-detail-hero {
   border-color: #e7ebf3;
-  box-shadow: 0 7px 24px rgba(30, 64, 175, 0.055);
+  box-shadow: 0 7px 24px rgb(var(--blue-700) / 0.055);
 }
 
 .inventory-details-page .inventory-detail-hero > .relative {
@@ -1603,7 +1608,7 @@ html.theme-dark .ui-soft-panel {
 .workspace-shell select:not([multiple]):hover {
   background-color: color-mix(in srgb, var(--clay-surface) 84%, var(--clay-accent) 7%) !important;
   border-color: color-mix(in srgb, var(--clay-accent) 52%, var(--clay-border) 48%) !important;
-  box-shadow: 0 10px 26px -22px rgba(37, 99, 235, 0.55), inset 0 1px 0 rgba(255, 255, 255, 0.62) !important;
+  box-shadow: 0 10px 26px -22px rgb(var(--blue-500) / 0.55), inset 0 1px 0 rgba(255, 255, 255, 0.62) !important;
   transform: translateY(-1px);
 }
 
@@ -1631,7 +1636,7 @@ html.theme-dark .workspace-shell select:not([multiple]) {
 
 html.theme-dark .workspace-shell select:not([multiple]):hover {
   background-color: color-mix(in srgb, var(--clay-surface) 78%, var(--clay-accent) 10%) !important;
-  box-shadow: 0 14px 34px -26px rgba(96, 165, 250, 0.48), inset 0 1px 0 rgba(148, 163, 184, 0.12) !important;
+  box-shadow: 0 14px 34px -26px rgb(var(--blue-400) / 0.48), inset 0 1px 0 rgba(148, 163, 184, 0.12) !important;
 }
 
 .workspace-shell button,
@@ -1655,10 +1660,10 @@ html.theme-dark .workspace-shell select:not([multiple]):hover {
 .workspace-shell .bg-gradient-to-br.from-slate-900,
 .workspace-shell .bg-gradient-to-r.from-slate-800,
 .workspace-shell .bg-gradient-to-br.from-slate-800 {
-  background-image: linear-gradient(135deg, rgba(15, 23, 42, 0.94), rgba(30, 64, 175, 0.9) 58%, rgba(14, 165, 233, 0.84)) !important;
+  background-image: linear-gradient(135deg, rgba(15, 23, 42, 0.94), rgb(var(--blue-700) / 0.9) 58%, rgba(14, 165, 233, 0.84)) !important;
   color: #ffffff !important;
   border-color: var(--glass-border) !important;
-  box-shadow: 0 18px 48px -36px rgba(37, 99, 235, 0.65);
+  box-shadow: 0 18px 48px -36px rgb(var(--blue-500) / 0.65);
   backdrop-filter: blur(14px);
 }
 
@@ -2156,7 +2161,7 @@ html.theme-dark .chat-doc-screen {
 }
 
 html.theme-dark .chat-doc-screen .msg.me {
-  background: rgba(37, 99, 235, 0.22) !important;
+  background: rgb(var(--blue-500) / 0.22) !important;
 }
 
 @media (max-width: 767px) {
@@ -2604,8 +2609,8 @@ html.theme-dark .calendar-done-btn { border-color: #2f8053; background: #142d20;
   --ink-3: var(--clay-muted);
   --muted: var(--clay-muted);
   --text: var(--clay-text);
-  --b300: #93c5fd;
-  --b500: #2563eb;
+  --b300: rgb(var(--blue-300));
+  --b500: rgb(var(--blue-500));
   --ok50: #ecfdf5;
   --ok500: #16a34a;
   --ok600: #059669;
@@ -3033,7 +3038,7 @@ html.theme-dark .finance-doc-screen .finance-tbl td span:not(.finance-pill):not(
   --accent: var(--clay-accent);
   --text: var(--clay-text);
   --muted: var(--clay-muted);
-  --b500: #2563eb;
+  --b500: rgb(var(--blue-500));
   --ok500: #16a34a;
   --ok600: #059669;
   --wa500: #f59e0b;
@@ -3526,7 +3531,7 @@ html.theme-dark .reports-doc-screen .reports-empty-row {
   --text: var(--clay-text);
   --muted: var(--clay-muted);
   --ink-3: var(--clay-muted);
-  --b500: #2563eb;
+  --b500: rgb(var(--blue-500));
   --ok50: #ecfdf5;
   --ok500: #16a34a;
   --ok600: #059669;
@@ -4027,7 +4032,7 @@ html.theme-dark .leaderboard-doc-screen .leaderboard-tbl tr.is-top {
 }
 
 html.theme-dark .leaderboard-doc-screen .leaderboard-tbl tr.is-self {
-  background: rgba(37, 99, 235, 0.14) !important;
+  background: rgb(var(--blue-500) / 0.14) !important;
 }
 
 html.theme-dark .targets-doc-screen .targets-stat.is-alert {
@@ -4457,7 +4462,7 @@ html.theme-dark .team-doc-screen .team-chip {
 }
 
 html.theme-dark .team-doc-screen .team-tbl tr.is-self {
-  background: rgba(37, 99, 235, 0.14) !important;
+  background: rgb(var(--blue-500) / 0.14) !important;
 }
 
 .team-doc-screen .team-tbl tr.is-clickable {
@@ -5010,7 +5015,7 @@ html.theme-dark .console-assistant-screen {
 }
 
 html.theme-dark .console-msg.is-user {
-  background: rgba(37, 99, 235, 0.22) !important;
+  background: rgb(var(--blue-500) / 0.22) !important;
 }
 
 html.theme-dark .console-input-wrap {
@@ -5054,3 +5059,332 @@ html.theme-dark .console-input-wrap {
 .revenue-summary { min-width: 420px; }
 .revenue-summary tr.is-total td { background: var(--surface2); }
 .revenue-error { margin: 12px; color: var(--dg700); font-size: 13px; }
+
+/* ---------------------------------------------------------------------------
+   Theme gap patches
+   The dark override layer above covers slate-900..400 and bg-white/50/100 but
+   misses a handful of utilities the screens actually use, which left headings
+   and chips rendering dark-on-dark. Everything here is expressed with the
+   theme tokens so light mode keeps the same look it already had.
+--------------------------------------------------------------------------- */
+
+/* Darkest heading colour: not part of the slate-900..400 override block. */
+html.theme-dark .text-slate-950,
+html.theme-dark .text-slate-900\/90,
+html.theme-dark .text-slate-800\/90 {
+  color: var(--clay-text) !important;
+}
+
+/* Solid light fills used for dividers, rails and progress tracks. */
+html.theme-dark .bg-slate-200,
+html.theme-dark .bg-slate-300,
+html.theme-dark [class*="bg-slate-200/"],
+html.theme-dark [class*="bg-slate-300/"] {
+  background-color: var(--clay-surface-muted) !important;
+}
+
+/* The -100 pastels (avatar bubbles, soft chips) had no token mapping, so they
+   stayed light in dark mode. Dark only: light mode keeps the Tailwind pastels. */
+html.theme-dark .workspace-shell .bg-blue-100,
+html.theme-dark .workspace-shell .bg-indigo-100,
+html.theme-dark .workspace-shell .bg-sky-100,
+html.theme-dark .workspace-shell .bg-cyan-100 {
+  background: color-mix(in srgb, var(--clay-accent) 16%, var(--clay-surface)) !important;
+}
+
+html.theme-dark .workspace-shell .bg-violet-100,
+html.theme-dark .workspace-shell .bg-purple-100,
+html.theme-dark .workspace-shell .bg-fuchsia-100 {
+  background: color-mix(in srgb, #8b5cf6 16%, var(--clay-surface)) !important;
+}
+
+html.theme-dark .workspace-shell .bg-emerald-100,
+html.theme-dark .workspace-shell .bg-green-100,
+html.theme-dark .workspace-shell .bg-teal-100 {
+  background: color-mix(in srgb, var(--clay-green) 16%, var(--clay-surface)) !important;
+}
+
+html.theme-dark .workspace-shell .bg-amber-100,
+html.theme-dark .workspace-shell .bg-yellow-100,
+html.theme-dark .workspace-shell .bg-orange-100 {
+  background: color-mix(in srgb, var(--clay-gold) 16%, var(--clay-surface)) !important;
+}
+
+html.theme-dark .workspace-shell .bg-rose-100,
+html.theme-dark .workspace-shell .bg-red-100,
+html.theme-dark .workspace-shell .bg-pink-100 {
+  background: color-mix(in srgb, var(--clay-rose) 16%, var(--clay-surface)) !important;
+}
+
+/* Dark mode needs the pastel text to lift off the tinted chip. */
+html.theme-dark .workspace-shell .text-blue-700,
+html.theme-dark .workspace-shell .text-blue-800,
+html.theme-dark .workspace-shell .text-indigo-700 {
+  color: var(--clay-accent-strong) !important;
+}
+
+html.theme-dark .workspace-shell .text-violet-700,
+html.theme-dark .workspace-shell .text-purple-700 {
+  color: #c4b5fd !important;
+}
+
+html.theme-dark .workspace-shell .text-emerald-700,
+html.theme-dark .workspace-shell .text-green-700,
+html.theme-dark .workspace-shell .text-teal-700 {
+  color: var(--clay-green) !important;
+}
+
+html.theme-dark .workspace-shell .text-amber-700,
+html.theme-dark .workspace-shell .text-orange-700,
+html.theme-dark .workspace-shell .text-yellow-700 {
+  color: var(--clay-gold) !important;
+}
+
+html.theme-dark .workspace-shell .text-rose-700,
+html.theme-dark .workspace-shell .text-red-700 {
+  color: var(--clay-rose) !important;
+}
+
+/* ---------------------------------------------------------------------------
+   Colour themes (Settings > Theme)
+   The accent scales Tailwind compiles (blue, indigo, sky, cyan - see
+   tailwind.config.js) read these RGB triplets, so a theme swaps every button,
+   link, ring and chip without touching a component. The values below are the
+   stock palette; Classic Blue sets nothing else.
+--------------------------------------------------------------------------- */
+:root {
+  --blue-50: 238 243 255;
+  --blue-100: 221 230 255;
+  --blue-200: 188 208 255;
+  --blue-300: 143 176 255;
+  --blue-400: 92 135 251;
+  --blue-500: 58 99 240;
+  --blue-600: 37 73 214;
+  --blue-700: 28 55 171;
+  --blue-800: 26 48 136;
+  --blue-900: 24 42 109;
+  --blue-950: 16 28 74;
+  --indigo-50: 238 242 255;
+  --indigo-100: 224 231 255;
+  --indigo-200: 199 210 254;
+  --indigo-300: 165 180 252;
+  --indigo-400: 129 140 248;
+  --indigo-500: 99 102 241;
+  --indigo-600: 79 70 229;
+  --indigo-700: 67 56 202;
+  --indigo-800: 55 48 163;
+  --indigo-900: 49 46 129;
+  --indigo-950: 30 27 75;
+  --sky-50: 240 249 255;
+  --sky-100: 224 242 254;
+  --sky-200: 186 230 253;
+  --sky-300: 125 211 252;
+  --sky-400: 56 189 248;
+  --sky-500: 14 165 233;
+  --sky-600: 2 132 199;
+  --sky-700: 3 105 161;
+  --sky-800: 7 89 133;
+  --sky-900: 12 74 110;
+  --sky-950: 8 47 73;
+  --cyan-50: 233 244 251;
+  --cyan-100: 210 233 247;
+  --cyan-200: 168 211 239;
+  --cyan-300: 121 185 227;
+  --cyan-400: 76 157 211;
+  --cyan-500: 43 127 191;
+  --cyan-600: 31 100 153;
+  --cyan-700: 24 79 121;
+  --cyan-800: 19 62 95;
+  --cyan-900: 16 51 77;
+  --cyan-950: 8 29 44;
+}
+
+/* Any other theme publishes --accent-<shade> on <html> (utils/themePreferences.js)
+   and every accent family follows it. */
+html[data-color-theme]:not([data-color-theme="classic"]) {
+  --blue-50: var(--accent-50);
+  --blue-100: var(--accent-100);
+  --blue-200: var(--accent-200);
+  --blue-300: var(--accent-300);
+  --blue-400: var(--accent-400);
+  --blue-500: var(--accent-500);
+  --blue-600: var(--accent-600);
+  --blue-700: var(--accent-700);
+  --blue-800: var(--accent-800);
+  --blue-900: var(--accent-900);
+  --blue-950: var(--accent-950);
+  --indigo-50: var(--accent-50);
+  --indigo-100: var(--accent-100);
+  --indigo-200: var(--accent-200);
+  --indigo-300: var(--accent-300);
+  --indigo-400: var(--accent-400);
+  --indigo-500: var(--accent-500);
+  --indigo-600: var(--accent-600);
+  --indigo-700: var(--accent-700);
+  --indigo-800: var(--accent-800);
+  --indigo-900: var(--accent-900);
+  --indigo-950: var(--accent-950);
+  --sky-50: var(--accent-50);
+  --sky-100: var(--accent-100);
+  --sky-200: var(--accent-200);
+  --sky-300: var(--accent-300);
+  --sky-400: var(--accent-400);
+  --sky-500: var(--accent-500);
+  --sky-600: var(--accent-600);
+  --sky-700: var(--accent-700);
+  --sky-800: var(--accent-800);
+  --sky-900: var(--accent-900);
+  --sky-950: var(--accent-950);
+  --cyan-50: var(--accent-50);
+  --cyan-100: var(--accent-100);
+  --cyan-200: var(--accent-200);
+  --cyan-300: var(--accent-300);
+  --cyan-400: var(--accent-400);
+  --cyan-500: var(--accent-500);
+  --cyan-600: var(--accent-600);
+  --cyan-700: var(--accent-700);
+  --cyan-800: var(--accent-800);
+  --cyan-900: var(--accent-900);
+  --cyan-950: var(--accent-950);
+}
+
+/* Semantic tokens used by the override layer, the dashboards and the module
+   CSS. Dark mode takes the lighter end of the scale so accents stay legible. */
+html.theme-light[data-color-theme]:not([data-color-theme="classic"]) {
+  --clay-accent: rgb(var(--accent-600));
+  --clay-accent-strong: rgb(var(--accent-700));
+  --crm-accent: rgb(var(--accent-600));
+  --crm-focus-ring: rgb(var(--accent-500) / 0.22);
+}
+
+html.theme-dark[data-color-theme]:not([data-color-theme="classic"]) {
+  --clay-accent: rgb(var(--accent-400));
+  --clay-accent-strong: rgb(var(--accent-300));
+  --crm-accent: rgb(var(--accent-400));
+  --crm-focus-ring: rgb(var(--accent-400) / 0.28);
+}
+
+/* ---------------------------------------------------------------------------
+   Bare inputs inside a drawn field
+   The shell forces every input/select/textarea to carry a fill, border colour,
+   radius and focus ring (all !important, above). That is right for standalone
+   fields, but some inputs sit inside a wrapper that already draws the field
+   (search pills, tag editors, date pickers, quick-add bars). Painting them too
+   gave a second rounded box inside the first. These are the inputs whose own
+   CSS asks for no border / no background; the wrapper keeps the focus state
+   through :focus-within. `data-bare-input` opts in any future one.
+--------------------------------------------------------------------------- */
+:root .workspace-shell :is(
+  input.bg-transparent,
+  textarea.bg-transparent,
+  [data-bare-input],
+  .chat-doc-screen .chat-search-input,
+  .reports-custom-range input,
+  .team-search input,
+  .lead-details-mobile-assignee-search input,
+  .task-workspace-page .tw-search input,
+  .task-workspace-page .tw-quick-add input,
+  .task-workspace-page .tw-date-field input,
+  .task-workspace-page .tw-tag-editor input,
+  .task-workspace-page .tw-detail-tags label input,
+  .task-workspace-page .tw-member-filter select,
+  .task-workspace-page .tw-select-wrap select,
+  .task-user-picker-popover input
+) {
+  background: transparent !important;
+  border-color: transparent !important;
+  border-radius: 0 !important;
+  box-shadow: none !important;
+  outline: none;
+}
+
+/* The wrapper takes over the focus state the bare input no longer paints. */
+.workspace-shell :is(
+  .chat-doc-screen .chat-search-box,
+  .team-search,
+  .task-workspace-page .tw-search,
+  .task-workspace-page .tw-date-field,
+  .task-workspace-page .tw-tag-editor,
+  .task-workspace-page .tw-detail-tags label
+):focus-within {
+  border-color: color-mix(in srgb, var(--clay-accent) 68%, var(--clay-border));
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--clay-accent) 16%, transparent);
+}
+
+/* ---------------------------------------------------------------------------
+   Hover = theme colour
+   Neutral hovers were written for light mode (hover:bg-slate-50, a near-white
+   #fbfcff ...). The dark override layer only repaints resting classes, so in
+   dark mode every one of them flashed a light grey and washed the row text
+   out. All neutral hovers now take one tint of the active colour theme;
+   semantic hovers (red delete, green approve) and solid dark buttons
+   (hover:bg-slate-800) are left alone.
+--------------------------------------------------------------------------- */
+html {
+  --hover-tint: color-mix(in srgb, var(--clay-accent) 8%, var(--clay-surface));
+  --hover-border: color-mix(in srgb, var(--clay-accent) 45%, var(--clay-border));
+}
+
+html.theme-dark {
+  --hover-tint: color-mix(in srgb, var(--clay-accent) 16%, var(--clay-surface));
+}
+
+.workspace-shell :is(
+  .hover\:bg-white,
+  .hover\:bg-white\/10,
+  .hover\:bg-slate-50,
+  .hover\:bg-slate-50\/70,
+  .hover\:bg-slate-50\/80,
+  .hover\:bg-slate-100,
+  .hover\:bg-slate-200,
+  .hover\:bg-slate-500\/10,
+  .hover\:bg-slate-800\/50,
+  .hover\:bg-slate-800\/60,
+  .hover\:bg-blue-50,
+  .hover\:bg-sky-50,
+  .hover\:bg-sky-100,
+  .hover\:bg-cyan-50\/40,
+  .hover\:bg-cyan-50\/50,
+  .hover\:bg-slate-700,
+  .hover\:bg-slate-800:not(.bg-slate-900),
+  .hover\:bg-slate-900,
+  .dark\:hover\:bg-slate-800,
+  .dark\:hover\:bg-slate-900,
+  .dark\:hover\:bg-slate-800\/50,
+  .dark\:hover\:bg-slate-800\/60
+):hover {
+  background-color: var(--hover-tint) !important;
+}
+
+.workspace-shell :is(
+  .hover\:border-slate-300,
+  .hover\:border-slate-400,
+  .hover\:border-slate-700,
+  .dark\:hover\:border-slate-600
+):hover {
+  border-color: var(--hover-border) !important;
+}
+
+/* Module CSS hovers that carried a literal grey / near-white. */
+.workspace-shell :is(
+  .tw-task-row:not(.is-selected),
+  .tw-menu-popover button,
+  .task-user-picker-popover [role="option"],
+  .lead-details-mobile-assignee-list button,
+  .profile-button-secondary,
+  .profile-month-controls > button,
+  .profile-photo-menu button,
+  .profile-photo-menu label,
+  .calendar-expand-btn,
+  .attendance-doc-screen table tbody tr,
+  .app-header-icon,
+  .app-header-logout
+):hover {
+  background: var(--hover-tint) !important;
+}
+
+/* Generic table rows: any data row in the workspace lifts to the theme tint,
+   so tables built without a hover class still respond. */
+.workspace-shell table tbody tr:hover > td {
+  background-color: var(--hover-tint);
+}

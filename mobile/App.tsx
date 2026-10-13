@@ -1,60 +1,64 @@
 import "react-native-gesture-handler";
-import React, { useCallback } from "react";
+import React, { useEffect } from "react";
 import { View } from "react-native";
 import { StatusBar } from "expo-status-bar";
-import { useFonts } from "expo-font";
 import * as SplashScreen from "expo-splash-screen";
-import { RootNavigator } from "./src/navigation/RootNavigator";
-import { ThemeProvider, useTheme } from "./src/theme/ThemeContext";
-import { appFonts } from "./src/theme/fonts";
-import { applyGlobalFont } from "./src/theme/applyGlobalFont";
-import { ErrorBoundary } from "./src/components/common/ErrorBoundary";
+import {
+  useFonts,
+  PlusJakartaSans_400Regular,
+  PlusJakartaSans_500Medium,
+  PlusJakartaSans_600SemiBold,
+  PlusJakartaSans_700Bold,
+  PlusJakartaSans_800ExtraBold,
+} from "@expo-google-fonts/plus-jakarta-sans";
+import { JetBrainsMono_500Medium } from "@expo-google-fonts/jetbrains-mono";
 import { SafeAreaProvider } from "react-native-safe-area-context";
+import { AuthProvider, useAuth } from "./src/auth/AuthProvider";
+import { RootNavigator } from "./src/navigation/RootNavigator";
+import { ThemeProvider, useTheme } from "./src/theme/ThemeProvider";
+import { NotificationBridge } from "./src/notifications/NotificationBridge";
 
-// Patches Text/TextInput to default to Inter. Runs once, at module scope, so it
-// is in place before the first render rather than after a flash of system face.
-applyGlobalFont();
-
-SplashScreen.preventAutoHideAsync().catch(() => {
-  // Already hidden, or the module is unavailable in this runtime (web). Not
-  // worth failing the launch over.
-});
+SplashScreen.preventAutoHideAsync().catch(() => {});
 
 const Shell = () => {
-  const { scheme, colors, ready: themeReady } = useTheme();
-  const [fontsLoaded, fontError] = useFonts(appFonts);
+  const { colors, scheme, ready: themeReady } = useTheme();
+  const { booting } = useAuth();
+  const [fontsLoaded, fontError] = useFonts({
+    PlusJakartaSans_400Regular,
+    PlusJakartaSans_500Medium,
+    PlusJakartaSans_600SemiBold,
+    PlusJakartaSans_700Bold,
+    PlusJakartaSans_800ExtraBold,
+    JetBrainsMono_500Medium,
+  });
 
-  // A missing font should degrade to the system face, not hold the splash
-  // forever - so a load error counts as "done" here.
-  const ready = themeReady && (fontsLoaded || Boolean(fontError));
+  // A font that fails to load falls back to the system face rather than
+  // holding the splash forever.
+  const ready = themeReady && !booting && (fontsLoaded || Boolean(fontError));
 
-  const onLayout = useCallback(() => {
+  useEffect(() => {
     if (ready) SplashScreen.hideAsync().catch(() => {});
   }, [ready]);
 
   if (!ready) return null;
 
   return (
-    <View style={{ flex: 1, backgroundColor: colors.bg }} onLayout={onLayout}>
+    <View style={{ flex: 1, backgroundColor: colors.bg }}>
       <StatusBar style={scheme === "dark" ? "light" : "dark"} />
       <RootNavigator />
+      <NotificationBridge />
     </View>
   );
 };
 
 export default function App() {
   return (
-    /*
-     * Outermost, and outside ThemeProvider on purpose: a crash inside the
-     * provider itself still has to render something, and the fallback reads
-     * static tokens rather than the context for exactly that reason.
-     */
-    <ErrorBoundary label="app">
-      <SafeAreaProvider>
-        <ThemeProvider>
+    <SafeAreaProvider>
+      <ThemeProvider>
+        <AuthProvider>
           <Shell />
-        </ThemeProvider>
-      </SafeAreaProvider>
-    </ErrorBoundary>
+        </AuthProvider>
+      </ThemeProvider>
+    </SafeAreaProvider>
   );
 }

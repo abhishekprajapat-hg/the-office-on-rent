@@ -16,6 +16,19 @@ import {
   readSystemSettings,
   SYSTEM_SETTINGS_UPDATED_EVENT,
 } from "./utils/systemSettings";
+import {
+  applyColorThemeToDocument,
+  applyThemeModeToDocument,
+  DEFAULT_COLOR_THEME,
+  isForcedDefaultThemePath,
+  LEGACY_THEME_STORAGE_KEY,
+  readColorTheme,
+  readThemeMode,
+  resolveThemeMode,
+  systemPrefersDark,
+  writeColorTheme,
+  writeThemeMode,
+} from "./utils/themePreferences";
 
 /* =======================
    LAZY IMPORTS
@@ -70,14 +83,6 @@ const EARTH_RADIUS_METERS = 6371000;
 const LOCATION_SYNC_MIN_INTERVAL_MS = 30000;
 const LOCATION_SYNC_MIN_DISTANCE_METERS = 30;
 const PUBLIC_ROUTE_PREFIXES = [
-  "/privacy-policy",
-  "/terms-and-conditions",
-  "/data-use-notice",
-  "/service-terms",
-  "/shared",
-];
-const FORCE_LIGHT_ROUTE_PREFIXES = [
-  "/login",
   "/privacy-policy",
   "/terms-and-conditions",
   "/data-use-notice",
@@ -357,10 +362,12 @@ export default function App() {
   const [userRole, setUserRole] = useState(null);
   const [sessionReady, setSessionReady] = useState(false);
   const [systemSettingsVersion, setSystemSettingsVersion] = useState(0);
-  const [theme, setTheme] = useState(() => {
-    const storedTheme = localStorage.getItem("theme");
-    return storedTheme === "dark" ? "dark" : "light";
-  });
+  // "light" | "dark" | "system" as the user chose it; `theme` below is what
+  // that resolves to right now.
+  const [themeMode, setThemeMode] = useState(readThemeMode);
+  const [prefersDark, setPrefersDark] = useState(systemPrefersDark);
+  const [colorTheme, setColorTheme] = useState(readColorTheme);
+  const theme = resolveThemeMode(themeMode, prefersDark);
   const inactivityTimerRef = useRef(null);
   const sessionTimeoutMsRef = useRef(
     getSessionTimeoutMs(readSystemSettings().security.sessionTimeoutMinutes),
@@ -389,9 +396,7 @@ export default function App() {
   const isPublicPage = PUBLIC_ROUTE_PREFIXES.some((prefix) =>
     location.pathname.startsWith(prefix),
   );
-  const isForcedLightPage = FORCE_LIGHT_ROUTE_PREFIXES.some((prefix) =>
-    location.pathname.startsWith(prefix),
-  );
+  const isForcedLightPage = isForcedDefaultThemePath(location.pathname);
   const isChatPage = location.pathname === "/chat";
   const shouldLockDocumentScroll = isLoggedIn && !isPublicPage;
   const routeViewportClass = shouldLockDocumentScroll
@@ -430,18 +435,26 @@ export default function App() {
     setSessionReady(true);
   }, []);
 
+  // "System" mode has to follow the OS live, e.g. when it switches at sunset.
   useEffect(() => {
-    const root = document.documentElement;
-    const activeTheme = isForcedLightPage ? "light" : theme;
+    if (typeof window.matchMedia !== "function") return undefined;
+    const query = window.matchMedia("(prefers-color-scheme: dark)");
+    const onChange = (event) => setPrefersDark(event.matches);
+    query.addEventListener("change", onChange);
+    return () => query.removeEventListener("change", onChange);
+  }, []);
 
-    if (isForcedLightPage && theme !== "light") {
-      setTheme("light");
+  // Public and sign-in pages render the stock brand, but only for display: the
+  // user's saved choice is left alone and comes back once they are inside.
+  useEffect(() => {
+    applyThemeModeToDocument(isForcedLightPage ? "light" : theme);
+    applyColorThemeToDocument(isForcedLightPage ? DEFAULT_COLOR_THEME : colorTheme);
+    try {
+      localStorage.setItem(LEGACY_THEME_STORAGE_KEY, theme);
+    } catch {
+      // Storage blocked: nothing else depends on this write.
     }
-
-    root.classList.remove("theme-light", "theme-dark");
-    root.classList.add(activeTheme === "dark" ? "theme-dark" : "theme-light");
-    localStorage.setItem("theme", activeTheme);
-  }, [isForcedLightPage, theme]);
+  }, [colorTheme, isForcedLightPage, theme]);
 
   const performInactivityLogout = useCallback(() => {
     localStorage.removeItem("token");
@@ -701,9 +714,19 @@ export default function App() {
     [],
   );
 
-  const toggleTheme = useCallback(() => {
-    setTheme((prev) => (prev === "dark" ? "light" : "dark"));
+  const changeThemeMode = useCallback((mode) => {
+    setThemeMode(writeThemeMode(mode));
   }, []);
+
+  const changeColorTheme = useCallback((id) => {
+    setColorTheme(writeColorTheme(id));
+  }, []);
+
+  // The header toggle flips what is on screen, so from "System" it becomes an
+  // explicit choice of the opposite mode.
+  const toggleTheme = useCallback(() => {
+    changeThemeMode(theme === "dark" ? "light" : "dark");
+  }, [changeThemeMode, theme]);
 
   const pageHeader = useMemo(
     () => resolvePageHeader(location.pathname, userRole),
@@ -831,7 +854,17 @@ export default function App() {
       />
       <Route
         path="/settings"
-        element={withPageAccess("settings", <SystemSettings />, ["ADMIN", "MANAGER"])}
+        element={withPageAccess(
+          "settings",
+          <SystemSettings
+            themeMode={themeMode}
+            resolvedTheme={theme}
+            onThemeModeChange={changeThemeMode}
+            colorTheme={colorTheme}
+            onColorThemeChange={changeColorTheme}
+          />,
+          ["ADMIN", "MANAGER"],
+        )}
       />
       <Route
         path="/targets"
@@ -905,6 +938,10 @@ export default function App() {
     DashboardByRole,
     withPageAccess,
     theme,
+    themeMode,
+    colorTheme,
+    changeThemeMode,
+    changeColorTheme,
     userRole,
   ]);
 

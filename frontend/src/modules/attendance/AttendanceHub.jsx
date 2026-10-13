@@ -1281,12 +1281,13 @@ const AttendanceHub = () => {
                   </div>
                 )}
                 {showPersonalHistory ? (
-                  <div className="ml-auto flex rounded-lg border border-slate-200 bg-slate-50 p-0.5">
+                  <div className="ml-auto flex rounded-lg border border-slate-200 bg-slate-50 p-0.5 transition-colors focus-within:border-blue-400">
                     <input
                       type="month"
                       value={month}
                       onChange={(event) => setMonth(event.target.value)}
-                      className="h-8 rounded-md border-0 bg-white px-3 text-[13px] font-semibold text-slate-700 shadow-sm outline-none"
+                      data-bare-input
+                      className="h-8 border-0 bg-transparent px-3 text-[13px] font-semibold text-slate-700 outline-none"
                     />
                     <button
                       type="button"

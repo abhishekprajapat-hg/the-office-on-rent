@@ -21,7 +21,14 @@ const mongoose = require("mongoose");
  * two.
  */
 // Expo tokens carry no encryption keys, so the requirement is conditional.
+// Under findOneAndUpdate({ runValidators: true }) - how /push/subscribe saves -
+// `this` is the Query, not the document, so `this.kind` is undefined and every
+// Expo registration failed validation. Read the kind from the update instead.
 function requiredForWeb() {
+  if (this instanceof mongoose.Query) {
+    const update = this.getUpdate() || {};
+    return (update.$set?.kind ?? update.kind) !== "EXPO";
+  }
   return this.kind !== "EXPO";
 }
 
