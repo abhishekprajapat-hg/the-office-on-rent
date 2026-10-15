@@ -60,7 +60,7 @@ export const UserDetailScreen = ({ route, navigation }: RootScreenProps<"UserDet
   const [customRoleId, setCustomRoleId] = useState<string | null>(null);
   const [person, setPerson] = useState<TeamUser | null>(null);
   const [team, setTeam] = useState<TeamUser[]>([]);
-  /* The admin-only full record (reporting manager filled in) and lead numbers; managers work from the team list. */
+  /* The full record (reporting manager filled in) and lead numbers, for admins and managers; others work from the team list. */
   const [profile, setProfile] = useState<AdminProfileView | null>(null);
   const [glance, setGlance] = useState<{ attendance: AttendanceSummary | null; tasks: ReturnType<typeof taskStats> | null; leave: LeaveBalance | null } | null>(null);
   const [editOpen, setEditOpen] = useState(false);
@@ -90,7 +90,7 @@ export const UserDetailScreen = ({ route, navigation }: RootScreenProps<"UserDet
         listUsers(),
         getPageAccess(id).catch(() => null),
         listCustomRoles().catch(() => []),
-        me.role === "ADMIN" ? getUserProfile(id).catch(() => null) : Promise.resolve(null),
+        me.role === "ADMIN" || me.role === "MANAGER" ? getUserProfile(id).catch(() => null) : Promise.resolve(null),
       ]);
       const found = users.find((user) => user._id === id) || null;
       if (!found) throw new Error("This person isn't in your team list.");
@@ -232,7 +232,7 @@ export const UserDetailScreen = ({ route, navigation }: RootScreenProps<"UserDet
   const record = profile?.profile || person;
   const parent = record.parentId && typeof record.parentId === "object" ? record.parentId : team.find((user) => user._id === record.parentId) || null;
   const category = BUSINESS_CATEGORIES.find((item) => item.key === record.roleType)?.label;
-  const canEditDetails = !self && (me.role === "ADMIN" || me.role === "MANAGER");
+  const canEditDetails = !self && (me.role === "ADMIN" || (me.role === "MANAGER" && person.role !== "ADMIN"));
 
   return (
     <Body>

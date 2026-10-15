@@ -78,6 +78,8 @@ export const LeadDetailScreen = ({ route, navigation }: RootScreenProps<"LeadDet
   const temperature = TEMPERATURE[leadTemperature(lead)];
   const phone = dialable(lead.phone);
   const canDelete = isManagement(user.role);
+  const myId = user.id || user._id;
+  const onLead = [lead.assignedTo, lead.assignedExecutive, lead.assignedManager, lead.assignedFieldExecutive].some((person) => person && (typeof person === "object" ? person._id : person) === myId);
 
   const contact: { icon: IconName; label: string; onPress?: () => void }[] = [
     { icon: "call", label: "Call", onPress: phone ? () => Linking.openURL(`tel:${phone}`) : undefined },
@@ -107,7 +109,8 @@ export const LeadDetailScreen = ({ route, navigation }: RootScreenProps<"LeadDet
     { key: "req", label: "Edit requirements", icon: "options-outline", onPress: () => navigation.navigate("EditRequirements", { leadId: lead._id }) },
     { key: "transfer", label: "Transfer lead", icon: "swap-horizontal-outline", hint: "Hand it to a teammate", onPress: () => navigation.navigate("TransferLead", { leadId: lead._id }) },
     { key: "task", label: "Add task", icon: "add-circle-outline", onPress: () => navigation.navigate("NewTask", { leadId: lead._id, leadName: lead.name }) },
-    ...(canOpenPage(user, access, "chat")
+    // The lead room holds the lead's manager, executive and field executive (never an admin); the server has the final say.
+    ...(canOpenPage(user, access, "chat") && user.role !== "ADMIN" && (isManagement(user.role) || onLead)
       ? [
           {
             key: "room",

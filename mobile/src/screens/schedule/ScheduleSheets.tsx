@@ -118,7 +118,7 @@ export const ScheduleFollowUpSheet = ({
               Searching…
             </Text>
           ) : null}
-          {results.map((row) => {
+          {results.slice(0, 6).map((row) => {
             const allowed = canScheduleFollowUp(row);
             return (
               <Pressable

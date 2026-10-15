@@ -71,8 +71,13 @@ export const ProposalSheet = ({ visible, lead, properties, onClose }: { visible:
     run("pdf", async () => {
       const html = proposalHtml(input(await items()));
       if (Platform.OS === "web") {
-        // The browser's own print dialog saves it as a PDF.
-        await Print.printAsync({ html });
+        // expo-print's web build prints the current page, so the proposal gets its own window; "Save as PDF" in the print dialog keeps it.
+        const win = window.open("", "_blank");
+        if (!win) return "Allow pop-ups for this site to save the PDF.";
+        win.document.write(html);
+        win.document.close();
+        win.focus();
+        setTimeout(() => win.print(), 400);
         return null;
       }
       const { uri } = await Print.printToFileAsync({ html });

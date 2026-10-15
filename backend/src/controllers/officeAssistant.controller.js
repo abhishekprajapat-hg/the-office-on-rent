@@ -258,7 +258,7 @@ const queryInventory = async ({
 
   const rows = await Inventory.find(filter)
     .populate({
-      path: "saleMeta.leadId",
+      path: "saleDetails.leadId",
       select: "name phone assignedTo createdBy",
       populate: [
         { path: "assignedTo", select: "name role profileImageUrl" },
@@ -270,7 +270,7 @@ const queryInventory = async ({
     .lean();
 
   const items = rows.map((row) => {
-    const saleLead = row?.saleMeta?.leadId;
+    const saleLead = row?.saleDetails?.leadId;
     const handledBy = saleLead?.assignedTo?.name || saleLead?.createdBy?.name || "-";
 
     return {
@@ -578,7 +578,7 @@ const querySalesInterestedSnapshot = async ({ user }) => {
   const [soldInventoryRows, interestedLeadRows] = await Promise.all([
     Inventory.find({ ...inventoryScope, status: "Sold" })
       .populate({
-        path: "saleMeta.leadId",
+        path: "saleDetails.leadId",
         select: "name phone assignedTo createdBy",
         populate: [
           { path: "assignedTo", select: "name role profileImageUrl" },
@@ -602,10 +602,10 @@ const querySalesInterestedSnapshot = async ({ user }) => {
     location: row.location || "-",
     price: row.price || 0,
     soldThrough:
-      row?.saleMeta?.leadId?.assignedTo?.name
-      || row?.saleMeta?.leadId?.createdBy?.name
+      row?.saleDetails?.leadId?.assignedTo?.name
+      || row?.saleDetails?.leadId?.createdBy?.name
       || "-",
-    soldLeadName: row?.saleMeta?.leadId?.name || "-",
+    soldLeadName: row?.saleDetails?.leadId?.name || "-",
     updatedAt: row.updatedAt || null,
   }));
 

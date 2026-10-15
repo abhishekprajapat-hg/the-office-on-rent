@@ -47,7 +47,7 @@ export const AssistantScreen = ({ navigation }: RootScreenProps<"Assistant">) =>
   }, [messages, storageKey]);
 
   React.useLayoutEffect(() => {
-    navigation.setOptions({ headerRight: () => (messages.length ? <HeaderButton icon="ellipsis-horizontal" label="More" onPress={() => setMenu(true)} /> : null) });
+    navigation.setOptions({ headerRight: () => (messages.length ? <HeaderButton icon="ellipsis-horizontal" label="More" variant="secondary" onPress={() => setMenu(true)} /> : null) });
   });
 
   const go = (target: NavTarget) => {

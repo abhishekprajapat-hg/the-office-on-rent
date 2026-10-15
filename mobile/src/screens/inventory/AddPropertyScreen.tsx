@@ -70,7 +70,6 @@ const formFrom = (p: Property) => ({
   ownerWhatsapp: p.ownerWhatsappNumber || "",
   keyName: p.keyManagerName || "",
   keyNumber: p.keyManagerNumber || "",
-  propertyId: p.propertyId || "",
   area: p.area || "",
   pincode: p.pincode || "",
   builtUp: groupedNumber(p.builtUpArea),
@@ -126,7 +125,6 @@ export const AddPropertyScreen = ({ navigation, route }: RootScreenProps<"AddPro
     ownerWhatsapp: "",
     keyName: "",
     keyNumber: "",
-    propertyId: "",
     area: "",
     pincode: "",
     builtUp: "",
@@ -306,7 +304,6 @@ export const AddPropertyScreen = ({ navigation, route }: RootScreenProps<"AddPro
         ownerWhatsappNumber: form.ownerWhatsapp.replace(/[^\d+]/g, "") || undefined,
         keyManagerName: form.keyName.trim() || undefined,
         keyManagerNumber: form.keyNumber.replace(/[^\d+]/g, "") || undefined,
-        propertyId: form.propertyId.trim(),
         area: form.area.trim(),
         pincode: form.pincode.trim(),
         builtUpArea: num(form.builtUp),
@@ -437,7 +434,11 @@ export const AddPropertyScreen = ({ navigation, route }: RootScreenProps<"AddPro
             </Group>
             <Field label="Project / building" value={form.projectName} onChangeText={set("projectName")} placeholder="e.g. DLF Cyber Park" error={show("projectName")} />
             <Field label="Tower / block / unit" value={form.towerName} onChangeText={set("towerName")} placeholder="e.g. Tower B, unit 702" error={show("towerName")} />
-            <Field label="Property ID" value={form.propertyId} onChangeText={set("propertyId")} placeholder="Your listing code, e.g. OOR-118" autoCapitalize="characters" hint="What clients see in proposals, with the project name" />
+            {editId && original?.propertyId ? (
+              <Text variant="small" color="muted">
+                Property ID {original.propertyId} · set by the system, shown to clients in proposals
+              </Text>
+            ) : null}
             <Field label="Location" value={form.location} onChangeText={set("location")} placeholder="Street, sector or landmark" error={show("location")} />
             <Pair>
               <Field label="Locality" value={form.area} onChangeText={set("area")} placeholder="Sector 39" />

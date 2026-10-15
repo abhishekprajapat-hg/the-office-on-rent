@@ -136,7 +136,6 @@ export type NewProperty = {
   images?: string[];
   commercialDetails?: NonNullable<Property["commercialDetails"]>;
   residentialDetails?: NonNullable<Property["residentialDetails"]>;
-  propertyId?: string;
   pincode?: string;
   builtUpArea?: number | null;
   agreementYears?: number | null;

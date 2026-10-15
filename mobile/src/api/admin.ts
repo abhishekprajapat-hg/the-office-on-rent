@@ -115,7 +115,7 @@ export type AdminProfileView = {
   } | null;
 };
 
-/* GET /users/:id/profile - admins only: the full record, reporting manager filled in, with lead numbers. */
+/* GET /users/:id/profile - admins and managers: the full record, reporting manager filled in, with lead numbers. */
 export const getUserProfile = async (userId: string) => {
   const res = await api.get(`/users/${userId}/profile`);
   return { profile: res.data?.profile || null, performance: res.data?.performance || null } as AdminProfileView;

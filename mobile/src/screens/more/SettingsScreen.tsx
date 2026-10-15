@@ -120,7 +120,7 @@ export const SettingsScreen = () => {
       </View>
 
       <Text variant="mono" color={colors.textFaint} align="center" style={styles.version}>
-        v{Constants.expoConfig?.version || "2.0.0"} · Office On Rent
+        v{Constants.expoConfig?.version || "2.1.0"} · Office On Rent
       </Text>
 
       <ActionSheet
