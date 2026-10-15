@@ -45,3 +45,17 @@ export const getBlockedLeads = async (id: string) => {
   const res = await api.get<{ blockedLeads: BlockedLead[] }>(`/contacts/${id}/blocked-leads`);
   return res.data?.blockedLeads || [];
 };
+
+export type ContactImportResult = { createdCount: number; updatedCount: number; failedCount: number; failures: { row: number; message: string }[] };
+
+/* POST /contacts/bulk - up to 5,000 rows; rows are keyed by phone, so re-uploading a corrected sheet updates. */
+export const importContacts = async (kind: ContactKind, rows: Record<string, string>[]) => {
+  const res = await api.post<ContactImportResult>("/contacts/bulk", { kind, rows }, { timeout: 120000 });
+  return res.data;
+};
+
+/* GET /contacts/identify?phone - whether a number is in the Broker Database (brokers can't be saved as leads). */
+export const identifyPhone = async (phone: string) => {
+  const res = await api.get<{ isBroker: boolean; contactId: string | null; name: string }>("/contacts/identify", { params: { phone } });
+  return res.data;
+};

@@ -95,3 +95,24 @@ export const useSocketEvent = <T,>(event: string, handler: (payload: T) => void,
     };
   }, [event, enabled]);
 };
+
+/* Sends one event and resolves with the server's ack (or null when offline or it times out). */
+export const emitWithAck = <T = Record<string, unknown>,>(event: string, payload: Record<string, unknown>, timeoutMs = 8000) =>
+  new Promise<T | null>((resolve) => {
+    const live = acquireSocket();
+    const done = (value: T | null) => {
+      clearTimeout(timer);
+      releaseSocket();
+      resolve(value);
+    };
+    const timer = setTimeout(() => done(null), timeoutMs);
+    if (!live.connected) return done(null);
+    live.emit(event, payload, (ack: T) => done(ack || null));
+  });
+
+/* Fire-and-forget emit on the shared socket (typing state). */
+export const emitEvent = (event: string, payload: Record<string, unknown>) => {
+  const live = acquireSocket();
+  if (live.connected) live.emit(event, payload);
+  releaseSocket();
+};

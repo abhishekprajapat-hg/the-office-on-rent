@@ -28,10 +28,10 @@ export const FilterSheet = ({
   onApply?: () => void;
   children: React.ReactNode;
 }) => {
-  const { colors } = useTheme();
+  const { colors, reduceMotion } = useTheme();
   const insets = useSafeAreaInsets();
   return (
-    <Modal transparent visible={visible} animationType="slide" onRequestClose={onClose}>
+    <Modal transparent visible={visible} animationType={reduceMotion ? "none" : "slide"} onRequestClose={onClose}>
       <View style={[styles.backdrop, { backgroundColor: colors.overlay, paddingTop: insets.top + 44 }]}>
         <Pressable style={StyleSheet.absoluteFill} onPress={onClose} accessibilityLabel="Close filters" />
         <View style={[styles.sheet, { backgroundColor: colors.surface }]}>

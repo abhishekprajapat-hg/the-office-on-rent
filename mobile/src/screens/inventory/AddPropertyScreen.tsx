@@ -1,21 +1,37 @@
 import React, { useEffect, useState } from "react";
-import { Image, Pressable, ScrollView, StyleSheet, View } from "react-native";
+import { Image, Linking, Pressable, ScrollView, StyleSheet, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { errorMessage, mediaUrl } from "../../api/client";
 import { createProperty, getProperty, requestPropertyUpdate, updateProperty, type DealType, type NewProperty, type Property } from "../../api/inventory";
 import { useAuth } from "../../auth/AuthProvider";
 import { inventoryAccess } from "../../lib/inventoryAccess";
-import { pickImage, uploadFile, type LocalFile } from "../../api/uploads";
-import { formatPrice, parseAmount } from "../../lib/money";
+import { pickDocument, pickImage, uploadFile, type LocalFile } from "../../api/uploads";
+import { currentPosition } from "../../lib/location";
+import { formatPrice, formatRupees, parseAmount } from "../../lib/money";
 import { FURNISHING } from "../../lib/property";
-import { validateProperty } from "../../lib/propertyForm";
+import {
+  DEAL_TYPES,
+  DOCUMENT_CHECKS,
+  MODELS_BY_OWNERSHIP,
+  OWNER_TYPES,
+  OWNERSHIP,
+  PAYMENT_STATUSES,
+  badLink,
+  enterpriseProfit,
+  parseLinks,
+  pincodeError,
+  validateProperty,
+  type DocumentChecks,
+} from "../../lib/propertyForm";
 import type { RootScreenProps } from "../../navigation/types";
 import { useTheme } from "../../theme/ThemeProvider";
-import { Button, Chip, ErrorState, Field, FooterBar, Icon, InlineError, Loading, Segmented, Text } from "../../ui";
+import { Button, CheckSquare, Chip, ErrorState, Field, FooterBar, Icon, InlineError, Loading, Segmented, Text, Toggle } from "../../ui";
 
 const COMMERCIAL_CATEGORIES = ["Office", "Shop", "Showroom", "Coworking", "Warehouse", "Land"];
 const RESIDENTIAL_CATEGORIES = ["Apartment", "Builder Floor", "Villa", "House", "Plot", "PG"];
-const STEPS = ["Basics", "Size & pricing", "Photos", "Owner"];
+const STEPS = ["Basics", "Size & pricing", "Photos & files", "Owner & papers"];
+const NO_DOCS: DocumentChecks = { registry: false, searchReport: false, electricityNoc: false, maintenanceNoc: false, taxReceipt: false, loanNoc: false };
+const fileNameOf = (url: string) => decodeURIComponent(url.split("?")[0]!.split("/").pop() || "Document").replace(/^\d{10,}-/, "");
 const MAX_PHOTOS = 12;
 
 const num = (value: string) => {
@@ -54,6 +70,21 @@ const formFrom = (p: Property) => ({
   ownerWhatsapp: p.ownerWhatsappNumber || "",
   keyName: p.keyManagerName || "",
   keyNumber: p.keyManagerNumber || "",
+  area: p.area || "",
+  pincode: p.pincode || "",
+  builtUp: groupedNumber(p.builtUpArea),
+  deposit: text(p.deposit),
+  agreementYears: text(p.agreementYears),
+  ownerType: p.ownerType || "",
+  ownershipType: p.ownershipType || "",
+  businessModel: p.businessModel || "",
+  leaseRent: text(p.enterpriseDetails?.leaseRent),
+  clientRent: text(p.enterpriseDetails?.clientRent),
+  clientName: p.enterpriseDetails?.clientName || "",
+  rentDueDay: text(p.enterpriseDetails?.rentDueDay),
+  paymentStatus: p.enterpriseDetails?.paymentStatus || "",
+  dealType: p.dealType || "",
+  videoLinks: (p.videoTours || []).join("\n"),
 });
 
 /*
@@ -94,7 +125,30 @@ export const AddPropertyScreen = ({ navigation, route }: RootScreenProps<"AddPro
     ownerWhatsapp: "",
     keyName: "",
     keyNumber: "",
+    area: "",
+    pincode: "",
+    builtUp: "",
+    deposit: "",
+    agreementYears: "",
+    ownerType: "",
+    ownershipType: "",
+    businessModel: "",
+    leaseRent: "",
+    clientRent: "",
+    clientName: "",
+    rentDueDay: "",
+    paymentStatus: "",
+    dealType: "",
+    videoLinks: "",
   });
+  const [docs, setDocs] = useState<DocumentChecks>(NO_DOCS);
+  const [gst, setGst] = useState(false);
+  const [pin, setPin] = useState<{ lat: number; lng: number } | null>(null);
+  const [locating, setLocating] = useState(false);
+  const [plans, setPlans] = useState<string[]>([]);
+  const [newPlans, setNewPlans] = useState<LocalFile[]>([]);
+  const [papers, setPapers] = useState<string[]>([]);
+  const [newPapers, setNewPapers] = useState<LocalFile[]>([]);
   const [photos, setPhotos] = useState<LocalFile[]>([]);
   const [existing, setExisting] = useState<string[]>([]);
   const [original, setOriginal] = useState<Property | null>(null);
@@ -116,6 +170,11 @@ export const AddPropertyScreen = ({ navigation, route }: RootScreenProps<"AddPro
       setFurnishing(property.furnishingStatus || "");
       setForm(formFrom(property));
       setExisting(property.images || []);
+      setPlans(property.floorPlans || []);
+      setPapers(property.documents || []);
+      setDocs({ ...NO_DOCS, ...(property.documentsAvailable || {}) });
+      setGst(Boolean(property.gstApplicable));
+      setPin(property.siteLocation?.lat != null && property.siteLocation?.lng != null ? { lat: property.siteLocation.lat, lng: property.siteLocation.lng } : null);
       setOriginal(property);
     } catch (err) {
       setLoadError(errorMessage(err));
@@ -136,8 +195,13 @@ export const AddPropertyScreen = ({ navigation, route }: RootScreenProps<"AddPro
   const setArea = (key: keyof typeof form) => (value: string) => setForm((prev) => ({ ...prev, [key]: grouped(value) }));
   const price = parseAmount(form.price);
   const rent = parseAmount(form.rent);
-  const errors = validateProperty({ ...form, type: deal, price, rent });
-  const stepErrors = [["projectName", "towerName", "location"], ["price", "rent"], [], []];
+  const videoTours = parseLinks(form.videoLinks);
+  const errors: Record<string, string> = { ...validateProperty({ ...form, type: deal, price, rent }) };
+  if (pincodeError(form.pincode)) errors.pincode = pincodeError(form.pincode)!;
+  if (badLink(videoTours)) errors.videoLinks = `"${badLink(videoTours)}" isn't a link. Use one https:// address per line.`;
+  if (form.rentDueDay && !(Number(form.rentDueDay) >= 1 && Number(form.rentDueDay) <= 31)) errors.rentDueDay = "A day from 1 to 31";
+  const stepErrors = [["projectName", "towerName", "location", "pincode"], ["price", "rent"], ["videoLinks"], ["rentDueDay"]];
+  const profit = enterpriseProfit(form.leaseRent, form.clientRent);
   const show = (key: string) => (touched.some((index) => stepErrors[index]!.includes(key)) ? errors[key] : undefined);
   const commercial = inventoryType === "COMMERCIAL";
 
@@ -148,6 +212,32 @@ export const AddPropertyScreen = ({ navigation, route }: RootScreenProps<"AddPro
       if (file) setPhotos((prev) => [...prev, file].slice(0, MAX_PHOTOS - existing.length));
     } catch (err) {
       setError(errorMessage(err));
+    }
+  };
+
+  /* Floor plans are pictures or PDFs; documents any paper the server accepts. */
+  const addFile = async (kind: "plan" | "paper", source: "camera" | "library" | "file") => {
+    setError(null);
+    try {
+      const file = source === "file" ? await pickDocument() : await pickImage(source);
+      if (!file) return;
+      if (kind === "plan") setNewPlans((prev) => [...prev, file]);
+      else setNewPapers((prev) => [...prev, file]);
+    } catch (err) {
+      setError(errorMessage(err));
+    }
+  };
+
+  const pinHere = async () => {
+    setLocating(true);
+    setError(null);
+    try {
+      const here = await currentPosition();
+      setPin({ lat: Number(here.latitude.toFixed(6)), lng: Number(here.longitude.toFixed(6)) });
+    } catch {
+      setError("Couldn't get your location. Turn on location services and allow it for the app, then try again.");
+    } finally {
+      setLocating(false);
     }
   };
 
@@ -166,6 +256,16 @@ export const AddPropertyScreen = ({ navigation, route }: RootScreenProps<"AddPro
       for (let index = 0; index < photos.length; index += 1) {
         setSaving(`Uploading photo ${index + 1} of ${photos.length}…`);
         images.push((await uploadFile(photos[index]!, "inventory-images")).url);
+      }
+      const floorPlans = [...plans];
+      for (let index = 0; index < newPlans.length; index += 1) {
+        setSaving(`Uploading floor plan ${index + 1} of ${newPlans.length}…`);
+        floorPlans.push((await uploadFile(newPlans[index]!, "inventory-floorplans")).url);
+      }
+      const documents = [...papers];
+      for (let index = 0; index < newPapers.length; index += 1) {
+        setSaving(`Uploading document ${index + 1} of ${newPapers.length}…`);
+        documents.push((await uploadFile(newPapers[index]!, "inventory-documents")).url);
       }
       setSaving("Saving…");
       const carpet = num(form.carpetArea);
@@ -204,6 +304,32 @@ export const AddPropertyScreen = ({ navigation, route }: RootScreenProps<"AddPro
         ownerWhatsappNumber: form.ownerWhatsapp.replace(/[^\d+]/g, "") || undefined,
         keyManagerName: form.keyName.trim() || undefined,
         keyManagerNumber: form.keyNumber.replace(/[^\d+]/g, "") || undefined,
+        area: form.area.trim(),
+        pincode: form.pincode.trim(),
+        builtUpArea: num(form.builtUp),
+        deposit: deal !== "Sale" ? parseAmount(form.deposit) : null,
+        agreementYears: deal !== "Sale" ? num(form.agreementYears) : null,
+        floorPlans,
+        documents,
+        videoTours,
+        documentsAvailable: docs,
+        gstApplicable: gst,
+        ownerType: form.ownerType,
+        ownershipType: form.ownershipType,
+        businessModel: form.businessModel,
+        enterpriseDetails:
+          form.businessModel === "ENTERPRISE"
+            ? {
+                leaseRent: parseAmount(form.leaseRent),
+                clientRent: parseAmount(form.clientRent),
+                clientName: form.clientName.trim(),
+                rentDueDay: num(form.rentDueDay),
+                paymentStatus: form.paymentStatus,
+                lastPaymentDate: original?.enterpriseDetails?.lastPaymentDate || null,
+              }
+            : null,
+        dealType: form.dealType,
+        ...(pin ? { siteLocation: pin } : {}),
       };
       if (editId) {
         if (direct) {
@@ -308,12 +434,38 @@ export const AddPropertyScreen = ({ navigation, route }: RootScreenProps<"AddPro
             </Group>
             <Field label="Project / building" value={form.projectName} onChangeText={set("projectName")} placeholder="e.g. DLF Cyber Park" error={show("projectName")} />
             <Field label="Tower / block / unit" value={form.towerName} onChangeText={set("towerName")} placeholder="e.g. Tower B, unit 702" error={show("towerName")} />
+            {editId && original?.propertyId ? (
+              <Text variant="small" color="muted">
+                Property ID {original.propertyId} · set by the system, shown to clients in proposals
+              </Text>
+            ) : null}
             <Field label="Location" value={form.location} onChangeText={set("location")} placeholder="Street, sector or landmark" error={show("location")} />
             <Pair>
+              <Field label="Locality" value={form.area} onChangeText={set("area")} placeholder="Sector 39" />
               <Field label="City" value={form.city} onChangeText={set("city")} placeholder="Gurugram" />
+            </Pair>
+            <Pair>
+              <Field label="PIN code" value={form.pincode} onChangeText={(value) => set("pincode")(value.replace(/\D/g, "").slice(0, 6))} keyboardType="number-pad" placeholder="122001" error={show("pincode")} />
               <Field label="Floor" value={form.floorNumber} onChangeText={set("floorNumber")} keyboardType="numeric" placeholder="0 = ground" suffix={form.totalFloors ? `of ${form.totalFloors}` : undefined} />
             </Pair>
             <Field label="Floors in building" value={form.totalFloors} onChangeText={set("totalFloors")} keyboardType="numeric" placeholder="Optional" />
+            <View style={[styles.pinRow, { borderColor: colors.border }]}>
+              <Icon name="location" size={18} color={pin ? colors.success : colors.textFaint} />
+              <View style={styles.flex}>
+                <Text variant="smallStrong">{pin ? "Pinned on the map" : "Map pin"}</Text>
+                <Text variant="tiny" color="muted">
+                  {pin ? `${pin.lat}, ${pin.lng}` : "Stand at the property and pin it, for directions and field visits."}
+                </Text>
+              </View>
+              {pin ? (
+                <Pressable accessibilityRole="link" hitSlop={6} onPress={() => Linking.openURL(`https://www.google.com/maps/search/?api=1&query=${pin.lat},${pin.lng}`).catch(() => {})}>
+                  <Text variant="smallStrong" color="primary">
+                    View
+                  </Text>
+                </Pressable>
+              ) : null}
+              <Button label={pin ? "Re-pin" : "Pin here"} size="sm" variant="secondary" icon="navigate-outline" loading={locating} onPress={pinHere} />
+            </View>
           </>
         ) : null}
 
@@ -328,6 +480,7 @@ export const AddPropertyScreen = ({ navigation, route }: RootScreenProps<"AddPro
               <Field label="Carpet area" value={form.carpetArea} onChangeText={setArea("carpetArea")} keyboardType="numeric" placeholder="3,200" suffix="sq ft" />
               <Field label="Super area" value={form.superArea} onChangeText={setArea("superArea")} keyboardType="numeric" placeholder="4,100" suffix="sq ft" />
             </Pair>
+            <Field label="Built-up area" value={form.builtUp} onChangeText={setArea("builtUp")} keyboardType="numeric" placeholder="Optional" suffix="sq ft" />
             {commercial ? (
               <Pair>
                 <Field label="Workstations" value={form.workstations} onChangeText={set("workstations")} keyboardType="numeric" placeholder="40" />
@@ -350,6 +503,23 @@ export const AddPropertyScreen = ({ navigation, route }: RootScreenProps<"AddPro
               <Field label="Maintenance" value={form.maintenance} onChangeText={set("maintenance")} placeholder="Optional" suffix="₹/mo" />
               {deal !== "Sale" ? <Field label="Lock-in" value={form.lockIn} onChangeText={set("lockIn")} keyboardType="numeric" placeholder="3" suffix="years" /> : <View />}
             </Pair>
+            {deal !== "Sale" ? (
+              <Pair>
+                <Field label="Deposit amount" value={form.deposit} onChangeText={set("deposit")} placeholder="Optional" suffix="₹" hint={parseAmount(form.deposit) ? formatPrice(parseAmount(form.deposit)) : undefined} />
+                <Field label="Agreement" value={form.agreementYears} onChangeText={set("agreementYears")} keyboardType="numeric" placeholder="9" suffix="years" />
+              </Pair>
+            ) : null}
+            <Group label="Deal">
+              {DEAL_TYPES.map((item) => (
+                <Chip key={item.key} label={item.label} selected={form.dealType === item.key} onPress={() => set("dealType")(form.dealType === item.key ? "" : item.key)} />
+              ))}
+            </Group>
+            <View style={styles.toggleRow}>
+              <Text variant="bodyStrong" style={styles.flex}>
+                GST applicable
+              </Text>
+              <Toggle value={gst} label="GST applicable" onChange={setGst} />
+            </View>
             {rent && num(form.carpetArea) ? (
               <View style={[styles.note, { backgroundColor: colors.bg }]}>
                 <Text variant="small" color="muted">
@@ -411,8 +581,28 @@ export const AddPropertyScreen = ({ navigation, route }: RootScreenProps<"AddPro
               ) : null}
             </View>
             <Text variant="small" color="faint">
-              {existing.length + photos.length ? `${existing.length + photos.length} of ${MAX_PHOTOS} · the first photo is the cover` : "Add up to 12 photos. Floor plans and documents can be added from the web app."}
+              {existing.length + photos.length ? `${existing.length + photos.length} of ${MAX_PHOTOS} · the first photo is the cover` : "Add up to 12 photos."}
             </Text>
+            <FileList
+              title="Floor plans"
+              files={[...plans.map((url) => ({ key: `url:${url}`, name: fileNameOf(url), saved: true })), ...newPlans.map((file, index) => ({ key: `new:${index}`, name: file.name, saved: false }))]}
+              onRemove={(key) => (key.startsWith("new:") ? setNewPlans((prev) => prev.filter((_, at) => `new:${at}` !== key)) : setPlans((prev) => prev.filter((url) => `url:${url}` !== key)))}
+              actions={[
+                { label: "Photo", icon: "camera-outline", onPress: () => addFile("plan", "camera") },
+                { label: "Gallery", icon: "image-outline", onPress: () => addFile("plan", "library") },
+                { label: "PDF", icon: "document-outline", onPress: () => addFile("plan", "file") },
+              ]}
+            />
+            <FileList
+              title="Documents"
+              files={[...papers.map((url) => ({ key: `url:${url}`, name: fileNameOf(url), saved: true })), ...newPapers.map((file, index) => ({ key: `new:${index}`, name: file.name, saved: false }))]}
+              onRemove={(key) => (key.startsWith("new:") ? setNewPapers((prev) => prev.filter((_, at) => `new:${at}` !== key)) : setPapers((prev) => prev.filter((url) => `url:${url}` !== key)))}
+              actions={[
+                { label: "Scan", icon: "camera-outline", onPress: () => addFile("paper", "camera") },
+                { label: "File", icon: "document-attach-outline", onPress: () => addFile("paper", "file") },
+              ]}
+            />
+            <Field label="Video tours" value={form.videoLinks} onChangeText={set("videoLinks")} placeholder="https://… one link per line" multiline autoCapitalize="none" autoCorrect={false} error={show("videoLinks")} />
           </>
         ) : null}
 
@@ -428,6 +618,68 @@ export const AddPropertyScreen = ({ navigation, route }: RootScreenProps<"AddPro
               <Field value={form.keyName} onChangeText={set("keyName")} placeholder="Name" autoCapitalize="words" />
               <Field value={form.keyNumber} onChangeText={set("keyNumber")} placeholder="Phone" keyboardType="phone-pad" />
             </Pair>
+            <Group label="Ownership">
+              {OWNER_TYPES.map((item) => (
+                <Chip key={item.key} label={item.label} selected={form.ownerType === item.key} onPress={() => set("ownerType")(form.ownerType === item.key ? "" : item.key)} />
+              ))}
+            </Group>
+            <Group label="Papers in hand">
+              {DOCUMENT_CHECKS.map((item) => (
+                <Pressable key={item.key} accessibilityRole="checkbox" accessibilityState={{ checked: docs[item.key] }} onPress={() => setDocs((prev) => ({ ...prev, [item.key]: !prev[item.key] }))} style={styles.check}>
+                  <CheckSquare checked={docs[item.key]} />
+                  <Text variant="small">{item.label}</Text>
+                </Pressable>
+              ))}
+            </Group>
+            <Group label="Revenue">
+              {OWNERSHIP.map((item) => (
+                <Chip
+                  key={item.key}
+                  label={item.label}
+                  selected={form.ownershipType === item.key}
+                  onPress={() =>
+                    setForm((prev) => {
+                      const ownershipType = prev.ownershipType === item.key ? "" : item.key;
+                      const keep = (MODELS_BY_OWNERSHIP[ownershipType] || []).some((model) => model.key === prev.businessModel);
+                      return { ...prev, ownershipType, businessModel: keep ? prev.businessModel : "" };
+                    })
+                  }
+                />
+              ))}
+            </Group>
+            {form.ownershipType ? (
+              <>
+                <Text variant="tiny" color="muted">
+                  Counts as {OWNERSHIP.find((item) => item.key === form.ownershipType)?.income.toLowerCase()} in Finance.
+                </Text>
+                <View style={styles.chips}>
+                  {(MODELS_BY_OWNERSHIP[form.ownershipType] || []).map((model) => (
+                    <Chip key={model.key} label={model.label} selected={form.businessModel === model.key} onPress={() => set("businessModel")(form.businessModel === model.key ? "" : model.key)} />
+                  ))}
+                </View>
+              </>
+            ) : null}
+            {form.businessModel === "ENTERPRISE" ? (
+              <>
+                <Pair>
+                  <Field label="Lease rent" value={form.leaseRent} onChangeText={set("leaseRent")} keyboardType="numeric" placeholder="What you pay" suffix="₹/mo" />
+                  <Field label="Client rent" value={form.clientRent} onChangeText={set("clientRent")} keyboardType="numeric" placeholder="What they pay" suffix="₹/mo" />
+                </Pair>
+                <Text variant="small" color={profit !== null && profit < 0 ? colors.danger : colors.textMuted}>
+                  Monthly profit: {profit === null ? "enter both rents" : formatRupees(profit)}
+                </Text>
+                <Field label="Client" value={form.clientName} onChangeText={set("clientName")} placeholder="Who sublets it" autoCapitalize="words" />
+                <Pair>
+                  <Field label="Rent due day" value={form.rentDueDay} onChangeText={(value) => set("rentDueDay")(value.replace(/\D/g, "").slice(0, 2))} keyboardType="number-pad" placeholder="5" error={show("rentDueDay")} />
+                  <View />
+                </Pair>
+                <View style={styles.chips}>
+                  {PAYMENT_STATUSES.map((item) => (
+                    <Chip key={item.key} label={item.label} selected={form.paymentStatus === item.key} onPress={() => set("paymentStatus")(form.paymentStatus === item.key ? "" : item.key)} />
+                  ))}
+                </View>
+              </>
+            ) : null}
           </>
         ) : null}
 
@@ -466,6 +718,48 @@ const Pair = ({ children }: { children: React.ReactNode[] }) => (
   </View>
 );
 
+const FileList = ({
+  title,
+  files,
+  onRemove,
+  actions,
+}: {
+  title: string;
+  files: { key: string; name: string; saved: boolean }[];
+  onRemove: (key: string) => void;
+  actions: { label: string; icon: "camera-outline" | "image-outline" | "document-outline" | "document-attach-outline"; onPress: () => void }[];
+}) => {
+  const { colors } = useTheme();
+  return (
+    <View style={styles.gapSm}>
+      <Text variant="smallStrong" color="muted">
+        {title}
+      </Text>
+      {files.map((file) => (
+        <View key={file.key} style={[styles.fileRow, { borderColor: colors.border }]}>
+          <Icon name={file.saved ? "document-text" : "cloud-upload-outline"} size={16} color={file.saved ? colors.primary : colors.textMuted} />
+          <Text variant="small" numberOfLines={1} style={styles.flex}>
+            {file.name}
+          </Text>
+          {!file.saved ? (
+            <Text variant="tiny" color="faint">
+              uploads on save
+            </Text>
+          ) : null}
+          <Pressable accessibilityRole="button" accessibilityLabel={`Remove ${file.name}`} hitSlop={6} onPress={() => onRemove(file.key)}>
+            <Icon name="close" size={16} color={colors.textFaint} />
+          </Pressable>
+        </View>
+      ))}
+      <View style={styles.row}>
+        {actions.map((action) => (
+          <Button key={action.label} label={action.label} icon={action.icon} size="sm" variant="secondary" onPress={action.onPress} />
+        ))}
+      </View>
+    </View>
+  );
+};
+
 const AddTile = ({ icon, label, onPress }: { icon: "camera" | "images"; label: string; onPress: () => void }) => {
   const { colors } = useTheme();
   return (
@@ -503,6 +797,10 @@ const styles = StyleSheet.create({
   remove: { position: "absolute", top: 6, right: 6, width: 22, height: 22, borderRadius: 11, alignItems: "center", justifyContent: "center" },
   addTile: { borderWidth: 1.5, borderStyle: "dashed", alignItems: "center", justifyContent: "center", gap: 4 },
   keysLabel: { marginBottom: -6 },
+  pinRow: { flexDirection: "row", alignItems: "center", gap: 10, borderWidth: 1, borderRadius: 14, padding: 10 },
+  toggleRow: { flexDirection: "row", alignItems: "center", gap: 12 },
+  check: { flexDirection: "row", alignItems: "center", gap: 8, width: "48%", paddingVertical: 4 },
+  fileRow: { flexDirection: "row", alignItems: "center", gap: 8, borderWidth: 1, borderRadius: 10, paddingHorizontal: 10, paddingVertical: 8 },
   done: { alignItems: "center", justifyContent: "center", padding: 28, gap: 12 },
   doneIcon: { width: 64, height: 64, borderRadius: 22, alignItems: "center", justifyContent: "center" },
   doneButton: { alignSelf: "stretch", marginTop: 8 },

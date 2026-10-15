@@ -19,6 +19,7 @@ import { ThemeProvider, useTheme } from "./src/theme/ThemeProvider";
 import { NotificationBridge } from "./src/notifications/NotificationBridge";
 import { BootSplash } from "./src/screens/auth/BootSplash";
 import { AppLock } from "./src/components/AppLock";
+import { IdleSignOut } from "./src/components/IdleSignOut";
 
 SplashScreen.preventAutoHideAsync().catch(() => {});
 
@@ -51,8 +52,10 @@ const Shell = () => {
     <View style={{ flex: 1, backgroundColor: colors.bg }}>
       <StatusBar style={scheme === "dark" ? "light" : "dark"} />
       <AppLock>
-        <RootNavigator />
-        <NotificationBridge />
+        <IdleSignOut>
+          <RootNavigator />
+          <NotificationBridge />
+        </IdleSignOut>
       </AppLock>
     </View>
   );

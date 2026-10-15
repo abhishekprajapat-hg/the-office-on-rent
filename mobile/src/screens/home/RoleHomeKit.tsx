@@ -196,12 +196,12 @@ const Hero = ({ spec }: { spec: HeroSpec }) => {
   const { colors } = useTheme();
   const total = spec.bar.reduce((sum, part) => sum + Math.max(0, part.value), 0);
   return (
-    <View style={[styles.hero, { backgroundColor: colors.hero }]}>
+    <View style={[styles.hero, { backgroundColor: colors.hero, shadowColor: colors.hero }]}>
       <View style={styles.heroHead}>
         <View style={styles.heroIcon}>
           <Icon name={spec.icon} size={16} color="#fff" />
         </View>
-        <Text variant="smallStrong" color="#d6defd" numberOfLines={1} style={[styles.flex, styles.heroLabel]}>
+        <Text variant="smallStrong" color={colors.onPrimaryMuted} numberOfLines={1} style={[styles.flex, styles.heroLabel]}>
           {spec.label}
         </Text>
         {spec.tag ? (
@@ -217,7 +217,7 @@ const Hero = ({ spec }: { spec: HeroSpec }) => {
           {spec.value}
         </Text>
         {spec.unit ? (
-          <Text variant="smallStrong" color="#c9d4fb" style={styles.heroUnit}>
+          <Text variant="smallStrong" color={colors.onPrimaryMuted} style={styles.heroUnit}>
             {spec.unit}
           </Text>
         ) : null}
@@ -250,8 +250,8 @@ const Hero = ({ spec }: { spec: HeroSpec }) => {
           onPress={spec.cta.onPress}
           style={({ pressed }) => [styles.cta, (pressed || spec.cta?.disabled) && { opacity: spec.cta?.disabled ? 0.6 : 0.9, transform: [{ scale: 0.98 }] }]}
         >
-          {spec.cta.busy ? <ActivityIndicator color={colors.primary} /> : <Icon name={spec.cta.icon} size={17} color="#2549d6" />}
-          <Text variant="bodyStrong" color="#2549d6" style={styles.ctaText} numberOfLines={1}>
+          {spec.cta.busy ? <ActivityIndicator color={colors.primary} /> : <Icon name={spec.cta.icon} size={17} color={colors.hero} />}
+          <Text variant="bodyStrong" color={colors.hero} style={styles.ctaText} numberOfLines={1}>
             {spec.cta.label}
           </Text>
         </Pressable>
@@ -347,7 +347,7 @@ const styles = StyleSheet.create({
   bell: { width: 42, height: 42, borderRadius: 14, borderWidth: 1, alignItems: "center", justifyContent: "center" },
   bellDot: { position: "absolute", top: 9, right: 10, width: 10, height: 10, borderRadius: 5, borderWidth: 2 },
   heroLoading: { height: 230, borderRadius: 26, alignItems: "center", justifyContent: "center" },
-  hero: { borderRadius: 26, padding: 18, gap: 14, shadowColor: "#2549d6", shadowOpacity: 0.28, shadowRadius: 17, shadowOffset: { width: 0, height: 14 }, elevation: 6 },
+  hero: { borderRadius: 26, padding: 18, gap: 14, shadowOpacity: 0.28, shadowRadius: 17, shadowOffset: { width: 0, height: 14 }, elevation: 6 },
   heroHead: { flexDirection: "row", alignItems: "center", gap: 8 },
   heroIcon: { width: 30, height: 30, borderRadius: 10, backgroundColor: "rgba(255,255,255,0.16)", alignItems: "center", justifyContent: "center" },
   heroLabel: { fontSize: 13 },

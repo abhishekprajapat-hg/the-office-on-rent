@@ -20,10 +20,10 @@ export const ActionSheet = ({
   actions: SheetAction[];
   onClose: () => void;
 }) => {
-  const { colors } = useTheme();
+  const { colors, reduceMotion } = useTheme();
   const insets = useSafeAreaInsets();
   return (
-    <Modal transparent visible={visible} animationType="fade" onRequestClose={onClose}>
+    <Modal transparent visible={visible} animationType={reduceMotion ? "none" : "fade"} onRequestClose={onClose}>
       <Pressable style={[styles.backdrop, { backgroundColor: colors.overlay }]} onPress={onClose} accessibilityLabel="Close menu">
         <Pressable style={[styles.sheet, { backgroundColor: colors.surface, paddingBottom: insets.bottom + space.lg }]}>
           <View style={[styles.grabber, { backgroundColor: colors.border }]} />

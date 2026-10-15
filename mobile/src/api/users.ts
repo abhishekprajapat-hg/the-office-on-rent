@@ -10,6 +10,14 @@ export type TeamUser = {
   profileImageUrl?: string;
   parentId?: { _id: string; name: string } | string | null;
   designation?: string;
+  roleType?: string;
+  shiftTiming?: string;
+  monthlyTarget?: number;
+  canViewInventory?: boolean;
+  brokerageConfig?: { mode?: string; value?: number; notes?: string } | null;
+  employeeId?: string;
+  joiningDate?: string | null;
+  lastLoginAt?: string | null;
   /* A role the company named, when the person is on one. */
   customRoleId?: string | { _id: string; name?: string } | null;
   customRoleName?: string;

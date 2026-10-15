@@ -1,4 +1,5 @@
 import { api } from "./client";
+import type { TeamUser } from "./users";
 
 /* Admin console: page access, user admin edits, attendance rules, company and Meta settings. */
 
@@ -35,6 +36,12 @@ export type AdminUserPatch = Partial<{
   canViewInventory: boolean;
   /* A role the company named; null takes the person off it. The server applies the role's base role and category. */
   customRoleId: string | null;
+  roleType: "COMMERCIAL" | "RESIDENTIAL" | "BOTH" | "COWORKING";
+  /* Their manager (or, for a manager, the admin they report to). */
+  reportingToId: string | null;
+  shiftTiming: string;
+  monthlyTarget: number;
+  brokerageConfig: { mode: "FLAT" | "PERCENTAGE"; value: number; notes: string };
 }>;
 export const updateUserByAdmin = async (userId: string, patch: AdminUserPatch) => (await api.patch(`/users/admin/${userId}`, patch)).data;
 
@@ -92,4 +99,24 @@ export const updateCustomRole = async (id: string, payload: { name: string; base
 export const deleteCustomRole = async (id: string) => {
   const res = await api.delete<{ message?: string; approvalRequired?: boolean }>(`/roles/${id}`);
   return { pendingApproval: res.status === 202 || Boolean(res.data?.approvalRequired), message: res.data?.message || "Role deleted" };
+};
+
+export type AdminProfileView = {
+  profile: TeamUser & { parentId?: { _id: string; name: string; role?: string } | string | null; employeeCode?: string; partnerCode?: string | null };
+  performance: {
+    totalLeads?: number;
+    closedLeads?: number;
+    conversionRate?: number;
+    dueFollowUpsToday?: number;
+    overdueFollowUps?: number;
+    siteVisits?: number;
+    directReports?: number;
+    achievedTarget?: number;
+  } | null;
+};
+
+/* GET /users/:id/profile - admins and managers: the full record, reporting manager filled in, with lead numbers. */
+export const getUserProfile = async (userId: string) => {
+  const res = await api.get(`/users/${userId}/profile`);
+  return { profile: res.data?.profile || null, performance: res.data?.performance || null } as AdminProfileView;
 };

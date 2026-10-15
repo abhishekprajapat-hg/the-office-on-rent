@@ -11,6 +11,8 @@ export const linking: LinkingOptions<RootStackParamList> = {
   config: {
     screens: {
       Login: "login",
+      Legal: "legal/:doc",
+      Assistant: "admin/assistant",
       Tabs: {
         screens: {
           Home: "",

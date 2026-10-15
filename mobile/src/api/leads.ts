@@ -68,7 +68,8 @@ export const getTodayFollowUps = async (limit = 5) => {
 /* Leads whose next follow-up falls in [from, to], for the schedule. */
 export const listFollowUpsBetween = async (from: Date, to: Date) => {
   const res = await api.get<{ leads: Lead[] }>("/leads", {
-    params: { page: 1, limit: 200, fields: LIST_FIELDS, followUpFrom: from.toISOString(), followUpTo: to.toISOString(), sortBy: "nextFollowUp" },
+    // dealPayment tells a part-paid closed deal (whose follow-up is collecting the rest) from the others.
+    params: { page: 1, limit: 200, fields: `${LIST_FIELDS},dealPayment`, followUpFrom: from.toISOString(), followUpTo: to.toISOString(), sortBy: "nextFollowUp" },
   });
   return res.data?.leads || [];
 };
@@ -247,7 +248,7 @@ export const deleteLead = async (leadId: string) => {
  * fields reports need. Mirrors the web's getAllLeads.
  */
 export const listAllLeadsForReports = async () => {
-  const fields = "_id,status,source,sourceChannel,createdAt,updatedAt,lastContactedAt,brokerageReceived,assignedTo";
+  const fields = "_id,status,source,sourceChannel,createdAt,updatedAt,lastContactedAt,brokerageReceived,assignedTo,assignmentHistory";
   const rows: Lead[] = [];
   for (let page = 1; page <= 25; page += 1) {
     const res = await api.get<{ leads: Lead[]; pagination?: Pagination }>("/leads", { params: { page, limit: 200, fields } });
@@ -272,4 +273,16 @@ export const listVisitsBetween = async (from: Date, to: Date) => {
     },
   });
   return res.data?.leads || [];
+};
+
+/* Every lead the caller can see with what Field ops needs (web FieldOps loads all leads), 200 a page, at most 10 pages. */
+export const listLeadsForFieldOps = async () => {
+  const fields = "_id,name,phone,status,city,projectInterested,nextFollowUp,createdAt,siteLocation,assignedTo,assignedFieldExecutive";
+  const rows: Lead[] = [];
+  for (let page = 1; page <= 10; page += 1) {
+    const res = await api.get<{ leads: Lead[]; pagination?: Pagination }>("/leads", { params: { page, limit: 200, fields } });
+    rows.push(...(res.data?.leads || []));
+    if (!res.data?.pagination?.hasNextPage) break;
+  }
+  return rows;
 };

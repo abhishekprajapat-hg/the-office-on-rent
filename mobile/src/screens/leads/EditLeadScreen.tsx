@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from "react";
 import { StyleSheet, View } from "react-native";
+import { BrokerPhoneHint } from "../../components/BrokerPhoneHint";
 import { errorMessage } from "../../api/client";
 import { getLeadDetail, updateLeadBasics, updateLeadDetails, type LeadDetail } from "../../api/leads";
 import { validateNewLead } from "../../lib/leadForm";
@@ -91,6 +92,7 @@ export const EditLeadScreen = ({ route, navigation }: RootScreenProps<"EditLead"
       <Card style={styles.gap}>
         <Field label="Name *" value={form.name} onChangeText={set("name")} autoCapitalize="words" />
         <Field label="Phone *" value={form.phone} onChangeText={set("phone")} keyboardType="phone-pad" />
+        <BrokerPhoneHint phone={form.phone} />
         <Field label="Email" value={form.email} onChangeText={set("email")} keyboardType="email-address" autoCapitalize="none" />
         <Field label="City" value={form.city} onChangeText={set("city")} />
         <Field label="Preferred locations" value={form.locations} onChangeText={set("locations")} placeholder="Comma separated, e.g. Sector 57, Golf Course Rd" />

@@ -17,6 +17,15 @@ npm run web          # browser preview
 The app talks to `https://crm.theofficeonrent.com/api` unless `EXPO_PUBLIC_API_BASE_URL`
 is set (see `.env.example`).
 
+The Field ops map uses Google Maps on Android, which needs a key baked into the
+build: set `GOOGLE_MAPS_ANDROID_API_KEY` as an EAS secret (or in the shell for a
+local build); `app.config.js` passes it on. Without it the screen draws its own
+map. iOS uses Apple Maps and needs no key.
+
+Version 2.1.0 added native modules (`expo-print`, `expo-sharing`,
+`react-native-maps`), so it needs a new build; with `runtimeVersion` set to the
+app version, 2.1.0 updates never reach 2.0.0 installs.
+
 ## Check
 
 ```bash

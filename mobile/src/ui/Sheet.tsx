@@ -27,10 +27,10 @@ export const Sheet = ({
   /* Pinned under the scrolling body (the primary action). */
   footer?: React.ReactNode;
 }) => {
-  const { colors } = useTheme();
+  const { colors, reduceMotion } = useTheme();
   const insets = useSafeAreaInsets();
   return (
-    <Modal transparent visible={visible} animationType="slide" onRequestClose={onClose} statusBarTranslucent>
+    <Modal transparent visible={visible} animationType={reduceMotion ? "none" : "slide"} onRequestClose={onClose} statusBarTranslucent>
       <KeyboardAvoidingView style={styles.flex} behavior={Platform.OS === "ios" ? "padding" : undefined}>
         <Pressable style={[styles.backdrop, { backgroundColor: colors.overlay }]} onPress={onClose} accessibilityLabel="Close" />
         <View style={[styles.panel, { backgroundColor: colors.surface, paddingBottom: Math.max(insets.bottom, 12) + 14 }]}>

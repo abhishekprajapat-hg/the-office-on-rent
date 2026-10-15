@@ -6,7 +6,12 @@ import { errorMessage } from "../../api/client";
 import { listLeads } from "../../api/leads";
 import type { Lead } from "../../api/types";
 import { LeadRow } from "../../components/LeadRow";
-import { useUser } from "../../auth/AuthProvider";
+import { useAuth, useUser } from "../../auth/AuthProvider";
+import { canDoPageAction } from "../../api/access";
+import { datedFileName, toCsv } from "../../lib/csv";
+import { formatDate } from "../../lib/format";
+import { statusMeta } from "../../lib/leadStatus";
+import { shareTextFile } from "../../lib/shareFile";
 import { activeFilterCount, filterParams, type LeadFilters } from "../../lib/leadFilters";
 import { isManagement } from "../../lib/roles";
 import { LeadFiltersSheet } from "./LeadFiltersSheet";
@@ -38,7 +43,10 @@ const PAGE_SIZE = 25;
 export const LeadsScreen = () => {
   const navigation = useNavigation();
   const user = useUser();
+  const { access } = useAuth();
   const { colors } = useTheme();
+  const canExport = canDoPageAction(user, access, "leads", "export") || canDoPageAction(user, access, "my_leads", "export");
+  const [exporting, setExporting] = useState(false);
   const [filters, setFilters] = useState<LeadFilters>({});
   const [filtersOpen, setFiltersOpen] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
@@ -114,6 +122,28 @@ export const LeadsScreen = () => {
   );
 
   const filtered = Boolean(search) || filter !== "ALL" || filterCount > 0;
+
+  /* Web "Export": the leads matching what is on screen, as a CSV with the web's columns. Capped so a phone never pulls the whole company. */
+  const exportCsv = async () => {
+    setExporting(true);
+    try {
+      const rows: Lead[] = [];
+      for (let next = 1; next <= 10; next += 1) {
+        const { leads: chunk, pagination } = await listLeads({ page: next, limit: 100, search, status: filter === "DUE" ? undefined : filter, followUpDueOnly: filter === "DUE", extra: filterParams(filters) });
+        rows.push(...chunk);
+        if (!pagination?.hasNextPage) break;
+      }
+      const csv = toCsv([
+        ["Name", "Phone", "Email", "Status", "City", "Assigned to", "Next follow-up"],
+        ...rows.map((lead) => [lead.name, lead.phone, lead.email, statusMeta(lead.status).label, lead.city, lead.assignedTo?.name, lead.nextFollowUp ? formatDate(lead.nextFollowUp) : ""]),
+      ]);
+      await shareTextFile(datedFileName("leads"), csv);
+    } catch (err) {
+      setError(errorMessage(err));
+    } finally {
+      setExporting(false);
+    }
+  };
 
   return (
     <View style={[styles.root, { backgroundColor: colors.bg, paddingTop: insets.top }]}>
@@ -223,6 +253,9 @@ export const LeadsScreen = () => {
             ? [{ key: "team", label: "Team pipeline", icon: "people-outline" as const, onPress: () => navigation.navigate("TeamPipeline") }]
             : []),
           { key: "upload", label: "Bulk upload", hint: "Import leads from an Excel or CSV file", icon: "cloud-upload-outline" as const, onPress: () => navigation.navigate("BulkUpload") },
+          ...(canExport
+            ? [{ key: "export", label: exporting ? "Exporting…" : "Export CSV", hint: filtered ? "The leads matching your filters" : "Your pipeline, up to 1,000 leads", icon: "download-outline" as const, onPress: exportCsv }]
+            : []),
         ]}
       />
       <LeadFiltersSheet

@@ -63,6 +63,17 @@ export type Property = {
     amenities?: Record<string, boolean | string>;
   } | null;
   saleDetails?: { leadId?: { _id: string; name: string } | null; soldAt?: string } | null;
+  builtUpArea?: number | null;
+  floorPlans?: string[];
+  documents?: string[];
+  videoTours?: string[];
+  documentsAvailable?: Partial<Record<"registry" | "searchReport" | "electricityNoc" | "maintenanceNoc" | "taxReceipt" | "loanNoc", boolean>> | null;
+  ownerType?: string;
+  ownershipType?: string;
+  businessModel?: string;
+  enterpriseDetails?: { leaseRent?: number | null; clientRent?: number | null; clientName?: string; rentDueDay?: number | null; paymentStatus?: string; lastPaymentDate?: string | null } | null;
+  dealType?: string;
+  gstApplicable?: boolean;
   createdAt?: string;
   updatedAt?: string;
 };
@@ -125,6 +136,20 @@ export type NewProperty = {
   images?: string[];
   commercialDetails?: NonNullable<Property["commercialDetails"]>;
   residentialDetails?: NonNullable<Property["residentialDetails"]>;
+  pincode?: string;
+  builtUpArea?: number | null;
+  agreementYears?: number | null;
+  floorPlans?: string[];
+  documents?: string[];
+  videoTours?: string[];
+  documentsAvailable?: Property["documentsAvailable"];
+  ownerType?: string;
+  ownershipType?: string;
+  businessModel?: string;
+  enterpriseDetails?: Property["enterpriseDetails"];
+  dealType?: string;
+  gstApplicable?: boolean;
+  siteLocation?: { lat: number | null; lng: number | null } | null;
 };
 
 /*

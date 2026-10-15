@@ -1,13 +1,15 @@
 import React, { useEffect, useState } from "react";
 import { biometricLabel, unlock } from "../../lib/biometric";
-import { Linking, Platform, Pressable, StyleSheet, View } from "react-native";
+import { Platform, Pressable, StyleSheet, View } from "react-native";
+import { useNavigation } from "@react-navigation/native";
 import Constants from "expo-constants";
-import { errorMessage, webOrigin } from "../../api/client";
+import { errorMessage } from "../../api/client";
 import { useAuth } from "../../auth/AuthProvider";
-import { prefs, usePrefs } from "../../lib/prefs";
+import { IDLE_SIGN_OUT_CHOICES, idleLabel, prefs, usePrefs } from "../../lib/prefs";
 import { sendTestPush } from "../../notifications/pushRegistration";
+import { ACCENTS } from "../../theme/accents";
 import { useTheme, type ThemePreference } from "../../theme/ThemeProvider";
-import { ActionSheet, Body, GroupLabel, Icon, IconTile, ListCard, Text, Toggle, type IconName } from "../../ui";
+import { ActionSheet, Body, GroupLabel, Icon, IconTile, ListCard, Sheet, Text, Toggle, type IconName } from "../../ui";
 
 const THEME_LABEL: Record<ThemePreference, string> = { system: "System", light: "Light", dark: "Dark" };
 
@@ -16,7 +18,10 @@ export const SettingsScreen = () => {
   const { colors, preference, setPreference } = useTheme();
   const { signOut } = useAuth();
   const settings = usePrefs();
+  const navigation = useNavigation();
   const [themeOpen, setThemeOpen] = useState(false);
+  const [accentOpen, setAccentOpen] = useState(false);
+  const [idleOpen, setIdleOpen] = useState(false);
   const [confirm, setConfirm] = useState(false);
   const [signingOut, setSigningOut] = useState(false);
   const [note, setNote] = useState<string | null>(null);
@@ -91,6 +96,16 @@ export const SettingsScreen = () => {
       </View>
 
       <View style={styles.group}>
+        <GroupLabel>Display</GroupLabel>
+        <ListCard style={styles.card}>
+          <Row icon="color-palette" label="Colour theme" value={ACCENTS.find((item) => item.id === settings.accent)?.label || "Classic Blue"} onPress={() => setAccentOpen(true)} />
+          <Row icon="contrast" label="High contrast" right={<Toggle label="High contrast" value={settings.highContrast} onChange={(highContrast) => prefs.set({ highContrast })} />} />
+          <Row icon="pause-circle" label="Reduce motion" right={<Toggle label="Reduce motion" value={settings.reduceMotion} onChange={(reduceMotion) => prefs.set({ reduceMotion })} />} />
+          <Row icon="timer" label="Sign out when idle" value={idleLabel(settings.idleSignOutMinutes)} onPress={() => setIdleOpen(true)} />
+        </ListCard>
+      </View>
+
+      <View style={styles.group}>
         <GroupLabel>Account</GroupLabel>
         <ListCard style={styles.card}>
           <Row
@@ -98,14 +113,14 @@ export const SettingsScreen = () => {
             label="Change password"
             onPress={() => setNote("Passwords are reset by your admin from Admin → Users. Ask them for a new one.")}
           />
-          <Row icon="shield-checkmark" label="Privacy policy" onPress={() => Linking.openURL(`${webOrigin()}/privacy-policy`)} />
-          <Row icon="document-text" label="Terms and conditions" onPress={() => Linking.openURL(`${webOrigin()}/terms-and-conditions`)} />
+          <Row icon="shield-checkmark" label="Privacy policy" chevron onPress={() => navigation.navigate("Legal", { doc: "privacy" })} />
+          <Row icon="document-text" label="Terms and conditions" chevron onPress={() => navigation.navigate("Legal", { doc: "terms" })} />
           <Row icon="log-out" label={signingOut ? "Signing out…" : confirm ? "Tap again to sign out" : "Sign out"} danger onPress={signingOut ? undefined : onSignOut} />
         </ListCard>
       </View>
 
       <Text variant="mono" color={colors.textFaint} align="center" style={styles.version}>
-        v{Constants.expoConfig?.version || "2.0.0"} · Office On Rent
+        v{Constants.expoConfig?.version || "2.1.0"} · Office On Rent
       </Text>
 
       <ActionSheet
@@ -120,6 +135,43 @@ export const SettingsScreen = () => {
           onPress: () => setPreference(key),
         }))}
       />
+      <ActionSheet
+        visible={idleOpen}
+        title="Sign out when idle"
+        onClose={() => setIdleOpen(false)}
+        actions={IDLE_SIGN_OUT_CHOICES.map((minutes) => ({
+          key: String(minutes),
+          label: idleLabel(minutes),
+          icon: (minutes ? "timer-outline" : "infinite-outline") as IconName,
+          hint: minutes === settings.idleSignOutMinutes ? "Current" : undefined,
+          onPress: () => prefs.set({ idleSignOutMinutes: minutes }),
+        }))}
+      />
+      <Sheet visible={accentOpen} title="Colour theme" subtitle="Recolours buttons, links and highlights on this phone." onClose={() => setAccentOpen(false)}>
+        <ListCard>
+          {ACCENTS.map((item) => {
+            const active = item.id === settings.accent;
+            return (
+              <Pressable
+                key={item.id}
+                accessibilityRole="radio"
+                accessibilityState={{ checked: active }}
+                onPress={() => prefs.set({ accent: item.id })}
+                style={({ pressed }) => [styles.accentRow, pressed && { backgroundColor: colors.surfaceAlt }]}
+              >
+                <View style={[styles.swatch, { backgroundColor: item.swatch }]} />
+                <View style={styles.accentText}>
+                  <Text variant="bodyStrong">{item.label}</Text>
+                  <Text variant="tiny" color="muted">
+                    {item.description}
+                  </Text>
+                </View>
+                {active ? <Icon name="checkmark-circle" size={20} color={colors.primary} /> : null}
+              </Pressable>
+            );
+          })}
+        </ListCard>
+      </Sheet>
     </Body>
   );
 };
@@ -171,4 +223,7 @@ const styles = StyleSheet.create({
   row: { flexDirection: "row", alignItems: "center", gap: 10, height: 48, paddingHorizontal: 12 },
   label: { flex: 1, fontSize: 13.5, fontFamily: "PlusJakartaSans_600SemiBold" },
   version: { fontSize: 11 },
+  accentRow: { flexDirection: "row", alignItems: "center", gap: 12, paddingHorizontal: 14, paddingVertical: 10 },
+  swatch: { width: 26, height: 26, borderRadius: 13 },
+  accentText: { flex: 1, minWidth: 0 },
 });

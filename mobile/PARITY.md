@@ -56,62 +56,63 @@ ticked when the *capability* is there, not when the pixels match.
 - [x] Overdue view; task stats (`/tasks/stats`, `/tasks/stats/by-user`)
 
 ## Wave 3 — Approvals & notifications (web `modules/admin/AdminNotifications.jsx`)
-- [ ] Inbox: all / unread / inventory / payments / system, search, date filter
-- [ ] Delete requests: approve / reject / cancel (`deleteRequestService`)
-- [ ] Inventory requests: pending (approve / reject), my requests
-- [ ] Lead status requests and payment requests: approve / reject
-- [ ] Leave requests: approve / reject (`reviewLeaveRequest`)
-- [ ] User delete requests: review
-- [ ] Push notifications on the device (Expo push) + in-app alerts (realtime)
+- [x] Inbox: all / unread / inventory / payments / system, search, date filter _(Approvals: type, waiting / decided, date window, search. Notifications: kind and unread, date window, search)_
+- [x] Delete requests: approve / reject / cancel (`deleteRequestService`) _(cancel your own from My requests)_
+- [x] Inventory requests: pending (approve / reject), my requests
+- [x] Lead status requests and payment requests: approve / reject
+- [x] Leave requests: approve / reject (`reviewLeaveRequest`)
+- [x] User delete requests: review
+- [x] Push notifications on the device (Expo push) + in-app alerts (realtime) _(needs a device build to observe)_
 
 ## Wave 4 — Attendance administration (web `modules/attendance`)
 - [x] Team day view (`/attendance/daily`): who's in, late, on break, absent _(any past day; filter and search)_
 - [x] A member's attendance history (`/attendance/users/:id`)
 - [x] Correct a break, start/end a break for someone, set a day's status
-- [ ] Violations: list, review
-- [ ] Policy: shift, grace, half/full day, week-offs, geofence
+- [x] Violations: list, review _(History screen; managers see the team's and record a review or excuse)_
+- [x] Policy: shift, grace, half/full day, week-offs, geofence _(Admin → Shifts & rules)_
 - [x] Office locations for geofencing _(further offices and who may check in at each; the main office stays in System settings)_
 - [x] Leave balances of others
 
 ## Wave 5 — Reports, performance, targets (web `modules/reports`, `performance`, `targets`)
 - [x] Performance (mine / team / a user) — `performanceService`
-- [ ] Intelligence reports: pipeline, sources, conversion, monthly trend
-- [ ] Role leaderboard (`getRoleLeaderboard`)
-- [ ] Targets: my targets, assign hierarchy targets
-- [ ] Company performance overview (`/leads/performance/overview`)
-- [ ] Manager / production / field dashboards' extra panels
+- [x] Intelligence reports: pipeline, sources, conversion, monthly trend _(week / month / quarter / year / custom range, closed leads counted when they closed as on the web, transfers, six-month trend, executives, lost reasons, CSV export. The web's lead-aging, project-demand and follow-up-risk sections are never mounted, so they are not ported)_
+- [x] Role leaderboard (`getRoleLeaderboard`)
+- [x] Targets: my targets, assign hierarchy targets
+- [~] Company performance overview (`/leads/performance/overview`) — no web screen calls it
+- [x] Manager / production / field dashboards' extra panels _(role homes; field panel under Field ops)_
 
 ## Wave 6 — Team & administration (web `modules/admin`, `/settings`)
-- [ ] Team manager: list users, create user, edit, designation, deactivate/delete (with approval), rebalance executives
-- [ ] User details: KPIs, attendance, leave, tasks, activity
-- [ ] Page access per user (`/access/users/:id/pages`)
+- [x] Team manager: list users, create user, edit, designation, deactivate/delete (with approval), rebalance executives _(rebalance from Lead pool)_
+- [x] User details: KPIs, attendance, leave, tasks, activity _(edit details: contact, business category, reporting manager, department, branch, shift, monthly target; at a glance: attendance this month, tasks, target progress, leads, leave balance; links to full attendance, salary and performance)_
+- [x] Page access per user (`/access/users/:id/pages`)
 - [x] Custom roles: catalogue, create / edit / delete _(and assigning one from a person's page)_
-- [ ] Channel-partner inventory access toggle
-- [ ] System settings: session timeout, accessibility (high contrast, reduce motion), maintenance
-- [ ] Meta Ads / tenant integration (`saasService`)
-- [ ] Admin command console (AI assistant, `/assistant`)
+- [x] Channel-partner inventory access toggle _(with brokerage: flat or percentage, notes)_
+- [x] System settings: session timeout, accessibility (high contrast, reduce motion), maintenance _(Settings → Display: colour themes from the web's scales, high contrast, reduce motion, sign out when idle; kept per phone like the web keeps them per browser. Maintenance reset is a browser-storage repair with nothing to repair on a phone)_
+- [x] Meta Ads / tenant integration (`saasService`)
+- [x] Admin command console (AI assistant, `/assistant`) _(answers from `POST /assistant/ask`, which the web console never calls; "take me to …" moves around the app. Fixed the server's inventory answers, which populated a path the schema doesn't have)_
 
 ## Wave 7 — Finance & salary (web `modules/finance`, `salary`)
-- [x] Revenue centre / report (`revenueService`)
-- [ ] Financial core: transactions, entries
+- [x] Revenue centre / report (`revenueService`) _(this month, last month, 3 / 12 months, financial year, custom range; brokerage, payouts, rental and summary CSVs)_
+- [x] Financial core: transactions, entries
 - [x] My salary; team salaries; set a salary
 - [x] Payroll policy; company deductions; employee deductions & rules
 - [x] Billing status (Billstack) — view, retry sync, hand-off _(on a lead and a coworking client)_
 
 ## Wave 8 — Inventory depth, contacts, projects (web `modules/inventory`)
-- [x] Edit property (all fields), status change, reservation _(the fields the add form has; blocked and sold take a lead, sold takes the payment)_
-- [ ] Photos, documents, floor plans, video tours (upload)
+- [x] Edit property (all fields), status change, reservation _(adds locality, PIN, map pin, built-up area, deposit, agreement, deal type, GST, ownership, revenue model with enterprise rents, papers checklist; the property ID is always made by the server)_
+- [x] Photos, documents, floor plans, video tours (upload) _(floor plans from camera, gallery or PDF; documents from a scan or file; video tour links; listed on the property page)_
 - [x] Inventory requests: create / update / delete requests for non-admins; my requests _(plus cancelling your own pending delete requests)_
 - [x] Property activity log (admin / manager)
-- [ ] Bulk upload inventory
-- [ ] Owner database & broker database (`/contacts`): list, add, bulk add, identify, blocked leads, delete
-- [x] Projects: list, details, create, edit, delete _(unit-by-unit office / shop / showroom lists and photos stay on web)_
-- [ ] Public shared-inventory page (works without signing in)
+- [~] Bulk upload inventory — the server has `/inventory/bulk` but no web screen uses it
+- [x] Owner database & broker database (`/contacts`): list, add, bulk add, identify, blocked leads, delete _(import a CSV or Excel sheet with the web's header matching, template; a broker's number is flagged while typing on the lead forms)_
+- [x] Projects: list, details, create, edit, delete _(with a commercial project's office / shop / showroom lists — codes, length × breadth area, facing, status, rates — and photos)_
+- [x] Share a property into a chat; share link
+- [~] Public shared-inventory page (works without signing in) — it is the web page itself; the app's share links and proposals open it
 
 ## Wave 9 — Field operations (web `modules/field`)
-- [ ] Live location sharing for field executives (`updateMyLiveLocation`)
-- [ ] Field ops map for managers (`getFieldExecutiveLocations`)
-- [ ] Field dashboard
+- [x] Live location sharing for field executives (`updateMyLiveLocation`)
+- [x] Field ops map for managers (`getFieldExecutiveLocations`) _(react-native-maps; Android needs GOOGLE_MAPS_ANDROID_API_KEY at build time, otherwise and on web a drawn map. Positions refresh every 30s. Only real pins are drawn: the web's city-guessed positions are left out of a real map)_
+- [x] Field dashboard _(workload per field executive, their task queue, dispatch queue of unassigned leads, quick locate, properties with directions)_
 
 ## Wave 10 — Coworking (web `modules/coworking`)
 - [x] Booking board: floors, cabins, seats (`/coworking/board`) _(the same board document the web uses: wings and floor-plan views, filters, select cabins → onboard, hold, confirm, drop, renew, move, release, block / upkeep, record payment, activity log, CSV export, undo of your own last change; the logic is a tested port of the web reducer)_
@@ -119,17 +120,20 @@ ticked when the *capability* is there, not when the pixels match.
 - [x] Birthday reminders
 
 ## Wave 11 — Chat extras (web `modules/chat`)
-- [ ] Group chats and lead rooms
-- [ ] Broadcasts (send / receive)
-- [ ] Attachments and media; share a property into a chat
+- [x] Group chats and lead rooms _(a lead's team room from the lead menu, for its manager, executive and field executive)_
+- [x] Broadcasts (send / receive)
+- [x] Attachments and media; share a property into a chat _(photos and documents)_
 - [x] Delete message (me / everyone), clear chat _(everyone: admins, their own messages, as the server allows)_
-- [ ] Typing indicator
-- [ ] Voice / video calls (WebRTC)
-- [ ] Escalations
+- [x] Typing indicator _(and seen receipts sent from an open chat; receipt events now read the server's `{ roomId, message }` shape)_
+- [ ] Voice / video calls (WebRTC) — left out by decision
+- [~] Escalations — only a dashboard subtitle on the web
 
 ## Wave 12 — Platform
 - [x] File uploads from camera / library / documents (`uploadService`)
 - [x] Profile photo change
-- [ ] Push notification registration & preferences
-- [ ] Legal pages in-app
-- [ ] Release build (EAS) for Play Store / App Store / APK
+- [x] Push notification registration & preferences
+- [x] Legal pages in-app _(privacy policy and terms, signed in or out, linked from sign-in and Settings)_
+- [x] Proposal PDF (expo-print + expo-sharing) _(validity, special note, photos; share the PDF, or send the same summary on WhatsApp or by email)_
+- [x] Leads: CSV export, log a call or visit, timeline filter, remaining-payment follow-up, site visit card
+- [x] Schedule: a follow-up for any lead, reschedule, clear, add a note, tick tasks done
+- [ ] Release build (EAS) for Play Store / App Store / APK _(app version 2.1.0: this release adds native modules, so it needs a new build; over-the-air updates for 2.1.0 never reach 2.0.0 builds)_

@@ -85,6 +85,10 @@ export type RootStackParamList = {
   MetaAds: undefined;
   SystemSettings: { section?: "shift" | "company" } | undefined;
   Search: undefined;
+  /* The privacy policy or terms, signed in or out. */
+  Legal: { doc: "privacy" | "terms" };
+  /* Ask about leads, inventory and the team (POST /assistant/ask). */
+  Assistant: undefined;
 };
 
 export type RootScreenProps<T extends keyof RootStackParamList> = NativeStackScreenProps<RootStackParamList, T>;

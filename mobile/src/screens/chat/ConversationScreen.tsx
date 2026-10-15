@@ -3,22 +3,25 @@ import { ActivityIndicator, FlatList, Image, KeyboardAvoidingView, Platform, Pre
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { errorMessage, mediaUrl } from "../../api/client";
 import { clearChat, deleteMessage, getMessages, listConversations, markRead, sendMessage, type ChatMessage, type Conversation } from "../../api/chat";
-import { pickImage, uploadFile } from "../../api/uploads";
+import { pickDocument, pickImage, uploadFile, type LocalFile } from "../../api/uploads";
 import { listUsers } from "../../api/users";
 import { dialable } from "../../lib/format";
 import { roleLabel } from "../../lib/roles";
 import { useUser } from "../../auth/AuthProvider";
-import { chatTime, conversationTitle, mergeMessage, receipt, startsNewDay, type Tick } from "../../lib/chat";
+import { chatTime, conversationTitle, mergeMessage, receipt, startsNewDay, typingLine, unseenByMe, type Tick } from "../../lib/chat";
 import { formatDate } from "../../lib/format";
 import { formatPrice } from "../../lib/money";
 import type { RootScreenProps } from "../../navigation/types";
-import { useRoomChannel, useSocketEvent } from "../../realtime/socket";
+import { emitEvent, emitWithAck, useRoomChannel, useSocketEvent } from "../../realtime/socket";
 import { useTheme } from "../../theme/ThemeProvider";
 import { font, radius, space } from "../../theme/tokens";
 import { ActionSheet, Avatar, ErrorState, Icon, Loading, Text, type IconName } from "../../ui";
 import { Linking } from "react-native";
 
 const PAGE = 40;
+// Typing state: stop after 3s without a keystroke; drop someone else's after 6s without news (web REMOTE_TYPING_TIMEOUT_MS).
+const LOCAL_TYPING_IDLE_MS = 3000;
+const REMOTE_TYPING_TIMEOUT_MS = 6000;
 
 export const ConversationScreen = ({ route, navigation }: RootScreenProps<"Conversation">) => {
   const { id, title } = route.params;
@@ -43,6 +46,10 @@ export const ConversationScreen = ({ route, navigation }: RootScreenProps<"Conve
   const [selected, setSelected] = useState<ChatMessage | null>(null);
   const [roomMenu, setRoomMenu] = useState(false);
   const [confirmClear, setConfirmClear] = useState(false);
+  const [typing, setTyping] = useState<Record<string, number>>({});
+  const typingTimers = useRef(new Map<string, ReturnType<typeof setTimeout>>());
+  const localTyping = useRef<{ on: boolean; timer: ReturnType<typeof setTimeout> | null }>({ on: false, timer: null });
+  const seenSent = useRef(new Set<string>());
 
   // The room (for the header, members and a lead link) and, for a direct chat, the other person's phone.
   useEffect(() => {
@@ -100,13 +107,63 @@ export const ConversationScreen = ({ route, navigation }: RootScreenProps<"Conve
     if (message.sender?._id !== myId) markRead(id).catch(() => {});
   });
 
-  // Receipts arrive as room events; refresh the ticks on my messages.
-  useSocketEvent<{ messageId?: string; roomId?: string; seenBy?: ChatMessage["seenBy"]; deliveredTo?: ChatMessage["deliveredTo"] }>(
-    "chat:message:seen",
-    (event) => {
-      if (event.roomId !== id || !event.messageId) return;
-      setMessages((current) => current.map((item) => (item._id === event.messageId ? { ...item, seenBy: event.seenBy || item.seenBy } : item)));
+  // Receipts arrive as room events carrying the updated message (web onMessageSeen / onMessageDelivered); refresh its ticks.
+  const applyReceipt = (event: { roomId?: string; message?: ChatMessage }) => {
+    const updated = event.message;
+    if (!updated?._id || String(event.roomId || updated.room) !== id) return;
+    setMessages((current) => current.map((item) => (item._id === updated._id ? { ...item, deliveredTo: updated.deliveredTo || item.deliveredTo, seenBy: updated.seenBy || item.seenBy } : item)));
+  };
+  useSocketEvent<{ roomId?: string; message?: ChatMessage }>("chat:message:seen", applyReceipt);
+  useSocketEvent<{ roomId?: string; message?: ChatMessage }>("chat:message:delivered", applyReceipt);
+
+  // With the chat open, messages from others are seen: tell the sender, once per message.
+  useEffect(() => {
+    unseenByMe(messages, myId).forEach((message) => {
+      if (seenSent.current.has(message._id)) return;
+      seenSent.current.add(message._id);
+      emitWithAck<{ ok?: boolean; message?: ChatMessage }>("chat:message:seen", { messageId: message._id }).then((ack) => {
+        if (ack?.ok && ack.message) applyReceipt({ roomId: id, message: ack.message });
+      });
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [messages, myId, id]);
+
+  // Someone else typing in this room (web onTyping); each name drops off on its own after a quiet spell.
+  useSocketEvent<{ roomId?: string; userId?: string; isTyping?: boolean }>("chat:typing", (event) => {
+    const who = String(event.userId || "");
+    if (String(event.roomId) !== id || !who || who === myId) return;
+    const existing = typingTimers.current.get(who);
+    if (existing) clearTimeout(existing);
+    if (event.isTyping === false) {
+      typingTimers.current.delete(who);
+      setTyping(({ [who]: _gone, ...rest }) => rest);
+      return;
+    }
+    setTyping((prev) => ({ ...prev, [who]: Date.now() }));
+    typingTimers.current.set(
+      who,
+      setTimeout(() => {
+        typingTimers.current.delete(who);
+        setTyping(({ [who]: _gone, ...rest }) => rest);
+      }, REMOTE_TYPING_TIMEOUT_MS),
+    );
+  });
+  useEffect(() => () => typingTimers.current.forEach((timer) => clearTimeout(timer)), []);
+
+  /* My typing state: on with the first keystroke, off after a pause, on send, or on leaving. */
+  const setLocalTyping = (on: boolean) => {
+    if (localTyping.current.timer) clearTimeout(localTyping.current.timer);
+    localTyping.current.timer = on ? setTimeout(() => setLocalTyping(false), LOCAL_TYPING_IDLE_MS) : null;
+    if (localTyping.current.on === on) return;
+    localTyping.current.on = on;
+    emitEvent("chat:typing", { roomId: id, isTyping: on });
+  };
+  useEffect(
+    () => () => {
+      if (localTyping.current.on) emitEvent("chat:typing", { roomId: id, isTyping: false });
+      if (localTyping.current.timer) clearTimeout(localTyping.current.timer);
     },
+    [id],
   );
   // A message deleted for everyone (or by me on another device) leaves the list; so does a chat I cleared elsewhere.
   useSocketEvent<{ roomId?: string; messageId?: string }>("chat:message:deleted", (event) => {
@@ -152,10 +209,10 @@ export const ConversationScreen = ({ route, navigation }: RootScreenProps<"Conve
     );
   });
 
-  const sendPhoto = async (source: "camera" | "library") => {
+  const sendPhoto = async (source: "camera" | "library" | "file") => {
     setAttachError(null);
     try {
-      const file = await pickImage(source);
+      const file: LocalFile | null = source === "file" ? await pickDocument() : await pickImage(source);
       if (!file) return;
       setUploading(true);
       const uploaded = await uploadFile(file, "chat");
@@ -184,6 +241,7 @@ export const ConversationScreen = ({ route, navigation }: RootScreenProps<"Conve
     };
     setMessages((current) => mergeMessage(current, optimistic, clientId));
     if (!retryOf) setDraft("");
+    setLocalTyping(false);
     try {
       const saved = await sendMessage(id, body);
       pendingText.current.delete(clientId);
@@ -326,6 +384,11 @@ export const ConversationScreen = ({ route, navigation }: RootScreenProps<"Conve
           {attachError}
         </Text>
       ) : null}
+      {Object.keys(typing).length ? (
+        <Text variant="tiny" color="muted" style={styles.attachError} accessibilityLiveRegion="polite">
+          {typingLine(Object.keys(typing).map((userId) => room?.participants.find((person) => person._id === userId)?.name || "Someone"))}
+        </Text>
+      ) : null}
             <View style={[styles.composer, { backgroundColor: colors.bg, paddingBottom: insets.bottom + space.sm }]}>
         <Pressable
           accessibilityRole="button"
@@ -338,7 +401,10 @@ export const ConversationScreen = ({ route, navigation }: RootScreenProps<"Conve
         </Pressable>
         <TextInput
           value={draft}
-          onChangeText={setDraft}
+          onChangeText={(value) => {
+            setDraft(value);
+            setLocalTyping(Boolean(value.trim()));
+          }}
           placeholder="Message"
           placeholderTextColor={colors.textFaint}
           multiline
@@ -390,6 +456,7 @@ export const ConversationScreen = ({ route, navigation }: RootScreenProps<"Conve
         actions={[
           { key: "camera", icon: "camera-outline", label: "Take a photo", onPress: () => sendPhoto("camera") },
           { key: "library", icon: "image-outline", label: "Photo from gallery", onPress: () => sendPhoto("library") },
+          { key: "file", icon: "document-attach-outline", label: "Document", hint: "PDF, Word, Excel or other file", onPress: () => sendPhoto("file") },
           { key: "property", icon: "business-outline", label: "Share a property", hint: "Sends a card from inventory", onPress: () => navigation.navigate("PickProperty", { chatId: id }) },
         ]}
       />
