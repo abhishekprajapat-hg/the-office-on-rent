@@ -115,6 +115,8 @@ export type BreakSession = {
   breakType?: string;
 };
 
+export type BreakAuditEntry = { actorName?: string; actorRole?: string; changedAt?: string; reason?: string; sessionIndex?: number };
+
 export type AttendanceDay = {
   _id?: string;
   attendanceDate?: string;
@@ -128,4 +130,9 @@ export type AttendanceDay = {
   isLateCheckIn?: boolean;
   /* PRESENT, LATE, HALF_DAY, ABSENT, ON_LEAVE, WEEK_OFF... - server-derived. */
   status?: string;
+  /* MANUAL when an admin set the day; NO_RECORD for a day nobody touched. */
+  source?: string;
+  /* Sent back with a break correction so the server can refuse a stale edit. */
+  updatedAt?: string | null;
+  breakAudit?: BreakAuditEntry[];
 };

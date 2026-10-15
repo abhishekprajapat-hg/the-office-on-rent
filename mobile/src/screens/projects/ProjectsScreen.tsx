@@ -1,7 +1,10 @@
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useLayoutEffect, useState } from "react";
 import { Pressable, StyleSheet, View } from "react-native";
 import { useNavigation } from "@react-navigation/native";
+import { canManagePage } from "../../api/access";
 import { humanize, listProjects, projectOccupancy, type Project } from "../../api/projects";
+import { useAuth } from "../../auth/AuthProvider";
+import { Icon } from "../../ui";
 import { useQuery } from "../../lib/useQuery";
 import { useTheme } from "../../theme/ThemeProvider";
 import type { Tone } from "../../theme/tokens";
@@ -20,6 +23,19 @@ export const PROJECT_STATUS_TONE: Record<string, Tone> = {
 export const ProjectsScreen = () => {
   const navigation = useNavigation();
   const { colors } = useTheme();
+  const { user, access } = useAuth();
+  const canCreate = canManagePage(user, access, "projects", "create");
+  useLayoutEffect(() => {
+    navigation.setOptions({
+      headerRight: canCreate
+        ? () => (
+            <Pressable accessibilityRole="button" accessibilityLabel="New project" hitSlop={8} onPress={() => navigation.navigate("ProjectForm")}>
+              <Icon name="add-circle" size={24} color={colors.primary} />
+            </Pressable>
+          )
+        : undefined,
+    });
+  }, [navigation, canCreate, colors.primary]);
   const [category, setCategory] = useState<"ALL" | "COMMERCIAL" | "RESIDENTIAL">("ALL");
   const [query, setQuery] = useState("");
   const [search, setSearch] = useState("");

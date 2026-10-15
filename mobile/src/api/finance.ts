@@ -105,3 +105,47 @@ export const listDealPayments = async () => {
   });
   return res.data?.leads || [];
 };
+
+/* ---------------------------------------------------------------- revenue -- */
+/* Web: modules/finance/RevenueCenter. Rental income (coworking + enterprise) and brokerage, kept apart. */
+
+type DealSummary = { count: number; grossBrokerage: number; brokerageReceived: number; brokerageDistributed: number; netBrokerage: number; pendingBrokerage: number };
+
+export type RevenueDeal = {
+  leadId: string;
+  dealId: string;
+  model: "RENTAL_BROKERAGE" | "BUY_SELL" | string;
+  property: string;
+  client: string;
+  brokerageReceived: number;
+  brokerageDistributed: number;
+  grossBrokerage: number;
+  pendingBrokerage: number;
+  brokeragePaymentStatus: "RECEIVED" | "PARTIAL" | "PENDING" | string;
+  closingDate: string | null;
+  closingExecutive: string;
+};
+
+export type RevenuePayout = { dealId: string; leadId: string; client: string; property: string; recipientName: string; recipientType: string; amount: number; paidDate: string | null };
+
+export type EnterpriseRow = { inventoryId: string; property: string; client: string; leaseRent: number; clientRent: number; monthlyProfit: number; periodProfit: number; paymentStatus: string };
+
+export type RevenueReport = {
+  range: { from: string; to: string; months: number };
+  rental: {
+    total: number;
+    coworking: { invoiced: number; collected: number; outstanding: number };
+    enterprise: { count: number; clientRent: number; leaseRent: number; profit: number; monthlyProfit: number };
+  };
+  brokerage: DealSummary & { rentalBrokerage: DealSummary; buySell: DealSummary };
+  summary: { rentalIncome: number; brokerageRevenue: number; totalRevenue: number; enterpriseLeaseCost: number; netRevenue: number; brokerageDistributed: number };
+  deals: RevenueDeal[];
+  payouts: RevenuePayout[];
+  enterprise: EnterpriseRow[];
+};
+
+/* GET /finance/revenue?from&to (YYYY-MM-DD, IST; defaults to this month so far). */
+export const getRevenueReport = async (params: { from?: string; to?: string } = {}) => {
+  const res = await api.get<RevenueReport>("/finance/revenue", { params });
+  return res.data;
+};

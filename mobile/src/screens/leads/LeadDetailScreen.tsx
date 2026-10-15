@@ -14,6 +14,7 @@ import { useTheme } from "../../theme/ThemeProvider";
 import { space } from "../../theme/tokens";
 import { ActionSheet, type SheetAction } from "../../ui/ActionSheet";
 import { Avatar, Badge, Body, Button, Card, ErrorState, Icon, InlineError, Loading, Text, type IconName } from "../../ui";
+import { BillstackCard } from "../../components/BillstackCard";
 import { LeadActivityTab, LeadNotesTab, LeadOverviewTab, LeadPropertiesTab, LeadRequirementsTab } from "./LeadDetailTabs";
 
 const TABS = [
@@ -194,6 +195,7 @@ export const LeadDetailScreen = ({ route, navigation }: RootScreenProps<"LeadDet
         </ScrollView>
 
         {tab === "overview" ? <LeadOverviewTab lead={lead} onEditRequirements={() => setTab("requirements")} /> : null}
+        {tab === "overview" ? <BillstackCard entityType="lead" entityId={lead._id} /> : null}
         {tab === "requirements" ? <LeadRequirementsTab lead={lead} onEdit={() => navigation.navigate("EditRequirements", { leadId: lead._id })} /> : null}
         {tab === "properties" ? <LeadPropertiesTab lead={lead} onChanged={reload} /> : null}
         {tab === "notes" ? <LeadNotesTab leadId={lead._id} entries={data.diary} onAdded={reload} /> : null}

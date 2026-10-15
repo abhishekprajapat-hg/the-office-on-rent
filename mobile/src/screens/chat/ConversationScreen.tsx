@@ -2,7 +2,7 @@ import React, { useCallback, useEffect, useRef, useState } from "react";
 import { ActivityIndicator, FlatList, Image, KeyboardAvoidingView, Platform, Pressable, StyleSheet, TextInput, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { errorMessage, mediaUrl } from "../../api/client";
-import { getMessages, listConversations, markRead, sendMessage, type ChatMessage, type Conversation } from "../../api/chat";
+import { clearChat, deleteMessage, getMessages, listConversations, markRead, sendMessage, type ChatMessage, type Conversation } from "../../api/chat";
 import { pickImage, uploadFile } from "../../api/uploads";
 import { listUsers } from "../../api/users";
 import { dialable } from "../../lib/format";
@@ -40,6 +40,9 @@ export const ConversationScreen = ({ route, navigation }: RootScreenProps<"Conve
   const [attachMenu, setAttachMenu] = useState(false);
   const [uploading, setUploading] = useState(false);
   const [attachError, setAttachError] = useState<string | null>(null);
+  const [selected, setSelected] = useState<ChatMessage | null>(null);
+  const [roomMenu, setRoomMenu] = useState(false);
+  const [confirmClear, setConfirmClear] = useState(false);
 
   // The room (for the header, members and a lead link) and, for a direct chat, the other person's phone.
   useEffect(() => {
@@ -105,6 +108,37 @@ export const ConversationScreen = ({ route, navigation }: RootScreenProps<"Conve
       setMessages((current) => current.map((item) => (item._id === event.messageId ? { ...item, seenBy: event.seenBy || item.seenBy } : item)));
     },
   );
+  // A message deleted for everyone (or by me on another device) leaves the list; so does a chat I cleared elsewhere.
+  useSocketEvent<{ roomId?: string; messageId?: string }>("chat:message:deleted", (event) => {
+    if (String(event.roomId) !== id || !event.messageId) return;
+    setMessages((current) => current.filter((item) => item._id !== event.messageId));
+  });
+  useSocketEvent<{ roomId?: string; userId?: string }>("chat:room:cleared", (event) => {
+    if (String(event.roomId) !== id || String(event.userId || myId) !== myId) return;
+    setMessages([]);
+  });
+
+  const removeMessage = async (message: ChatMessage, scope: "self" | "everyone") => {
+    setAttachError(null);
+    try {
+      await deleteMessage(message._id, scope);
+      setMessages((current) => current.filter((item) => item._id !== message._id));
+    } catch (err) {
+      setAttachError(errorMessage(err));
+    }
+  };
+
+  const runClear = async () => {
+    setAttachError(null);
+    try {
+      await clearChat(id);
+      setMessages([]);
+      setHasOlder(false);
+    } catch (err) {
+      setAttachError(errorMessage(err));
+    }
+  };
+
   useSocketEvent<{ roomId?: string; userId?: string }>("chat:room:read", (event) => {
     const reader = String(event.userId || "");
     if (String(event.roomId) !== id || !reader || reader === myId) return;
@@ -198,6 +232,9 @@ export const ConversationScreen = ({ route, navigation }: RootScreenProps<"Conve
           <Icon name="call-outline" size={21} color={colors.primary} />
         </Pressable>
       ) : null}
+      <Pressable accessibilityRole="button" accessibilityLabel="Chat options" hitSlop={10} onPress={() => setRoomMenu(true)}>
+        <Icon name="ellipsis-vertical" size={20} color={colors.primary} />
+      </Pressable>
     </View>
   );
 
@@ -278,6 +315,7 @@ export const ConversationScreen = ({ route, navigation }: RootScreenProps<"Conve
                 tick={mine ? receipt(item, myId) : null}
                 onRetry={item.localState === "failed" ? () => send(pendingText.current.get(item._id) || item.text || "", item._id) : undefined}
                 onOpenProperty={(propertyId) => navigation.navigate("PropertyDetail", { id: propertyId })}
+                onLongPress={item.localState ? undefined : () => setSelected(item)}
               />
             </View>
           );
@@ -319,6 +357,33 @@ export const ConversationScreen = ({ route, navigation }: RootScreenProps<"Conve
         </Pressable>
       </View>
       <ActionSheet
+        visible={Boolean(selected)}
+        title="Message"
+        onClose={() => setSelected(null)}
+        actions={
+          selected
+            ? [
+                { key: "self", icon: "eye-off-outline", label: "Delete for me", destructive: true, onPress: () => removeMessage(selected, "self") },
+                ...(user.role === "ADMIN" && selected.sender?._id === myId
+                  ? [{ key: "everyone", icon: "trash-outline" as IconName, label: "Delete for everyone", destructive: true, onPress: () => removeMessage(selected, "everyone") }]
+                  : []),
+              ]
+            : []
+        }
+      />
+      <ActionSheet
+        visible={roomMenu}
+        title={heading}
+        onClose={() => setRoomMenu(false)}
+        actions={[{ key: "clear", icon: "trash-bin-outline", label: "Clear chat", hint: "Removes the messages for you only", destructive: true, onPress: () => setConfirmClear(true) }]}
+      />
+      <ActionSheet
+        visible={confirmClear}
+        title="Clear every message in this chat for you?"
+        onClose={() => setConfirmClear(false)}
+        actions={[{ key: "confirm", icon: "trash-bin-outline", label: "Clear chat", destructive: true, onPress: runClear }]}
+      />
+      <ActionSheet
         visible={attachMenu}
         onClose={() => setAttachMenu(false)}
         title="Send"
@@ -346,12 +411,15 @@ const Bubble = ({
   tick,
   onRetry,
   onOpenProperty,
+  onLongPress,
 }: {
   message: ChatMessage;
   mine: boolean;
   tick: Tick | null;
   onRetry?: () => void;
   onOpenProperty: (id: string) => void;
+  /* Opens the delete menu for a saved message. */
+  onLongPress?: () => void;
 }) => {
   const { colors } = useTheme();
   const bg = mine ? colors.primary : colors.surface;
@@ -362,9 +430,11 @@ const Bubble = ({
   return (
     <View style={[styles.bubbleRow, mine ? styles.mineRow : styles.theirRow]}>
       <Pressable
-        disabled={!onRetry}
+        disabled={!onRetry && !onLongPress}
         onPress={onRetry}
+        onLongPress={onLongPress}
         accessibilityLabel={onRetry ? "Message not sent. Tap to retry." : undefined}
+        accessibilityHint={onLongPress ? "Long-press for options" : undefined}
         style={[
           styles.bubble,
           { backgroundColor: bg, borderColor: colors.border },

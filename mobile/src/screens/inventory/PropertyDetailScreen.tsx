@@ -9,6 +9,7 @@ import { dialable, formatDate, whatsappNumber } from "../../lib/format";
 import { formatRupees } from "../../lib/money";
 import { amenityLabels, areaLine, floorLabel, fullAddress, FURNISHING, INVENTORY_STATUS, propertyTitle } from "../../lib/property";
 import { useQuery } from "../../lib/useQuery";
+import { PropertyMenu } from "./PropertyMenu";
 import type { RootScreenProps } from "../../navigation/types";
 import { useTheme } from "../../theme/ThemeProvider";
 import { Badge, Button, ErrorState, FooterBar, Icon, IconTile, InlineError, ListCard, Loading, Text, type IconName } from "../../ui";
@@ -21,8 +22,9 @@ export const PropertyDetailScreen = ({ route, navigation }: RootScreenProps<"Pro
   const [sharing, setSharing] = useState(false);
   const [shareError, setShareError] = useState<string | null>(null);
   const [sharedUrl, setSharedUrl] = useState<string | null>(null);
+  const [notice, setNotice] = useState<string | null>(null);
 
-  const { data: property, loading, error, refreshing, refresh } = useQuery(async () => {
+  const { data: property, loading, error, refreshing, refresh, reload } = useQuery(async () => {
     const result = await getProperty(id);
     if (!result) throw new Error("This property no longer exists.");
     return result;
@@ -134,6 +136,7 @@ export const PropertyDetailScreen = ({ route, navigation }: RootScreenProps<"Pro
                   <Icon name="map-outline" size={18} color={colors.primary} />
                 </Pressable>
               ) : null}
+              <PropertyMenu property={property} onChanged={reload} onNotice={setNotice} />
             </View>
           </View>
           {images.length > 1 ? (
@@ -219,6 +222,11 @@ export const PropertyDetailScreen = ({ route, navigation }: RootScreenProps<"Pro
           ) : null}
           {property.keyManagerName ? <PersonCard label="Keys with" name={property.keyManagerName} sub={property.keyManagerNumber} phone={property.keyManagerNumber} /> : null}
 
+          {notice ? (
+            <Text variant="smallStrong" color={colors.success}>
+              {notice}
+            </Text>
+          ) : null}
           <InlineError message={shareError || linkNote?.error || null} />
           {linkNote?.ok ? (
             <Text variant="small" color={colors.success} align="center">

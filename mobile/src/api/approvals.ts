@@ -175,3 +175,28 @@ export const decide = async (item: ApprovalItem, approve: boolean, note: string,
 
 /* Which decisions need a written reason. */
 export const reasonRequired = (kind: ApprovalKind, approve: boolean) => !approve && (kind === "inventory" || kind === "status");
+
+/* ------------------------------------------------- the caller's requests -- */
+
+export type MyDeleteRequest = {
+  _id: string;
+  entityLabel?: string;
+  entityName?: string;
+  reason?: string;
+  status: "PENDING" | "APPROVED" | "REJECTED" | "CANCELLED" | string;
+  reviewNote?: string;
+  reviewedBy?: { name?: string } | null;
+  createdAt?: string;
+};
+
+/* GET /delete-requests?status=ALL - for anyone but an admin, only their own. */
+export const listMyDeleteRequests = async () => {
+  const res = await api.get<{ requests: MyDeleteRequest[] }>("/delete-requests", { params: { status: "ALL" } });
+  return res.data?.requests || [];
+};
+
+/* POST /delete-requests/:id/cancel - the person who asked, while it is pending. */
+export const cancelDeleteRequest = async (id: string) => {
+  const res = await api.post<{ message?: string }>(`/delete-requests/${id}/cancel`);
+  return res.data?.message || "Delete request cancelled";
+};

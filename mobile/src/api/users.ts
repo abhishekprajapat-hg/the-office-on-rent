@@ -10,6 +10,9 @@ export type TeamUser = {
   profileImageUrl?: string;
   parentId?: { _id: string; name: string } | string | null;
   designation?: string;
+  /* A role the company named, when the person is on one. */
+  customRoleId?: string | { _id: string; name?: string } | null;
+  customRoleName?: string;
   department?: string;
   branch?: string;
 };

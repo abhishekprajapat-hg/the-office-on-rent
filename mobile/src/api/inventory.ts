@@ -16,6 +16,8 @@ export type Property = {
   category?: string;
   status?: InventoryStatus | string;
   reservationReason?: string;
+  reservationLeadId?: { _id: string; name?: string } | string | null;
+  superBuiltUpArea?: number | null;
   price?: number | null;
   rent?: number | null;
   deposit?: number | null;
@@ -121,8 +123,8 @@ export type NewProperty = {
   maintenanceCharges?: number | null;
   totalFloors?: number | null;
   images?: string[];
-  commercialDetails?: { officeLayout?: { workstations?: number | null; totalCabins?: number | null; conferenceRooms?: number | null } };
-  residentialDetails?: { bedrooms?: number | null; bathrooms?: number | null; parking?: number | null };
+  commercialDetails?: NonNullable<Property["commercialDetails"]>;
+  residentialDetails?: NonNullable<Property["residentialDetails"]>;
 };
 
 /*
@@ -132,4 +134,88 @@ export type NewProperty = {
 export const createProperty = async (payload: NewProperty) => {
   const res = await api.post<{ asset?: Property; inventory?: Property; request?: { _id: string } }>("/inventory", payload);
   return { property: res.data?.asset || res.data?.inventory || null, pendingApproval: Boolean(res.data?.request) };
+};
+
+/* ------------------------------------------------------ edit and delete -- */
+/* Web: AssetVault. Admins and managers change a property directly; executives send a request an admin approves. */
+
+export type PropertyPatch = Partial<NewProperty> & {
+  status?: InventoryStatus;
+  reservationReason?: string;
+  reservationLeadId?: string | null;
+  saleDetails?: SaleDetails | null;
+};
+
+export type SaleDetails = {
+  leadId: string;
+  paymentMode: string;
+  paymentType: "FULL" | "PARTIAL";
+  totalAmount: number;
+  remainingAmount: number;
+  paymentReference: string;
+  note: string;
+  soldAt: string;
+};
+
+/* PATCH /inventory/:id */
+export const updateProperty = async (id: string, payload: PropertyPatch) => {
+  const res = await api.patch<{ asset?: Property; inventory?: Property }>(`/inventory/${id}`, payload);
+  return res.data?.asset || res.data?.inventory || null;
+};
+
+/* POST /inventory-request/update/:id - proposed changes wait for an admin. */
+export const requestPropertyUpdate = async (id: string, proposedData: PropertyPatch, requestNote?: string) => {
+  const relatedLeadId = typeof proposedData.reservationLeadId === "string" ? proposedData.reservationLeadId : undefined;
+  const res = await api.post(`/inventory-request/update/${id}`, {
+    proposedData,
+    ...(requestNote ? { requestNote } : {}),
+    ...(relatedLeadId ? { relatedLeadId } : {}),
+  });
+  return res.data?.request || null;
+};
+
+/* DELETE /inventory/:id - an admin's delete; anyone else's becomes a request (202 { approvalRequired }). */
+export const deleteProperty = async (id: string) => {
+  const res = await api.delete<{ approvalRequired?: boolean; message?: string }>(`/inventory/${id}`);
+  return { pendingApproval: res.status === 202 || Boolean(res.data?.approvalRequired), message: res.data?.message || "" };
+};
+
+/* POST /inventory-request/delete/:id */
+export const requestPropertyDelete = async (id: string, requestNote: string) => {
+  const res = await api.post(`/inventory-request/delete/${id}`, { requestNote });
+  return res.data?.request || null;
+};
+
+export type PropertyActivity = {
+  _id: string;
+  actionType: string;
+  role?: string;
+  changedBy?: { _id: string; name?: string; role?: string; profileImageUrl?: string } | null;
+  oldValue?: unknown;
+  newValue?: unknown;
+  timestamp?: string;
+};
+
+/* GET /inventory/:id/activity - admins and managers. */
+export const getPropertyActivity = async (id: string) => {
+  const res = await api.get<{ activities: PropertyActivity[] }>(`/inventory/${id}/activity`, { params: { limit: 100 } });
+  return res.data?.activities || [];
+};
+
+export type InventoryRequest = {
+  _id: string;
+  type: "create" | "update" | "delete";
+  status: "pending" | "approved" | "rejected" | string;
+  proposedData?: Record<string, unknown>;
+  requestNote?: string;
+  rejectionReason?: string;
+  inventoryId?: Property | string | null;
+  createdAt?: string;
+  updatedAt?: string;
+};
+
+/* GET /inventory-request/my - the caller's own create / update / delete requests. */
+export const listMyInventoryRequests = async () => {
+  const res = await api.get<{ requests: InventoryRequest[] }>("/inventory-request/my");
+  return res.data?.requests || [];
 };

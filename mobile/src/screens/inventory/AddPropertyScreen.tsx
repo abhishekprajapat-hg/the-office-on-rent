@@ -1,15 +1,17 @@
-import React, { useState } from "react";
+import React, { useEffect, useState } from "react";
 import { Image, Pressable, ScrollView, StyleSheet, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import { errorMessage } from "../../api/client";
-import { createProperty, type DealType } from "../../api/inventory";
+import { errorMessage, mediaUrl } from "../../api/client";
+import { createProperty, getProperty, requestPropertyUpdate, updateProperty, type DealType, type NewProperty, type Property } from "../../api/inventory";
+import { useAuth } from "../../auth/AuthProvider";
+import { inventoryAccess } from "../../lib/inventoryAccess";
 import { pickImage, uploadFile, type LocalFile } from "../../api/uploads";
 import { formatPrice, parseAmount } from "../../lib/money";
 import { FURNISHING } from "../../lib/property";
 import { validateProperty } from "../../lib/propertyForm";
 import type { RootScreenProps } from "../../navigation/types";
 import { useTheme } from "../../theme/ThemeProvider";
-import { Button, Chip, Field, FooterBar, Icon, InlineError, Segmented, Text } from "../../ui";
+import { Button, Chip, ErrorState, Field, FooterBar, Icon, InlineError, Loading, Segmented, Text } from "../../ui";
 
 const COMMERCIAL_CATEGORIES = ["Office", "Shop", "Showroom", "Coworking", "Warehouse", "Land"];
 const RESIDENTIAL_CATEGORIES = ["Apartment", "Builder Floor", "Villa", "House", "Plot", "PG"];
@@ -25,8 +27,43 @@ const grouped = (value: string) => {
   return digits ? Number(digits).toLocaleString("en-IN") : "";
 };
 
-/* Design 24: the web's add-property form as a four-step wizard (Basics → Size & pricing → Photos → Owner). */
-export const AddPropertyScreen = ({ navigation }: RootScreenProps<"AddProperty">) => {
+const text = (value?: number | null) => (value === null || value === undefined ? "" : String(value));
+const groupedNumber = (value?: number | null) => (value ? Number(value).toLocaleString("en-IN") : "");
+
+/* The form's fields from a saved property, for editing. */
+const formFrom = (p: Property) => ({
+  projectName: p.projectName || "",
+  towerName: p.towerName || "",
+  location: p.location || "",
+  city: p.city || "",
+  floorNumber: text(p.floorNumber),
+  totalFloors: text(p.totalFloors),
+  carpetArea: groupedNumber(p.carpetArea),
+  superArea: groupedNumber(p.superBuiltUpArea ?? (p.carpetArea ? null : p.totalArea)),
+  workstations: text(p.commercialDetails?.officeLayout?.workstations),
+  cabins: text(p.commercialDetails?.officeLayout?.totalCabins),
+  bedrooms: text(p.residentialDetails?.bedrooms),
+  bathrooms: text(p.residentialDetails?.bathrooms),
+  price: text(p.price),
+  rent: text(p.rent),
+  depositMonths: text(p.depositMonths),
+  maintenance: text(p.maintenanceCharges),
+  lockIn: text(p.lockInYears),
+  ownerName: p.ownerName || "",
+  ownerNumber: p.ownerNumber || "",
+  ownerWhatsapp: p.ownerWhatsappNumber || "",
+  keyName: p.keyManagerName || "",
+  keyNumber: p.keyManagerNumber || "",
+});
+
+/*
+ * Design 24: the web's add-property form as a four-step wizard (Basics → Size & pricing → Photos → Owner).
+ * With an id it edits that property (web AssetVault edit): admins and managers save directly, executives send the change for approval.
+ */
+export const AddPropertyScreen = ({ navigation, route }: RootScreenProps<"AddProperty">) => {
+  const editId = route.params?.id;
+  const { user, access } = useAuth();
+  const direct = inventoryAccess(user?.role, access).canManage;
   const { colors } = useTheme();
   const insets = useSafeAreaInsets();
   const [step, setStep] = useState(0);
@@ -59,6 +96,37 @@ export const AddPropertyScreen = ({ navigation }: RootScreenProps<"AddProperty">
     keyNumber: "",
   });
   const [photos, setPhotos] = useState<LocalFile[]>([]);
+  const [existing, setExisting] = useState<string[]>([]);
+  const [original, setOriginal] = useState<Property | null>(null);
+  const [loadingEdit, setLoadingEdit] = useState(Boolean(editId));
+  const [loadError, setLoadError] = useState<string | null>(null);
+  const [pendingEdit, setPendingEdit] = useState(false);
+
+  const loadEdit = async () => {
+    if (!editId) return;
+    setLoadingEdit(true);
+    setLoadError(null);
+    try {
+      const property = await getProperty(editId);
+      if (!property) throw new Error("This property no longer exists.");
+      const type = property.inventoryType === "RESIDENTIAL" ? "RESIDENTIAL" : "COMMERCIAL";
+      setInventoryType(type);
+      setDeal((property.type as DealType) || "Rent");
+      setCategory(property.category || (type === "COMMERCIAL" ? COMMERCIAL_CATEGORIES : RESIDENTIAL_CATEGORIES)[0]!);
+      setFurnishing(property.furnishingStatus || "");
+      setForm(formFrom(property));
+      setExisting(property.images || []);
+      setOriginal(property);
+    } catch (err) {
+      setLoadError(errorMessage(err));
+    } finally {
+      setLoadingEdit(false);
+    }
+  };
+  useEffect(() => {
+    loadEdit();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [editId]);
   const [touched, setTouched] = useState<number[]>([]);
   const [saving, setSaving] = useState("");
   const [error, setError] = useState<string | null>(null);
@@ -77,7 +145,7 @@ export const AddPropertyScreen = ({ navigation }: RootScreenProps<"AddProperty">
     setError(null);
     try {
       const file = await pickImage(source);
-      if (file) setPhotos((prev) => [...prev, file].slice(0, MAX_PHOTOS));
+      if (file) setPhotos((prev) => [...prev, file].slice(0, MAX_PHOTOS - existing.length));
     } catch (err) {
       setError(errorMessage(err));
     }
@@ -94,7 +162,7 @@ export const AddPropertyScreen = ({ navigation }: RootScreenProps<"AddProperty">
   const save = async () => {
     setError(null);
     try {
-      const images: string[] = [];
+      const images: string[] = [...existing];
       for (let index = 0; index < photos.length; index += 1) {
         setSaving(`Uploading photo ${index + 1} of ${photos.length}…`);
         images.push((await uploadFile(photos[index]!, "inventory-images")).url);
@@ -102,7 +170,7 @@ export const AddPropertyScreen = ({ navigation }: RootScreenProps<"AddProperty">
       setSaving("Saving…");
       const carpet = num(form.carpetArea);
       const superArea = num(form.superArea);
-      const result = await createProperty({
+      const payload: NewProperty = {
         inventoryType,
         type: deal,
         category,
@@ -121,16 +189,34 @@ export const AddPropertyScreen = ({ navigation }: RootScreenProps<"AddProperty">
         depositMonths: deal !== "Sale" ? num(form.depositMonths) : null,
         maintenanceCharges: parseAmount(form.maintenance),
         lockInYears: deal !== "Sale" ? num(form.lockIn) : null,
+        // The server replaces these objects whole, so an edit keeps what this form doesn't show (amenities, office type…).
         ...(commercial
-          ? { commercialDetails: { officeLayout: { workstations: num(form.workstations), totalCabins: num(form.cabins) } } }
-          : { residentialDetails: { bedrooms: num(form.bedrooms), bathrooms: num(form.bathrooms) } }),
+          ? {
+              commercialDetails: {
+                ...(original?.commercialDetails || {}),
+                officeLayout: { ...(original?.commercialDetails?.officeLayout || {}), workstations: num(form.workstations), totalCabins: num(form.cabins) },
+              },
+            }
+          : { residentialDetails: { ...(original?.residentialDetails || {}), bedrooms: num(form.bedrooms), bathrooms: num(form.bathrooms) } }),
         images,
         ownerName: form.ownerName.trim() || undefined,
         ownerNumber: form.ownerNumber.replace(/[^\d+]/g, "") || undefined,
         ownerWhatsappNumber: form.ownerWhatsapp.replace(/[^\d+]/g, "") || undefined,
         keyManagerName: form.keyName.trim() || undefined,
         keyManagerNumber: form.keyNumber.replace(/[^\d+]/g, "") || undefined,
-      });
+      };
+      if (editId) {
+        if (direct) {
+          await updateProperty(editId, payload);
+          navigation.goBack();
+          return;
+        }
+        await requestPropertyUpdate(editId, payload, "Edit requested from the mobile app");
+        setPendingEdit(true);
+        setSaving("");
+        return;
+      }
+      const result = await createProperty(payload);
       if (result.pendingApproval) {
         setPending(true);
       } else if (result.property?._id) {
@@ -146,7 +232,10 @@ export const AddPropertyScreen = ({ navigation }: RootScreenProps<"AddProperty">
     setSaving("");
   };
 
-  if (pending) {
+  if (loadingEdit) return <Loading />;
+  if (loadError) return <ErrorState message={loadError} onRetry={loadEdit} />;
+
+  if (pending || pendingEdit) {
     return (
       <View style={[styles.flex, styles.done, { backgroundColor: colors.surface, paddingTop: insets.top }]}>
         <View style={[styles.doneIcon, { backgroundColor: colors.successSoft }]}>
@@ -156,7 +245,7 @@ export const AddPropertyScreen = ({ navigation }: RootScreenProps<"AddProperty">
           Sent for approval
         </Text>
         <Text variant="body" color="muted" align="center">
-          Your listing goes live once an admin approves it. You'll find it in inventory after that.
+          {pendingEdit ? "Your changes apply once an admin approves them. You'll find the request under My requests." : "Your listing goes live once an admin approves it. You'll find it in inventory after that."}
         </Text>
         <Button label="Done" onPress={() => navigation.goBack()} style={styles.doneButton} />
       </View>
@@ -171,7 +260,7 @@ export const AddPropertyScreen = ({ navigation }: RootScreenProps<"AddProperty">
             <Icon name="close" size={24} color={colors.textMuted} />
           </Pressable>
           <Text variant="heading" style={styles.headTitle}>
-            Add property
+            {editId ? "Edit property" : "Add property"}
           </Text>
           <Text variant="smallStrong" color="muted" style={[styles.side, styles.count]}>
             {step + 1}/{STEPS.length}
@@ -274,10 +363,30 @@ export const AddPropertyScreen = ({ navigation }: RootScreenProps<"AddProperty">
         {step === 2 ? (
           <>
             <View style={styles.photos}>
+              {existing.map((url, index) => (
+                <View key={`${url}${index}`} style={styles.photoCell}>
+                  <Image source={{ uri: mediaUrl(url) || url }} style={[styles.photo, { backgroundColor: colors.track }]} />
+                  {index === 0 ? (
+                    <View style={[styles.cover, { backgroundColor: colors.primary }]}>
+                      <Text variant="tiny" color={colors.onPrimary}>
+                        Cover
+                      </Text>
+                    </View>
+                  ) : null}
+                  <Pressable
+                    accessibilityRole="button"
+                    accessibilityLabel="Remove photo"
+                    onPress={() => setExisting((prev) => prev.filter((_, at) => at !== index))}
+                    style={[styles.remove, { backgroundColor: colors.surface }]}
+                  >
+                    <Icon name="close" size={14} color={colors.text} />
+                  </Pressable>
+                </View>
+              ))}
               {photos.map((photo, index) => (
                 <View key={`${photo.uri}${index}`} style={styles.photoCell}>
                   <Image source={{ uri: photo.uri }} style={[styles.photo, { backgroundColor: colors.track }]} />
-                  {index === 0 ? (
+                  {index === 0 && !existing.length ? (
                     <View style={[styles.cover, { backgroundColor: colors.primary }]}>
                       <Text variant="tiny" color={colors.onPrimary}>
                         Cover
@@ -294,7 +403,7 @@ export const AddPropertyScreen = ({ navigation }: RootScreenProps<"AddProperty">
                   </Pressable>
                 </View>
               ))}
-              {photos.length < MAX_PHOTOS ? (
+              {existing.length + photos.length < MAX_PHOTOS ? (
                 <>
                   <AddTile icon="camera" label="Take photo" onPress={() => addPhoto("camera")} />
                   <AddTile icon="images" label="From gallery" onPress={() => addPhoto("library")} />
@@ -302,7 +411,7 @@ export const AddPropertyScreen = ({ navigation }: RootScreenProps<"AddProperty">
               ) : null}
             </View>
             <Text variant="small" color="faint">
-              {photos.length ? `${photos.length} of ${MAX_PHOTOS} · the first photo is the cover` : "Add up to 12 photos. Floor plans and documents can be added from the web app."}
+              {existing.length + photos.length ? `${existing.length + photos.length} of ${MAX_PHOTOS} · the first photo is the cover` : "Add up to 12 photos. Floor plans and documents can be added from the web app."}
             </Text>
           </>
         ) : null}
@@ -332,7 +441,7 @@ export const AddPropertyScreen = ({ navigation }: RootScreenProps<"AddProperty">
 
       <FooterBar>
         <Button label="Back" variant="secondary" style={styles.flex} disabled={!step || Boolean(saving)} onPress={() => setStep(step - 1)} />
-        <Button label={step < STEPS.length - 1 ? `Next: ${STEPS[step + 1]}` : "Add property"} style={styles.wide} loading={Boolean(saving)} onPress={next} />
+        <Button label={step < STEPS.length - 1 ? `Next: ${STEPS[step + 1]}` : editId ? (direct ? "Save changes" : "Send for approval") : "Add property"} style={styles.wide} loading={Boolean(saving)} onPress={next} />
       </FooterBar>
     </View>
   );
