@@ -20,6 +20,7 @@ import { dialable, formatDate } from "../../lib/format";
 import { formatRupees, parseAmount } from "../../lib/money";
 import { useQuery } from "../../lib/useQuery";
 import type { RootScreenProps } from "../../navigation/types";
+import { BillstackCard } from "../../components/BillstackCard";
 import { useTheme } from "../../theme/ThemeProvider";
 import { Avatar, Badge, Body, Button, Chip, ErrorState, Field, GroupLabel, Icon, InlineError, ListCard, Loading, Sheet, Text } from "../../ui";
 
@@ -175,6 +176,8 @@ export const ClientDetailScreen = ({ route, navigation }: RootScreenProps<"Clien
           No contracts yet.
         </Text>
       )}
+
+      <BillstackCard entityType="coworking-client" entityId={client._id} />
 
       <GroupLabel>{`Invoices · ${invoices.length}`}</GroupLabel>
       {invoices.length ? (

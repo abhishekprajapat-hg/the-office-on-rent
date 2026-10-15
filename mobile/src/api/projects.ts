@@ -33,11 +33,11 @@ export type Project = {
   city?: string;
   state?: string;
   pincode?: string;
-  totalLandArea?: number | null;
+  totalLandArea?: number | string | null;
   totalPlots?: number | null;
   plotsAvailable?: number | null;
   plotSize?: string;
-  customPlotSize?: number | null;
+  customPlotSize?: number | string | null;
   numberOfFlats?: number | null;
   numberOfFloors?: number | null;
   totalFloors?: number | null;
@@ -50,8 +50,10 @@ export type Project = {
   showrooms?: ProjectUnit[];
   startingRate?: number | null;
   currentRate?: number | null;
-  plc?: number | null;
-  otherCharges?: number | null;
+  plc?: number | string | null;
+  otherCharges?: number | string | null;
+  flatsPerFloor?: number | null;
+  officesPerFloor?: number | null;
   amenities?: string[];
   images?: string[];
   ownerManagerName?: string;
@@ -103,3 +105,52 @@ export const humanize = (value?: string) =>
     .replace(/\bbhk\b/i, "BHK")
     .replace(/\btnc\b/i, "TNC")
     .replace(/\brera\b/i, "RERA");
+
+/* Fields the mobile form edits; unit-by-unit lists (offices, shops, showrooms) and photos are left as they are. */
+export type ProjectPayload = {
+  projectCategory: "RESIDENTIAL" | "COMMERCIAL";
+  projectType?: string;
+  projectName: string;
+  totalLandArea: string;
+  status: string;
+  startingRate: number;
+  currentRate: number;
+  housingCategory?: string;
+  totalPlots?: number | null;
+  plotsAvailable?: number | null;
+  plotSize?: string;
+  customPlotSize?: string;
+  numberOfFlats?: number | null;
+  numberOfFloors?: number | null;
+  flatsPerFloor?: number | null;
+  bhkConfigurations?: BhkConfig[];
+  totalFloors?: number | null;
+  officesPerFloor?: number | null;
+  totalOffices?: number | null;
+  totalShops?: number | null;
+  totalShowrooms?: number | null;
+  plc?: string;
+  otherCharges?: string;
+  amenities?: string[];
+  location?: string;
+  landmark?: string;
+  city?: string;
+  state?: string;
+  pincode?: string;
+  ownerManagerName?: string;
+  ownerManagerMobile?: string;
+  brokerManagerName?: string;
+  brokerManagerMobile?: string;
+};
+
+/* POST /projects - admins and managers (or the Projects create grant). */
+export const createProject = async (payload: ProjectPayload) => {
+  const res = await api.post<{ project: Project }>("/projects", payload);
+  return res.data?.project || null;
+};
+
+/* PATCH /projects/:id */
+export const updateProject = async (id: string, payload: Partial<ProjectPayload>) => {
+  const res = await api.patch<{ project: Project }>(`/projects/${id}`, payload);
+  return res.data?.project || null;
+};

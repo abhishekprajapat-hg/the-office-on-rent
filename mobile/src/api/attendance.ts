@@ -142,3 +142,79 @@ export const reviewViolation = async (id: string, action: "WARNING_ISSUED" | "MA
   const res = await api.patch(`/attendance/violations/${id}`, { action, note: note.trim() });
   return res.data;
 };
+
+/* ------------------------------------------------- team administration -- */
+/* Web: AttendanceHub (team view), AttendanceDayStatusDialog, BreakCorrectionDialog, AttendanceOfficesPanel. Admins and managers, for people in their scope. */
+
+export type MemberAttendance = {
+  user: { _id: string; name: string; email?: string; role?: string; profileImageUrl?: string } | null;
+  policy: AttendancePolicy | null;
+  summary: AttendanceSummary;
+  days: AttendanceDay[];
+  timezone: string;
+};
+
+/* GET /attendance/users/:id?from&to - one person's days, absences and approved leave filled in. */
+export const getMemberAttendance = async (userId: string, params: { from: string; to: string }) => {
+  const res = await api.get(`/attendance/users/${userId}`, { params });
+  return {
+    user: res.data?.user || null,
+    policy: res.data?.policy || null,
+    summary: res.data?.summary || {},
+    days: Array.isArray(res.data?.attendance) ? res.data.attendance : [],
+    timezone: String(res.data?.timezone || ""),
+  } as MemberAttendance;
+};
+
+/* PATCH /attendance/users/:id/:date/status - PRESENT, HALF_DAY, ABSENT, LEAVE or WEEK_OFF, with an optional note. */
+export const setMemberDayStatus = async (userId: string, date: string, status: string, note = "") => {
+  const res = await api.patch(`/attendance/users/${userId}/${date}/status`, { status, note: note.trim() });
+  return { message: String(res.data?.message || "Attendance status updated"), day: (res.data?.attendance || null) as AttendanceDay | null };
+};
+
+/* POST /attendance/users/:id/break - start or end their break as of now (today, checked in, not out). */
+export const manageMemberBreak = async (userId: string, action: "START" | "END", breakType?: string) => {
+  const res = await api.post(`/attendance/users/${userId}/break`, { action, ...(action === "START" ? { breakType: breakType || "UTILITY" } : {}) });
+  return { message: String(res.data?.message || "Break updated"), day: (res.data?.attendance || null) as AttendanceDay | null };
+};
+
+/*
+ * PATCH /attendance/users/:id/:date/breaks - add a missed break (sessionIndex null) or correct one.
+ * expectedUpdatedAt is the day's updatedAt as loaded; the server answers 409 if it has changed since.
+ */
+export const correctMemberBreak = async (
+  userId: string,
+  date: string,
+  payload: { sessionIndex: number | null; startAt: string; endAt: string | null; reason: string; expectedUpdatedAt?: string | null },
+) => {
+  const res = await api.patch(`/attendance/users/${userId}/${date}/breaks`, { ...payload, reason: payload.reason.trim() });
+  return { message: String(res.data?.message || "Break saved"), day: (res.data?.attendance || null) as AttendanceDay | null };
+};
+
+export type Office = { _id?: string; name: string; latitude: number | string; longitude: number | string; radiusMeters?: number; userIds?: string[] };
+export type OfficeUser = { _id: string; name: string; role?: string; profileImageUrl?: string };
+
+/* GET /attendance/offices - offices beyond the main one, and who the viewer may allow at them. */
+export const getOffices = async () => {
+  const res = await api.get("/attendance/offices");
+  return {
+    offices: (Array.isArray(res.data?.offices) ? res.data.offices : []) as Office[],
+    assignableUsers: (Array.isArray(res.data?.assignableUsers) ? res.data.assignableUsers : []) as OfficeUser[],
+  };
+};
+
+/* PUT /attendance/offices - replaces the whole list; a manager only changes access for their own team. */
+export const saveOffices = async (offices: Office[]) => {
+  const res = await api.put("/attendance/offices", { offices });
+  return {
+    message: String(res.data?.message || "Offices updated"),
+    offices: (Array.isArray(res.data?.offices) ? res.data.offices : []) as Office[],
+    assignableUsers: (Array.isArray(res.data?.assignableUsers) ? res.data.assignableUsers : []) as OfficeUser[],
+  };
+};
+
+/* GET /attendance/leave-balance/:id - someone else's leave balance. */
+export const getMemberLeaveBalance = async (userId: string) => {
+  const res = await api.get<LeaveBalance>(`/attendance/leave-balance/${userId}`);
+  return res.data || null;
+};

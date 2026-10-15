@@ -2,9 +2,10 @@ import React, { useEffect, useMemo, useState } from "react";
 import { Pressable, StyleSheet, View } from "react-native";
 import { errorMessage } from "../../api/client";
 import { api } from "../../api/client";
-import { getPageAccess, setPageAccess, updateUserByAdmin, type CrmPage, type PageAccess } from "../../api/admin";
+import { getPageAccess, listCustomRoles, setPageAccess, updateUserByAdmin, type CrmPage, type CustomRole, type PageAccess } from "../../api/admin";
+import { canOpenPage } from "../../api/access";
 import { listUsers, type TeamUser } from "../../api/users";
-import { useUser } from "../../auth/AuthProvider";
+import { useAuth, useUser } from "../../auth/AuthProvider";
 import { ROLE_LABELS } from "../../lib/roles";
 import type { RootScreenProps } from "../../navigation/types";
 import { useTheme } from "../../theme/ThemeProvider";
@@ -48,7 +49,10 @@ const ROLE_CHOICES = ["EXECUTIVE", "FIELD_EXECUTIVE", "INSIDE_EXECUTIVE", "MANAG
 export const UserDetailScreen = ({ route, navigation }: RootScreenProps<"UserDetail">) => {
   const { id } = route.params;
   const me = useUser();
+  const { access: myAccess } = useAuth();
   const { colors } = useTheme();
+  const [namedRoles, setNamedRoles] = useState<CustomRole[]>([]);
+  const [customRoleId, setCustomRoleId] = useState<string | null>(null);
   const [person, setPerson] = useState<TeamUser | null>(null);
   const [access, setAccess] = useState<PageAccess | null>(null);
   const [grants, setGrants] = useState<Record<string, string[]>>({});
@@ -72,10 +76,12 @@ export const UserDetailScreen = ({ route, navigation }: RootScreenProps<"UserDet
     setLoading(true);
     setLoadError(null);
     try {
-      const [users, pages] = await Promise.all([listUsers(), getPageAccess(id).catch(() => null)]);
+      const [users, pages, roles] = await Promise.all([listUsers(), getPageAccess(id).catch(() => null), listCustomRoles().catch(() => [])]);
       const found = users.find((user) => user._id === id) || null;
       if (!found) throw new Error("This person isn't in your team list.");
       setPerson(found);
+      setNamedRoles(roles);
+      setCustomRoleId(idOfRole(found.customRoleId));
       setRole(found.role);
       setActive(found.isActive !== false);
       setAccess(pages);
@@ -92,7 +98,8 @@ export const UserDetailScreen = ({ route, navigation }: RootScreenProps<"UserDet
 
   const original = useMemo(() => JSON.stringify(Object.fromEntries((access?.pageAccess || []).map((grant) => [grant.pageKey, [...grant.actions].sort()]))), [access]);
   const current = JSON.stringify(Object.fromEntries(Object.entries(grants).map(([key, actions]) => [key, [...actions].sort()])));
-  const dirty = Boolean(person) && (role !== person?.role || active !== (person?.isActive !== false) || original !== current);
+  const customChanged = Boolean(person) && customRoleId !== idOfRole(person?.customRoleId);
+  const dirty = Boolean(person) && (role !== person?.role || customChanged || active !== (person?.isActive !== false) || original !== current);
 
   const save = async () => {
     if (!person || !dirty) return;
@@ -101,7 +108,12 @@ export const UserDetailScreen = ({ route, navigation }: RootScreenProps<"UserDet
     setSaved(false);
     try {
       const patch: Record<string, unknown> = {};
-      if (role !== person.role) patch.role = role;
+      // A named role carries its own base role; the server applies it, so send one or the other.
+      if (customChanged && customRoleId) patch.customRoleId = customRoleId;
+      else if (role !== person.role || customChanged) {
+        patch.role = role;
+        patch.customRoleId = null;
+      }
       if (active !== (person.isActive !== false)) patch.isActive = active;
       if (Object.keys(patch).length) await updateUserByAdmin(person._id, patch);
       if (original !== current && access?.canEdit) {
@@ -202,9 +214,55 @@ export const UserDetailScreen = ({ route, navigation }: RootScreenProps<"UserDet
       <GroupLabel>Role</GroupLabel>
       <View style={styles.chips}>
         {roleChoices.map((key) => (
-          <Chip key={key} label={SHORT_ROLE[key] || key} selected={role === key} onPress={() => !self && setRole(key)} />
+          <Chip
+            key={key}
+            label={SHORT_ROLE[key] || key}
+            selected={!customRoleId && role === key}
+            onPress={() => {
+              if (self) return;
+              setRole(key);
+              setCustomRoleId(null);
+            }}
+          />
         ))}
       </View>
+      {namedRoles.length ? (
+        <>
+          <Text variant="smallStrong" color="muted">
+            Named roles
+          </Text>
+          <View style={styles.chips}>
+            {namedRoles
+              .filter((item) => isAdmin || !["ADMIN", "MANAGER"].includes(item.baseRole) || item._id === customRoleId)
+              .map((item) => (
+                <Chip
+                  key={item._id}
+                  label={item.name}
+                  selected={customRoleId === item._id}
+                  onPress={() => {
+                    if (self) return;
+                    setCustomRoleId(item._id);
+                    setRole(item.baseRole);
+                  }}
+                />
+              ))}
+          </View>
+        </>
+      ) : null}
+
+      {!self && person.role !== "ADMIN" ? (
+        <ListCard>
+          {canOpenPage(me, myAccess, "attendance") ? (
+            <LinkRow icon="calendar-number-outline" label="Attendance" onPress={() => navigation.navigate("MemberAttendance", { userId: person._id, name: person.name })} />
+          ) : null}
+          {canOpenPage(me, myAccess, "salary") ? (
+            <LinkRow icon="wallet-outline" label="Salary" onPress={() => navigation.navigate("MemberSalary", { userId: person._id, name: person.name })} />
+          ) : null}
+          {canOpenPage(me, myAccess, "performance") ? (
+            <LinkRow icon="speedometer-outline" label="Performance" onPress={() => navigation.navigate("MemberPerformance", { userId: person._id, name: person.name })} />
+          ) : null}
+        </ListCard>
+      ) : null}
 
       <GroupLabel>Page access</GroupLabel>
       {!access ? (
@@ -342,6 +400,21 @@ export const UserDetailScreen = ({ route, navigation }: RootScreenProps<"UserDet
         <InlineError message={sheetError} />
       </Sheet>
     </Body>
+  );
+};
+
+const idOfRole = (value: TeamUser["customRoleId"]) => (value && typeof value === "object" ? value._id : value || null);
+
+const LinkRow = ({ icon, label, onPress }: { icon: IconName; label: string; onPress: () => void }) => {
+  const { colors } = useTheme();
+  return (
+    <Pressable accessibilityRole="button" onPress={onPress} style={({ pressed }) => [styles.pageRow, pressed && { backgroundColor: colors.surfaceAlt }]}>
+      <Icon name={icon} size={18} color={colors.textMuted} />
+      <Text variant="body" style={[styles.flex, styles.pageLabel]}>
+        {label}
+      </Text>
+      <Icon name="chevron-forward" size={16} color={colors.textFaint} />
+    </Pressable>
   );
 };
 

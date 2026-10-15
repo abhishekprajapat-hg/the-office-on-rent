@@ -4,6 +4,8 @@ import type { User } from "./types";
 export type AccessProfile = {
   permissions: string[];
   enforcePageAccess: boolean;
+  /* An employee-level page selection; only then does a page grant widen what a role may do (checkRoleOrPageAction). */
+  hasExplicitPageOverride?: boolean;
 };
 
 // These routes are still restricted to management by their APIs.
@@ -29,6 +31,14 @@ export const canOpenPage = (user: User | null, access: AccessProfile | null, pag
   if (user.role !== "ADMIN" && page === "coworking_clients" && !access?.permissions.includes("clients.view")) return false;
   return true;
 };
+
+/* A page action granted to this person explicitly, which opens routes outside their role (server checkRoleOrPageAction). */
+export const hasExplicitGrant = (access: AccessProfile | null | undefined, page: string, action: string) =>
+  Boolean(access?.hasExplicitPageOverride ?? access?.enforcePageAccess) && Boolean(access?.permissions.includes(`page.${page}.${action}`));
+
+/* Admins and managers, or an explicit grant - the rule for project and inventory writes. */
+export const canManagePage = (user: User | null, access: AccessProfile | null, page: string, action: string) =>
+  user?.role === "ADMIN" || user?.role === "MANAGER" || hasExplicitGrant(access, page, action);
 
 export const canDoPageAction = (user: User | null, access: AccessProfile | null, page: string, action: string) =>
   canOpenPage(user, access, page) && canPageAction(access, page, action);

@@ -101,3 +101,18 @@ export const openLeadRoom = async (leadId: string) => {
 export const markRead = async (conversationId: string) => {
   await api.patch(`/chat/rooms/${conversationId}/read`);
 };
+
+/*
+ * PATCH /chat/messages/:id/delete - "self" hides it for me; "everyone" removes
+ * it for the whole room (admins, and only their own messages).
+ */
+export const deleteMessage = async (messageId: string, scope: "self" | "everyone") => {
+  const res = await api.patch(`/chat/messages/${messageId}/delete`, { scope });
+  return res.data;
+};
+
+/* PATCH /chat/rooms/:id/clear - empties the conversation for me only. */
+export const clearChat = async (conversationId: string) => {
+  const res = await api.patch(`/chat/rooms/${conversationId}/clear`);
+  return res.data;
+};

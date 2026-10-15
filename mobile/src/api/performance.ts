@@ -36,3 +36,9 @@ export const getTeamPerformance = async (month: string) => {
   const res = await api.get<{ month: string; rows: TeamPerformanceRow[] }>("/performance/team", { params: { month } });
   return res.data?.rows || [];
 };
+
+/* GET /performance/users/:id?month - a teammate's score (admins, and managers for their team). */
+export const getUserPerformance = async (userId: string, month: string) => {
+  const res = await api.get<MyPerformance>(`/performance/users/${userId}`, { params: { month } });
+  return res.data;
+};

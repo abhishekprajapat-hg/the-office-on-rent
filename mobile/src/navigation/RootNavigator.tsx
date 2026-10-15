@@ -3,7 +3,7 @@ import { DarkTheme, DefaultTheme, NavigationContainer, type Theme } from "@react
 import { createNativeStackNavigator } from "@react-navigation/native-stack";
 import { createBottomTabNavigator, type BottomTabHeaderProps } from "@react-navigation/bottom-tabs";
 import { useAuth } from "../auth/AuthProvider";
-import { canDoPageAction, canOpenPage } from "../api/access";
+import { canDoPageAction, canManagePage, canOpenPage } from "../api/access";
 import { canMarkAttendance, isManagement } from "../lib/roles";
 import { useTheme } from "../theme/ThemeProvider";
 import { font } from "../theme/tokens";
@@ -18,18 +18,29 @@ import { HomeScreen } from "../screens/home/HomeScreen";
 import { AttendanceScreen } from "../screens/attendance/AttendanceScreen";
 import { LeaveScreen } from "../screens/attendance/LeaveScreen";
 import { AttendanceHistoryScreen } from "../screens/attendance/AttendanceHistoryScreen";
+import { TeamAttendanceScreen } from "../screens/attendance/TeamAttendanceScreen";
+import { MemberAttendanceScreen } from "../screens/attendance/MemberAttendanceScreen";
+import { OfficesScreen } from "../screens/attendance/OfficesScreen";
 import { SalaryScreen } from "../screens/salary/SalaryScreen";
+import { TeamSalaryScreen } from "../screens/salary/TeamSalaryScreen";
+import { MemberSalaryScreen } from "../screens/salary/MemberSalaryScreen";
+import { PayrollPolicyScreen } from "../screens/salary/PayrollPolicyScreen";
+import { RevenueScreen } from "../screens/finance/RevenueScreen";
 import { LeadPoolScreen } from "../screens/leads/LeadPoolScreen";
 import { ContactsScreen } from "../screens/contacts/ContactsScreen";
 import { ProjectsScreen } from "../screens/projects/ProjectsScreen";
 import { ProjectDetailScreen } from "../screens/projects/ProjectDetailScreen";
+import { ProjectFormScreen } from "../screens/projects/ProjectFormScreen";
+import { PropertyActivityScreen } from "../screens/inventory/PropertyActivityScreen";
+import { MyRequestsScreen } from "../screens/inventory/MyRequestsScreen";
 import { FinanceScreen } from "../screens/finance/FinanceScreen";
 import { RecordPaymentScreen } from "../screens/finance/RecordPaymentScreen";
 import { ReportsScreen } from "../screens/reports/ReportsScreen";
 import { LeaderboardScreen } from "../screens/leaderboard/LeaderboardScreen";
 import { TargetsScreen } from "../screens/leaderboard/TargetsScreen";
 import { FieldOpsScreen } from "../screens/field/FieldOpsScreen";
-import { PerformanceScreen } from "../screens/performance/PerformanceScreen";
+import { MemberPerformanceScreen, PerformanceScreen } from "../screens/performance/PerformanceScreen";
+import { RolesScreen } from "../screens/admin/RolesScreen";
 import { AddPropertyScreen } from "../screens/inventory/AddPropertyScreen";
 import { InventoryScreen } from "../screens/inventory/InventoryScreen";
 import { PropertyDetailScreen } from "../screens/inventory/PropertyDetailScreen";
@@ -179,7 +190,9 @@ export const RootNavigator = () => {
             {allowed("calendar") ? <Stack.Screen name="Schedule" component={ScheduleScreen} options={{ title: "Schedule", headerShown: false }} /> : null}
             {allowed("inventory") ? <Stack.Screen name="Inventory" component={InventoryScreen} options={{ title: "Inventory", headerShown: false }} /> : null}
             {allowed("inventory") ? <Stack.Screen name="PropertyDetail" component={PropertyDetailScreen} options={{ title: "Property", headerShown: false }} /> : null}
-            {action("inventory", "create") ? <Stack.Screen name="AddProperty" component={AddPropertyScreen} options={{ title: "New property", presentation: "modal", headerShown: false }} /> : null}
+            {action("inventory", "create") || action("inventory", "edit") ? <Stack.Screen name="AddProperty" component={AddPropertyScreen} options={{ title: "New property", presentation: "modal", headerShown: false }} /> : null}
+            {allowed("inventory") ? <Stack.Screen name="PropertyActivity" component={PropertyActivityScreen} options={{ title: "Activity" }} /> : null}
+            <Stack.Screen name="MyRequests" component={MyRequestsScreen} options={{ title: "My requests" }} />
             <Stack.Screen name="Profile" component={ProfileScreen} options={{ title: "Profile" }} />
             <Stack.Screen name="Notifications" component={NotificationsScreen} options={{ title: "Notifications" }} />
             <Stack.Screen name="Settings" component={SettingsScreen} options={{ title: "Settings" }} />
@@ -193,16 +206,28 @@ export const RootNavigator = () => {
             {allowed("admin_team") ? <Stack.Screen name="Users" component={UsersScreen} options={{ title: "Users" }} /> : null}
             {allowed("admin_team") ? <Stack.Screen name="UserDetail" component={UserDetailScreen} options={{ title: "User" }} /> : null}
             {action("admin_team", "create") ? <Stack.Screen name="AddUser" component={AddUserScreen} options={{ title: "New user", presentation: "modal" }} /> : null}
+            {allowed("admin_team") && isManagement(user.role) ? <Stack.Screen name="Roles" component={RolesScreen} options={{ title: "Roles" }} /> : null}
             {allowed("admin_meta_ads") ? <Stack.Screen name="MetaAds" component={MetaAdsScreen} options={{ title: "Meta Ads" }} /> : null}
             {allowed("settings") ? <Stack.Screen name="SystemSettings" component={SystemSettingsScreen} options={{ title: "System" }} /> : null}
             {allowed("salary") ? <Stack.Screen name="Salary" component={SalaryScreen} options={{ title: "Salary" }} /> : null}
+            {allowed("salary") && isManagement(user.role) ? <Stack.Screen name="TeamSalary" component={TeamSalaryScreen} options={{ title: "Team salaries" }} /> : null}
+            {allowed("salary") && isManagement(user.role) ? <Stack.Screen name="MemberSalary" component={MemberSalaryScreen} options={{ title: "Salary" }} /> : null}
+            {allowed("salary") && isManagement(user.role) ? <Stack.Screen name="PayrollPolicy" component={PayrollPolicyScreen} options={{ title: "Deduction rules" }} /> : null}
             {allowed("performance") ? <Stack.Screen name="Performance" component={PerformanceScreen} options={{ title: "My performance" }} /> : null}
+            {allowed("performance") && isManagement(user.role) ? <Stack.Screen name="MemberPerformance" component={MemberPerformanceScreen} options={{ title: "Performance" }} /> : null}
             {allowed("attendance") ? <Stack.Screen name="AttendanceHistory" component={AttendanceHistoryScreen} options={{ title: "History" }} /> : null}
+            {allowed("attendance") && isManagement(user.role) ? <Stack.Screen name="TeamAttendance" component={TeamAttendanceScreen} options={{ title: "Team attendance" }} /> : null}
+            {allowed("attendance") && isManagement(user.role) ? <Stack.Screen name="MemberAttendance" component={MemberAttendanceScreen} options={{ title: "Attendance" }} /> : null}
+            {allowed("attendance") && isManagement(user.role) ? <Stack.Screen name="Offices" component={OfficesScreen} options={{ title: "Offices" }} /> : null}
             {allowed("leads") && isManagement(user.role) ? <Stack.Screen name="LeadPool" component={LeadPoolScreen} options={{ title: "Lead pool" }} /> : null}
             {allowed("inventory") && user.role !== "CHANNEL_PARTNER" ? <Stack.Screen name="Contacts" component={ContactsScreen} options={{ title: "Contacts database" }} /> : null}
             {allowed("projects") ? <Stack.Screen name="Projects" component={ProjectsScreen} options={{ title: "Projects" }} /> : null}
             {allowed("projects") ? <Stack.Screen name="ProjectDetail" component={ProjectDetailScreen} options={{ title: "Project" }} /> : null}
+            {allowed("projects") && (canManagePage(user, access, "projects", "create") || canManagePage(user, access, "projects", "edit")) ? (
+              <Stack.Screen name="ProjectForm" component={ProjectFormScreen} options={{ title: "Project", presentation: "modal" }} />
+            ) : null}
             {allowed("finance") ? <Stack.Screen name="Finance" component={FinanceScreen} options={{ title: "Finance" }} /> : null}
+            {allowed("finance") ? <Stack.Screen name="Revenue" component={RevenueScreen} options={{ title: "Revenue" }} /> : null}
             {allowed("reports") ? <Stack.Screen name="Reports" component={ReportsScreen} options={{ title: "Reports" }} /> : null}
             {allowed("leaderboard") ? <Stack.Screen name="Leaderboard" component={LeaderboardScreen} options={{ headerShown: false }} /> : null}
             {allowed("targets") ? <Stack.Screen name="Targets" component={TargetsScreen} options={{ title: "Targets" }} /> : null}

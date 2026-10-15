@@ -33,6 +33,8 @@ export type AdminUserPatch = Partial<{
   password: string;
   mustChangePassword: boolean;
   canViewInventory: boolean;
+  /* A role the company named; null takes the person off it. The server applies the role's base role and category. */
+  customRoleId: string | null;
 }>;
 export const updateUserByAdmin = async (userId: string, patch: AdminUserPatch) => (await api.patch(`/users/admin/${userId}`, patch)).data;
 
@@ -71,3 +73,23 @@ export type MetaIntegration = {
 export const getMetaIntegration = async () => (await api.get<{ integration: MetaIntegration }>("/client/saas/tenant/meta")).data?.integration;
 export const updateMetaIntegration = async (payload: { pageIds: string[]; accessToken?: string }) =>
   (await api.patch<{ integration: MetaIntegration }>("/client/saas/tenant/meta", payload)).data?.integration;
+
+/* --------------------------------------------------------- custom roles -- */
+/* Web: TeamManager "Roles". A name plus the built-in role it behaves as; admins and managers. */
+
+export type BusinessCategory = "COMMERCIAL" | "RESIDENTIAL" | "COWORKING" | "BOTH";
+export type CustomRole = { _id: string; name: string; baseRole: string; businessCategory: BusinessCategory; description?: string };
+
+export const getRoleCatalogue = async () =>
+  (await api.get<{ businessCategories: BusinessCategory[]; baseRoles: string[] }>("/roles/catalogue")).data;
+export const listCustomRoles = async () => (await api.get<{ roles: CustomRole[] }>("/roles")).data?.roles || [];
+export const createCustomRole = async (payload: { name: string; baseRole: string; businessCategory: BusinessCategory; description?: string }) =>
+  (await api.post<{ role: CustomRole; message?: string }>("/roles", payload)).data;
+/* Only an admin may change baseRole; leave it out to keep it. */
+export const updateCustomRole = async (id: string, payload: { name: string; baseRole?: string; businessCategory?: BusinessCategory }) =>
+  (await api.patch<{ role: CustomRole; message?: string; usersUpdated?: number }>(`/roles/${id}`, payload)).data;
+/* Refused (409) while anyone holds the role; a manager's delete becomes an approval request (202). */
+export const deleteCustomRole = async (id: string) => {
+  const res = await api.delete<{ message?: string; approvalRequired?: boolean }>(`/roles/${id}`);
+  return { pendingApproval: res.status === 202 || Boolean(res.data?.approvalRequired), message: res.data?.message || "Role deleted" };
+};

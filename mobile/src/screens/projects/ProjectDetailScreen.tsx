@@ -3,7 +3,8 @@ import { Image, Linking, ScrollView, StyleSheet, View } from "react-native";
 import { useNavigation, useRoute, type RouteProp } from "@react-navigation/native";
 import { errorMessage, mediaUrl } from "../../api/client";
 import { deleteProject, getProject, humanize, projectOccupancy, type ProjectUnit } from "../../api/projects";
-import { useUser } from "../../auth/AuthProvider";
+import { canManagePage } from "../../api/access";
+import { useAuth, useUser } from "../../auth/AuthProvider";
 import { dialable } from "../../lib/format";
 import { formatPrice } from "../../lib/money";
 import { isManagement } from "../../lib/roles";
@@ -21,6 +22,8 @@ export const ProjectDetailScreen = () => {
   const { params } = useRoute<RouteProp<RootStackParamList, "ProjectDetail">>();
   const navigation = useNavigation();
   const user = useUser();
+  const { access } = useAuth();
+  const canEdit = canManagePage(user, access, "projects", "edit");
   const { colors } = useTheme();
   const { data: project, loading, error, refreshing, refresh } = useQuery(() => getProject(params.id), [params.id]);
   const [confirm, setConfirm] = useState(false);
@@ -100,8 +103,11 @@ export const ProjectDetailScreen = () => {
       <Card style={styles.facts}>
         <FactRow label="Starting rate" value={rate(project.startingRate)} />
         <FactRow label="Current rate" value={rate(project.currentRate)} />
-        {project.plc ? <FactRow label="PLC" value={rate(project.plc)} /> : null}
-        {project.otherCharges ? <FactRow label="Other charges" value={rate(project.otherCharges)} /> : null}
+        {/* Free text on the server ("₹200/sq ft", "As applicable"); a bare number reads as a price. */}
+        {project.plc ? <FactRow label="PLC" value={typeof project.plc === "number" || /^\d+(\.\d+)?$/.test(project.plc) ? rate(Number(project.plc)) : project.plc} /> : null}
+        {project.otherCharges ? (
+          <FactRow label="Other charges" value={typeof project.otherCharges === "number" || /^\d+(\.\d+)?$/.test(project.otherCharges) ? rate(Number(project.otherCharges)) : project.otherCharges} />
+        ) : null}
       </Card>
 
       <GroupLabel>Project</GroupLabel>
@@ -216,6 +222,7 @@ export const ProjectDetailScreen = () => {
         </Text>
       ) : null}
       <InlineError message={actionError} />
+      {canEdit ? <Button variant="secondary" icon="create-outline" label="Edit project" onPress={() => navigation.navigate("ProjectForm", { id: project._id })} /> : null}
       {isManagement(user.role) ? (
         <Button variant="danger" icon="trash-outline" label={confirm ? "Tap again to delete" : "Delete project"} onPress={remove} />
       ) : null}

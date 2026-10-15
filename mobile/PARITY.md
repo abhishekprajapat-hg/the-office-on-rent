@@ -65,16 +65,16 @@ ticked when the *capability* is there, not when the pixels match.
 - [ ] Push notifications on the device (Expo push) + in-app alerts (realtime)
 
 ## Wave 4 — Attendance administration (web `modules/attendance`)
-- [ ] Team day view (`/attendance/daily`): who's in, late, on break, absent
-- [ ] A member's attendance history (`/attendance/users/:id`)
-- [ ] Correct a break, start/end a break for someone, set a day's status
+- [x] Team day view (`/attendance/daily`): who's in, late, on break, absent _(any past day; filter and search)_
+- [x] A member's attendance history (`/attendance/users/:id`)
+- [x] Correct a break, start/end a break for someone, set a day's status
 - [ ] Violations: list, review
 - [ ] Policy: shift, grace, half/full day, week-offs, geofence
-- [ ] Office locations for geofencing
-- [ ] Leave balances of others
+- [x] Office locations for geofencing _(further offices and who may check in at each; the main office stays in System settings)_
+- [x] Leave balances of others
 
 ## Wave 5 — Reports, performance, targets (web `modules/reports`, `performance`, `targets`)
-- [ ] Performance (mine / team / a user) — `performanceService`
+- [x] Performance (mine / team / a user) — `performanceService`
 - [ ] Intelligence reports: pipeline, sources, conversion, monthly trend
 - [ ] Role leaderboard (`getRoleLeaderboard`)
 - [ ] Targets: my targets, assign hierarchy targets
@@ -85,27 +85,27 @@ ticked when the *capability* is there, not when the pixels match.
 - [ ] Team manager: list users, create user, edit, designation, deactivate/delete (with approval), rebalance executives
 - [ ] User details: KPIs, attendance, leave, tasks, activity
 - [ ] Page access per user (`/access/users/:id/pages`)
-- [ ] Custom roles: catalogue, create / edit / delete
+- [x] Custom roles: catalogue, create / edit / delete _(and assigning one from a person's page)_
 - [ ] Channel-partner inventory access toggle
 - [ ] System settings: session timeout, accessibility (high contrast, reduce motion), maintenance
 - [ ] Meta Ads / tenant integration (`saasService`)
 - [ ] Admin command console (AI assistant, `/assistant`)
 
 ## Wave 7 — Finance & salary (web `modules/finance`, `salary`)
-- [ ] Revenue centre / report (`revenueService`)
+- [x] Revenue centre / report (`revenueService`)
 - [ ] Financial core: transactions, entries
-- [ ] My salary; team salaries; set a salary
-- [ ] Payroll policy; company deductions; employee deductions & rules
-- [ ] Billing status (Billstack) — view, retry sync, hand-off
+- [x] My salary; team salaries; set a salary
+- [x] Payroll policy; company deductions; employee deductions & rules
+- [x] Billing status (Billstack) — view, retry sync, hand-off _(on a lead and a coworking client)_
 
 ## Wave 8 — Inventory depth, contacts, projects (web `modules/inventory`)
-- [ ] Edit property (all fields), status change, reservation
+- [x] Edit property (all fields), status change, reservation _(the fields the add form has; blocked and sold take a lead, sold takes the payment)_
 - [ ] Photos, documents, floor plans, video tours (upload)
-- [ ] Inventory requests: create / update / delete requests for non-admins; my requests
-- [ ] Property activity log (admin / manager)
+- [x] Inventory requests: create / update / delete requests for non-admins; my requests _(plus cancelling your own pending delete requests)_
+- [x] Property activity log (admin / manager)
 - [ ] Bulk upload inventory
 - [ ] Owner database & broker database (`/contacts`): list, add, bulk add, identify, blocked leads, delete
-- [ ] Projects: list, details, create, edit, delete
+- [x] Projects: list, details, create, edit, delete _(unit-by-unit office / shop / showroom lists and photos stay on web)_
 - [ ] Public shared-inventory page (works without signing in)
 
 ## Wave 9 — Field operations (web `modules/field`)
@@ -122,7 +122,7 @@ ticked when the *capability* is there, not when the pixels match.
 - [ ] Group chats and lead rooms
 - [ ] Broadcasts (send / receive)
 - [ ] Attachments and media; share a property into a chat
-- [ ] Delete message (me / everyone), clear chat
+- [x] Delete message (me / everyone), clear chat _(everyone: admins, their own messages, as the server allows)_
 - [ ] Typing indicator
 - [ ] Voice / video calls (WebRTC)
 - [ ] Escalations

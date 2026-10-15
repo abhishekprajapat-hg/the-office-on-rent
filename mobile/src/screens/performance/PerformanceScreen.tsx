@@ -1,7 +1,9 @@
 import React, { useState } from "react";
 import { Pressable, StyleSheet, View } from "react-native";
 import { isForbidden } from "../../api/client";
-import { getMyPerformance, getTeamPerformance, type Grade, type MyPerformance, type PerformancePart } from "../../api/performance";
+import { useNavigation } from "@react-navigation/native";
+import { getMyPerformance, getTeamPerformance, getUserPerformance, type Grade, type MyPerformance, type PerformancePart } from "../../api/performance";
+import type { RootScreenProps } from "../../navigation/types";
 import { useUser } from "../../auth/AuthProvider";
 import { monthKeyOf, monthLabel, rupees, shiftMonth } from "../../lib/format";
 import { isManagement, roleLabel } from "../../lib/roles";
@@ -85,22 +87,35 @@ export const PerformanceScreen = () => {
   );
 };
 
-const Mine = () => {
+/* A teammate's score, opened from the team list (web: performance user view). */
+export const MemberPerformanceScreen = ({ route, navigation }: RootScreenProps<"MemberPerformance">) => {
+  React.useLayoutEffect(() => {
+    navigation.setOptions({ title: route.params.name || "Performance" });
+  }, [navigation, route.params.name]);
+  return (
+    <Body>
+      <Mine userId={route.params.userId} />
+    </Body>
+  );
+};
+
+/* One person's score: mine, or a teammate's when userId is given. */
+const Mine = ({ userId }: { userId?: string }) => {
   const { colors } = useTheme();
   const current = monthKeyOf();
   const months = [-4, -3, -2, -1, 0].map((delta) => shiftMonth(current, delta));
   const [open, setOpen] = useState<string | null>(null);
   const { data, loading, error, refresh } = useQuery(async () => {
-    const rows = await Promise.all(
-      months.map((key) => getMyPerformance(key).catch((err) => (isForbidden(err) ? Promise.reject(err) : null))),
-    );
+    const load = (key: string) => (userId ? getUserPerformance(userId, key) : getMyPerformance(key));
+    const rows = await Promise.all(months.map((key) => load(key).catch((err) => (isForbidden(err) ? Promise.reject(err) : null))));
     return rows as (MyPerformance | null)[];
-  }, [current]);
+  }, [current, userId]);
 
   if (loading) return <Loading />;
   if (error) return <ErrorState message={error} onRetry={refresh} />;
   const now = data?.[4];
-  if (!now?.performance) return <EmptyState icon="speedometer-outline" title="No score yet" message="Your score appears once you have attendance, tasks or leads this month." />;
+  if (!now?.performance)
+    return <EmptyState icon="speedometer-outline" title="No score yet" message={`${userId ? "The" : "Your"} score appears once there's attendance, tasks or leads this month.`} />;
 
   const perf = now.performance;
   const score = perf.score ?? 0;
@@ -187,6 +202,8 @@ const Mine = () => {
 };
 
 const Team = () => {
+  const navigation = useNavigation();
+  const { colors } = useTheme();
   const month = monthKeyOf();
   const { data, loading, error, refresh } = useQuery(() => getTeamPerformance(month), [month]);
   if (loading) return <Loading />;
@@ -205,7 +222,12 @@ const Team = () => {
       <GroupLabel>{monthLabel(month)}</GroupLabel>
       <ListCard>
         {rows.map((row) => (
-          <View key={row.user._id} style={styles.teamRow}>
+          <Pressable
+            key={row.user._id}
+            accessibilityRole="button"
+            onPress={() => navigation.navigate("MemberPerformance", { userId: row.user._id, name: row.user.name })}
+            style={({ pressed }) => [styles.teamRow, pressed && { backgroundColor: colors.surfaceAlt }]}
+          >
             <Avatar name={row.user.name} uri={row.user.profileImageUrl} size={36} />
             <View style={styles.flex}>
               <Text variant="bodyStrong" style={styles.teamName} numberOfLines={1}>
@@ -223,7 +245,7 @@ const Team = () => {
                 score
               </Text>
             </View>
-          </View>
+          </Pressable>
         ))}
       </ListCard>
     </>
