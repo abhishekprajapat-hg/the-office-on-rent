@@ -50,6 +50,7 @@ export const AdminConsoleScreen = ({ navigation }: RootScreenProps<"AdminConsole
       badge: data?.pending,
       onPress: () => navigation.navigate("Approvals"),
     },
+    { icon: "sparkles", tone: "violet", label: "Assistant", sub: "Ask about leads & stock", onPress: () => navigation.navigate("Assistant") },
     { icon: "key", tone: "violet", label: "Page access", sub: "Per-user modules", onPress: () => navigation.navigate("Users", { focus: "access" }) },
     { icon: "megaphone", tone: "primary", label: "Broadcast", sub: "Notify everyone", onPress: () => navigation.navigate("Broadcast") },
     {

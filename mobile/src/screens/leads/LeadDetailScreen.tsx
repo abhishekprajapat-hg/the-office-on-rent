@@ -4,7 +4,9 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { errorMessage } from "../../api/client";
 import { deleteLead, getDiary, getLeadActivity, getLeadDetail } from "../../api/leads";
 import { listTasks } from "../../api/tasks";
-import { useUser } from "../../auth/AuthProvider";
+import { useAuth, useUser } from "../../auth/AuthProvider";
+import { canOpenPage } from "../../api/access";
+import { openLeadRoom } from "../../api/chat";
 import { dialable, isOverdue, whatsappNumber } from "../../lib/format";
 import { leadTemperature, statusMeta, TEMPERATURE } from "../../lib/leadStatus";
 import { isManagement } from "../../lib/roles";
@@ -30,6 +32,7 @@ type TabKey = (typeof TABS)[number]["key"];
 export const LeadDetailScreen = ({ route, navigation }: RootScreenProps<"LeadDetail">) => {
   const { leadId, name } = route.params;
   const user = useUser();
+  const { access } = useAuth();
   const { colors } = useTheme();
   const insets = useSafeAreaInsets();
   const [tab, setTab] = useState<TabKey>("overview");
@@ -104,6 +107,25 @@ export const LeadDetailScreen = ({ route, navigation }: RootScreenProps<"LeadDet
     { key: "req", label: "Edit requirements", icon: "options-outline", onPress: () => navigation.navigate("EditRequirements", { leadId: lead._id }) },
     { key: "transfer", label: "Transfer lead", icon: "swap-horizontal-outline", hint: "Hand it to a teammate", onPress: () => navigation.navigate("TransferLead", { leadId: lead._id }) },
     { key: "task", label: "Add task", icon: "add-circle-outline", onPress: () => navigation.navigate("NewTask", { leadId: lead._id, leadName: lead.name }) },
+    ...(canOpenPage(user, access, "chat")
+      ? [
+          {
+            key: "room",
+            label: "Team chat",
+            icon: "chatbubbles-outline" as IconName,
+            hint: "A room for everyone on this lead",
+            onPress: async () => {
+              setActionError(null);
+              try {
+                const room = await openLeadRoom(lead._id);
+                if (room?._id) navigation.navigate("Conversation", { id: room._id, title: lead.name });
+              } catch (err) {
+                setActionError(errorMessage(err));
+              }
+            },
+          },
+        ]
+      : []),
     ...(canDelete
       ? [{ key: "delete", label: "Delete lead", icon: "trash-outline" as IconName, destructive: true, hint: user.role === "ADMIN" ? undefined : "Needs an admin's approval", onPress: () => setConfirmDelete(true) }]
       : []),
@@ -194,7 +216,7 @@ export const LeadDetailScreen = ({ route, navigation }: RootScreenProps<"LeadDet
           })}
         </ScrollView>
 
-        {tab === "overview" ? <LeadOverviewTab lead={lead} onEditRequirements={() => setTab("requirements")} /> : null}
+        {tab === "overview" ? <LeadOverviewTab lead={lead} onEditRequirements={() => setTab("requirements")} onOpenProperties={() => setTab("properties")} /> : null}
         {tab === "overview" ? <BillstackCard entityType="lead" entityId={lead._id} /> : null}
         {tab === "requirements" ? <LeadRequirementsTab lead={lead} onEdit={() => navigation.navigate("EditRequirements", { leadId: lead._id })} /> : null}
         {tab === "properties" ? <LeadPropertiesTab lead={lead} onChanged={reload} /> : null}

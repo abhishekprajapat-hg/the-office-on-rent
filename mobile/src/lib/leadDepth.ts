@@ -66,16 +66,3 @@ export const requirementSummary = (req?: Req) => {
   const what = [kind, DEAL_LABEL[req.transactionType || ""]].filter(Boolean).join(" ");
   return [what, budgetLabel(req.budgetMin, req.budgetMax)].filter(Boolean).join(" · ");
 };
-
-type ProposalProperty = { title: string; price?: string; location?: string; link?: string };
-
-/* The WhatsApp message a proposal sends: greeting, one block per property, sign-off. */
-export const proposalMessage = (leadName: string, agentName: string, properties: ProposalProperty[]) => {
-  const first = leadName.trim().split(/\s+/)[0] || "there";
-  const blocks = properties.map((property, index) =>
-    [`${index + 1}. *${property.title}*`, property.price ? `   ${property.price}` : "", property.location ? `   📍 ${property.location}` : "", property.link ? `   ${property.link}` : ""]
-      .filter(Boolean)
-      .join("\n"),
-  );
-  return [`Hi ${first},`, "", `Here ${properties.length === 1 ? "is a property" : `are ${properties.length} properties`} that match what you're looking for:`, "", ...blocks, "", "Let me know which you'd like to visit.", `— ${agentName}`].join("\n");
-};

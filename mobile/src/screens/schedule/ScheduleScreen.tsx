@@ -2,9 +2,11 @@ import React, { useMemo, useState } from "react";
 import { Pressable, RefreshControl, ScrollView, StyleSheet, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { errorMessage } from "../../api/client";
-import { completeFollowUp, listFollowUpsBetween } from "../../api/leads";
+import { completeFollowUp, listFollowUpsBetween, updateLeadStatus } from "../../api/leads";
 import type { Lead, Task } from "../../api/types";
-import { listTasks } from "../../api/tasks";
+import { listTasks, updateTask } from "../../api/tasks";
+import { isUnpaidCollection } from "../../lib/followUp";
+import { FollowUpNoteSheet, ScheduleFollowUpSheet } from "./ScheduleSheets";
 import { canDoPageAction, canOpenPage } from "../../api/access";
 import { addMonths, dayKey, gridRange, groupByDay, monthGrid, MONTH_NAMES, WEEKDAYS } from "../../lib/calendar";
 import { useAuth } from "../../auth/AuthProvider";
@@ -13,7 +15,7 @@ import { useUser } from "../../auth/AuthProvider";
 import type { RootScreenProps } from "../../navigation/types";
 import { useTheme } from "../../theme/ThemeProvider";
 import { ActivityIndicator } from "react-native";
-import { ErrorState, Icon, InlineError, Sheet, Text } from "../../ui";
+import { ActionSheet, ErrorState, Icon, InlineError, Sheet, Text, type IconName, type SheetAction } from "../../ui";
 
 const settle = <T,>(promise: Promise<T>, fallback: T) => promise.catch(() => fallback);
 const mondayOf = (date: Date) => {
@@ -39,7 +41,16 @@ export const ScheduleScreen = ({ navigation }: RootScreenProps<"Schedule">) => {
   const [picking, setPicking] = useState(false);
   const [cursor, setCursor] = useState(() => addMonths(new Date(), 0));
   const [busyLead, setBusyLead] = useState<string | null>(null);
+  const [busyTask, setBusyTask] = useState<string | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
+  const [addOpen, setAddOpen] = useState(false);
+  const [scheduling, setScheduling] = useState<{ lead: Lead | null } | null>(null);
+  const [acting, setActing] = useState<Lead | null>(null);
+  const [noting, setNoting] = useState<Lead | null>(null);
+  const [clearing, setClearing] = useState<Lead | null>(null);
+  const canEditLeads = canDoPageAction(user, access, "leads", "edit") || canDoPageAction(user, access, "my_leads", "edit");
+  const canFollowUp = canDoPageAction(user, access, "leads", "follow_up") || canDoPageAction(user, access, "my_leads", "follow_up");
+  const canAddTask = canDoPageAction(user, access, "tasks", "create");
 
   const selectedDate = new Date(`${selected}T00:00:00`);
   const weekStart = mondayOf(selectedDate);
@@ -91,8 +102,47 @@ export const ScheduleScreen = ({ navigation }: RootScreenProps<"Schedule">) => {
     }
   };
 
-  const open = (item: Item) =>
-    item.kind === "lead" ? navigation.navigate("LeadDetail", { leadId: item.lead._id, name: item.lead.name }) : navigation.navigate("TaskDetail", { taskId: item.task._id });
+  /* Clearing deletes the follow-up without logging it done (web "Delete follow-up"). */
+  const clearFollowUp = async (lead: Lead) => {
+    setBusyLead(lead._id);
+    setActionError(null);
+    try {
+      await updateLeadStatus(lead._id, { status: lead.status || "NEW", nextFollowUp: null });
+      reload();
+    } catch (err) {
+      setActionError(errorMessage(err));
+    } finally {
+      setBusyLead(null);
+    }
+  };
+
+  const tickTask = async (task: Task) => {
+    setBusyTask(task._id);
+    setActionError(null);
+    try {
+      await updateTask(task._id, { status: "COMPLETED" });
+      reload();
+    } catch (err) {
+      setActionError(errorMessage(err));
+    } finally {
+      setBusyTask(null);
+    }
+  };
+
+  const open = (item: Item) => (item.kind === "lead" ? setActing(item.lead) : navigation.navigate("TaskDetail", { taskId: item.task._id }));
+
+  const leadActions = (lead: Lead): SheetAction[] => {
+    const collecting = isUnpaidCollection(lead);
+    return [
+      { key: "open", label: "Open lead", icon: "person-outline", onPress: () => navigation.navigate("LeadDetail", { leadId: lead._id, name: lead.name }) },
+      ...(canFollowUp ? [{ key: "note", label: "Add a note", icon: "create-outline" as IconName, onPress: () => setNoting(lead) }] : []),
+      ...(canEditLeads ? [{ key: "move", label: "Reschedule", icon: "time-outline" as IconName, onPress: () => setScheduling({ lead }) }] : []),
+      ...(canFollowUp && !collecting ? [{ key: "done", label: "Mark done", icon: "checkmark-circle-outline" as IconName, onPress: () => markDone(lead._id) }] : []),
+      ...(canEditLeads && !collecting
+        ? [{ key: "clear", label: "Clear follow-up", icon: "trash-outline" as IconName, hint: "Removes it without marking it done", destructive: true, onPress: () => setClearing(lead) }]
+        : []),
+    ];
+  };
 
   const renderEvent = (item: Item) => {
     let tone = { fg: colors.textMuted, bg: colors.track };
@@ -101,7 +151,7 @@ export const ScheduleScreen = ({ navigation }: RootScreenProps<"Schedule">) => {
     if (item.kind === "lead") {
       const visit = VISIT_STATUSES.includes(item.lead.status || "");
       tone = visit ? { fg: colors.primary, bg: colors.primarySoft } : { fg: colors.violet, bg: colors.violetSoft };
-      title = `${visit ? "Site visit" : "Call"} · ${item.lead.name}`;
+      title = `${visit ? "Site visit" : isUnpaidCollection(item.lead) ? "Collect payment" : "Call"} · ${item.lead.name}`;
       sub = visit ? item.lead.projectInterested || "Site visit" : `Follow-up${item.at.getMinutes() ? ` · ${item.at.toLocaleTimeString("en-IN", { hour: "numeric", minute: "2-digit" })}` : ""}`;
     } else {
       const urgent = ["HIGH", "URGENT"].includes(item.task.priority);
@@ -120,7 +170,7 @@ export const ScheduleScreen = ({ navigation }: RootScreenProps<"Schedule">) => {
             {sub}
           </Text>
         </View>
-        {item.kind === "lead" ? (
+        {item.kind === "lead" && canFollowUp && !isUnpaidCollection(item.lead) ? (
           <Pressable
             accessibilityRole="button"
             accessibilityLabel={`Mark follow-up with ${item.lead.name} done`}
@@ -129,6 +179,17 @@ export const ScheduleScreen = ({ navigation }: RootScreenProps<"Schedule">) => {
             style={[styles.doneButton, { borderColor: tone.fg }]}
           >
             {busyLead === item.lead._id ? <ActivityIndicator size="small" color={tone.fg} /> : <Icon name="checkmark" size={15} color={tone.fg} />}
+          </Pressable>
+        ) : null}
+        {item.kind === "task" ? (
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel={`Mark ${item.task.title} done`}
+            hitSlop={8}
+            onPress={() => tickTask(item.task)}
+            style={[styles.doneButton, { borderColor: tone.fg }]}
+          >
+            {busyTask === item.task._id ? <ActivityIndicator size="small" color={tone.fg} /> : <Icon name="checkmark" size={15} color={tone.fg} />}
           </Pressable>
         ) : null}
       </Pressable>
@@ -163,8 +224,13 @@ export const ScheduleScreen = ({ navigation }: RootScreenProps<"Schedule">) => {
               </Text>
             </Pressable>
           ) : null}
-          {canDoPageAction(user, access, "tasks", "create") ? (
-            <Pressable accessibilityRole="button" accessibilityLabel="New task" onPress={() => navigation.navigate("NewTask")} style={[styles.add, { backgroundColor: colors.primary }]}>
+          {canAddTask || canEditLeads ? (
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel="Add to schedule"
+              onPress={() => (canEditLeads ? setAddOpen(true) : navigation.navigate("NewTask"))}
+              style={[styles.add, { backgroundColor: colors.primary }]}
+            >
               <Icon name="add" size={24} color={colors.onPrimary} />
             </Pressable>
           ) : null}
@@ -235,6 +301,34 @@ export const ScheduleScreen = ({ navigation }: RootScreenProps<"Schedule">) => {
         </ScrollView>
       )}
 
+      <ActionSheet
+        visible={addOpen}
+        title="Add to schedule"
+        onClose={() => setAddOpen(false)}
+        actions={[
+          { key: "follow", label: "Schedule a follow-up", hint: "For any lead you can see", icon: "alarm-outline", onPress: () => setScheduling({ lead: null }) },
+          ...(canAddTask ? [{ key: "task", label: "New task", icon: "checkbox-outline" as IconName, onPress: () => navigation.navigate("NewTask") }] : []),
+        ]}
+      />
+      <ActionSheet visible={Boolean(acting)} title={acting?.name} onClose={() => setActing(null)} actions={acting ? leadActions(acting) : []} />
+      <ActionSheet
+        visible={Boolean(clearing)}
+        title={`Clear the follow-up with ${clearing?.name || "this lead"}?`}
+        onClose={() => setClearing(null)}
+        actions={clearing ? [{ key: "confirm", label: "Clear follow-up", icon: "trash-outline", destructive: true, onPress: () => clearFollowUp(clearing) }] : []}
+      />
+      <ScheduleFollowUpSheet
+        visible={Boolean(scheduling)}
+        day={selectedDate}
+        lead={scheduling?.lead}
+        onClose={() => setScheduling(null)}
+        onSaved={(at) => {
+          setScheduling(null);
+          setSelected(dayKey(at));
+          reload();
+        }}
+      />
+      <FollowUpNoteSheet lead={noting} onClose={() => setNoting(null)} />
       <Sheet visible={picking} title={`${MONTH_NAMES[cursor.getMonth()]} ${cursor.getFullYear()}`} onClose={() => setPicking(false)}>
         <View style={styles.monthNav}>
           <Pressable accessibilityLabel="Previous month" hitSlop={10} onPress={() => setCursor((value) => addMonths(value, -1))}>

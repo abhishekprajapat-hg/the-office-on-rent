@@ -37,3 +37,28 @@ export const followUpQuickPicks = (now = new Date()): QuickPick[] => {
  * explicit instant leaves nothing to reinterpret.
  */
 export const toFollowUpPayload = (date: Date | null) => (date ? date.toISOString() : null);
+
+type FollowUpLead = { status?: string; phone?: string; name?: string; dealPayment?: { paymentType?: string | null; remainingAmount?: number | null } | null };
+const upper = (value: unknown) => String(value || "").trim().toUpperCase();
+
+/* A deal closed on part payment keeps its follow-up until the rest is collected (web isUnpaidCollectionLead). */
+export const isUnpaidCollection = (lead: FollowUpLead) =>
+  upper(lead.status) === "CLOSED" && upper(lead.dealPayment?.paymentType) === "PARTIAL" && Number(lead.dealPayment?.remainingAmount) > 0;
+
+/* Mirrors the server: finished leads carry no follow-up. */
+const NO_FOLLOW_UP = new Set(["CLOSED", "LOST", "INVALID", "MISSING_IN_ACTION"]);
+export const canScheduleFollowUp = (lead: FollowUpLead) => !NO_FOLLOW_UP.has(upper(lead.status)) || isUnpaidCollection(lead);
+
+/* A typed number is searched by its digits, so "98765 43210" and "+91 98765-43210" find 9876543210; names pass through. */
+export const phoneSearch = (query: string) => {
+  const text = query.trim();
+  return /^[\d\s+()-]+$/.test(text) ? text.replace(/\D/g, "").replace(/^91(?=\d{10}$)/, "") : text;
+};
+
+/* The picker's starting time on a chosen day (web getDefaultFollowUpDate): the next hour today, 11 AM on any other day. */
+export const defaultFollowUpOn = (day: Date, now = new Date()) => {
+  const date = new Date(day.getFullYear(), day.getMonth(), day.getDate());
+  const today = date.toDateString() === now.toDateString();
+  date.setHours(today ? Math.min(now.getHours() + 1, 23) : 11, 0, 0, 0);
+  return date;
+};

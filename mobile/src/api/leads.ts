@@ -68,7 +68,8 @@ export const getTodayFollowUps = async (limit = 5) => {
 /* Leads whose next follow-up falls in [from, to], for the schedule. */
 export const listFollowUpsBetween = async (from: Date, to: Date) => {
   const res = await api.get<{ leads: Lead[] }>("/leads", {
-    params: { page: 1, limit: 200, fields: LIST_FIELDS, followUpFrom: from.toISOString(), followUpTo: to.toISOString(), sortBy: "nextFollowUp" },
+    // dealPayment tells a part-paid closed deal (whose follow-up is collecting the rest) from the others.
+    params: { page: 1, limit: 200, fields: `${LIST_FIELDS},dealPayment`, followUpFrom: from.toISOString(), followUpTo: to.toISOString(), sortBy: "nextFollowUp" },
   });
   return res.data?.leads || [];
 };

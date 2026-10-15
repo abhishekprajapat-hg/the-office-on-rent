@@ -1,21 +1,23 @@
 import React, { useEffect, useState } from "react";
-import { Image, Linking, StyleSheet, View } from "react-native";
+import { Image, StyleSheet, View } from "react-native";
 import { useNavigation } from "@react-navigation/native";
-import { errorMessage, mediaUrl, webOrigin } from "../../api/client";
-import { createShareLink, getProperty, type Property } from "../../api/inventory";
+import { errorMessage, mediaUrl } from "../../api/client";
+import { getProperty, type Property } from "../../api/inventory";
 import { addLeadNote, selectLinkedProperty, unlinkProperty, type DiaryEntry, type LeadActivity, type LeadDetail } from "../../api/leads";
 import type { PersonRef, Task } from "../../api/types";
 import { TaskRow } from "../../components/TaskRow";
 import { sortTasks } from "../../lib/taskMeta";
-import { useUser } from "../../auth/AuthProvider";
-import { formatDate, formatWhen, isOverdue, whatsappNumber } from "../../lib/format";
-import { areaRangeLabel, budgetLabel, missingDetails, proposalMessage, requirementSummary } from "../../lib/leadDepth";
+import { formatDate, formatWhen, isOverdue } from "../../lib/format";
+import { formatRupees } from "../../lib/money";
+import { ProposalSheet } from "./ProposalSheet";
+import { logModeOf, matchesTimeline, withLogMode, type LogMode, type TimelineFilter } from "../../lib/leadLog";
+import { areaRangeLabel, budgetLabel, missingDetails, requirementSummary } from "../../lib/leadDepth";
 import { LEAD_STAGES, statusMeta, statusStage } from "../../lib/leadStatus";
 import { INVENTORY_STATUS, priceLine, propertyTitle, FURNISHING } from "../../lib/property";
 import { roleLabel } from "../../lib/roles";
 import { useTheme } from "../../theme/ThemeProvider";
 import { radius, space } from "../../theme/tokens";
-import { Avatar, Badge, Button, Card, Field, Icon, InlineError, Loading, SectionTitle, Text, type IconName } from "../../ui";
+import { Avatar, Badge, Button, Card, Chip, Field, Icon, InlineError, Loading, SectionTitle, Segmented, Text, type IconName } from "../../ui";
 
 const SOURCE_LABELS: Record<string, string> = {
   META: "Meta ads",
@@ -35,8 +37,13 @@ const idOf = (value: string | { _id: string } | null | undefined) => (typeof val
 
 /* ------------------------------------------------------------- overview -- */
 
-export const LeadOverviewTab = ({ lead, onEditRequirements }: { lead: LeadDetail; onEditRequirements: () => void }) => {
+export const LeadOverviewTab = ({ lead, onEditRequirements, onOpenProperties }: { lead: LeadDetail; onEditRequirements: () => void; onOpenProperties: () => void }) => {
   const { colors } = useTheme();
+  // A closed deal paid in part keeps one follow-up: collecting the rest (web "Remaining payment follow-up").
+  const collecting = String(lead.status || "").toUpperCase() === "CLOSED" && String(lead.dealPayment?.paymentType || "").toUpperCase() === "PARTIAL";
+  const remaining = Number(lead.dealPayment?.remainingAmount) > 0 ? Number(lead.dealPayment?.remainingAmount) : null;
+  const linkedCount = (lead.relatedInventoryIds || []).length;
+  const visitStage = ["INTERESTED", "SITE_VISIT_SCHEDULED", "SITE_VISIT", "CONTACTED", "NEW"].includes(String(lead.status || "").toUpperCase());
   const stage = statusStage(lead.status);
   const stageIndex = stage ? LEAD_STAGES.findIndex((item) => item.key === stage) : -1;
   const overdue = isOverdue(lead.nextFollowUp);
@@ -80,11 +87,16 @@ export const LeadOverviewTab = ({ lead, onEditRequirements }: { lead: LeadDetail
         </View>
         <View style={styles.flex}>
           <Text variant="small" color="muted">
-            Next follow-up
+            {collecting ? "Remaining payment follow-up" : "Next follow-up"}
           </Text>
           <Text variant="bodyStrong" color={overdue ? colors.danger : colors.text}>
             {lead.nextFollowUp ? `${formatWhen(lead.nextFollowUp)}${overdue ? " · overdue" : ""}` : "Not scheduled"}
           </Text>
+          {collecting ? (
+            <Text variant="small" color="muted">
+              Collect the pending amount{remaining ? ` (${formatRupees(remaining)})` : ""}.
+            </Text>
+          ) : null}
           {lead.followUpPurpose ? (
             <Text variant="small" color="muted" numberOfLines={2}>
               {lead.followUpPurpose}
@@ -103,6 +115,24 @@ export const LeadOverviewTab = ({ lead, onEditRequirements }: { lead: LeadDetail
               Looking for
             </Text>
             <Text variant="bodyStrong">{summary}</Text>
+          </View>
+          <Icon name="chevron-forward" size={18} color={colors.textFaint} />
+        </Card>
+      ) : null}
+
+      {visitStage ? (
+        <Card onPress={onOpenProperties} style={styles.inlineCard} accessibilityLabel="Site visit">
+          <View style={[styles.squareIcon, { backgroundColor: colors.violetSoft }]}>
+            <Icon name="navigate" size={20} color={colors.violet} />
+          </View>
+          <View style={styles.flex}>
+            <Text variant="small" color="muted">
+              Site visit
+            </Text>
+            <Text variant="bodyStrong">{lead.inventoryId ? "Property chosen" : linkedCount ? `${linkedCount} linked, none chosen` : "No property linked"}</Text>
+            <Text variant="small" color="muted">
+              {lead.inventoryId ? "Mark it visited from Update status." : "Link and choose a property to schedule a visit."}
+            </Text>
           </View>
           <Icon name="chevron-forward" size={18} color={colors.textFaint} />
         </Card>
@@ -206,7 +236,6 @@ export const LeadRequirementsTab = ({ lead, onEdit }: { lead: LeadDetail; onEdit
 
 export const LeadPropertiesTab = ({ lead, onChanged }: { lead: LeadDetail; onChanged: () => void }) => {
   const navigation = useNavigation();
-  const user = useUser();
   const { colors } = useTheme();
   const ids = (lead.relatedInventoryIds || []).map(idOf).filter(Boolean);
   const selectedId = idOf(lead.inventoryId);
@@ -214,6 +243,7 @@ export const LeadPropertiesTab = ({ lead, onChanged }: { lead: LeadDetail; onCha
   const [busy, setBusy] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [picked, setPicked] = useState<string[]>([]);
+  const [proposalOpen, setProposalOpen] = useState(false);
 
   const idKey = ids.join(",");
   useEffect(() => {
@@ -234,27 +264,6 @@ export const LeadPropertiesTab = ({ lead, onChanged }: { lead: LeadDetail; onCha
     try {
       await action();
       onChanged();
-    } catch (err) {
-      setError(errorMessage(err));
-    } finally {
-      setBusy(null);
-    }
-  };
-
-  /* Proposal: share links for the chosen properties, sent to the client on WhatsApp. */
-  const sendProposal = async () => {
-    const chosen = (properties || []).filter((property) => picked.includes(property._id));
-    if (!chosen.length) return setError("Tick the properties to include in the proposal.");
-    setBusy("proposal");
-    setError(null);
-    try {
-      const links = await Promise.all(chosen.map((property) => createShareLink(property._id).then((res) => `${webOrigin()}/shared/inventory/${res.shareToken}`).catch(() => "")));
-      const message = proposalMessage(
-        lead.name,
-        user.name,
-        chosen.map((property, index) => ({ title: propertyTitle(property), price: priceLine(property), location: property.location, link: links[index] })),
-      );
-      await Linking.openURL(`https://wa.me/${whatsappNumber(lead.phone)}?text=${encodeURIComponent(message)}`);
     } catch (err) {
       setError(errorMessage(err));
     } finally {
@@ -323,13 +332,13 @@ export const LeadPropertiesTab = ({ lead, onChanged }: { lead: LeadDetail; onCha
       <Button label="Link a property" icon="link-outline" variant="secondary" onPress={() => navigation.navigate("PickProperty", { leadId: lead._id })} />
       {(properties || []).length ? (
         <Button
-          label={picked.length ? `Send proposal (${picked.length}) on WhatsApp` : "Tick properties to send a proposal"}
-          icon="logo-whatsapp"
+          label={picked.length ? `Send proposal (${picked.length})` : "Tick properties to send a proposal"}
+          icon="document-text-outline"
           disabled={!picked.length}
-          loading={busy === "proposal"}
-          onPress={sendProposal}
+          onPress={() => setProposalOpen(true)}
         />
       ) : null}
+      <ProposalSheet visible={proposalOpen} lead={lead} properties={(properties || []).filter((property) => picked.includes(property._id))} onClose={() => setProposalOpen(false)} />
     </>
   );
 };
@@ -338,16 +347,18 @@ export const LeadPropertiesTab = ({ lead, onChanged }: { lead: LeadDetail; onCha
 
 export const LeadNotesTab = ({ leadId, entries, onAdded }: { leadId: string; entries: DiaryEntry[]; onAdded: () => void }) => {
   const [note, setNote] = useState("");
+  const [mode, setMode] = useState<LogMode>("NOTE");
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const empty = !note.replace(/^(Call|Visit):\s*/, "").trim();
 
   const add = async () => {
-    if (!note.trim()) return;
+    if (empty) return;
     setSaving(true);
     setError(null);
     try {
       await addLeadNote(leadId, note);
-      setNote("");
+      setNote(withLogMode("", mode));
       onAdded();
     } catch (err) {
       setError(errorMessage(err));
@@ -359,16 +370,35 @@ export const LeadNotesTab = ({ leadId, entries, onAdded }: { leadId: string; ent
   return (
     <>
       <Card style={styles.gapSm}>
-        <Field value={note} onChangeText={setNote} placeholder="Log a call, a visit, what the client said…" multiline maxLength={2000} />
+        <Segmented
+          options={[
+            { key: "NOTE", label: "Note" },
+            { key: "CALL", label: "Call" },
+            { key: "VISIT", label: "Visit" },
+          ]}
+          value={mode}
+          onChange={(next) => {
+            setMode(next);
+            setNote((draft) => withLogMode(draft, next));
+          }}
+        />
+        <Field
+          value={note}
+          onChangeText={setNote}
+          placeholder={mode === "CALL" ? "What was discussed on the call…" : mode === "VISIT" ? "How the site visit went…" : "A note about this lead…"}
+          multiline
+          maxLength={2000}
+        />
         <InlineError message={error} />
-        <Button label="Add note" icon="add" size="sm" disabled={!note.trim()} loading={saving} onPress={add} />
+        <Button label={mode === "CALL" ? "Log call" : mode === "VISIT" ? "Log visit" : "Add note"} icon="add" size="sm" disabled={empty} loading={saving} onPress={add} />
       </Card>
       {entries.length ? (
         entries.map((entry) => {
           const author = entry.createdBy || entry.author;
           return (
             <Card key={entry._id} style={styles.gapSm}>
-              <Text variant="body">{entry.note}</Text>
+              {logModeOf(entry.note || "") !== "NOTE" ? <Badge label={logModeOf(entry.note || "") === "CALL" ? "Call" : "Visit"} tone={logModeOf(entry.note || "") === "CALL" ? "primary" : "violet"} /> : null}
+              <Text variant="body">{(entry.note || "").replace(/^(Call|Visit):\s*/, "")}</Text>
               <View style={styles.authorRow}>
                 <Avatar name={author?.name || "?"} size={22} />
                 <Text variant="tiny" color="faint">
@@ -393,6 +423,8 @@ export const LeadActivityTab = ({ lead, activity, tasks }: { lead: LeadDetail; a
   const { colors } = useTheme();
   const navigation = useNavigation();
   const history = [...(lead.assignmentHistory || [])].reverse();
+  const [filter, setFilter] = useState<TimelineFilter>("ALL");
+  const shown = activity.filter((entry) => matchesTimeline(entry.action || "", filter));
   return (
     <>
       <SectionTitle title={`Tasks${tasks.length ? ` · ${tasks.length}` : ""}`} action="New task" onAction={() => navigation.navigate("NewTask", { leadId: lead._id, leadName: lead.name })} />
@@ -430,13 +462,26 @@ export const LeadActivityTab = ({ lead, activity, tasks }: { lead: LeadDetail; a
         </>
       ) : null}
       <SectionTitle title="Activity timeline" />
+      <View style={styles.chips}>
+        {(
+          [
+            ["ALL", "All"],
+            ["NOTES", "Notes"],
+            ["CALLS", "Calls"],
+            ["VISITS", "Visits"],
+            ["ASSIGNMENTS", "Assignments"],
+          ] as [TimelineFilter, string][]
+        ).map(([key, label]) => (
+          <Chip key={key} label={label} selected={filter === key} onPress={() => setFilter(key)} />
+        ))}
+      </View>
       <Card style={styles.rows}>
-        {activity.length ? (
-          activity.map((entry, index) => (
+        {shown.length ? (
+          shown.map((entry, index) => (
             <View key={entry._id} style={styles.activity}>
               <View style={styles.timeline}>
                 <View style={[styles.timelineDot, { backgroundColor: index === 0 ? colors.primary : colors.border }]} />
-                {index < activity.length - 1 ? <View style={[styles.timelineLine, { backgroundColor: colors.border }]} /> : null}
+                {index < shown.length - 1 ? <View style={[styles.timelineLine, { backgroundColor: colors.border }]} /> : null}
               </View>
               <View style={[styles.flex, styles.activityBody]}>
                 <Text variant="small">{entry.action}</Text>
@@ -448,7 +493,7 @@ export const LeadActivityTab = ({ lead, activity, tasks }: { lead: LeadDetail; a
           ))
         ) : (
           <Text variant="small" color="muted">
-            No activity recorded yet.
+            {filter === "ALL" ? "No activity recorded yet." : "Nothing of this kind yet."}
           </Text>
         )}
       </Card>

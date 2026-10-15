@@ -61,6 +61,8 @@ import { UserDetailScreen } from "../screens/admin/UserDetailScreen";
 import { AddUserScreen } from "../screens/admin/AddUserScreen";
 import { MetaAdsScreen } from "../screens/admin/MetaAdsScreen";
 import { SystemSettingsScreen } from "../screens/admin/SystemSettingsScreen";
+import { AssistantScreen } from "../screens/admin/AssistantScreen";
+import { LegalScreen } from "../screens/legal/LegalScreen";
 import { ScheduleScreen } from "../screens/schedule/ScheduleScreen";
 import { EditLeadScreen } from "../screens/leads/EditLeadScreen";
 import { EditRequirementsScreen } from "../screens/leads/EditRequirementsScreen";
@@ -131,7 +133,7 @@ const Tabs = () => {
 
 export const RootNavigator = () => {
   const { user, access } = useAuth();
-  const { colors, scheme } = useTheme();
+  const { colors, scheme, reduceMotion } = useTheme();
   const allowed = (page: string) => canOpenPage(user, access, page);
   const action = (page: string, name: string) => canDoPageAction(user, access, page, name);
   const leads = allowed("leads") || allowed("my_leads");
@@ -163,6 +165,7 @@ export const RootNavigator = () => {
           headerShadowVisible: false,
           headerBackButtonDisplayMode: "minimal",
           contentStyle: { backgroundColor: colors.bg },
+          ...(reduceMotion ? { animation: "none" as const } : {}),
         }}
       >
         {user ? (
@@ -211,6 +214,7 @@ export const RootNavigator = () => {
             {allowed("admin_team") && isManagement(user.role) ? <Stack.Screen name="Roles" component={RolesScreen} options={{ title: "Roles" }} /> : null}
             {allowed("admin_meta_ads") ? <Stack.Screen name="MetaAds" component={MetaAdsScreen} options={{ title: "Meta Ads" }} /> : null}
             {allowed("settings") ? <Stack.Screen name="SystemSettings" component={SystemSettingsScreen} options={{ title: "System" }} /> : null}
+            {allowed("admin_console") ? <Stack.Screen name="Assistant" component={AssistantScreen} options={{ title: "Assistant" }} /> : null}
             {allowed("salary") ? <Stack.Screen name="Salary" component={SalaryScreen} options={{ title: "Salary" }} /> : null}
             {allowed("salary") && isManagement(user.role) ? <Stack.Screen name="TeamSalary" component={TeamSalaryScreen} options={{ title: "Team salaries" }} /> : null}
             {allowed("salary") && isManagement(user.role) ? <Stack.Screen name="MemberSalary" component={MemberSalaryScreen} options={{ title: "Salary" }} /> : null}
@@ -239,6 +243,7 @@ export const RootNavigator = () => {
         ) : (
           <Stack.Screen name="Login" component={LoginScreen} options={{ headerShown: false }} />
         )}
+        <Stack.Screen name="Legal" component={LegalScreen} options={{ title: "Legal" }} />
       </Stack.Navigator>
     </NavigationContainer>
   );

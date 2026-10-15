@@ -27,7 +27,7 @@ export type FilterDef<T extends string = string> = {
  * tinted with a one-tap clear.
  */
 export const FilterDropdown = <T extends string>({ label, options, value, onChange, defaultKey, icon, grow = true }: FilterDef<T> & { grow?: boolean }) => {
-  const { colors } = useTheme();
+  const { colors, reduceMotion } = useTheme();
   const insets = useSafeAreaInsets();
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState("");
@@ -81,7 +81,7 @@ export const FilterDropdown = <T extends string>({ label, options, value, onChan
         )}
       </Pressable>
 
-      <Modal transparent visible={open} animationType="slide" onRequestClose={() => setOpen(false)} statusBarTranslucent>
+      <Modal transparent visible={open} animationType={reduceMotion ? "none" : "slide"} onRequestClose={() => setOpen(false)} statusBarTranslucent>
         <Pressable style={[styles.backdrop, { backgroundColor: colors.overlay }]} onPress={() => setOpen(false)} accessibilityLabel="Close">
           <Pressable style={[styles.sheet, { backgroundColor: colors.surface, paddingBottom: insets.bottom + 16 }]}>
             <Grabber />

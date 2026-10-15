@@ -1,15 +1,16 @@
-import React, { useLayoutEffect, useMemo } from "react";
+import React, { useLayoutEffect, useMemo, useState } from "react";
 import { Pressable, StyleSheet, View } from "react-native";
 import { useNavigation } from "@react-navigation/native";
 import { getTodayFollowUps } from "../../api/leads";
 import { useAuth, useUser } from "../../auth/AuthProvider";
 import { canOpenPage } from "../../api/access";
 import { formatAgo, formatTime, isOverdue } from "../../lib/format";
+import { DATE_WINDOWS, matchesQuery, withinWindow, type DateWindow } from "../../lib/inboxFilters";
 import { useQuery } from "../../lib/useQuery";
 import { feed, useFeed, type FeedItem, type FeedKind } from "../../notifications/feed";
 import { useTheme } from "../../theme/ThemeProvider";
 import type { Tone } from "../../theme/tokens";
-import { Body, EmptyState, GroupLabel, IconTile, ListCard, Text, type IconName } from "../../ui";
+import { Body, EmptyState, Field, FilterBar, GroupLabel, IconTile, ListCard, Text, type IconName } from "../../ui";
 
 const KIND: Record<FeedKind | "overdue", { icon: IconName; tone: Tone }> = {
   overdue: { icon: "alarm", tone: "danger" },
@@ -22,6 +23,18 @@ const KIND: Record<FeedKind | "overdue", { icon: IconName; tone: Tone }> = {
 };
 
 type Row = FeedItem & { overdue?: boolean };
+type Show = "ALL" | "UNREAD" | "lead" | "task" | "chat" | "request" | "broadcast";
+
+/* What the inbox can be narrowed to (web: All / Unread / Payments / Inventory / System, in the phone feed's own kinds). */
+const SHOW: { key: Show; label: string; test: (row: Row) => boolean }[] = [
+  { key: "ALL", label: "Everything", test: () => true },
+  { key: "UNREAD", label: "Unread", test: (row) => !row.read },
+  { key: "lead", label: "Leads & follow-ups", test: (row) => row.kind === "lead" || Boolean(row.overdue) || (row.link || "").startsWith("leads") },
+  { key: "task", label: "Tasks", test: (row) => row.kind === "task" || (row.link || "").startsWith("tasks") },
+  { key: "chat", label: "Chat", test: (row) => row.kind === "chat" || (row.link || "").startsWith("chats") },
+  { key: "request", label: "Approvals", test: (row) => row.kind === "request" || row.link === "approvals" },
+  { key: "broadcast", label: "Announcements", test: (row) => row.kind === "broadcast" },
+];
 
 /* Design 06: Today / Earlier groups, tinted icon, unread dot, "Read all". */
 export const NotificationsScreen = () => {
@@ -31,6 +44,9 @@ export const NotificationsScreen = () => {
   const leadsAllowed = canOpenPage(user, access, "leads") || canOpenPage(user, access, "my_leads");
   const { colors } = useTheme();
   const items = useFeed();
+  const [show, setShow] = useState<Show>("ALL");
+  const [when, setWhen] = useState<DateWindow>("ALL");
+  const [query, setQuery] = useState("");
   const { data: followUps, refreshing, refresh } = useQuery(() => (leadsAllowed ? getTodayFollowUps(20) : Promise.resolve([])), [leadsAllowed]);
 
   useLayoutEffect(() => {
@@ -70,10 +86,13 @@ export const NotificationsScreen = () => {
     return [...overdue, ...visible].sort((a, b) => new Date(b.at).getTime() - new Date(a.at).getTime());
   }, [items, followUps, leadsAllowed, user, access]);
 
+  const showTest = SHOW.find((item) => item.key === show)!.test;
+  const shown = rows.filter((row) => showTest(row) && withinWindow(row.at, when) && matchesQuery([row.title, row.body], query));
+  const filtering = show !== "ALL" || when !== "ALL" || Boolean(query.trim());
   const today = new Date().toDateString();
   const groups = [
-    { label: "Today", rows: rows.filter((row) => new Date(row.at).toDateString() === today) },
-    { label: "Earlier", rows: rows.filter((row) => new Date(row.at).toDateString() !== today) },
+    { label: "Today", rows: shown.filter((row) => new Date(row.at).toDateString() === today) },
+    { label: "Earlier", rows: shown.filter((row) => new Date(row.at).toDateString() !== today) },
   ].filter((group) => group.rows.length);
 
   const open = (row: Row) => {
@@ -90,12 +109,32 @@ export const NotificationsScreen = () => {
     else if (link === "attendance") navigation.navigate("Tabs", { screen: "Attendance" });
   };
 
-  if (!groups.length) {
+  if (!rows.length) {
     return <EmptyState icon="sparkles" tone="success" title="You're all caught up" message="New leads, mentions, tasks and approvals will show up here." />;
   }
 
   return (
     <Body refreshing={refreshing} onRefresh={refresh} style={styles.body}>
+      <FilterBar
+        filters={[
+          {
+            label: "Show",
+            icon: "funnel-outline",
+            options: SHOW.map((item) => ({ key: item.key, label: item.label, count: rows.filter(item.test).length })),
+            value: show,
+            onChange: (key: string) => setShow(key as Show),
+          },
+          {
+            label: "When",
+            icon: "calendar-outline",
+            options: DATE_WINDOWS.map((item) => ({ key: item.key, label: item.label })),
+            value: when,
+            onChange: (key: string) => setWhen(key as DateWindow),
+          },
+        ]}
+      />
+      <Field value={query} onChangeText={setQuery} placeholder="Search notifications" icon="search" compact surface autoCapitalize="none" />
+      {!groups.length && filtering ? <EmptyState icon="search-outline" title="Nothing matches" message="Try another filter or search." /> : null}
       {groups.map((group) => (
         <View key={group.label} style={styles.group}>
           <GroupLabel>{group.label}</GroupLabel>

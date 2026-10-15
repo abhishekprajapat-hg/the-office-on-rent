@@ -36,7 +36,7 @@ export const PickerSheet = ({
   /* Server-side search: called (debounced) as the person types; the list shows whatever `items` becomes. */
   onSearch?: (query: string) => void;
 }) => {
-  const { colors } = useTheme();
+  const { colors, reduceMotion } = useTheme();
   const insets = useSafeAreaInsets();
   const [query, setQuery] = useState("");
   useEffect(() => {
@@ -52,7 +52,7 @@ export const PickerSheet = ({
   }, [items, query, onSearch]);
 
   return (
-    <Modal transparent visible={visible} animationType="slide" onRequestClose={onClose}>
+    <Modal transparent visible={visible} animationType={reduceMotion ? "none" : "slide"} onRequestClose={onClose}>
       <Pressable style={[styles.backdrop, { backgroundColor: colors.overlay }]} onPress={onClose} accessibilityLabel="Close">
         <Pressable style={[styles.sheet, { backgroundColor: colors.surface, paddingBottom: insets.bottom + 18 }]}>
           <Grabber />

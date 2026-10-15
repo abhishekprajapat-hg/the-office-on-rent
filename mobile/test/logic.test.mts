@@ -226,7 +226,7 @@ test("mergeMessage swaps the optimistic copy and keeps order", () => {
   assert.equal(startsNewDay([m("a", "2026-10-11T10:00:00"), m("b", "2026-10-12T10:00:00")], 1), true);
 });
 
-import { budgetLabel, missingDetails, proposalMessage, requirementSummary } from "../src/lib/leadDepth.ts";
+import { budgetLabel, missingDetails, requirementSummary } from "../src/lib/leadDepth.ts";
 
 test("missing details checklist", () => {
   assert.deepEqual(missingDetails({ status: "NEW" }), ["Email", "Preferred location", "Property type", "Buy / rent / lease", "Budget", "Next follow-up"]);
@@ -245,18 +245,6 @@ test("requirement summary and budget", () => {
   );
   assert.equal(requirementSummary({ inventoryType: "COMMERCIAL", transactionType: "LEASE" }), "Commercial on lease");
   assert.equal(requirementSummary(undefined), "");
-});
-
-test("proposal message", () => {
-  const text = proposalMessage("Ananya Das", "Priya Nair", [
-    { title: "Palm Grove 2BHK", price: "₹62,000/mo", location: "Sector 92", link: "https://x/shared/inventory/abc" },
-    { title: "Cyber Park Office" },
-  ]);
-  assert.match(text, /^Hi Ananya,/);
-  assert.match(text, /are 2 properties/);
-  assert.match(text, /1\. \*Palm Grove 2BHK\*\n {3}₹62,000\/mo\n {3}📍 Sector 92\n {3}https:\/\/x\/shared\/inventory\/abc/);
-  assert.match(text, /2\. \*Cyber Park Office\*/);
-  assert.match(text, /— Priya Nair$/);
 });
 
 import { activeFilterCount, filterError, filterParams } from "../src/lib/leadFilters.ts";

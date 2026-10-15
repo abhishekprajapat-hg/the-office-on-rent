@@ -2,13 +2,17 @@ import React, { useEffect, useLayoutEffect, useState } from "react";
 import { Linking, Pressable, StyleSheet, View } from "react-native";
 import { useNavigation } from "@react-navigation/native";
 import { errorMessage } from "../../api/client";
-import { deleteContact, getBlockedLeads, listContacts, saveContact, type BlockedLead, type ContactKind, type CrmContact } from "../../api/contacts";
-import { useUser } from "../../auth/AuthProvider";
+import { deleteContact, getBlockedLeads, importContacts, listContacts, saveContact, type BlockedLead, type ContactImportResult, type ContactKind, type CrmContact } from "../../api/contacts";
+import { canDoPageAction } from "../../api/access";
+import { useAuth, useUser } from "../../auth/AuthProvider";
+import { CONTACT_TEMPLATE_CSV, contactRowsFromMatrix } from "../../lib/contactImport";
+import { shareTextFile } from "../../lib/shareFile";
+import { pickSpreadsheet, readSheets } from "../../lib/spreadsheet";
 import { dialable, formatDate, whatsappNumber } from "../../lib/format";
 import { isManagement } from "../../lib/roles";
 import { useQuery } from "../../lib/useQuery";
 import { useTheme } from "../../theme/ThemeProvider";
-import { Avatar, Body, Button, EmptyState, ErrorState, FactRow, Field, Icon, InlineError, ListCard, Loading, Segmented, Sheet, Text } from "../../ui";
+import { ActionSheet, Avatar, Body, Button, EmptyState, ErrorState, FactRow, Field, Icon, InlineError, ListCard, Loading, Segmented, Sheet, Text } from "../../ui";
 
 const EMPTY = { name: "", phone: "", email: "", company: "", city: "", propertyDetails: "", notes: "" };
 
@@ -16,7 +20,13 @@ const EMPTY = { name: "", phone: "", email: "", company: "", city: "", propertyD
 export const ContactsScreen = () => {
   const navigation = useNavigation();
   const user = useUser();
+  const { access } = useAuth();
   const { colors } = useTheme();
+  const canWrite = canDoPageAction(user, access, "inventory", "create");
+  const [menu, setMenu] = useState(false);
+  const [importing, setImporting] = useState(false);
+  const [imported, setImported] = useState<(ContactImportResult & { fileName: string; kind: ContactKind }) | null>(null);
+  const [importError, setImportError] = useState<string | null>(null);
   const [kind, setKind] = useState<ContactKind>("OWNER");
   const [query, setQuery] = useState("");
   const [search, setSearch] = useState("");
@@ -36,12 +46,40 @@ export const ContactsScreen = () => {
   useLayoutEffect(() => {
     navigation.setOptions({
       headerRight: () => (
-        <Pressable accessibilityRole="button" accessibilityLabel="Add contact" onPress={() => setAdding(true)} hitSlop={8}>
-          <Icon name="add-circle" size={24} color={colors.primary} />
-        </Pressable>
+        <View style={styles.headerActions}>
+          {canWrite ? (
+            <Pressable accessibilityRole="button" accessibilityLabel="Import contacts" onPress={() => setMenu(true)} hitSlop={8}>
+              <Icon name="cloud-upload-outline" size={22} color={colors.primary} />
+            </Pressable>
+          ) : null}
+          <Pressable accessibilityRole="button" accessibilityLabel="Add contact" onPress={() => setAdding(true)} hitSlop={8}>
+            <Icon name="add-circle" size={24} color={colors.primary} />
+          </Pressable>
+        </View>
       ),
     });
-  }, [navigation, colors.primary]);
+  }, [navigation, colors.primary, canWrite]);
+
+  /* Web "Import": a CSV or Excel sheet of owners or brokers, matched to columns by header. */
+  const runImport = async () => {
+    setImportError(null);
+    try {
+      const file = await pickSpreadsheet();
+      if (!file) return;
+      setImporting(true);
+      const [first] = await readSheets(file.uri, file.name);
+      if (!first) throw new Error("The workbook has no sheets.");
+      const rows = contactRowsFromMatrix(first.matrix);
+      if (!rows.length) throw new Error("No rows found in the file.");
+      const result = await importContacts(kind, rows);
+      setImported({ ...result, fileName: file.name, kind });
+      refresh();
+    } catch (err) {
+      setImportError(errorMessage(err, "Couldn't import that file."));
+    } finally {
+      setImporting(false);
+    }
+  };
 
   const list = kind === "OWNER" ? data?.owners : data?.brokers;
 
@@ -57,6 +95,12 @@ export const ContactsScreen = () => {
           onChange={setKind}
         />
         <Field icon="search" surface compact value={query} onChangeText={setQuery} placeholder="Name, phone or company" autoCorrect={false} autoCapitalize="none" />
+        {importing ? (
+          <Text variant="small" color="muted" align="center">
+            Importing…
+          </Text>
+        ) : null}
+        <InlineError message={importError} />
         {loading ? (
           <Loading />
         ) : error ? (
@@ -134,6 +178,38 @@ export const ContactsScreen = () => {
 
       <ContactSheet contact={open} canDelete={isManagement(user.role)} onClose={() => setOpen(null)} onChanged={refresh} />
       <AddContactSheet visible={adding} kind={kind} onClose={() => setAdding(false)} onSaved={refresh} />
+      <ActionSheet
+        visible={menu}
+        title={`Import ${kind === "OWNER" ? "owners" : "brokers"}`}
+        onClose={() => setMenu(false)}
+        actions={[
+          { key: "file", label: "Import a CSV or Excel file", hint: "Needs a name and a phone column", icon: "document-attach-outline", onPress: runImport },
+          { key: "template", label: "Get the template", hint: "A sample sheet with every column", icon: "download-outline", onPress: () => shareTextFile(`${kind.toLowerCase()}-import-template.csv`, CONTACT_TEMPLATE_CSV).catch(() => {}) },
+        ]}
+      />
+      <Sheet visible={Boolean(imported)} title="Import finished" subtitle={imported?.fileName} onClose={() => setImported(null)} footer={<Button label="Done" onPress={() => setImported(null)} />}>
+        {imported ? (
+          <>
+            <ListCard>
+              <View style={styles.facts}>
+                <FactRow icon="add-circle-outline" label="Added" value={String(imported.createdCount)} valueColor={colors.success} />
+                <FactRow icon="refresh-outline" label="Updated" value={String(imported.updatedCount)} />
+                <FactRow icon="alert-circle-outline" label="Skipped" value={String(imported.failedCount)} valueColor={imported.failedCount ? colors.danger : undefined} />
+              </View>
+            </ListCard>
+            {imported.failures.slice(0, 20).map((failure) => (
+              <Text key={`${failure.row}-${failure.message}`} variant="small" color="muted">
+                Row {failure.row}: {failure.message}
+              </Text>
+            ))}
+            {imported.failures.length > 20 ? (
+              <Text variant="tiny" color="faint">
+                and {imported.failures.length - 20} more.
+              </Text>
+            ) : null}
+          </>
+        ) : null}
+      </Sheet>
     </>
   );
 };
@@ -287,6 +363,8 @@ const AddContactSheet = ({ visible, kind: initialKind, onClose, onSaved }: { vis
 };
 
 const styles = StyleSheet.create({
+  headerActions: { flexDirection: "row", alignItems: "center", gap: 14 },
+  facts: { paddingHorizontal: 14, paddingVertical: 4 },
   flex: { flex: 1, minWidth: 0 },
   row: { flexDirection: "row", alignItems: "center", gap: 10, paddingVertical: 11, paddingHorizontal: 12 },
   tile: { width: 38, height: 38, borderRadius: 12, alignItems: "center", justifyContent: "center" },

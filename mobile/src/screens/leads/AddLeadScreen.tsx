@@ -1,5 +1,6 @@
 import React, { useLayoutEffect, useRef, useState } from "react";
 import { Pressable, StyleSheet, TextInput, View } from "react-native";
+import { BrokerPhoneHint } from "../../components/BrokerPhoneHint";
 import { useTheme } from "../../theme/ThemeProvider";
 import { PickerSheet } from "../../ui/PickerSheet";
 import { errorMessage } from "../../api/client";
@@ -106,6 +107,7 @@ export const AddLeadScreen = ({ navigation }: RootScreenProps<"AddLead">) => {
           onSubmitEditing={() => emailRef.current?.focus()}
           error={touched ? errors.phone : undefined}
         />
+        <BrokerPhoneHint phone={form.phone} />
         <Field
           ref={emailRef}
           label="Email"

@@ -24,7 +24,7 @@ type Props = {
  * preview (used for design checks) falls back to the browser's own input.
  */
 export const DateTimeField = ({ label, value, onChange, mode = "datetime", minimumDate, clearable, variant = "field", icon = "calendar-outline" }: Props) => {
-  const { colors, scheme } = useTheme();
+  const { colors, scheme, reduceMotion } = useTheme();
   const [iosOpen, setIosOpen] = useState(false);
   const [draft, setDraft] = useState<Date>(value || new Date());
 
@@ -67,7 +67,7 @@ export const DateTimeField = ({ label, value, onChange, mode = "datetime", minim
   };
 
   const iosModal = (
-        <Modal transparent visible={iosOpen} animationType="fade" onRequestClose={() => setIosOpen(false)}>
+        <Modal transparent visible={iosOpen} animationType={reduceMotion ? "none" : "fade"} onRequestClose={() => setIosOpen(false)}>
           <Pressable style={[styles.backdrop, { backgroundColor: colors.overlay }]} onPress={() => setIosOpen(false)}>
             <Pressable style={[styles.sheet, { backgroundColor: colors.surface }]}>
               <DateTimePicker

@@ -1,6 +1,7 @@
 import React, { useRef, useState } from "react";
 import { Image, KeyboardAvoidingView, Platform, Pressable, ScrollView, StyleSheet, TextInput, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
+import { useNavigation } from "@react-navigation/native";
 import { errorMessage } from "../../api/client";
 import { useAuth } from "../../auth/AuthProvider";
 import { useTheme } from "../../theme/ThemeProvider";
@@ -13,6 +14,7 @@ export const LoginScreen = () => {
   const { signIn } = useAuth();
   const { colors } = useTheme();
   const insets = useSafeAreaInsets();
+  const navigation = useNavigation();
   const passwordRef = useRef<TextInput>(null);
 
   const [email, setEmail] = useState("");
@@ -126,7 +128,15 @@ export const LoginScreen = () => {
 
         <View style={styles.spacer} />
         <Text variant="tiny" color="faint" align="center" style={styles.legal}>
-          By signing in you agree to the Terms and the Data Use Notice.
+          By signing in you agree to the{" "}
+          <Text variant="tiny" color="primary" style={styles.legal} accessibilityRole="link" onPress={() => navigation.navigate("Legal", { doc: "terms" })}>
+            Terms
+          </Text>{" "}
+          and the{" "}
+          <Text variant="tiny" color="primary" style={styles.legal} accessibilityRole="link" onPress={() => navigation.navigate("Legal", { doc: "privacy" })}>
+            Privacy Policy
+          </Text>
+          .
         </Text>
       </ScrollView>
     </KeyboardAvoidingView>

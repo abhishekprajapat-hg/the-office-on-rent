@@ -4,6 +4,7 @@ import { decide, loadApprovals, reasonRequired, type ApprovalItem, type Approval
 import { errorMessage, mediaUrl } from "../../api/client";
 import { useUser } from "../../auth/AuthProvider";
 import { formatWhen } from "../../lib/format";
+import { DATE_WINDOWS, matchesQuery, withinWindow, type DateWindow } from "../../lib/inboxFilters";
 import { useQuery } from "../../lib/useQuery";
 import type { RootScreenProps } from "../../navigation/types";
 import { useTheme } from "../../theme/ThemeProvider";
@@ -28,11 +29,20 @@ export const ApprovalsScreen = ({ navigation }: RootScreenProps<"Approvals">) =>
   const { colors } = useTheme();
   const [kind, setKind] = useState<"ALL" | ApprovalKind>("ALL");
   const [show, setShow] = useState<"PENDING" | "DONE">("PENDING");
+  const [when, setWhen] = useState<DateWindow>("ALL");
+  const [query, setQuery] = useState("");
   const { data, loading, error, refreshing, refresh, reload } = useQuery(loadApprovals, []);
 
   const items = useMemo(
-    () => (data || []).filter((item) => (kind === "ALL" || item.kind === kind) && (show === "PENDING" ? item.status === "PENDING" : item.status !== "PENDING")),
-    [data, kind, show],
+    () =>
+      (data || []).filter(
+        (item) =>
+          (kind === "ALL" || item.kind === kind) &&
+          (show === "PENDING" ? item.status === "PENDING" : item.status !== "PENDING") &&
+          withinWindow(item.createdAt, when) &&
+          matchesQuery([item.title, item.detail, item.note, item.requestedBy?.name], query),
+      ),
+    [data, kind, show, when, query],
   );
   const pendingBy = (key: "ALL" | ApprovalKind) => (data || []).filter((item) => item.status === "PENDING" && (key === "ALL" || item.kind === key)).length;
 
@@ -73,12 +83,26 @@ export const ApprovalsScreen = ({ navigation }: RootScreenProps<"Approvals">) =>
                 value: show,
                 onChange: (key: string) => setShow(key as typeof show),
               },
+              {
+                label: "When",
+                icon: "calendar-outline",
+                options: DATE_WINDOWS.map((item) => ({ key: item.key, label: item.label })),
+                value: when,
+                onChange: (key: string) => setWhen(key as DateWindow),
+              },
             ]}
           />
+          <View style={styles.search}>
+            <Field value={query} onChangeText={setQuery} placeholder="Search by name, lead or note" icon="search" compact surface autoCapitalize="none" />
+          </View>
         </View>
       }
       ListEmptyComponent={
-        <EmptyState icon="checkmark-done-circle-outline" title={show === "PENDING" ? "All clear" : "Nothing decided yet"} message={show === "PENDING" ? "Nothing is waiting for your approval." : undefined} />
+        query.trim() || when !== "ALL" ? (
+          <EmptyState icon="search-outline" title="Nothing matches" message="Try another search or a wider date range." />
+        ) : (
+          <EmptyState icon="checkmark-done-circle-outline" title={show === "PENDING" ? "All clear" : "Nothing decided yet"} message={show === "PENDING" ? "Nothing is waiting for your approval." : undefined} />
+        )
       }
       renderItem={({ item }) => <ApprovalCard item={item} role={user.role} onDone={reload} onOpenLead={(leadId) => navigation.navigate("LeadDetail", { leadId })} />}
     />
@@ -203,6 +227,7 @@ const styles = StyleSheet.create({
   grow: { flexGrow: 1 },
   list: { paddingVertical: space.lg },
   header: { gap: space.sm, marginBottom: space.md },
+  search: { paddingHorizontal: 14 },
   chipStrip: { flexGrow: 0 },
   chipScroll: { gap: 6, paddingHorizontal: space.lg, alignItems: "center" },
   toggle: { alignSelf: "flex-end", paddingHorizontal: space.lg },

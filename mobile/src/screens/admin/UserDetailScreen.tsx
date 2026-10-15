@@ -2,14 +2,19 @@ import React, { useEffect, useMemo, useState } from "react";
 import { Pressable, StyleSheet, View } from "react-native";
 import { errorMessage } from "../../api/client";
 import { api } from "../../api/client";
-import { getPageAccess, listCustomRoles, setPageAccess, updateUserByAdmin, type CrmPage, type CustomRole, type PageAccess } from "../../api/admin";
+import { getPageAccess, getUserProfile, listCustomRoles, setPageAccess, updateUserByAdmin, type AdminProfileView, type CrmPage, type CustomRole, type PageAccess } from "../../api/admin";
 import { canOpenPage } from "../../api/access";
+import { getMemberAttendance, getMemberLeaveBalance, type AttendanceSummary, type LeaveBalance } from "../../api/attendance";
+import { listTasks } from "../../api/tasks";
 import { listUsers, type TeamUser } from "../../api/users";
 import { useAuth, useUser } from "../../auth/AuthProvider";
+import { formatDate, monthKeyOf } from "../../lib/format";
 import { ROLE_LABELS } from "../../lib/roles";
+import { BUSINESS_CATEGORIES, taskStats } from "../../lib/userAdmin";
 import type { RootScreenProps } from "../../navigation/types";
 import { useTheme } from "../../theme/ThemeProvider";
-import { Avatar, Badge, Body, Button, Chip, ErrorState, Field, GroupLabel, Icon, InlineError, ListCard, Loading, Sheet, Text, Toggle, type IconName } from "../../ui";
+import { Avatar, Badge, Body, Button, Chip, ErrorState, FactRow, Field, GroupLabel, Icon, InlineError, ListCard, Loading, Sheet, Text, Toggle, type IconName } from "../../ui";
+import { AtAGlance, EditDetailsSheet } from "./UserProfileKit";
 
 const PAGE_ICONS: Record<string, IconName> = {
   dashboard: "grid-outline",
@@ -54,6 +59,11 @@ export const UserDetailScreen = ({ route, navigation }: RootScreenProps<"UserDet
   const [namedRoles, setNamedRoles] = useState<CustomRole[]>([]);
   const [customRoleId, setCustomRoleId] = useState<string | null>(null);
   const [person, setPerson] = useState<TeamUser | null>(null);
+  const [team, setTeam] = useState<TeamUser[]>([]);
+  /* The admin-only full record (reporting manager filled in) and lead numbers; managers work from the team list. */
+  const [profile, setProfile] = useState<AdminProfileView | null>(null);
+  const [glance, setGlance] = useState<{ attendance: AttendanceSummary | null; tasks: ReturnType<typeof taskStats> | null; leave: LeaveBalance | null } | null>(null);
+  const [editOpen, setEditOpen] = useState(false);
   const [access, setAccess] = useState<PageAccess | null>(null);
   const [grants, setGrants] = useState<Record<string, string[]>>({});
   const [role, setRole] = useState("");
@@ -76,10 +86,17 @@ export const UserDetailScreen = ({ route, navigation }: RootScreenProps<"UserDet
     setLoading(true);
     setLoadError(null);
     try {
-      const [users, pages, roles] = await Promise.all([listUsers(), getPageAccess(id).catch(() => null), listCustomRoles().catch(() => [])]);
+      const [users, pages, roles, full] = await Promise.all([
+        listUsers(),
+        getPageAccess(id).catch(() => null),
+        listCustomRoles().catch(() => []),
+        me.role === "ADMIN" ? getUserProfile(id).catch(() => null) : Promise.resolve(null),
+      ]);
       const found = users.find((user) => user._id === id) || null;
       if (!found) throw new Error("This person isn't in your team list.");
       setPerson(found);
+      setTeam(users);
+      setProfile(full);
       setNamedRoles(roles);
       setCustomRoleId(idOfRole(found.customRoleId));
       setRole(found.role);
@@ -95,6 +112,22 @@ export const UserDetailScreen = ({ route, navigation }: RootScreenProps<"UserDet
   useEffect(() => {
     load();
   }, [id]);
+
+  /* The at-a-glance numbers load on their own; one the viewer may not see is left out, never an error. */
+  const loadGlance = async (target: TeamUser) => {
+    const now = new Date();
+    const day = (date: Date) => `${monthKeyOf(date)}-${String(date.getDate()).padStart(2, "0")}`;
+    const scored = target.role !== "ADMIN";
+    const [attendance, tasks, leave] = await Promise.all([
+      scored ? getMemberAttendance(target._id, { from: `${monthKeyOf(now)}-01`, to: day(now) }).then((data) => data.summary).catch(() => null) : null,
+      listTasks({ assignedTo: target._id }).then((rows) => taskStats(rows, now)).catch(() => null),
+      scored ? getMemberLeaveBalance(target._id).catch(() => null) : null,
+    ]);
+    setGlance({ attendance, tasks, leave });
+  };
+  useEffect(() => {
+    if (person && person._id === id) loadGlance(person);
+  }, [person?._id]);
 
   const original = useMemo(() => JSON.stringify(Object.fromEntries((access?.pageAccess || []).map((grant) => [grant.pageKey, [...grant.actions].sort()]))), [access]);
   const current = JSON.stringify(Object.fromEntries(Object.entries(grants).map(([key, actions]) => [key, [...actions].sort()])));
@@ -192,9 +225,14 @@ export const UserDetailScreen = ({ route, navigation }: RootScreenProps<"UserDet
     }
   };
 
-  const roleChoices = ROLE_CHOICES.filter((key) => isAdmin || !["ADMIN", "MANAGER"].includes(key) || key === person.role);
+  // Nobody is made an admin from here; the server refuses it.
+  const roleChoices = ROLE_CHOICES.filter((key) => key === person.role || (key !== "ADMIN" && (isAdmin || key !== "MANAGER")));
   const pages = (access?.pages || []).filter((page) => !page.alwaysAccessible);
   const self = person._id === (me.id || me._id);
+  const record = profile?.profile || person;
+  const parent = record.parentId && typeof record.parentId === "object" ? record.parentId : team.find((user) => user._id === record.parentId) || null;
+  const category = BUSINESS_CATEGORIES.find((item) => item.key === record.roleType)?.label;
+  const canEditDetails = !self && (me.role === "ADMIN" || me.role === "MANAGER");
 
   return (
     <Body>
@@ -210,6 +248,42 @@ export const UserDetailScreen = ({ route, navigation }: RootScreenProps<"UserDet
         </View>
         <Badge label={active ? "Active" : "Inactive"} tone={active ? "success" : "neutral"} />
       </View>
+
+      <ListCard>
+        <View style={styles.facts}>
+          {category ? <FactRow icon="briefcase-outline" label="Business" value={category} /> : null}
+          {parent ? <FactRow icon="git-merge-outline" label="Reports to" value={parent.name} /> : null}
+          {record.department ? <FactRow icon="layers-outline" label="Department" value={record.department} /> : null}
+          {record.branch ? <FactRow icon="location-outline" label="Branch" value={record.branch} /> : null}
+          {record.shiftTiming ? <FactRow icon="time-outline" label="Shift" value={record.shiftTiming} /> : null}
+          {record.role !== "ADMIN" ? <FactRow icon="flag-outline" label="Monthly target" value={String(Number.isFinite(record.monthlyTarget) ? record.monthlyTarget : 10)} /> : null}
+          {record.role === "CHANNEL_PARTNER" && record.brokerageConfig ? (
+            <FactRow
+              icon="cash-outline"
+              label="Brokerage"
+              value={record.brokerageConfig.mode === "PERCENTAGE" ? `${record.brokerageConfig.value ?? 0}% of sell value` : `₹${Number(record.brokerageConfig.value || 0).toLocaleString("en-IN")} per deal`}
+            />
+          ) : null}
+          {record.role === "CHANNEL_PARTNER" ? <FactRow icon="business-outline" label="Inventory access" value={record.canViewInventory ? "Can view" : "No"} /> : null}
+          {record.employeeId ? <FactRow icon="id-card-outline" label="Employee ID" value={record.employeeId} /> : null}
+          {record.joiningDate ? <FactRow icon="calendar-outline" label="Joined" value={formatDate(record.joiningDate)} /> : null}
+          {record.lastLoginAt ? <FactRow icon="log-in-outline" label="Last sign-in" value={formatDate(record.lastLoginAt)} /> : null}
+        </View>
+        {canEditDetails ? <LinkRow icon="create-outline" label="Edit details" onPress={() => setEditOpen(true)} /> : null}
+      </ListCard>
+
+      {glance ? (
+        <>
+          <GroupLabel>At a glance</GroupLabel>
+          <AtAGlance
+            attendance={glance.attendance}
+            tasks={glance.tasks}
+            leave={glance.leave}
+            target={{ target: Number.isFinite(record.monthlyTarget) ? Number(record.monthlyTarget) : 10, achieved: record.role === "ADMIN" ? null : profile?.performance ? Number(profile.performance.achievedTarget || 0) : null }}
+            leads={profile?.performance || null}
+          />
+        </>
+      ) : null}
 
       <GroupLabel>Role</GroupLabel>
       <View style={styles.chips}>
@@ -379,6 +453,18 @@ export const UserDetailScreen = ({ route, navigation }: RootScreenProps<"UserDet
         </Pressable>
       ) : null}
 
+      <EditDetailsSheet
+        visible={editOpen}
+        person={record}
+        role={person.role}
+        users={team}
+        onClose={() => setEditOpen(false)}
+        onSaved={() => {
+          setEditOpen(false);
+          setSaved(true);
+          load();
+        }}
+      />
       <Sheet
         visible={resetOpen}
         title="Reset password"
@@ -428,4 +514,5 @@ const styles = StyleSheet.create({
   actions: { flexDirection: "row", flexWrap: "wrap", gap: 6, paddingHorizontal: 14, paddingBottom: 12, paddingLeft: 44 },
   danger: { flexDirection: "row", gap: 8, alignItems: "center", justifyContent: "center", height: 50, borderRadius: 14 },
   removeLink: { alignSelf: "center", padding: 6 },
+  facts: { paddingHorizontal: 14, paddingVertical: 4 },
 });
