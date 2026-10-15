@@ -85,7 +85,7 @@ export const MoreScreen = () => {
     {
       label: "Coworking & admin",
       items: [
-        allowed("coworking_booking") ? { icon: "grid", label: "Bookings", onPress: () => navigation.navigate("Bookings") } : null,
+        allowed("coworking_booking") ? { icon: "grid", label: "Booking board", onPress: () => navigation.navigate("Bookings") } : null,
         allowed("coworking_clients") ? { icon: "briefcase", label: "Clients", onPress: () => navigation.navigate("Clients") } : null,
         allowed("admin_team") ? { icon: "people", label: "Team access", onPress: () => navigation.navigate("Users") } : null,
         allowed("admin_team") && isManagement(role) ? { icon: "id-card", label: "Roles", onPress: () => navigation.navigate("Roles") } : null,

@@ -1,7 +1,8 @@
 import { api } from "./client";
 
 /* BillStack customer sync and invoice hand-off (web: components/billing/BillstackSection). */
-export type BillingEntity = "lead" | "coworking-client";
+/* "board" is a coworking cabin code on the booking board; the server resolves its booked client. */
+export type BillingEntity = "lead" | "coworking-client" | "board";
 export type BillingState = { syncStatus: string; lastSyncedAt?: string | null; lastSyncError?: string };
 
 const path = (type: BillingEntity, id: string) => `/billing/${encodeURIComponent(type)}/${encodeURIComponent(id)}`;

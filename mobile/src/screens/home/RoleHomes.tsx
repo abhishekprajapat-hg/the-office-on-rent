@@ -8,7 +8,8 @@ import { getMyAttendance, getTeamAttendance, getViolations } from "../../api/att
 import { canOpenPage, canPage, canPageAction } from "../../api/access";
 import { openDirectChat, sendMessage } from "../../api/chat";
 import { listConversations } from "../../api/chat";
-import { getFloorView, invoiceDue, isOpenInvoice, listBookings, listContracts, listCwInvoices, listFloors, refId, type Booking } from "../../api/coworking";
+import { fetchBoard, fetchClientBirthdays } from "../../api/coworkingBoard";
+import { summarize, upcomingBirthdays } from "../../lib/coworkingBoard";
 import { getFinanceOverview } from "../../api/finance";
 import { listInventory } from "../../api/inventory";
 import { countLeads, getLeadSummary, getTodayFollowUps, listVisitsBetween, type VisitLead } from "../../api/leads";
@@ -636,59 +637,34 @@ export const FieldHome = () => {
 };
 
 /* ================================================== E · Community manager */
+/*
+ * The coworking desk's home, read off the same booking board the web uses:
+ * occupancy, what is free, renewals within 45 days, dues and birthdays.
+ */
 export const CommunityHome = () => {
   const navigation = useNavigation();
   const me = useUser();
   const { access } = useAuth();
   const bookingAllowed = canOpenPage(me, access, "coworking_booking");
   const clientsAllowed = canOpenPage(me, access, "coworking_clients");
-  const today = dayKey();
   const { data, loading, refreshing, refresh, error } = useQuery(async () => {
-    const floors = bookingAllowed ? await listFloors() : [];
-    const floor = floors[0] || null;
-    const [view, bookings, contracts, invoices] = await Promise.all([
-      floor ? settle(getFloorView(floor._id)) : null,
-      bookingAllowed ? settle(listBookings({ from: today, to: today })) : null,
-      clientsAllowed ? settle(listContracts()) : null,
-      clientsAllowed ? settle(listCwInvoices()) : null,
-    ]);
-    return { floor, view, bookings: bookings || [], contracts: contracts || [], invoices: invoices || [] };
-  }, [bookingAllowed, clientsAllowed, today]);
+    if (!bookingAllowed && !clientsAllowed) return null;
+    const [snapshot, birthdays] = await Promise.all([fetchBoard(), clientsAllowed ? settle(fetchClientBirthdays()) : null]);
+    return { cabins: snapshot.state.cabins, birthdays: birthdays || [] };
+  }, [bookingAllowed, clientsAllowed]);
 
-  const counts = data?.view?.counts;
-  const total = counts?.total || 0;
-  const booked = counts?.BOOKED || 0;
-  const hold = counts?.RESERVED || 0;
-  const free = counts?.VACANT || 0;
-  const live = (data?.bookings || []).filter((b) => ["PENDING", "CONFIRMED", "ACTIVE"].includes(b.status));
-  const rooms = live.filter((b) => b.startTime).sort((a, b) => String(a.startTime).localeCompare(String(b.startTime)));
-  const soon = Date.now() + 45 * 86400000;
-  const renewals = (data?.contracts || []).filter((c) => (c.status === "EXPIRING" || (c.status === "ACTIVE" && new Date(c.endDate).getTime() <= soon))).sort((a, b) => a.endDate.localeCompare(b.endDate));
-  const dues = (data?.invoices || []).filter(isOpenInvoice);
-  const dueByClient = new Map<string, number>();
-  dues.forEach((inv) => {
-    const id = refId(inv.clientId as { _id: string } | string);
-    dueByClient.set(id, (dueByClient.get(id) || 0) + invoiceDue(inv));
-  });
-  const nowMin = new Date().getHours() * 60 + new Date().getMinutes();
-  const toMin = (t?: string) => {
-    const [h, m] = String(t || "").split(":").map(Number);
-    return (h || 0) * 60 + (m || 0);
-  };
-  const floorName = data?.floor ? [typeof data.floor.propertyId === "object" ? data.floor.propertyId?.name : "", data.floor.name].filter(Boolean).join(" · ") : "";
-  const roomRow = (b: Booking): RowSpec => {
-    const nowOn = toMin(b.startTime) <= nowMin && nowMin < toMin(b.endTime || b.startTime);
-    return {
-      key: b._id,
-      icon: "easel",
-      tone: nowOn ? "ok" : "blue",
-      title: b.cabinId?.cabinCode || "Room",
-      sub: [b.clientId?.companyName, `${b.startTime}${b.endTime ? `–${b.endTime}` : ""}`].filter(Boolean).join(" · "),
-      right: nowOn ? "Now" : b.startTime,
-      rightTone: nowOn ? "ok" : "blue",
-      onPress: () => navigation.navigate("Tabs", { screen: "BookingsTab" }),
-    };
-  };
+  const cabins = data?.cabins || [];
+  const summary = summarize(cabins);
+  const booked = summary.counts.BOOKED;
+  const hold = summary.counts.RESERVED;
+  const free = summary.counts.VACANT;
+  const total = cabins.length;
+  const onBoard = [...new Map(cabins.filter((cabin) => cabin.client).map((cabin) => [cabin.client!.id, cabin.client!])).values()];
+  const remote = (data?.birthdays || []).map((client) => ({ ...client, id: client._id, name: client.companyName || "" }));
+  const birthdays = upcomingBirthdays([...new Map([...remote, ...onBoard].map((client) => [String(client.id || client.name), client])).values()] as { id: string; name?: string; contactPerson?: string; dateOfBirth?: string }[]);
+  const openBoard = () => navigation.navigate("Tabs", { screen: "BookingsTab" });
+  const openClients = () => navigation.navigate("Tabs", { screen: "ClientsTab" });
+  const onboard = () => navigation.navigate("Bookings", { select: true });
 
   return (
     <RoleHome
@@ -696,62 +672,77 @@ export const CommunityHome = () => {
       refreshing={refreshing}
       onRefresh={refresh}
       hero={
-        data?.view
+        data
           ? {
               page: "coworking_booking",
               icon: "grid",
-              label: `${floorName} · occupancy`,
-              tag: `${free} desk${free === 1 ? "" : "s"} free`,
-              value: `${total ? Math.round(((booked + hold) / total) * 100) : 0}%`,
-              unit: `of ${total} desks`,
+              label: "Coworking space · occupancy",
+              tag: `${free} cabin${free === 1 ? "" : "s"} free`,
+              value: `${summary.percent}%`,
+              unit: `of ${total} cabins`,
               bar: [
                 { label: "Booked", value: booked, color: HERO.white },
                 { label: "Hold", value: hold, color: HERO.gold },
                 { label: "Free", value: free, color: HERO.dim },
               ],
-              cta: { label: "New booking", icon: "add-circle", page: "coworking_booking", action: "create", onPress: () => navigation.navigate("NewBooking", { floorId: data.floor?._id }) },
+              cta: { label: "Onboard client", icon: "person-add", page: "coworking_booking", action: "edit", onPress: onboard },
             }
           : null
       }
       actions={[
-        { icon: "easel-outline", label: "Rooms", page: "coworking_booking", onPress: () => navigation.navigate("Tabs", { screen: "BookingsTab" }) },
-        { icon: "add-circle-outline", label: "New booking", page: "coworking_booking", action: "create", onPress: () => navigation.navigate("NewBooking", data?.floor ? { floorId: data.floor._id } : undefined) },
-        { icon: "briefcase-outline", label: "Clients", page: "coworking_clients", onPress: () => navigation.navigate("Tabs", { screen: "ClientsTab" }) },
-        { icon: "person-add-outline", label: "Add client", page: "coworking_clients", action: "create", onPress: () => navigation.navigate("AddClient") },
+        { icon: "grid-outline", label: "Board", page: "coworking_booking", onPress: openBoard },
+        { icon: "person-add-outline", label: "Onboard", page: "coworking_booking", action: "edit", onPress: onboard },
+        { icon: "briefcase-outline", label: "Clients", page: "coworking_clients", onPress: openClients },
+        { icon: "time-outline", label: "Activity", page: "coworking_booking", onPress: () => navigation.navigate("BoardActivity") },
       ]}
       stats={[
-        { icon: "enter", value: n(data ? live.length : undefined), label: "Bookings today", tone: "blue", page: "coworking_booking", onPress: () => navigation.navigate("Tabs", { screen: "BookingsTab" }) },
-        { icon: "easel", value: n(data ? rooms.length : undefined), label: "Room bookings", tone: "vio", page: "coworking_booking", onPress: () => navigation.navigate("Tabs", { screen: "BookingsTab" }) },
-        { icon: "refresh-circle", value: n(data ? renewals.length : undefined), label: "Renewals due", tone: "warn", page: "coworking_clients", onPress: () => navigation.navigate("Tabs", { screen: "ClientsTab" }) },
-        { icon: "cash", value: data ? compactRupees(dues.reduce((sum, inv) => sum + invoiceDue(inv), 0)) : "–", label: `Dues · ${dues.length} invoice${dues.length === 1 ? "" : "s"}`, tone: "bad", page: "coworking_clients", onPress: () => navigation.navigate("Tabs", { screen: "ClientsTab" }) },
+        { icon: "cash", value: data ? compactRupees(summary.monthlyRevenue) : "–", label: "Rent a month", tone: "blue", page: "coworking_booking", onPress: openBoard },
+        { icon: "enter", value: n(data ? free : undefined), label: `Vacant · ${summary.vacantCapacity} seats`, tone: "vio", page: "coworking_booking", onPress: openBoard },
+        { icon: "refresh-circle", value: n(data ? summary.freeingSoon.length : undefined), label: "Ending in 45 days", tone: "warn", page: "coworking_booking", onPress: openBoard },
+        { icon: "alert-circle", value: data ? compactRupees(summary.overdueAmount) : "–", label: `Dues · ${summary.overdue.length} cabin${summary.overdue.length === 1 ? "" : "s"}`, tone: "bad", page: "coworking_clients", onPress: openClients },
       ]}
       sections={
         error && !data
-          ? [{ title: "Coworking", empty: "Your account can't open the coworking desk yet. Ask an admin for Bookings access." }]
+          ? [{ title: "Coworking", empty: "Your account can't open the coworking desk yet. Ask an admin for Booking Board access." }]
           : [
-              { title: "Rooms today", page: "coworking_booking", link: "Calendar", onLink: () => navigation.navigate("Tabs", { screen: "BookingsTab" }), loading: loading && !data, rows: rooms.slice(0, 4).map(roomRow), empty: "No room bookings today" },
               {
-                title: "Renewals this month",
-                page: "coworking_clients",
-                link: renewals.length > 3 ? `All ${renewals.length}` : "Clients",
-                onLink: () => navigation.navigate("Tabs", { screen: "ClientsTab" }),
+                title: "Freeing up in 45 days",
+                page: "coworking_booking",
+                link: summary.freeingSoon.length > 4 ? `All ${summary.freeingSoon.length}` : "Board",
+                onLink: openBoard,
                 loading: loading && !data,
-                empty: "No contracts ending in the next 45 days",
-                rows: renewals.slice(0, 3).map((c) => {
-                  const clientId = refId(c.clientId as { _id: string } | string);
-                  const owes = dueByClient.get(clientId) || 0;
-                  const name = typeof c.clientId === "object" && c.clientId ? c.clientId.companyName : "Client";
-                  return {
-                    key: c._id,
-                    avatar: initials(name),
-                    tone: "blue",
-                    title: name,
-                    sub: `${c.contractType === "SEAT" ? "Seat" : "Cabin"} · ${compactRupees(c.rent)}/mo${owes ? ` · ${compactRupees(owes)} due` : ""}`,
-                    right: owes ? "Dues" : new Date(c.endDate).toLocaleDateString("en-IN", { day: "numeric", month: "short" }),
-                    rightTone: owes ? "bad" : "warn",
-                    onPress: () => navigation.navigate("ClientDetail", { id: clientId }),
-                  } as RowSpec;
-                }),
+                empty: "No agreement ends in the next 45 days",
+                rows: summary.freeingSoon.slice(0, 4).map(
+                  (cabin) =>
+                    ({
+                      key: cabin.code,
+                      avatar: initials(cabin.client?.name),
+                      tone: (cabin.contract?.duesAmount || 0) > 0 ? "bad" : "blue",
+                      title: `${cabin.label} · ${cabin.client?.name || ""}`,
+                      sub: `${cabin.seats} seater · ${compactRupees(cabin.contract?.monthlyRent || 0)}/mo${(cabin.contract?.duesAmount || 0) > 0 ? ` · ${compactRupees(cabin.contract!.duesAmount)} due` : ""}`,
+                      right: `${cabin.contract?.endsInDays}d`,
+                      rightTone: "warn",
+                      onPress: () => navigation.navigate("Cabin", { code: cabin.code }),
+                    }) as RowSpec,
+                ),
+              },
+              {
+                title: "Birthdays this week",
+                page: "coworking_clients",
+                loading: loading && !data,
+                empty: "No client birthdays in the next 7 days",
+                rows: birthdays.slice(0, 4).map(
+                  (client) =>
+                    ({
+                      key: String(client.id || client.name),
+                      avatar: initials(client.contactPerson || client.name),
+                      tone: "vio",
+                      title: client.contactPerson || client.name || "Client",
+                      sub: client.contactPerson && client.name ? client.name : "Coworking client",
+                      right: client.daysUntil === 0 ? "Today" : `${client.daysUntil}d`,
+                      rightTone: client.daysUntil === 0 ? "ok" : "blue",
+                    }) as RowSpec,
+                ),
               },
             ]
       }

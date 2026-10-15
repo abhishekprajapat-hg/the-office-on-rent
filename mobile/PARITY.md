@@ -114,9 +114,9 @@ ticked when the *capability* is there, not when the pixels match.
 - [ ] Field dashboard
 
 ## Wave 10 — Coworking (web `modules/coworking`)
-- [ ] Booking board: floors, cabins, seats (`/coworking/board`)
-- [ ] Clients: list, profile, onboarding with KYC document checklist
-- [ ] Birthday reminders
+- [x] Booking board: floors, cabins, seats (`/coworking/board`) _(the same board document the web uses: wings and floor-plan views, filters, select cabins → onboard, hold, confirm, drop, renew, move, release, block / upkeep, record payment, activity log, CSV export, undo of your own last change; the logic is a tested port of the web reducer)_
+- [x] Clients: list, profile, onboarding with KYC document checklist _(directory derived from the board like web; 4-step onboarding and edit; documents upload to the server. Not ported: the web's browser backup / restore, which rescues data held only in one browser, and reading a date of birth out of an uploaded document)_
+- [x] Birthday reminders
 
 ## Wave 11 — Chat extras (web `modules/chat`)
 - [ ] Group chats and lead rooms

@@ -1,145 +1,124 @@
-import React, { useMemo, useState } from "react";
-import { Pressable, StyleSheet, View } from "react-native";
-import { invoiceDue, isOpenInvoice, listContracts, listCwClients, listCwInvoices, refId, type Contract, type CwClient, type CwInvoice } from "../../api/coworking";
-import { compactRupees } from "../finance/FinanceScreen";
-import { formatRupees } from "../../lib/money";
+import React, { useLayoutEffect, useMemo, useState } from "react";
+import { Pressable, Share, StyleSheet, View } from "react-native";
+import { useNavigation } from "@react-navigation/native";
+import { canOpenPage } from "../../api/access";
+import { fetchClientBirthdays } from "../../api/coworkingBoard";
+import { useAuth } from "../../auth/AuthProvider";
+import { directoryFrom, upcomingBirthdays, type DirectoryClient } from "../../lib/coworkingBoard";
+import { clientsCsv, kycStatusOf } from "../../lib/coworkingKyc";
+import { initials } from "../../lib/format";
+import { useBoard } from "../../lib/useBoard";
 import { useQuery } from "../../lib/useQuery";
-import type { RootScreenProps } from "../../navigation/types";
 import { useTheme } from "../../theme/ThemeProvider";
-import { Avatar, Badge, Body, Segmented, EmptyState, ErrorState, Field, HeaderButton, Loading, Text } from "../../ui";
+import { Body, Card, Chip, EmptyState, ErrorState, Field, HeaderButton, Icon, ListCard, Loading, Text } from "../../ui";
 
-type Tab = "ACTIVE" | "RENEWING" | "DUES";
-const RENEW_WINDOW_DAYS = 45;
-const monthYear = (value: string) => new Date(value).toLocaleDateString("en-IN", { month: "short", year: "numeric" });
-const dayMonth = (value: string) => new Date(value).toLocaleDateString("en-IN", { day: "numeric", month: "short" });
-const humanType = (value?: string) => (value === "SME" ? "SME" : value ? value.charAt(0) + value.slice(1).toLowerCase().replace(/_/g, " ") : "");
+type Tab = "all" | "active" | "former" | "kyc";
 
-export type ClientRow = {
-  client: CwClient;
-  contracts: Contract[];
-  invoices: CwInvoice[];
-  rent: number;
-  endsOn: string | null;
-  renewing: boolean;
-  due: number;
-  dueOn: string | null;
-};
-
-export const buildClientRows = (clients: CwClient[], contracts: Contract[], invoices: CwInvoice[]): ClientRow[] => {
-  const soon = Date.now() + RENEW_WINDOW_DAYS * 86400000;
-  return clients.map((client) => {
-    const mine = contracts.filter((item) => refId(item.clientId as { _id: string } | string) === client._id && ["ACTIVE", "EXPIRING"].includes(item.status));
-    const open = invoices.filter((item) => refId(item.clientId as { _id: string } | string) === client._id && isOpenInvoice(item));
-    const ends = mine.map((item) => item.endDate).sort();
-    const dues = open.map((item) => item.dueDate).sort();
-    return {
-      client,
-      contracts: mine,
-      invoices: open,
-      rent: mine.reduce((sum, item) => sum + (item.rent || 0), 0),
-      endsOn: ends[0] || null,
-      renewing: mine.some((item) => item.status === "EXPIRING" || new Date(item.endDate).getTime() <= soon),
-      due: open.reduce((sum, item) => sum + invoiceDue(item), 0),
-      dueOn: dues[0] || null,
-    };
-  });
-};
-
-/* Design 36: coworking clients split into Active, Renewing (contracts ending soon) and Dues (open invoices). */
-export const ClientsScreen = ({ navigation }: RootScreenProps<"Clients">) => {
+/*
+ * Web: coworking/clients/ClientsPage. Everyone who has ever held a cabin,
+ * derived from the board itself - current tenants from the cabins they sit in,
+ * former ones from each cabin's history. There is no separate client table to
+ * fall out of step with the board.
+ */
+export const ClientsScreen = () => {
+  const navigation = useNavigation();
   const { colors } = useTheme();
-  const [tab, setTab] = useState<Tab>("ACTIVE");
+  const { user, access } = useAuth();
+  const { board, loading, error, refresh, refreshing } = useBoard();
+  const { data: remoteBirthdays } = useQuery(() => fetchClientBirthdays().catch(() => []), []);
+  const [tab, setTab] = useState<Tab>("all");
   const [query, setQuery] = useState("");
-  const { data, loading, error, refreshing, refresh } = useQuery(async () => {
-    const [clients, contracts, invoices] = await Promise.all([
-      listCwClients({ status: "ACTIVE" }),
-      listContracts(),
-      listCwInvoices().catch(() => [] as CwInvoice[]),
-    ]);
-    return buildClientRows(clients, contracts, invoices);
-  }, []);
+  const directory = useMemo(() => directoryFrom(board?.cabins || []), [board]);
 
-  React.useLayoutEffect(() => {
-    navigation.setOptions({ headerRight: () => <HeaderButton icon="person-add" label="Add client" variant="secondary" onPress={() => navigation.navigate("AddClient")} /> });
-  }, [navigation]);
-
-  const counts = {
-    ACTIVE: data?.length || 0,
-    RENEWING: (data || []).filter((row) => row.renewing).length,
-    DUES: (data || []).filter((row) => row.due > 0).length,
-  };
-  const rows = useMemo(() => {
-    const needle = query.trim().toLowerCase();
-    return (data || [])
-      .filter((row) => (tab === "RENEWING" ? row.renewing : tab === "DUES" ? row.due > 0 : true))
-      .filter((row) => !needle || `${row.client.companyName} ${row.client.contactPerson || ""} ${row.client.phone || ""}`.toLowerCase().includes(needle))
-      .sort((a, b) =>
-        tab === "RENEWING" ? String(a.endsOn).localeCompare(String(b.endsOn)) : tab === "DUES" ? b.due - a.due : a.client.companyName.localeCompare(b.client.companyName),
-      );
-  }, [data, tab, query]);
+  useLayoutEffect(() => {
+    navigation.setOptions({
+      headerRight: () => (
+        <View style={styles.headerActions}>
+          <HeaderButton icon="download-outline" label="Export CSV" variant="secondary" onPress={() => Share.share({ title: "Coworking clients", message: clientsCsv(directory) }).catch(() => {})} />
+          {canOpenPage(user, access, "coworking_booking") ? <HeaderButton icon="grid-outline" label="Booking board" onPress={() => navigation.navigate("Bookings")} /> : null}
+        </View>
+      ),
+    });
+  }, [navigation, directory, user, access]);
 
   if (loading) return <Loading />;
-  if (error) return <ErrorState message={error} onRetry={refresh} />;
+  if (error || !board) return <ErrorState message={error || "Couldn't load clients."} onRetry={refresh} />;
+
+  const active = directory.filter((client) => client.kind === "active");
+  const former = directory.filter((client) => client.kind === "former");
+  const kycDue = (client: DirectoryClient) => client.kind === "active" && !kycStatusOf({ kind: client.entityKind, documents: client.documents }).complete;
+  const pendingKyc = active.filter(kycDue);
+  const term = query.trim().toLowerCase();
+  const shown = directory
+    .filter((client) => (tab === "all" ? true : tab === "kyc" ? kycDue(client) : client.kind === tab))
+    .filter((client) =>
+      term
+        ? `${client.name} ${client.industry || ""} ${client.contactPerson || ""} ${client.phone || ""} ${client.cabins.map((cabin) => cabin.label).join(" ")} ${client.stays.map((stay) => stay.cabinLabel).join(" ")}`.toLowerCase().includes(term)
+        : true,
+    );
+  const remote = (remoteBirthdays || []).map((client) => ({ ...client, id: client._id, name: client.companyName || "" }));
+  const birthdays = upcomingBirthdays([...new Map([...remote, ...directory].map((client) => [String(client.id || client.name), client])).values()] as { id: string; name?: string; contactPerson?: string; dateOfBirth?: string }[]);
 
   return (
     <Body refreshing={refreshing} onRefresh={refresh}>
-      <Segmented
-        options={[
-          { key: "ACTIVE", label: `Active · ${counts.ACTIVE}` },
-          { key: "RENEWING", label: `Renewing · ${counts.RENEWING}` },
-          { key: "DUES", label: `Dues · ${counts.DUES}` },
-        ]}
-        value={tab}
-        onChange={setTab}
-      />
-      {(data?.length || 0) > 6 ? <Field icon="search" compact surface value={query} onChangeText={setQuery} placeholder="Search clients" /> : null}
-      {rows.length ? (
-        rows.map((row) => {
-          const status = row.due > 0 && tab !== "RENEWING" ? { label: "Dues", tone: "danger" as const } : row.renewing ? { label: "Renewing", tone: "warning" as const } : { label: "Active", tone: "success" as const };
-          const months = row.endsOn ? Math.max(0, Math.round((new Date(row.endsOn).getTime() - Date.now()) / (30.4 * 86400000))) : null;
-          const seats = row.contracts.length ? `${row.contracts.length} ${row.contracts[0]!.contractType === "SEAT" ? "seat" : "cabin"}${row.contracts.length === 1 ? "" : "s"}` : "No active contract";
-          const right =
-            status.label === "Dues" && row.dueOn
-              ? `${compactRupees(row.due)} due ${dayMonth(row.dueOn)}`
-              : status.label === "Renewing" && row.endsOn
-                ? `Renews ${dayMonth(row.endsOn)}`
-                : row.endsOn
-                  ? `Ends ${monthYear(row.endsOn)}`
-                  : "";
-          return (
-            <Pressable
-              key={row.client._id}
-              accessibilityRole="button"
-              onPress={() => navigation.navigate("ClientDetail", { id: row.client._id })}
-              style={({ pressed }) => [styles.card, { backgroundColor: colors.surface, borderColor: colors.border }, pressed && { opacity: 0.8 }]}
-            >
-              <View style={styles.top}>
-                <Avatar name={row.client.companyName} size={42} />
-                <View style={styles.flex}>
-                  <Text variant="bodyStrong" numberOfLines={1} style={styles.name}>
-                    {row.client.companyName}
-                  </Text>
-                  <Text variant="small" color="muted" numberOfLines={1}>
-                    {[humanType(row.client.clientType), seats].filter(Boolean).join(" · ")}
-                  </Text>
-                </View>
-                <Badge label={status.label} tone={status.tone} />
-              </View>
-              <View style={[styles.bottom, { borderTopColor: colors.border }]}>
-                <Text variant="small" color="muted" style={styles.flex}>
-                  {row.rent ? `${formatRupees(row.rent)} / mo${months !== null && months > 0 && status.label === "Active" ? ` · ${months} months` : ""}` : row.client.contactPerson || ""}
-                </Text>
-                <Text variant="smallStrong">{right}</Text>
-              </View>
-            </Pressable>
-          );
-        })
+      <Text variant="small" color="muted">
+        {active.length} current · {former.length} former{pendingKyc.length ? ` · ${pendingKyc.length} awaiting documents` : ""}
+      </Text>
+      {birthdays.length ? (
+        <Card style={[styles.birthdays, { backgroundColor: colors.violetSoft, borderColor: colors.violetSoft }]}>
+          <Text variant="smallStrong" color={colors.violet}>
+            Birthday reminders
+          </Text>
+          {birthdays.map((client) => (
+            <Text key={String(client.id || client.name)} variant="small" color={colors.violet}>
+              {client.contactPerson || client.name}: {client.daysUntil === 0 ? "birthday today" : `in ${client.daysUntil} day${client.daysUntil === 1 ? "" : "s"}`}
+            </Text>
+          ))}
+        </Card>
+      ) : null}
+      <Field compact icon="search-outline" value={query} onChangeText={setQuery} placeholder="Search name, contact or cabin" />
+      <View style={styles.chips}>
+        <Chip variant="filter" label="All" count={directory.length} selected={tab === "all"} onPress={() => setTab("all")} />
+        <Chip variant="filter" label="Current" count={active.length} selected={tab === "active"} onPress={() => setTab("active")} />
+        <Chip variant="filter" label="Former" count={former.length} selected={tab === "former"} onPress={() => setTab("former")} />
+        <Chip variant="filter" label="KYC due" count={pendingKyc.length} selected={tab === "kyc"} onPress={() => setTab("kyc")} />
+      </View>
+
+      {!shown.length ? (
+        <EmptyState icon="people-outline" title={directory.length ? "No client matches that" : "No clients yet"} message={directory.length ? "Try another search or filter." : "Onboard a client from the booking board and they appear here."} />
       ) : (
-        <EmptyState
-          icon={tab === "DUES" ? "checkmark-done" : "people-outline"}
-          title={tab === "DUES" ? "No dues" : tab === "RENEWING" ? "Nothing up for renewal" : "No active clients"}
-          message={tab === "DUES" ? "Every invoice is paid." : tab === "RENEWING" ? `No contract ends in the next ${RENEW_WINDOW_DAYS} days.` : "Add a client to start booking."}
-        />
+        <ListCard>
+          {shown.map((client) => (
+            <Pressable
+              key={client.id}
+              accessibilityRole="button"
+              onPress={() => navigation.navigate("ClientDetail", { id: client.id })}
+              style={({ pressed }) => [styles.row, pressed && { backgroundColor: colors.surfaceAlt }]}
+            >
+              <View style={[styles.avatar, { backgroundColor: client.kind === "active" ? colors.primary : colors.textFaint }]}>
+                <Text variant="tiny" color={colors.onPrimary}>
+                  {initials(client.name)}
+                </Text>
+              </View>
+              <View style={styles.flex}>
+                <View style={styles.nameRow}>
+                  <Text variant="bodyStrong" numberOfLines={1} style={styles.name}>
+                    {client.name}
+                  </Text>
+                  {client.returning ? <Icon name="repeat" size={13} color={colors.primary} /> : null}
+                  {client.duesAmount > 0 ? <Icon name="alert-circle" size={13} color={colors.danger} /> : null}
+                  {kycDue(client) ? <Icon name="document-text" size={13} color={colors.warning} /> : null}
+                </View>
+                <Text variant="small" color="muted" numberOfLines={1}>
+                  {client.kind === "active"
+                    ? `${client.cabins.length} ${client.cabins.length === 1 ? "cabin" : "cabins"} · ${client.capacity} seats`
+                    : `${client.stays.length} past ${client.stays.length === 1 ? "stay" : "stays"} · ${client.totalMonths} mo`}
+                </Text>
+              </View>
+              <Icon name="chevron-forward" size={16} color={colors.textFaint} />
+            </Pressable>
+          ))}
+        </ListCard>
       )}
     </Body>
   );
@@ -147,9 +126,11 @@ export const ClientsScreen = ({ navigation }: RootScreenProps<"Clients">) => {
 
 const styles = StyleSheet.create({
   flex: { flex: 1, minWidth: 0 },
-  chips: { flexDirection: "row", gap: 6 },
-  card: { borderWidth: 1, borderRadius: 18 },
-  top: { flexDirection: "row", alignItems: "center", gap: 12, padding: 14 },
-  name: { fontSize: 14 },
-  bottom: { flexDirection: "row", alignItems: "center", gap: 10, borderTopWidth: 1, paddingHorizontal: 14, paddingVertical: 11 },
+  headerActions: { flexDirection: "row", gap: 8 },
+  birthdays: { gap: 4 },
+  chips: { flexDirection: "row", flexWrap: "wrap", gap: 6 },
+  row: { flexDirection: "row", alignItems: "center", gap: 12, padding: 12 },
+  avatar: { width: 36, height: 36, borderRadius: 18, alignItems: "center", justifyContent: "center" },
+  nameRow: { flexDirection: "row", alignItems: "center", gap: 5 },
+  name: { flexShrink: 1, fontSize: 14 },
 });

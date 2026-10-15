@@ -42,7 +42,7 @@ export const ROLE_TABS: Record<HomeKind, TabSpec[]> = {
   sales: [HOME, { name: "Leads", label: "Leads", icon: "people" }, { name: "Tasks", label: "Tasks", icon: "checkbox" }, MORE],
   partner: [HOME, { name: "Leads", label: "Leads", icon: "people" }, MORE],
   field: [HOME, { name: "VisitsTab", label: "Visits", icon: "map" }, { name: "Tasks", label: "Tasks", icon: "checkbox" }, MORE],
-  community: [HOME, { name: "BookingsTab", label: "Bookings", icon: "calendar" }, { name: "ClientsTab", label: "Clients", icon: "briefcase" }, MORE],
+  community: [HOME, { name: "BookingsTab", label: "Board", icon: "grid" }, { name: "ClientsTab", label: "Clients", icon: "briefcase" }, MORE],
   production: [HOME, { name: "Tasks", label: "Tasks", icon: "checkbox" }, { name: "Attendance", label: "Attendance", icon: "finger-print" }, MORE],
 };
 
@@ -53,7 +53,7 @@ export const ROLE_FAB: Record<HomeKind, { icon: IconName; label: string }> = {
   sales: { icon: "add", label: "Create" },
   partner: { icon: "add", label: "Add lead" },
   field: { icon: "camera", label: "Site photo" },
-  community: { icon: "add", label: "New booking" },
+  community: { icon: "person-add", label: "Onboard client" },
   production: { icon: "add", label: "New task" },
 };
 

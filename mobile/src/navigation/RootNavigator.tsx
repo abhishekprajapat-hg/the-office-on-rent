@@ -49,11 +49,12 @@ import { ChatsScreen } from "../screens/chat/ChatsScreen";
 import { ConversationScreen } from "../screens/chat/ConversationScreen";
 import { NewChatScreen } from "../screens/chat/NewChatScreen";
 import { BroadcastScreen } from "../screens/chat/BroadcastScreen";
-import { BookingsScreen } from "../screens/coworking/BookingsScreen";
-import { NewBookingScreen } from "../screens/coworking/NewBookingScreen";
+import { BookingBoardScreen } from "../screens/coworking/BookingBoardScreen";
+import { CabinScreen } from "../screens/coworking/CabinScreen";
+import { OnboardScreen } from "../screens/coworking/OnboardScreen";
+import { BoardActivityScreen } from "../screens/coworking/BoardActivityScreen";
 import { ClientsScreen } from "../screens/coworking/ClientsScreen";
 import { ClientDetailScreen } from "../screens/coworking/ClientDetailScreen";
-import { AddClientScreen } from "../screens/coworking/AddClientScreen";
 import { AdminConsoleScreen } from "../screens/admin/AdminConsoleScreen";
 import { UsersScreen } from "../screens/admin/UsersScreen";
 import { UserDetailScreen } from "../screens/admin/UserDetailScreen";
@@ -96,7 +97,7 @@ const TeamTab = (props: object) => {
 const asTab = (Screen: React.ComponentType<any>) => (props: object) => <Screen {...props} />;
 const ApprovalsTab = asTab(ApprovalsScreen);
 const VisitsTab = asTab(FieldOpsScreen);
-const BookingsTab = asTab(BookingsScreen);
+const BookingsTab = asTab(BookingBoardScreen);
 const ClientsTab = asTab(ClientsScreen);
 const ListingsTab = asTab(InventoryScreen);
 
@@ -119,7 +120,7 @@ const Tabs = () => {
       {shown.has("TeamTab") ? <Tab.Screen name="TeamTab" component={TeamTab} options={{ ...withHeader, title: "Team" }} /> : null}
       {shown.has("ApprovalsTab") ? <Tab.Screen name="ApprovalsTab" component={ApprovalsTab} options={{ ...withHeader, title: "Approvals" }} /> : null}
       {shown.has("VisitsTab") ? <Tab.Screen name="VisitsTab" component={VisitsTab} /> : null}
-      {shown.has("BookingsTab") ? <Tab.Screen name="BookingsTab" component={BookingsTab} options={{ ...withHeader, title: "Bookings" }} /> : null}
+      {shown.has("BookingsTab") ? <Tab.Screen name="BookingsTab" component={BookingsTab} options={{ ...withHeader, title: "Booking board" }} /> : null}
       {shown.has("ClientsTab") ? <Tab.Screen name="ClientsTab" component={ClientsTab} options={{ ...withHeader, title: "Clients" }} /> : null}
       {shown.has("ListingsTab") ? <Tab.Screen name="ListingsTab" component={ListingsTab} /> : null}
       {allowed("attendance") && canMarkAttendance(role) ? <Tab.Screen name="Attendance" component={AttendanceScreen} /> : null}
@@ -196,11 +197,12 @@ export const RootNavigator = () => {
             <Stack.Screen name="Profile" component={ProfileScreen} options={{ title: "Profile" }} />
             <Stack.Screen name="Notifications" component={NotificationsScreen} options={{ title: "Notifications" }} />
             <Stack.Screen name="Settings" component={SettingsScreen} options={{ title: "Settings" }} />
-            {allowed("coworking_booking") ? <Stack.Screen name="Bookings" component={BookingsScreen} options={{ title: "Bookings" }} /> : null}
-            {action("coworking_booking", "create") ? <Stack.Screen name="NewBooking" component={NewBookingScreen} options={{ title: "New booking", presentation: "modal" }} /> : null}
+            {allowed("coworking_booking") ? <Stack.Screen name="Bookings" component={BookingBoardScreen} options={{ title: "Booking board" }} /> : null}
+            {allowed("coworking_booking") || allowed("coworking_clients") ? <Stack.Screen name="Cabin" component={CabinScreen} options={{ title: "Cabin" }} /> : null}
+            {action("coworking_booking", "edit") || action("coworking_booking", "create") ? <Stack.Screen name="Onboard" component={OnboardScreen} options={{ title: "Onboard client", presentation: "modal" }} /> : null}
+            {allowed("coworking_booking") ? <Stack.Screen name="BoardActivity" component={BoardActivityScreen} options={{ title: "Activity" }} /> : null}
             {allowed("coworking_clients") ? <Stack.Screen name="Clients" component={ClientsScreen} options={{ title: "Clients" }} /> : null}
             {allowed("coworking_clients") ? <Stack.Screen name="ClientDetail" component={ClientDetailScreen} options={{ title: "Client" }} /> : null}
-            {action("coworking_clients", "create") ? <Stack.Screen name="AddClient" component={AddClientScreen} options={{ title: "New client", presentation: "modal" }} /> : null}
             {isManagement(user.role) ? <Stack.Screen name="Search" component={SearchScreen} options={{ title: "Search" }} /> : null}
             {allowed("admin_console") ? <Stack.Screen name="AdminConsole" component={AdminConsoleScreen} options={{ title: "Admin", headerShown: false }} /> : null}
             {allowed("admin_team") ? <Stack.Screen name="Users" component={UsersScreen} options={{ title: "Users" }} /> : null}

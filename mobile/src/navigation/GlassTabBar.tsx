@@ -67,7 +67,7 @@ export const GlassTabBar = ({ state, navigation }: BottomTabBarProps) => {
       case "field":
         return openSitePhoto();
       case "community":
-        return navigation.navigate("NewBooking" as never);
+        return (navigation as unknown as { navigate: (name: string, params: object) => void }).navigate("Bookings", { select: true });
       case "production":
         return navigation.navigate("NewTask" as never);
     }

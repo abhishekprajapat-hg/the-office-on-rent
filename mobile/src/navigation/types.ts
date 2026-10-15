@@ -70,11 +70,14 @@ export type RootStackParamList = {
   FieldOps: undefined;
   PersonTasks: { assignedTo: string; name: string };
   PersonLeads: { assignedTo: string; name: string };
-  Bookings: undefined;
-  NewBooking: { floorId?: string; cabinId?: string } | undefined;
+  /* The coworking booking board; select opens it ready to pick cabins for onboarding. */
+  Bookings: { select?: boolean } | undefined;
+  Cabin: { code: string };
+  Onboard: { codes?: string[]; clientId?: string };
+  BoardActivity: undefined;
   Clients: undefined;
+  /* A board client: their identity on the booking board. */
   ClientDetail: { id: string };
-  AddClient: undefined;
   AdminConsole: undefined;
   Users: { focus?: "access" } | undefined;
   UserDetail: { id: string; name?: string };
