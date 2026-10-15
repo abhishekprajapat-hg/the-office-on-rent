@@ -103,7 +103,6 @@ const styles = StyleSheet.create({
   flex: { flex: 1, minWidth: 0 },
   note: { flexDirection: "row", gap: 8, alignItems: "center", borderRadius: 14, padding: 12 },
   strip: { flexGrow: 0 },
-  chips: { gap: 6, alignItems: "center" },
   row: { flexDirection: "row", alignItems: "center", gap: 12, paddingHorizontal: 14, paddingVertical: 11 },
   name: { fontSize: 14 },
   inactive: { alignSelf: "center", padding: 6 },

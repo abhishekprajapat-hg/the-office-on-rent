@@ -11,7 +11,7 @@ import { SOLD_PAYMENT_MODES, inventoryAccess, validateSale } from "../../lib/inv
 import { parseAmount } from "../../lib/money";
 import { propertyTitle } from "../../lib/property";
 import { useTheme } from "../../theme/ThemeProvider";
-import { ActionSheet, Button, Chip, Field, Icon, InlineError, Sheet, Text, type SheetAction } from "../../ui";
+import { ActionSheet, Button, Field, Icon, InlineError, Select, Sheet, Text, type SheetAction } from "../../ui";
 
 const STATUSES: InventoryStatus[] = ["Available", "Blocked", "Sold"];
 
@@ -209,23 +209,26 @@ export const PropertyMenu = ({ property, onChanged, onNotice }: { property: Prop
           </>
         }
       >
-        <View style={styles.chips}>
-          {STATUSES.map((item) => (
-            <Chip key={item} label={item} selected={status === item} onPress={() => setStatus(item)} />
-          ))}
-        </View>
+        <Select label="Status" options={STATUSES.map((item) => ({ key: item, label: item }))} value={status} onChange={setStatus} />
         {status === "Blocked" || status === "Sold" ? <LeadSearch selected={lead} onPick={setLead} /> : null}
         {status === "Blocked" ? <Field label="Reason" value={reason} onChangeText={setReason} placeholder="e.g. Token received, agreement next week" multiline /> : null}
         {status === "Sold" ? (
           <>
-            <View style={styles.chips}>
-              {SOLD_PAYMENT_MODES.map((mode) => (
-                <Chip key={mode.key} label={mode.label} selected={sale.paymentMode === mode.key} onPress={() => setSale((prev) => ({ ...prev, paymentMode: mode.key }))} />
-              ))}
-            </View>
-            <View style={styles.chips}>
-              <Chip label="Full payment" selected={sale.paymentType === "FULL"} onPress={() => setSale((prev) => ({ ...prev, paymentType: "FULL" }))} />
-              <Chip label="Part payment" selected={sale.paymentType === "PARTIAL"} onPress={() => setSale((prev) => ({ ...prev, paymentType: "PARTIAL" }))} />
+            <View style={styles.pair}>
+              <View style={styles.flex}>
+                <Select label="Paid by" options={SOLD_PAYMENT_MODES.map((mode) => ({ key: mode.key, label: mode.label }))} value={sale.paymentMode} onChange={(paymentMode) => setSale((prev) => ({ ...prev, paymentMode }))} />
+              </View>
+              <View style={styles.flex}>
+                <Select
+                  label="Payment"
+                  options={[
+                    { key: "FULL", label: "Full payment" },
+                    { key: "PARTIAL", label: "Part payment" },
+                  ]}
+                  value={sale.paymentType}
+                  onChange={(paymentType) => setSale((prev) => ({ ...prev, paymentType }))}
+                />
+              </View>
             </View>
             <Field label="Sold for" value={sale.total} onChangeText={(total) => setSale((prev) => ({ ...prev, total }))} placeholder="e.g. 1.2 cr" suffix="₹" />
             {sale.paymentType === "PARTIAL" ? <Field label="Still to come" value={sale.remaining} onChangeText={(remaining) => setSale((prev) => ({ ...prev, remaining }))} placeholder="e.g. 20 lakh" suffix="₹" /> : null}
@@ -256,7 +259,7 @@ export const PropertyMenu = ({ property, onChanged, onNotice }: { property: Prop
 const styles = StyleSheet.create({
   flex: { flex: 1, minWidth: 0 },
   gap: { gap: 8 },
-  chips: { flexDirection: "row", flexWrap: "wrap", gap: 6 },
+  pair: { flexDirection: "row", gap: 10 },
   lead: { flexDirection: "row", alignItems: "center", gap: 8, paddingHorizontal: 12, paddingVertical: 10, borderRadius: 12 },
   round: { width: 38, height: 38, borderRadius: 12, alignItems: "center", justifyContent: "center" },
 });

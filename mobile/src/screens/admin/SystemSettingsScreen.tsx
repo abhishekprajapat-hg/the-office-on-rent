@@ -6,7 +6,7 @@ import { DateTimeField } from "../../components/DateTimeField";
 import { useQuery } from "../../lib/useQuery";
 import type { RootScreenProps } from "../../navigation/types";
 import { useTheme } from "../../theme/ThemeProvider";
-import { Body, Button, Chip, ErrorState, Field, GroupLabel, InlineError, ListCard, Loading, Segmented, Text, Toggle } from "../../ui";
+import { Body, Button, ErrorState, Field, GroupLabel, InlineError, ListCard, Loading, MultiSelect, Segmented, Text, Toggle } from "../../ui";
 
 const DAYS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
 const toDate = (minutes: number) => {
@@ -131,12 +131,14 @@ export const SystemSettingsScreen = ({ route, navigation }: RootScreenProps<"Sys
               hint={`Late after ${clock(draft.shiftStartMinutes + draft.graceMinutes)} · half day under ${hours(draft.halfDayMinutes)}`}
             />
             <GroupLabel>Weekly off</GroupLabel>
-            <View style={styles.chips}>
-              {DAYS.map((label, index) => {
-                const on = (draft.weeklyOffDays || []).includes(index);
-                return <Chip key={label} label={label} selected={on} onPress={() => set({ weeklyOffDays: on ? draft.weeklyOffDays.filter((day) => day !== index) : [...(draft.weeklyOffDays || []), index].sort() })} />;
-              })}
-            </View>
+            <MultiSelect
+              title="Weekly off"
+              placeholder="No weekly off"
+              icon="calendar-outline"
+              options={DAYS.map((label, index) => ({ key: String(index), label }))}
+              value={(draft.weeklyOffDays || []).map(String)}
+              onChange={(keys) => set({ weeklyOffDays: keys.map(Number).sort((a, b) => a - b) })}
+            />
             <GroupLabel>Rules</GroupLabel>
             <ListCard>
               <View style={styles.toggleRow}>
@@ -219,7 +221,6 @@ export const SystemSettingsScreen = ({ route, navigation }: RootScreenProps<"Sys
 const styles = StyleSheet.create({
   flex: { flex: 1, minWidth: 0 },
   row: { flexDirection: "row", gap: 10 },
-  chips: { flexDirection: "row", flexWrap: "wrap", gap: 6 },
   toggleRow: { flexDirection: "row", alignItems: "center", gap: 12, paddingHorizontal: 14, paddingVertical: 12 },
   inset: { paddingHorizontal: 14, paddingBottom: 12 },
   fact: { flexDirection: "row", justifyContent: "space-between", paddingHorizontal: 14, paddingVertical: 10, gap: 10 },

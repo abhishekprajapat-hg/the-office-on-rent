@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from "react";
 import { StyleSheet, View } from "react-native";
 import { FACINGS, OFFICE_TYPES, UNIT_SPECS, UNIT_STATUSES, unitError, withDimension, type UnitDraft, type UnitGroup } from "../../lib/projectUnits";
-import { Button, Chip, Field, InlineError, Sheet, Text } from "../../ui";
+import { Button, Field, InlineError, Select, Sheet } from "../../ui";
 
 /* One office, shop or showroom on a commercial project (web Projects unit card). */
 export const UnitSheet = ({
@@ -64,14 +64,7 @@ export const UnitSheet = ({
       {group === "offices" ? (
         <>
           <Field label="Office name (optional)" value={draft.officeName || ""} onChangeText={set("officeName")} placeholder="Marketing office" />
-          <Text variant="smallStrong" color="muted">
-            Office type
-          </Text>
-          <View style={styles.chips}>
-            {OFFICE_TYPES.map((item) => (
-              <Chip key={item.key} label={item.label} selected={draft.officeType === item.key} onPress={() => set("officeType")(draft.officeType === item.key ? "" : item.key)} />
-            ))}
-          </View>
+          <Select label="Office type" allowClear clearLabel="Not set" placeholder="Not set" options={OFFICE_TYPES.map((item) => ({ key: item.key, label: item.label }))} value={draft.officeType} onChange={set("officeType")} />
         </>
       ) : null}
       <View style={styles.row}>
@@ -104,21 +97,13 @@ export const UnitSheet = ({
           </View>
         </View>
       ) : null}
-      <Text variant="smallStrong" color="muted">
-        Facing
-      </Text>
-      <View style={styles.chips}>
-        {FACINGS.map((item) => (
-          <Chip key={item.key} label={item.label} selected={draft.facing === item.key} onPress={() => set("facing")(draft.facing === item.key ? "" : item.key)} />
-        ))}
-      </View>
-      <Text variant="smallStrong" color="muted">
-        Status
-      </Text>
-      <View style={styles.chips}>
-        {UNIT_STATUSES.map((item) => (
-          <Chip key={item.key} label={item.label} selected={draft.status === item.key} onPress={() => set("status")(item.key)} />
-        ))}
+      <View style={styles.row}>
+        <View style={styles.flex}>
+          <Select label="Facing" allowClear clearLabel="Not set" placeholder="Not set" options={FACINGS.map((item) => ({ key: item.key, label: item.label }))} value={draft.facing} onChange={set("facing")} />
+        </View>
+        <View style={styles.flex}>
+          <Select label="Status" options={UNIT_STATUSES.map((item) => ({ key: item.key, label: item.label }))} value={draft.status} onChange={set("status")} />
+        </View>
       </View>
       <View style={styles.row}>
         <View style={styles.flex}>
@@ -144,5 +129,4 @@ const styles = StyleSheet.create({
   flex: { flex: 1, minWidth: 0 },
   wide: { flex: 2 },
   row: { flexDirection: "row", gap: 8 },
-  chips: { flexDirection: "row", flexWrap: "wrap", gap: 6 },
 });

@@ -20,6 +20,7 @@ import { NotificationBridge } from "./src/notifications/NotificationBridge";
 import { BootSplash } from "./src/screens/auth/BootSplash";
 import { AppLock } from "./src/components/AppLock";
 import { IdleSignOut } from "./src/components/IdleSignOut";
+import { ErrorBoundary } from "./src/components/ErrorBoundary";
 
 SplashScreen.preventAutoHideAsync().catch(() => {});
 
@@ -53,7 +54,9 @@ const Shell = () => {
       <StatusBar style={scheme === "dark" ? "light" : "dark"} />
       <AppLock>
         <IdleSignOut>
-          <RootNavigator />
+          <ErrorBoundary>
+            <RootNavigator />
+          </ErrorBoundary>
           <NotificationBridge />
         </IdleSignOut>
       </AppLock>

@@ -105,6 +105,7 @@ export const Body = ({
         ) : undefined
       }
     >
+      <OfflineBanner inset={false} />
       {children}
     </ScrollView>
   );

@@ -13,7 +13,7 @@ import { ROLE_LABELS } from "../../lib/roles";
 import { BUSINESS_CATEGORIES, taskStats } from "../../lib/userAdmin";
 import type { RootScreenProps } from "../../navigation/types";
 import { useTheme } from "../../theme/ThemeProvider";
-import { Avatar, Badge, Body, Button, Chip, ErrorState, FactRow, Field, GroupLabel, Icon, InlineError, ListCard, Loading, Sheet, Text, Toggle, type IconName } from "../../ui";
+import { Avatar, Badge, Body, Button, ErrorState, FactRow, Field, GroupLabel, Icon, InlineError, ListCard, Loading, MultiSelect, Select, Sheet, Text, Toggle, type IconName } from "../../ui";
 import { AtAGlance, EditDetailsSheet } from "./UserProfileKit";
 
 const PAGE_ICONS: Record<string, IconName> = {
@@ -189,10 +189,11 @@ export const UserDetailScreen = ({ route, navigation }: RootScreenProps<"UserDet
       else delete next[page.key];
       return next;
     });
-  const toggleAction = (page: CrmPage, action: string) =>
+  /* The page's extra actions as picked; view always stays, and actions not offered here are kept. */
+  const setActions = (page: CrmPage, offered: string[], picked: string[]) =>
     setGrants((prev) => {
-      const list = prev[page.key] || ["view"];
-      return { ...prev, [page.key]: list.includes(action) ? list.filter((item) => item !== action) : [...new Set([...list, "view", action])] };
+      const kept = (prev[page.key] || ["view"]).filter((action) => !offered.includes(action));
+      return { ...prev, [page.key]: [...new Set(["view", ...kept, ...picked])] };
     });
 
   const resetPassword = async () => {
@@ -286,43 +287,31 @@ export const UserDetailScreen = ({ route, navigation }: RootScreenProps<"UserDet
       ) : null}
 
       <GroupLabel>Role</GroupLabel>
-      <View style={styles.chips}>
-        {roleChoices.map((key) => (
-          <Chip
-            key={key}
-            label={SHORT_ROLE[key] || key}
-            selected={!customRoleId && role === key}
-            onPress={() => {
-              if (self) return;
-              setRole(key);
-              setCustomRoleId(null);
-            }}
-          />
-        ))}
-      </View>
-      {namedRoles.length ? (
-        <>
-          <Text variant="smallStrong" color="muted">
-            Named roles
-          </Text>
-          <View style={styles.chips}>
-            {namedRoles
-              .filter((item) => isAdmin || !["ADMIN", "MANAGER"].includes(item.baseRole) || item._id === customRoleId)
-              .map((item) => (
-                <Chip
-                  key={item._id}
-                  label={item.name}
-                  selected={customRoleId === item._id}
-                  onPress={() => {
-                    if (self) return;
-                    setCustomRoleId(item._id);
-                    setRole(item.baseRole);
-                  }}
-                />
-              ))}
-          </View>
-        </>
-      ) : null}
+      <Select
+        title="Role"
+        icon="briefcase-outline"
+        disabled={self}
+        hint={self ? "You can't change your own role." : undefined}
+        options={[
+          ...roleChoices.map((key) => ({ key: `base:${key}`, label: SHORT_ROLE[key] || key })),
+          ...namedRoles
+            .filter((item) => isAdmin || !["ADMIN", "MANAGER"].includes(item.baseRole) || item._id === customRoleId)
+            .map((item) => ({ key: `named:${item._id}`, label: item.name, hint: `Named role · works as ${SHORT_ROLE[item.baseRole] || item.baseRole}` })),
+        ]}
+        value={customRoleId ? `named:${customRoleId}` : `base:${role}`}
+        onChange={(key) => {
+          const [kind, id] = [key.slice(0, key.indexOf(":")), key.slice(key.indexOf(":") + 1)];
+          if (kind === "base") {
+            setRole(id);
+            setCustomRoleId(null);
+            return;
+          }
+          const named = namedRoles.find((item) => item._id === id);
+          if (!named) return;
+          setCustomRoleId(named._id);
+          setRole(named.baseRole);
+        }}
+      />
 
       {!self && person.role !== "ADMIN" ? (
         <ListCard>
@@ -377,9 +366,14 @@ export const UserDetailScreen = ({ route, navigation }: RootScreenProps<"UserDet
                 </View>
                 {expanded === page.key && on ? (
                   <View style={styles.actions}>
-                    {extra.map((action) => (
-                      <Chip key={action} label={ACTION_LABEL(action)} selected={(grants[page.key] || []).includes(action)} onPress={() => access.canEdit && toggleAction(page, action)} />
-                    ))}
+                    <MultiSelect
+                      title={`${page.label}: what they can do`}
+                      placeholder="View only"
+                      disabled={!access.canEdit}
+                      options={extra.map((action) => ({ key: action, label: ACTION_LABEL(action) }))}
+                      value={(grants[page.key] || []).filter((action) => extra.includes(action))}
+                      onChange={(keys) => setActions(page, extra, keys)}
+                    />
                   </View>
                 ) : null}
               </View>
@@ -508,10 +502,9 @@ const styles = StyleSheet.create({
   flex: { flex: 1, minWidth: 0 },
   card: { flexDirection: "row", alignItems: "center", gap: 12, padding: 14, borderRadius: 18, borderWidth: 1 },
   name: { fontSize: 15 },
-  chips: { flexDirection: "row", flexWrap: "wrap", gap: 6 },
   pageRow: { flexDirection: "row", alignItems: "center", gap: 12, paddingHorizontal: 14, minHeight: 50, paddingVertical: 6 },
   pageLabel: { fontSize: 14 },
-  actions: { flexDirection: "row", flexWrap: "wrap", gap: 6, paddingHorizontal: 14, paddingBottom: 12, paddingLeft: 44 },
+  actions: { paddingHorizontal: 14, paddingBottom: 12, paddingLeft: 44 },
   danger: { flexDirection: "row", gap: 8, alignItems: "center", justifyContent: "center", height: 50, borderRadius: 14 },
   removeLink: { alignSelf: "center", padding: 6 },
   facts: { paddingHorizontal: 14, paddingVertical: 4 },

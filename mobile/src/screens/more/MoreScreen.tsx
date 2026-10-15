@@ -8,7 +8,7 @@ import { canMarkAttendance, isManagement, roleLabel } from "../../lib/roles";
 import { initials } from "../../lib/format";
 import { useFeed } from "../../notifications/feed";
 import { homeKindFor, tabsShown } from "../../lib/roleHome";
-import { listConversations } from "../../api/chat";
+import { chatInbox, useUnreadChats } from "../../notifications/chatInbox";
 import { api } from "../../api/client";
 import { useQuery } from "../../lib/useQuery";
 import { useTheme } from "../../theme/ThemeProvider";
@@ -28,9 +28,10 @@ export const MoreScreen = () => {
   const inBar = tabsShown(homeKindFor(role), user, access);
   const goTab = (screen: "Leads" | "Tasks" | "Attendance") => navigation.navigate("Tabs", { screen });
   // Badges for the design's tiles: unread chats and leads still waiting in the pool.
+  const unreadChats = useUnreadChats();
   const { data: badges } = useQuery(async () => {
-    const [rooms, pool] = await Promise.all([
-      allowed("chat") ? listConversations().catch(() => []) : [],
+    const [, pool] = await Promise.all([
+      allowed("chat") ? chatInbox.refresh() : null,
       isManagement(role) && allowed("leads")
         ? api
             .get("/leads", { params: { page: 1, limit: 1, assignedTo: "UNASSIGNED", fields: "_id" } })
@@ -38,7 +39,7 @@ export const MoreScreen = () => {
             .catch(() => 0)
         : 0,
     ]);
-    return { chats: rooms.reduce((sum, room) => sum + (room.unreadCount || 0), 0), pool };
+    return { pool };
   }, [role, access]);
   // Same four groups as design 41; a tile appears once its module is built and the role may open it.
   const groups: { label: string; items: Tile[] }[] = [
@@ -46,7 +47,7 @@ export const MoreScreen = () => {
       label: "Sales",
       items: [
         (allowed("leads") || allowed("my_leads")) && !inBar.has("Leads") ? { icon: "people", label: "Leads", onPress: () => goTab("Leads") } : null,
-        allowed("inventory") ? { icon: "business", label: "Inventory", onPress: () => navigation.navigate("Inventory") } : null,
+        allowed("inventory") && !inBar.has("ListingsTab") ? { icon: "business", label: "Inventory", onPress: () => navigation.navigate("Inventory") } : null,
         allowed("projects") ? { icon: "albums", label: "Projects", onPress: () => navigation.navigate("Projects") } : null,
         allowed("inventory") && role !== "CHANNEL_PARTNER" ? { icon: "person-circle", label: "Owners & brokers", onPress: () => navigation.navigate("Contacts") } : null,
         allowed("leads") && isManagement(role) ? { icon: "file-tray-full", label: "Lead pool", badge: badges?.pool, onPress: () => navigation.navigate("LeadPool") } : null,
@@ -57,14 +58,15 @@ export const MoreScreen = () => {
     {
       label: "Work",
       items: [
-        allowed("chat") ? { icon: "chatbubbles", label: "Team chat", badge: badges?.chats, onPress: () => navigation.navigate("Chats") } : null,
+        allowed("chat") ? { icon: "chatbubbles", label: "Team chat", badge: unreadChats, onPress: () => navigation.navigate("Chats") } : null,
         allowed("calendar") ? { icon: "calendar", label: "Calendar", onPress: () => navigation.navigate("Schedule") } : null,
-        allowed("field_ops") ? { icon: "navigate", label: "Field ops", onPress: () => navigation.navigate("FieldOps") } : null,
+        allowed("field_ops") && !inBar.has("VisitsTab") ? { icon: "navigate", label: "Field ops", onPress: () => navigation.navigate("FieldOps") } : null,
         { icon: "notifications", label: "Notifications", badge: unread, onPress: () => navigation.navigate("Notifications") },
+        isManagement(role) ? { icon: "search", label: "Search", onPress: () => navigation.navigate("Search") } : null,
         allowed("tasks") && !inBar.has("Tasks") ? { icon: "checkbox", label: "Tasks", onPress: () => goTab("Tasks") } : null,
         allowed("attendance") && canMarkAttendance(role) && !inBar.has("Attendance") ? { icon: "finger-print", label: "Attendance", onPress: () => goTab("Attendance") } : null,
         allowed("attendance") ? { icon: "airplane", label: "Leave", onPress: () => navigation.navigate("Leave") } : null,
-        isManagement(role) && allowed("tasks") ? { icon: "bar-chart", label: "Team workload", onPress: () => navigation.navigate("TeamWorkload") } : null,
+        isManagement(role) && allowed("tasks") && !(role === "MANAGER" && inBar.has("TeamTab")) ? { icon: "bar-chart", label: "Team workload", onPress: () => navigation.navigate("TeamWorkload") } : null,
         isManagement(role) && allowed("attendance") ? { icon: "people-circle", label: "Team attendance", onPress: () => navigation.navigate("TeamAttendance") } : null,
       ].filter(Boolean) as Tile[],
     },
@@ -85,14 +87,14 @@ export const MoreScreen = () => {
     {
       label: "Coworking & admin",
       items: [
-        allowed("coworking_booking") ? { icon: "grid", label: "Booking board", onPress: () => navigation.navigate("Bookings") } : null,
-        allowed("coworking_clients") ? { icon: "briefcase", label: "Clients", onPress: () => navigation.navigate("Clients") } : null,
-        allowed("admin_team") ? { icon: "people", label: "Team access", onPress: () => navigation.navigate("Users") } : null,
+        allowed("coworking_booking") && !inBar.has("BookingsTab") ? { icon: "grid", label: "Booking board", onPress: () => navigation.navigate("Bookings") } : null,
+        allowed("coworking_clients") && !inBar.has("ClientsTab") ? { icon: "briefcase", label: "Clients", onPress: () => navigation.navigate("Clients") } : null,
+        allowed("admin_team") && !(role === "ADMIN" && inBar.has("TeamTab")) ? { icon: "people", label: "Team access", onPress: () => navigation.navigate("Users") } : null,
         allowed("admin_team") && isManagement(role) ? { icon: "id-card", label: "Roles", onPress: () => navigation.navigate("Roles") } : null,
         allowed("admin_console") ? { icon: "shield-checkmark", label: "Admin", onPress: () => navigation.navigate("AdminConsole") } : null,
         { icon: "settings", label: "Settings", onPress: () => navigation.navigate("Settings") },
         role !== "ADMIN" ? { icon: "hourglass", label: "My requests", onPress: () => navigation.navigate("MyRequests") } : null,
-        allowed("admin_console") ? { icon: "checkmark-done", label: "Approvals", onPress: () => navigation.navigate("Approvals") } : null,
+        allowed("admin_console") && !inBar.has("ApprovalsTab") ? { icon: "checkmark-done", label: "Approvals", onPress: () => navigation.navigate("Approvals") } : null,
       ].filter(Boolean) as Tile[],
     },
   ].filter((group) => group.items.length);

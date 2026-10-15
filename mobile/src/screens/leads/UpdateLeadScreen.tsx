@@ -11,14 +11,13 @@ import { getProperty } from "../../api/inventory";
 import { propertyTitle } from "../../lib/property";
 import { useFocusEffect } from "@react-navigation/native";
 import { useUser } from "../../auth/AuthProvider";
-import { Chip } from "../../ui/Chip";
 import { DateTimeField } from "../../components/DateTimeField";
 import { followUpQuickPicks, toFollowUpPayload } from "../../lib/followUp";
 import { LEAD_STATUS, normalizeStatus, suggestsFollowUp } from "../../lib/leadStatus";
 import { currentPosition } from "../../lib/location";
 import { isManagement } from "../../lib/roles";
 import type { RootScreenProps } from "../../navigation/types";
-import { Button, ErrorState, Field, Grabber, InlineError, Loading, Text } from "../../ui";
+import { Button, ErrorState, Field, Grabber, InlineError, Loading, Select, Text } from "../../ui";
 import { DealClosureSection, dealPayload, type DealDraft } from "./DealClosureSection";
 
 /* The status picker, grouped the way the web colours them, so twenty options read as six choices. */
@@ -176,21 +175,15 @@ export const UpdateLeadScreen = ({ route, navigation }: RootScreenProps<"UpdateL
           </Text>
         </View>
         <ScrollView style={styles.scroll} contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled">
-          <View style={styles.chips}>
-            {GROUPS.flatMap((group) => group.statuses)
+          <Select
+            label="New status"
+            options={GROUPS.flatMap((group) => group.statuses)
               // Only an admin may set Requested directly; for everyone else it is what closing becomes.
               .filter((key) => key !== "REQUESTED" || isAdmin || originalStatus === "REQUESTED")
-              .map((key) => (
-                <Chip
-                  key={key}
-                  label={LEAD_STATUS[key]!.label}
-                  tone={LEAD_STATUS[key]!.tone}
-                  dot={toneDot(LEAD_STATUS[key]!.tone)}
-                  selected={status === key}
-                  onPress={() => setStatus(key)}
-                />
-              ))}
-          </View>
+              .map((key) => ({ key, label: LEAD_STATUS[key]!.label, dot: toneDot(LEAD_STATUS[key]!.tone) }))}
+            value={status}
+            onChange={setStatus}
+          />
 
           {isDeal ? (
             <View style={styles.gap}>
@@ -290,7 +283,6 @@ const styles = StyleSheet.create({
   scroll: { flexGrow: 0 },
   content: { gap: 14 },
   gap: { gap: 8 },
-  chips: { flexDirection: "row", flexWrap: "wrap", gap: 6 },
   grid: { flexDirection: "row", flexWrap: "wrap", gap: 8 },
   tile: { width: "48.5%", flexGrow: 1, borderWidth: 1.5, borderRadius: 13, paddingVertical: 10, paddingHorizontal: 12 },
   tileTitle: { fontSize: 12.5 },

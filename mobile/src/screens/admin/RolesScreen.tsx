@@ -7,7 +7,7 @@ import { roleLabel } from "../../lib/roles";
 import { useQuery } from "../../lib/useQuery";
 import type { RootScreenProps } from "../../navigation/types";
 import { useTheme } from "../../theme/ThemeProvider";
-import { Badge, Body, Button, Chip, EmptyState, ErrorState, Field, Icon, InlineError, ListCard, Loading, Sheet, Text } from "../../ui";
+import { Badge, Body, Button, EmptyState, ErrorState, Field, Icon, InlineError, ListCard, Loading, Select, Sheet, Text } from "../../ui";
 
 const CATEGORY_LABEL: Record<string, string> = { COMMERCIAL: "Commercial", RESIDENTIAL: "Residential", COWORKING: "Coworking", BOTH: "Commercial & residential" };
 
@@ -143,22 +143,15 @@ export const RolesScreen = ({ navigation }: RootScreenProps<"Roles">) => {
         }
       >
         <Field label="Name" value={name} onChangeText={setName} placeholder="e.g. Senior Leasing Associate" maxLength={60} />
-        <Text variant="smallStrong" color="muted">
-          Works as{baseLocked ? " · only an admin can change this" : ""}
-        </Text>
-        <View style={styles.chips}>
-          {baseRoles.map((key) => (
-            <Chip key={key} label={roleLabel(key)} selected={baseRole === key} onPress={() => !baseLocked && setBaseRole(key)} />
-          ))}
-        </View>
-        <Text variant="smallStrong" color="muted">
-          Business
-        </Text>
-        <View style={styles.chips}>
-          {categories.map((key) => (
-            <Chip key={key} label={CATEGORY_LABEL[key] || key} selected={category === key} onPress={() => setCategory(key)} />
-          ))}
-        </View>
+        <Select
+          label="Works as"
+          hint={baseLocked ? "Only an admin can change this." : undefined}
+          disabled={baseLocked}
+          options={baseRoles.map((key) => ({ key, label: roleLabel(key) }))}
+          value={baseRole}
+          onChange={setBaseRole}
+        />
+        <Select label="Business" options={categories.map((key) => ({ key, label: CATEGORY_LABEL[key] || key }))} value={category} onChange={setCategory} />
         {editing && (editing.baseRole !== baseRole || editing.businessCategory !== category) ? (
           <Badge label="Everyone on this role is updated to match" tone="warning" />
         ) : null}
@@ -172,5 +165,4 @@ const styles = StyleSheet.create({
   flex: { flex: 1, minWidth: 0 },
   row: { flexDirection: "row", alignItems: "center", gap: 12, padding: 12 },
   name: { fontSize: 14 },
-  chips: { flexDirection: "row", flexWrap: "wrap", gap: 6 },
 });

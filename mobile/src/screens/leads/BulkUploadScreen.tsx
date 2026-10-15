@@ -8,7 +8,7 @@ import { statusMeta } from "../../lib/leadStatus";
 import type { RootScreenProps } from "../../navigation/types";
 import { useTheme } from "../../theme/ThemeProvider";
 import { space } from "../../theme/tokens";
-import { Badge, Body, Button, Card, Chip, InlineError, Text } from "../../ui";
+import { Badge, Body, Button, Card, InlineError, Select, Text } from "../../ui";
 
 type ParsedRow = { name: string; phone: string; city?: string; status: string; nextFollowUp?: string };
 type UploadResult = { createdCount: number; updatedCount: number; failedCount: number; failures?: { row?: number; phone?: string; message?: string; reason?: string }[] };
@@ -80,19 +80,15 @@ export const BulkUploadScreen = ({ navigation }: RootScreenProps<"BulkUpload">) 
         <Text variant="small" color="muted">
           Decides how requirement columns are read, as on the web.
         </Text>
-        <View style={styles.chips}>
-          {Object.values(BULK_LEAD_SHEET_TYPES).map((type) => (
-            <Chip
-              key={type as string}
-              label={(type as string).charAt(0) + (type as string).slice(1).toLowerCase()}
-              selected={sheetType === type}
-              onPress={() => {
-                setSheetType(type as string);
-                if (source) parse(source, type as string);
-              }}
-            />
-          ))}
-        </View>
+        <Select
+          title="Sheet type"
+          options={Object.values(BULK_LEAD_SHEET_TYPES).map((type) => ({ key: type as string, label: (type as string).charAt(0) + (type as string).slice(1).toLowerCase() }))}
+          value={sheetType}
+          onChange={(type) => {
+            setSheetType(type);
+            if (source) parse(source, type);
+          }}
+        />
         <Button label={fileName ? "Choose another file" : "Choose CSV or Excel file"} icon="document-attach-outline" variant="secondary" loading={parsing} onPress={pick} />
         {fileName ? (
           <Text variant="small" color="muted">

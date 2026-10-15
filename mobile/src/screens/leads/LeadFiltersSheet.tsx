@@ -8,7 +8,7 @@ import { filterError, type LeadFilters } from "../../lib/leadFilters";
 import { formatPrice, parseAmount } from "../../lib/money";
 import { roleLabel } from "../../lib/roles";
 import { useTheme } from "../../theme/ThemeProvider";
-import { Button, Chip, Field, Grabber, InlineError, Text } from "../../ui";
+import { Button, Field, Grabber, InlineError, Select, Text } from "../../ui";
 
 const LEAD_ROLES = ["ADMIN", "MANAGER", "INSIDE_EXECUTIVE", "EXECUTIVE", "FIELD_EXECUTIVE"];
 const toDate = (value?: string) => (value ? new Date(`${value}T00:00:00`) : null);
@@ -85,7 +85,6 @@ export const LeadFiltersSheet = ({
   }, [visible, canFilterAssignee, people.length]);
 
   const set = (patch: Partial<LeadFilters>) => setDraft((prev) => ({ ...prev, ...patch }));
-  const pick = <K extends keyof LeadFilters>(key: K, option: LeadFilters[K]) => set({ [key]: draft[key] === option ? "" : option } as Partial<LeadFilters>);
   const day = (key: keyof LeadFilters) => (next: Date | null) => set({ [key]: next ? isoDay(next) : "" } as Partial<LeadFilters>);
   const preset = followUpPreset(draft);
   const setPreset = (key: string) => {
@@ -131,25 +130,39 @@ export const LeadFiltersSheet = ({
             </Pressable>
           </View>
           <ScrollView contentContainerStyle={styles.body} keyboardShouldPersistTaps="handled">
-            <Section title="Status">
-              {STATUS_OPTIONS.map((option) => (
-                <Chip key={option.key} label={option.label} selected={draftStatus === option.key} onPress={() => setDraftStatus(option.key)} />
-              ))}
-            </Section>
-            <Section title="Source">
-              <Chip label="Meta ads" selected={draft.source === "META"} onPress={() => pick("source", "META")} />
-              <Chip label="Added by team" selected={draft.source === "MANUAL"} onPress={() => pick("source", "MANUAL")} />
-            </Section>
-            <Section title="Follow-up">
-              <Chip label="Overdue" selected={preset === "OVERDUE"} onPress={() => setPreset("OVERDUE")} />
-              <Chip label="Today" selected={preset === "TODAY"} onPress={() => setPreset("TODAY")} />
-              <Chip label="This week" selected={preset === "WEEK"} onPress={() => setPreset("WEEK")} />
-            </Section>
-            <Section title="Sort by">
-              {SORTS.map((sort) => (
-                <Chip key={sort.key} label={sort.label} selected={(draft.sortBy || "") === sort.key} onPress={() => pick("sortBy", sort.key)} />
-              ))}
-            </Section>
+            <Select label="Status" options={STATUS_OPTIONS.map((option) => ({ key: option.key, label: option.label }))} value={draftStatus} onChange={setDraftStatus} />
+            <View style={styles.row}>
+              <View style={styles.flex}>
+                <Select
+                  label="Source"
+                  placeholder="Any"
+                  allowClear
+                  clearLabel="Any source"
+                  options={[
+                    { key: "META", label: "Meta ads" },
+                    { key: "MANUAL", label: "Added by team" },
+                  ]}
+                  value={draft.source || ""}
+                  onChange={(source) => set({ source })}
+                />
+              </View>
+              <View style={styles.flex}>
+                <Select
+                  label="Follow-up"
+                  placeholder="Any time"
+                  allowClear
+                  clearLabel="Any time"
+                  options={[
+                    { key: "OVERDUE", label: "Overdue" },
+                    { key: "TODAY", label: "Today" },
+                    { key: "WEEK", label: "This week" },
+                  ]}
+                  value={preset || ""}
+                  onChange={(key) => (key ? key !== preset && setPreset(key) : preset && setPreset(preset))}
+                />
+              </View>
+            </View>
+            <Select label="Sort by" placeholder="Default order" allowClear clearLabel="Default order" options={SORTS} value={draft.sortBy || ""} onChange={(sortBy) => set({ sortBy })} />
 
             <Pressable onPress={() => setMore(!more)} style={styles.moreToggle} accessibilityRole="button">
               <Text variant="smallStrong" color="primary">
@@ -159,14 +172,30 @@ export const LeadFiltersSheet = ({
 
             {more ? (
               <>
-                <Section title="Looking for">
-                  {(["COMMERCIAL", "RESIDENTIAL", "COWORKING"] as const).map((key) => (
-                    <Chip key={key} label={key.charAt(0) + key.slice(1).toLowerCase()} selected={draft.inventoryType === key} onPress={() => pick("inventoryType", key)} />
-                  ))}
-                  {(["SALE", "RENT", "LEASE"] as const).map((key) => (
-                    <Chip key={key} label={key === "SALE" ? "Buy" : key.charAt(0) + key.slice(1).toLowerCase()} selected={draft.transactionType === key} onPress={() => pick("transactionType", key)} />
-                  ))}
-                </Section>
+                <View style={styles.row}>
+                  <View style={styles.flex}>
+                    <Select
+                      label="Looking for"
+                      placeholder="Any"
+                      allowClear
+                      clearLabel="Any"
+                      options={(["COMMERCIAL", "RESIDENTIAL", "COWORKING"] as const).map((key) => ({ key, label: key.charAt(0) + key.slice(1).toLowerCase() }))}
+                      value={draft.inventoryType || ""}
+                      onChange={(inventoryType) => set({ inventoryType } as Partial<LeadFilters>)}
+                    />
+                  </View>
+                  <View style={styles.flex}>
+                    <Select
+                      label="Deal"
+                      placeholder="Any"
+                      allowClear
+                      clearLabel="Any"
+                      options={(["SALE", "RENT", "LEASE"] as const).map((key) => ({ key, label: key === "SALE" ? "Buy" : key.charAt(0) + key.slice(1).toLowerCase() }))}
+                      value={draft.transactionType || ""}
+                      onChange={(transactionType) => set({ transactionType } as Partial<LeadFilters>)}
+                    />
+                  </View>
+                </View>
                 <Text variant="smallStrong" color="muted">
                   Budget
                 </Text>
@@ -181,12 +210,15 @@ export const LeadFiltersSheet = ({
                 <Field label="City" value={draft.city || ""} onChangeText={(city) => set({ city })} placeholder="Any city" />
                 <Field label="Project" value={draft.project || ""} onChangeText={(project) => set({ project })} placeholder="Any project" />
                 {canFilterAssignee ? (
-                  <Section title="Assigned to">
-                    <Chip label="Unassigned" selected={draft.assignedTo === "UNASSIGNED"} onPress={() => pick("assignedTo", "UNASSIGNED")} />
-                    {people.map((person) => (
-                      <Chip key={person._id} label={`${person.name} · ${roleLabel(person.role)}`} selected={draft.assignedTo === person._id} onPress={() => pick("assignedTo", person._id)} />
-                    ))}
-                  </Section>
+                  <Select
+                    label="Assigned to"
+                    placeholder="Anyone"
+                    allowClear
+                    clearLabel="Anyone"
+                    options={[{ key: "UNASSIGNED", label: "Unassigned" }, ...people.map((person) => ({ key: person._id, label: person.name, hint: roleLabel(person.role) }))]}
+                    value={draft.assignedTo || ""}
+                    onChange={(assignedTo) => set({ assignedTo })}
+                  />
                 ) : null}
                 <Text variant="smallStrong" color="muted">
                   Added between
@@ -213,15 +245,6 @@ export const LeadFiltersSheet = ({
   );
 };
 
-const Section = ({ title, children }: { title: string; children: React.ReactNode }) => (
-  <View style={styles.section}>
-    <Text variant="smallStrong" color="muted">
-      {title}
-    </Text>
-    <View style={styles.chips}>{children}</View>
-  </View>
-);
-
 const styles = StyleSheet.create({
   flex: { flex: 1 },
   wide: { flex: 2 },
@@ -230,8 +253,6 @@ const styles = StyleSheet.create({
   head: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", paddingHorizontal: 18, paddingTop: 12 },
   title: { fontSize: 19 },
   body: { padding: 18, gap: 16 },
-  section: { gap: 8 },
-  chips: { flexDirection: "row", flexWrap: "wrap", gap: 6 },
   row: { flexDirection: "row", gap: 8 },
   moreToggle: { alignSelf: "flex-start" },
   footer: { flexDirection: "row", gap: 8, paddingHorizontal: 18, paddingTop: 12, borderTopWidth: 1 },

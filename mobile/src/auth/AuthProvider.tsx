@@ -18,6 +18,8 @@ type AuthValue = {
   signIn: (email: string, password: string, remember?: boolean) => Promise<void>;
   signOut: () => Promise<void>;
   refreshUser: () => Promise<void>;
+  /* Set when the server ended the session (refresh failed); the login screen says so. */
+  sessionExpired: boolean;
 };
 
 const AuthContext = createContext<AuthValue | null>(null);
@@ -27,6 +29,7 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
   const [user, setUser] = useState<User | null>(null);
   const [access, setAccess] = useState<AccessProfile | null>(null);
   const [accessLoading, setAccessLoading] = useState(false);
+  const [sessionExpired, setSessionExpired] = useState(false);
   const accessRequest = useRef(0);
 
   const refreshAccess = useCallback(async () => {
@@ -46,7 +49,7 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
   useEffect(() => {
     // The API client calls this once a refresh has failed and the session is
     // already cleared; all that is left is to show the login screen.
-    setUnauthorizedHandler(() => { accessRequest.current++; setAccess(null); setAccessLoading(false); setUser(null); });
+    setUnauthorizedHandler(() => { accessRequest.current++; setAccess(null); setAccessLoading(false); setUser(null); setSessionExpired(true); });
     return () => setUnauthorizedHandler(null);
   }, []);
 
@@ -97,6 +100,7 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
     const token = String(payload.accessToken || payload.token || "").trim();
     if (!token || !payload.user) throw new Error("The server did not return a session. Please try again.");
     await session.set(token, payload.user, payload.refreshToken || null, remember);
+    setSessionExpired(false);
     await refreshAccess();
     setUser(payload.user);
   }, [refreshAccess]);
@@ -127,7 +131,10 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
     if (stored) setUser(stored);
   }, []);
 
-  const value = useMemo(() => ({ booting, user, access, accessLoading, refreshAccess, signIn, signOut, refreshUser }), [booting, user, access, accessLoading, refreshAccess, signIn, signOut, refreshUser]);
+  const value = useMemo(
+    () => ({ booting, user, access, accessLoading, refreshAccess, signIn, signOut, refreshUser, sessionExpired }),
+    [booting, user, access, accessLoading, refreshAccess, signIn, signOut, refreshUser, sessionExpired],
+  );
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
 };
 

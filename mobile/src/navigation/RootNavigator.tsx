@@ -84,6 +84,8 @@ import { TaskDetailScreen } from "../screens/tasks/TaskDetailScreen";
 import { TasksScreen } from "../screens/tasks/TasksScreen";
 import { PersonTasksScreen } from "../screens/tasks/PersonTasksScreen";
 import { TeamWorkloadScreen } from "../screens/tasks/TeamWorkloadScreen";
+import { InAppBanner } from "../notifications/InAppBanner";
+import { NoAccessScreen, NotFoundScreen, SuccessScreen } from "../screens/status/StatusScreens";
 import { linking } from "./linking";
 import type { RootStackParamList, TabParamList } from "./types";
 
@@ -239,12 +241,16 @@ export const RootNavigator = () => {
             {allowed("targets") ? <Stack.Screen name="Targets" component={TargetsScreen} options={{ title: "Targets" }} /> : null}
             {allowed("field_ops") ? <Stack.Screen name="FieldOps" component={FieldOpsScreen} options={{ headerShown: false }} /> : null}
             {action("finance", "create") ? <Stack.Screen name="RecordPayment" component={RecordPaymentScreen} options={{ title: "Record payment", presentation: "modal" }} /> : null}
+            <Stack.Screen name="Success" component={SuccessScreen} options={{ headerShown: false, gestureEnabled: false, animation: reduceMotion ? "none" : "fade" }} />
+            <Stack.Screen name="NoAccess" component={NoAccessScreen} options={{ headerShown: false }} />
           </>
         ) : (
           <Stack.Screen name="Login" component={LoginScreen} options={{ headerShown: false }} />
         )}
         <Stack.Screen name="Legal" component={LegalScreen} options={{ title: "Legal" }} />
+        <Stack.Screen name="NotFound" component={NotFoundScreen} options={{ headerShown: false }} />
       </Stack.Navigator>
+      {user ? <InAppBanner /> : null}
     </NavigationContainer>
   );
 };

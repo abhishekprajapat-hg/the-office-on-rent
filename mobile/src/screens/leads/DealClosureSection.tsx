@@ -7,7 +7,7 @@ import { fileKind, formatBytes } from "../../lib/uploadRules";
 import { formatPrice, parseAmount } from "../../lib/money";
 import { useTheme } from "../../theme/ThemeProvider";
 import { space } from "../../theme/tokens";
-import { Card, Chip, Field, Icon, Text } from "../../ui";
+import { Card, Field, Icon, Select, Text } from "../../ui";
 
 export type DealDraft = {
   mode: string;
@@ -81,17 +81,22 @@ export const DealClosureSection = ({
           Closing a deal goes to an admin to approve the payment. Until then the lead shows as Requested.
         </Text>
       ) : null}
-      <Text variant="smallStrong" color="muted">
-        Paid by
-      </Text>
-      <View style={styles.chips}>
-        {PAYMENT_MODES.map((mode) => (
-          <Chip key={mode.key} label={mode.label} selected={draft.mode === mode.key} onPress={() => set({ mode: mode.key })} />
-        ))}
-      </View>
-      <View style={styles.chips}>
-        <Chip label="Paid in full" selected={draft.paymentType === "FULL"} onPress={() => set({ paymentType: "FULL" })} />
-        <Chip label="Partly paid" selected={draft.paymentType === "PARTIAL"} onPress={() => set({ paymentType: "PARTIAL" })} />
+      <View style={styles.pair}>
+        <View style={styles.flex}>
+          <Select label="Paid by" placeholder="Choose" options={PAYMENT_MODES.map((mode) => ({ key: mode.key, label: mode.label }))} value={draft.mode} onChange={(mode) => set({ mode })} />
+        </View>
+        <View style={styles.flex}>
+          <Select
+            label="Payment"
+            placeholder="Choose"
+            options={[
+              { key: "FULL", label: "Paid in full" },
+              { key: "PARTIAL", label: "Partly paid" },
+            ]}
+            value={draft.paymentType}
+            onChange={(paymentType) => set({ paymentType })}
+          />
+        </View>
       </View>
       {draft.paymentType === "PARTIAL" ? (
         <Field label="Still to be paid" value={draft.remaining} onChangeText={(value) => set({ remaining: value })} placeholder="e.g. 2.5 lakh" hint={remaining ? formatPrice(remaining) : undefined} />
@@ -106,11 +111,19 @@ export const DealClosureSection = ({
       <Field label="Payment note" value={draft.note} onChangeText={(value) => set({ note: value })} placeholder="Optional" multiline maxLength={500} />
 
       <Text variant="heading">Brokerage</Text>
-      <View style={styles.chips}>
-        {[["TENANT", "Paid by tenant"], ["OWNER", "Paid by owner"], ["BOTH", "Both sides"]].map(([key, label]) => (
-          <Chip key={key} label={label!} selected={draft.brokerageSource === key} onPress={() => set({ brokerageSource: draft.brokerageSource === key ? "" : key! })} />
-        ))}
-      </View>
+      <Select
+        label="Paid by"
+        placeholder="Not set"
+        allowClear
+        clearLabel="Not set"
+        options={[
+          { key: "TENANT", label: "Paid by tenant" },
+          { key: "OWNER", label: "Paid by owner" },
+          { key: "BOTH", label: "Both sides" },
+        ]}
+        value={draft.brokerageSource}
+        onChange={(brokerageSource) => set({ brokerageSource })}
+      />
       <Field label="Received *" value={draft.brokerageReceived} onChangeText={(value) => set({ brokerageReceived: value })} placeholder="e.g. 50k (0 if none yet)" hint={parseAmount(draft.brokerageReceived) ? formatPrice(parseAmount(draft.brokerageReceived)) : undefined} />
       <Field label="Agreed" value={draft.brokerageAgreed} onChangeText={(value) => set({ brokerageAgreed: value })} placeholder="Optional" hint={parseAmount(draft.brokerageAgreed) ? formatPrice(parseAmount(draft.brokerageAgreed)) : undefined} />
       <Field label="Distributed to team / partners" value={draft.brokerageDistributed} onChangeText={(value) => set({ brokerageDistributed: value })} placeholder="Optional" />
@@ -158,6 +171,6 @@ export const DealClosureSection = ({
 const styles = StyleSheet.create({
   flex: { flex: 1 },
   gap: { gap: space.md },
-  chips: { flexDirection: "row", flexWrap: "wrap", gap: space.sm },
+  pair: { flexDirection: "row", gap: space.sm },
   doc: { flexDirection: "row", alignItems: "center", gap: space.md, borderWidth: 1, borderRadius: 10, padding: space.sm },
 });

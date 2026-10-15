@@ -8,7 +8,7 @@ import { formatDate, formatDayShort } from "../../lib/format";
 import { useQuery } from "../../lib/useQuery";
 import { useTheme } from "../../theme/ThemeProvider";
 import { toneColors, type Tone } from "../../theme/tokens";
-import { Badge, Body, Button, Chip, EmptyState, ErrorState, Field, GroupLabel, InlineError, ListCard, Loading, Sheet, Text } from "../../ui";
+import { Badge, Body, Button, EmptyState, ErrorState, Field, GroupLabel, InlineError, ListCard, Loading, Select, Sheet, Text } from "../../ui";
 
 const REQUEST_TONE: Record<string, Tone> = { PENDING: "warning", APPROVED: "success", REJECTED: "danger", CANCELLED: "neutral" };
 const TYPE_LABEL: Record<string, string> = Object.fromEntries(LEAVE_TYPES.map((item) => [item.key, item.label]));
@@ -152,11 +152,7 @@ export const LeaveScreen = () => {
           </>
         }
       >
-        <View style={styles.chips}>
-          {LEAVE_TYPES.map((item) => (
-            <Chip key={item.key} label={item.label} selected={leaveType === item.key} onPress={() => setLeaveType(item.key)} />
-          ))}
-        </View>
+        <Select label="Leave type" options={LEAVE_TYPES.map((item) => ({ key: item.key, label: item.label }))} value={leaveType} onChange={setLeaveType} />
         <View style={styles.dates}>
           <View style={styles.flex}>
             <DateTimeField
@@ -212,7 +208,6 @@ const styles = StyleSheet.create({
   tileLabel: { fontSize: 11.5 },
   tileHint: { opacity: 0.75, fontFamily: "PlusJakartaSans_400Regular" },
   sent: { borderRadius: 14, padding: 12 },
-  chips: { flexDirection: "row", flexWrap: "wrap", gap: 6 },
   dates: { flexDirection: "row", gap: 8 },
   request: { flexDirection: "row", alignItems: "center", gap: 10, padding: 12 },
   reqTitle: { fontSize: 13 },

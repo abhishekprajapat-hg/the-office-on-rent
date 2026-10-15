@@ -7,7 +7,7 @@ import { ROLE_LABELS } from "../../lib/roles";
 import { useQuery } from "../../lib/useQuery";
 import type { RootScreenProps } from "../../navigation/types";
 import { useTheme } from "../../theme/ThemeProvider";
-import { Body, Button, Card, Chip, Field, GroupLabel, Icon, IconTile, InlineError, Text } from "../../ui";
+import { Body, Button, Card, Field, GroupLabel, Icon, IconTile, InlineError, Select, Text } from "../../ui";
 
 const AUDIENCES = ["", "MANAGER", "EXECUTIVE", "INSIDE_EXECUTIVE", "FIELD_EXECUTIVE", "PRODUCTION_EXECUTIVE", "COMMUNITY_MANAGER"];
 
@@ -49,14 +49,16 @@ export const BroadcastScreen = ({ navigation }: RootScreenProps<"Broadcast">) =>
             </Text>
           </View>
         </View>
-        <Text variant="smallStrong" color="muted">
-          Send to
-        </Text>
-        <View style={styles.chips}>
-          {AUDIENCES.map((key) => (
-            <Chip key={key || "all"} label={key ? `${ROLE_LABELS[key as keyof typeof ROLE_LABELS]}s` : "Everyone"} selected={role === key} onPress={() => setRole(key)} />
-          ))}
-        </View>
+        <Select
+          label="Send to"
+          icon="people-outline"
+          allowClear
+          clearLabel="Everyone"
+          placeholder="Everyone"
+          options={AUDIENCES.filter(Boolean).map((key) => ({ key, label: `${ROLE_LABELS[key as keyof typeof ROLE_LABELS]}s` }))}
+          value={role}
+          onChange={setRole}
+        />
         <Field
           value={text}
           onChangeText={(value) => {
@@ -109,7 +111,6 @@ const styles = StyleSheet.create({
   flex: { flex: 1, minWidth: 0 },
   gap: { gap: 12 },
   headRow: { flexDirection: "row", gap: 12, alignItems: "center" },
-  chips: { flexDirection: "row", flexWrap: "wrap", gap: 6 },
   sentRow: { flexDirection: "row", alignItems: "center", gap: 6 },
   history: { flexDirection: "row", gap: 10, paddingHorizontal: 14, paddingVertical: 11 },
 });

@@ -1,5 +1,5 @@
 import React, { useEffect, useLayoutEffect, useState } from "react";
-import { Linking, ScrollView, StyleSheet, View } from "react-native";
+import { Linking, Pressable, StyleSheet, View } from "react-native";
 import { errorMessage, mediaUrl } from "../../api/client";
 import { pickDocument, pickImage, uploadFile, type LocalFile } from "../../api/uploads";
 import { DateTimeField } from "../../components/DateTimeField";
@@ -11,7 +11,7 @@ import { formatDate, rupees } from "../../lib/format";
 import { useBoard } from "../../lib/useBoard";
 import type { RootScreenProps } from "../../navigation/types";
 import { useTheme } from "../../theme/ThemeProvider";
-import { ActionSheet, Body, Button, Card, Chip, ErrorState, Field, FooterBar, InlineError, Loading, Segmented, Text } from "../../ui";
+import { ActionSheet, Body, Button, Card, ErrorState, Field, FooterBar, InlineError, Loading, Segmented, Select, Text } from "../../ui";
 
 const STEPS = ["Client", "Documents", "Agreement", "Review"];
 const TERM_OPTIONS = [3, 6, 12, 24];
@@ -266,11 +266,25 @@ export const OnboardScreen = ({ route, navigation }: RootScreenProps<"Onboard">)
   return (
     <View style={styles.flex}>
       <Body footerSpace>
-        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.stepper}>
-          {STEPS.map((label, index) => (
-            <Chip key={label} variant="filter" label={`${index + 1}. ${label}`} selected={index === step} onPress={() => index < step && setStep(index)} />
-          ))}
-        </ScrollView>
+        <View style={styles.stepper}>
+          <Text variant="smallStrong" color="primary">
+            Step {step + 1} of {STEPS.length} · {STEPS[step]}
+          </Text>
+          <View style={styles.stepBars}>
+            {STEPS.map((label, index) => (
+              <Pressable
+                key={label}
+                accessibilityRole="button"
+                accessibilityLabel={`Step ${index + 1}: ${label}`}
+                accessibilityState={{ selected: index === step, disabled: index >= step }}
+                disabled={index >= step}
+                onPress={() => setStep(index)}
+                hitSlop={8}
+                style={[styles.stepBar, { backgroundColor: index <= step ? colors.primary : colors.border }]}
+              />
+            ))}
+          </View>
+        </View>
         <Text variant="small" color="muted">
           {cabins.length} {cabins.length === 1 ? "cabin" : "cabins"} · seats {capacity} · {cabins.map((cabin) => cabin.label).join(", ")}
         </Text>
@@ -284,14 +298,7 @@ export const OnboardScreen = ({ route, navigation }: RootScreenProps<"Onboard">)
             {isCompany ? (
               <>
                 <Field label="Company name" value={form.companyName} onChangeText={set("companyName")} placeholder="Nexbridge Analytics" />
-                <Text variant="smallStrong" color="muted">
-                  Entity type
-                </Text>
-                <View style={styles.chips}>
-                  {ENTITY_TYPES.map((type) => (
-                    <Chip key={type} label={type} selected={form.entityType === type} onPress={() => set("entityType")(type)} />
-                  ))}
-                </View>
+                <Select label="Entity type" options={ENTITY_TYPES.map((type) => ({ key: type, label: type }))} value={form.entityType} onChange={set("entityType")} />
                 <Field label="Signing authority 1" hint="The person who signs the agreement" value={form.contactPerson} onChangeText={set("contactPerson")} />
                 <Field label="Signing authority 2 (optional)" value={form.signingAuthority2} onChangeText={set("signingAuthority2")} />
               </>
@@ -304,14 +311,7 @@ export const OnboardScreen = ({ route, navigation }: RootScreenProps<"Onboard">)
             )}
             <Field label="Phone" value={form.phone} onChangeText={set("phone")} keyboardType="phone-pad" placeholder="+91 98200 00000" />
             <Field label="Email" value={form.email} onChangeText={set("email")} keyboardType="email-address" autoCapitalize="none" />
-            <Text variant="smallStrong" color="muted">
-              {isCompany ? "Work profile / industry" : "Work profile"}
-            </Text>
-            <View style={styles.chips}>
-              {INDUSTRIES.map((industry) => (
-                <Chip key={industry} label={industry} selected={form.industryChoice === industry} onPress={() => set("industryChoice")(industry)} />
-              ))}
-            </View>
+            <Select label={isCompany ? "Work profile / industry" : "Work profile"} placeholder="Choose" options={INDUSTRIES.map((industry) => ({ key: industry, label: industry }))} value={form.industryChoice} onChange={set("industryChoice")} />
             {form.industryChoice === "Other" ? <Field label="Specify work profile" value={form.industryCustom} onChangeText={set("industryCustom")} placeholder="e.g. Cybersecurity" maxLength={80} /> : null}
             {isCompany ? <Field label="GSTIN (optional)" hint="Needed before the first invoice" value={form.gstin} onChangeText={(value) => set("gstin")(value.toUpperCase())} autoCapitalize="characters" /> : null}
           </>
@@ -354,24 +354,23 @@ export const OnboardScreen = ({ route, navigation }: RootScreenProps<"Onboard">)
               suffix="₹"
               hint={listRent - rent > 0 ? `${rupees(listRent - rent)} below the ${rupees(listRent)} list rate` : `List rate ${rupees(listRent)} for these cabins`}
             />
-            <Text variant="smallStrong" color="muted">
-              Deposit {custom ? "" : `· ${rupees(deposit)}`}
-            </Text>
-            <View style={styles.chips}>
-              {DEPOSIT_MONTHS.map((months) => (
-                <Chip key={months} label={`${months} ${months === 1 ? "month" : "months"}`} selected={!custom && terms.depositMonths === months} onPress={() => setTerms((prev) => ({ ...prev, depositMode: "months", depositMonths: months }))} />
-              ))}
-              <Chip label="Custom amount" selected={custom} onPress={() => setTerms((prev) => ({ ...prev, depositMode: "custom", depositAmount: prev.depositAmount || String(deposit || "") }))} />
-            </View>
+            <Select
+              label={`Deposit${custom ? "" : ` · ${rupees(deposit)}`}`}
+              options={[...DEPOSIT_MONTHS.map((months) => ({ key: String(months), label: `${months} ${months === 1 ? "month" : "months"}` })), { key: "custom", label: "Custom amount" }]}
+              value={custom ? "custom" : String(terms.depositMonths)}
+              onChange={(key) =>
+                key === "custom"
+                  ? setTerms((prev) => ({ ...prev, depositMode: "custom", depositAmount: prev.depositAmount || String(deposit || "") }))
+                  : setTerms((prev) => ({ ...prev, depositMode: "months", depositMonths: Number(key) }))
+              }
+            />
             {custom ? <Field label="Deposit amount" value={terms.depositAmount} onChangeText={(value) => setTerm("depositAmount")(value.replace(/[^0-9.]/g, ""))} keyboardType="decimal-pad" suffix="₹" /> : null}
-            <Text variant="smallStrong" color="muted">
-              Lock-in
-            </Text>
-            <View style={styles.chips}>
-              {LOCK_INS.map((months) => (
-                <Chip key={months} label={months ? `${months} months` : "No lock-in"} selected={terms.lockInMonths === months} onPress={() => setTerms((prev) => ({ ...prev, lockInMonths: months }))} />
-              ))}
-            </View>
+            <Select
+              label="Lock-in"
+              options={LOCK_INS.map((months) => ({ key: String(months), label: months ? `${months} months` : "No lock-in" }))}
+              value={String(terms.lockInMonths)}
+              onChange={(key) => setTerms((prev) => ({ ...prev, lockInMonths: Number(key) }))}
+            />
             <View style={styles.pair}>
               <View style={styles.flex}>
                 <Field label="Notice period" suffix="days" value={terms.noticePeriodDays} onChangeText={(value) => setTerm("noticePeriodDays")(value.replace(/[^0-9]/g, ""))} keyboardType="number-pad" />
@@ -491,8 +490,9 @@ export const OnboardScreen = ({ route, navigation }: RootScreenProps<"Onboard">)
 const styles = StyleSheet.create({
   flex: { flex: 1, minWidth: 0 },
   wide: { flex: 2 },
-  stepper: { gap: 6 },
-  chips: { flexDirection: "row", flexWrap: "wrap", gap: 6 },
+  stepper: { gap: 8 },
+  stepBars: { flexDirection: "row", gap: 6 },
+  stepBar: { flex: 1, height: 5, borderRadius: 3 },
   pair: { flexDirection: "row", gap: 8 },
   gap: { gap: 8 },
   summary: { gap: 6 },

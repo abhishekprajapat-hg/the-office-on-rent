@@ -5,7 +5,7 @@ import type { DeductionUnit, NamedDeduction, NamedDeductionInput } from "../../a
 import { monthKeyOf, monthLabel, shiftMonth } from "../../lib/format";
 import { RULE_KEYS, UNITS, describeRule, describeSchedule, validateNamedDeduction, type RuleDraft } from "../../lib/payroll";
 import { useTheme } from "../../theme/ThemeProvider";
-import { Button, Chip, Field, Icon, InlineError, ListCard, Sheet, Text } from "../../ui";
+import { Button, Field, Icon, InlineError, ListCard, Select, Sheet, Text } from "../../ui";
 
 /* Prev / next month picker; "" (optional) shows as "No end". */
 export const MonthStepper = ({ label, value, onChange, optional }: { label: string; value: string; onChange: (key: string) => void; optional?: boolean }) => {
@@ -47,19 +47,20 @@ export const RulesEditor = ({ draft, onChange }: { draft: RuleDraft; onChange: (
         <Text variant="tiny" color="faint">
           {hint}
         </Text>
-        <View style={styles.chips}>
-          {UNITS.map((unit) => (
-            <Chip key={unit.key} label={unit.label} selected={draft[key].unit === unit.key} onPress={() => onChange({ ...draft, [key]: { ...draft[key], unit: unit.key } })} />
-          ))}
+        <View style={styles.pair}>
+          <View style={styles.flex}>
+            <Select title={`${label}: cut as`} options={UNITS.map((unit) => ({ key: unit.key, label: unit.label }))} value={draft[key].unit} onChange={(unit) => onChange({ ...draft, [key]: { ...draft[key], unit } })} />
+          </View>
+          <View style={styles.flex}>
+            <Field
+              value={draft[key].value}
+              onChangeText={(value) => onChange({ ...draft, [key]: { ...draft[key], value: value.replace(/[^0-9.]/g, "") } })}
+              keyboardType="decimal-pad"
+              suffix={draft[key].unit === "AMOUNT" ? "₹" : draft[key].unit === "PERCENT" ? "%" : "days"}
+              accessibilityLabel={`${label} value`}
+            />
+          </View>
         </View>
-        <Field
-          compact
-          value={draft[key].value}
-          onChangeText={(value) => onChange({ ...draft, [key]: { ...draft[key], value: value.replace(/[^0-9.]/g, "") } })}
-          keyboardType="decimal-pad"
-          suffix={draft[key].unit === "AMOUNT" ? "₹" : draft[key].unit === "PERCENT" ? "%" : "days"}
-          accessibilityLabel={`${label} value`}
-        />
       </View>
     ))}
   </View>
@@ -178,22 +179,29 @@ export const DeductionSheet = ({ visible, editing, subtitle, onClose, onSave, on
       }
     >
       <Field label="Name" value={name} onChangeText={setName} placeholder="e.g. Loan EMI, canteen, advance" maxLength={60} />
-      <View style={styles.chips}>
-        {UNITS.map((item) => (
-          <Chip key={item.key} label={item.label} selected={unit === item.key} onPress={() => setUnit(item.key)} />
-        ))}
+      <View style={styles.pair}>
+        <View style={styles.flex}>
+          <Select label="Cut as" options={UNITS.map((item) => ({ key: item.key, label: item.label }))} value={unit} onChange={setUnit} />
+        </View>
+        <View style={styles.flex}>
+          <Field
+            label="Amount"
+            value={value}
+            onChangeText={(next) => setValue(next.replace(/[^0-9.]/g, ""))}
+            keyboardType="decimal-pad"
+            suffix={unit === "AMOUNT" ? "₹" : unit === "PERCENT" ? "%" : "days"}
+          />
+        </View>
       </View>
-      <Field
-        label="Amount"
-        value={value}
-        onChangeText={(next) => setValue(next.replace(/[^0-9.]/g, ""))}
-        keyboardType="decimal-pad"
-        suffix={unit === "AMOUNT" ? "₹" : unit === "PERCENT" ? "%" : "days"}
+      <Select
+        label="Repeats"
+        options={[
+          { key: "MONTHLY", label: "Every month" },
+          { key: "ONCE", label: "One month only" },
+        ]}
+        value={frequency}
+        onChange={setFrequency}
       />
-      <View style={styles.chips}>
-        <Chip label="Every month" selected={frequency === "MONTHLY"} onPress={() => setFrequency("MONTHLY")} />
-        <Chip label="One month only" selected={frequency === "ONCE"} onPress={() => setFrequency("ONCE")} />
-      </View>
       <MonthStepper label={frequency === "ONCE" ? "Month" : "From"} value={fromMonth} onChange={setFromMonth} />
       {frequency === "MONTHLY" ? <MonthStepper label="Until" value={toMonth} onChange={setToMonth} optional /> : null}
     </Sheet>
@@ -202,7 +210,7 @@ export const DeductionSheet = ({ visible, editing, subtitle, onClose, onSave, on
 
 const styles = StyleSheet.create({
   flex: { flex: 1, minWidth: 0 },
-  chips: { flexDirection: "row", flexWrap: "wrap", gap: 6 },
+  pair: { flexDirection: "row", gap: 10, alignItems: "flex-end" },
   rules: { gap: 16 },
   rule: { gap: 6 },
   ruleLabel: { fontSize: 14 },

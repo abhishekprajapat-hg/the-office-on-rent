@@ -3,8 +3,9 @@ import { canOpenPage, type AccessProfile } from "../api/access";
 import type { User } from "../api/types";
 
 /*
- * "Home by Role" design: each role gets its own home and its own four tabs
- * in the floating glass bar, plus a round action button beside it.
+ * "Home by Role" design: each role gets its own home and up to five tabs in
+ * the floating glass bar (Home, the three pages that role lives in, More),
+ * plus a round action button beside it. Everything else is a tile in More.
  */
 export type HomeKind = "admin" | "manager" | "sales" | "field" | "community" | "production" | "partner";
 
@@ -35,20 +36,24 @@ export type TabSpec = { name: TabName; label: string; icon: IconName };
 const HOME: TabSpec = { name: "Home", label: "Home", icon: "home" };
 const MORE: TabSpec = { name: "More", label: "More", icon: "grid" };
 
-/* The four tabs the design shows for each role (icons are the filled names; inactive uses "-outline"). */
+const LEADS: TabSpec = { name: "Leads", label: "Leads", icon: "people" };
+const TASKS: TabSpec = { name: "Tasks", label: "Tasks", icon: "checkbox" };
+const ATTENDANCE: TabSpec = { name: "Attendance", label: "Attendance", icon: "finger-print" };
+
+/* The tabs each role gets, most used first (icons are the filled names; inactive uses "-outline"). */
 export const ROLE_TABS: Record<HomeKind, TabSpec[]> = {
-  admin: [HOME, { name: "TeamTab", label: "Team", icon: "people" }, { name: "ApprovalsTab", label: "Approvals", icon: "checkmark-done" }, MORE],
-  manager: [HOME, { name: "Leads", label: "Leads", icon: "people" }, { name: "TeamTab", label: "Team", icon: "stats-chart" }, MORE],
-  sales: [HOME, { name: "Leads", label: "Leads", icon: "people" }, { name: "Tasks", label: "Tasks", icon: "checkbox" }, MORE],
-  partner: [HOME, { name: "Leads", label: "Leads", icon: "people" }, MORE],
-  field: [HOME, { name: "VisitsTab", label: "Visits", icon: "map" }, { name: "Tasks", label: "Tasks", icon: "checkbox" }, MORE],
-  community: [HOME, { name: "BookingsTab", label: "Board", icon: "grid" }, { name: "ClientsTab", label: "Clients", icon: "briefcase" }, MORE],
-  production: [HOME, { name: "Tasks", label: "Tasks", icon: "checkbox" }, { name: "Attendance", label: "Attendance", icon: "finger-print" }, MORE],
+  admin: [HOME, LEADS, { name: "TeamTab", label: "Team", icon: "people-circle" }, { name: "ApprovalsTab", label: "Approvals", icon: "checkmark-done" }, MORE],
+  manager: [HOME, LEADS, TASKS, { name: "TeamTab", label: "Team", icon: "stats-chart" }, MORE],
+  sales: [HOME, LEADS, TASKS, ATTENDANCE, MORE],
+  partner: [HOME, LEADS, { name: "ListingsTab", label: "Listings", icon: "business" }, MORE],
+  field: [HOME, { name: "VisitsTab", label: "Visits", icon: "map" }, TASKS, ATTENDANCE, MORE],
+  community: [HOME, { name: "BookingsTab", label: "Board", icon: "grid" }, { name: "ClientsTab", label: "Clients", icon: "briefcase" }, ATTENDANCE, MORE],
+  production: [HOME, TASKS, ATTENDANCE, MORE],
 };
 
 /* The round button beside the bar. */
 export const ROLE_FAB: Record<HomeKind, { icon: IconName; label: string }> = {
-  admin: { icon: "search", label: "Search" },
+  admin: { icon: "add", label: "Create" },
   manager: { icon: "add", label: "Create" },
   sales: { icon: "add", label: "Create" },
   partner: { icon: "add", label: "Add lead" },

@@ -8,7 +8,7 @@ import { MANUAL_STATUSES, atTimeOn, isLeaveRequestDay, statusClearsCheckIn } fro
 import { dayStatusMeta } from "../../lib/attendanceState";
 import { formatDayLong, formatTime } from "../../lib/format";
 import { useTheme } from "../../theme/ThemeProvider";
-import { Button, Chip, Field, InlineError, Sheet, Text } from "../../ui";
+import { Button, Field, InlineError, Select, Sheet, Text } from "../../ui";
 
 export type DayTarget = { userId: string; name: string; date: string; day: AttendanceDay | null };
 
@@ -63,16 +63,13 @@ export const DayStatusSheet = ({ target, onClose, onSaved }: { target: DayTarget
       <Text variant="small" color="muted">
         Currently: <Text variant="smallStrong">{hasRecord && day ? dayStatusMeta(day).label : "No record"}</Text>
       </Text>
-      <View style={styles.chips}>
-        {MANUAL_STATUSES.map((option) => (
-          <Chip
-            key={option.key}
-            label={hasRecord && current === option.key ? `${option.label} · current` : option.label}
-            selected={status === option.key}
-            onPress={() => setStatus(option.key)}
-          />
-        ))}
-      </View>
+      <Select
+        label="Set the day to"
+        placeholder="Choose a status"
+        options={MANUAL_STATUSES.map((option) => ({ key: option.key, label: option.label, hint: hasRecord && current === option.key ? "Current" : undefined }))}
+        value={status}
+        onChange={setStatus}
+      />
       {day?.checkInAt && statusClearsCheckIn(status) ? (
         <Text variant="small" color={colors.warning}>
           This removes the check-in, check-out and breaks recorded for this day.
@@ -157,17 +154,15 @@ export const BreakCorrectionSheet = ({ target, onClose, onSaved }: { target: Day
         </>
       }
     >
-      <View style={styles.chips}>
-        <Chip label="Add missed break" selected={index === null} onPress={() => pick(null)} />
-        {sessions.map((session, i) => (
-          <Chip
-            key={i}
-            label={`Break ${i + 1} · ${formatTime(session.startAt)}–${session.endAt ? formatTime(session.endAt) : "now"}`}
-            selected={index === i}
-            onPress={() => pick(i)}
-          />
-        ))}
-      </View>
+      <Select
+        label="Break"
+        options={[
+          { key: "new", label: "Add a missed break" },
+          ...sessions.map((session, i) => ({ key: String(i), label: `Break ${i + 1} · ${formatTime(session.startAt)}–${session.endAt ? formatTime(session.endAt) : "now"}` })),
+        ]}
+        value={index === null ? "new" : String(index)}
+        onChange={(key) => pick(key === "new" ? null : Number(key))}
+      />
       <DateTimeField label="Started" mode="time" icon="time-outline" value={startAt} onChange={setStartAt} />
       <DateTimeField label={day?.checkOutAt ? "Ended" : "Ended (leave empty if still on it)"} mode="time" icon="time-outline" value={endAt} onChange={setEndAt} clearable={!day?.checkOutAt} />
       <Text variant="tiny" color="faint">
@@ -190,6 +185,5 @@ export const BreakCorrectionSheet = ({ target, onClose, onSaved }: { target: Day
 };
 
 const styles = StyleSheet.create({
-  chips: { flexDirection: "row", flexWrap: "wrap", gap: 6 },
   audit: { gap: 3 },
 });
