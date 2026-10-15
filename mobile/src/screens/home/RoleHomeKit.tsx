@@ -9,9 +9,10 @@ import { canDoPageAction, canOpenPage } from "../../api/access";
 import { initials } from "../../lib/format";
 import { roleLabel } from "../../lib/roles";
 import { useFeed } from "../../notifications/feed";
+import { ChatButton } from "../../components/ChatButton";
 import { useTheme } from "../../theme/ThemeProvider";
 import type { Palette } from "../../theme/tokens";
-import { Avatar, Icon, Text, type IconName } from "../../ui";
+import { Avatar, Icon, OfflineBanner, Text, type IconName } from "../../ui";
 
 /* Tones as the design names them (TN in "Home by Role"). */
 export type HomeTone = "blue" | "ok" | "warn" | "bad" | "mut" | "vio";
@@ -57,7 +58,7 @@ export type RowSpec = {
 export type SectionSpec = { title: string; link?: string; onLink?: () => void; empty?: string; rows?: RowSpec[]; loading?: boolean; page?: string; linkPage?: string };
 
 /*
- * The shared home layout from "Home by Role": greeting header with the bell,
+ * The shared home layout from "Home by Role": greeting header with chat and the bell,
  * the blue hero card, four quick actions, a 2×2 of stats and titled sections.
  */
 export const RoleHome = ({
@@ -125,6 +126,7 @@ export const RoleHome = ({
               Hi, {String(user.name || "").split(" ")[0] || "there"}
             </Text>
           </View>
+          {showNotifications ? <ChatButton style={[styles.bell, { backgroundColor: colors.surface, borderColor: colors.border }]} /> : null}
           {showNotifications ? <Pressable
             accessibilityRole="button"
             accessibilityLabel={unread ? `Notifications, ${unread} unread` : "Notifications"}
@@ -136,6 +138,7 @@ export const RoleHome = ({
           </Pressable> : null}
         </View>
 
+        <OfflineBanner inset={false} />
         {visibleHero ? <Hero spec={visibleHero} /> : loading ? <View style={[styles.heroLoading, { backgroundColor: colors.hero }]}><ActivityIndicator color="#fff" /></View> : null}
 
         {visibleActions.length ? (

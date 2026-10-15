@@ -1,17 +1,18 @@
 import React, { useRef, useState } from "react";
-import { Image, KeyboardAvoidingView, Platform, Pressable, ScrollView, StyleSheet, TextInput, View } from "react-native";
+import { KeyboardAvoidingView, Platform, Pressable, ScrollView, StyleSheet, TextInput, View } from "react-native";
+import { BrandLogo } from "../../components/BrandLogo";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useNavigation } from "@react-navigation/native";
 import { errorMessage } from "../../api/client";
 import { useAuth } from "../../auth/AuthProvider";
 import { useTheme } from "../../theme/ThemeProvider";
 import { space } from "../../theme/tokens";
-import { Button, CheckSquare, Field, InlineError, Text } from "../../ui";
+import { Button, CheckSquare, Field, Icon, InlineError, Text } from "../../ui";
 
 const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
 export const LoginScreen = () => {
-  const { signIn } = useAuth();
+  const { signIn, sessionExpired } = useAuth();
   const { colors } = useTheme();
   const insets = useSafeAreaInsets();
   const navigation = useNavigation();
@@ -47,13 +48,7 @@ export const LoginScreen = () => {
         contentContainerStyle={[styles.content, { paddingTop: insets.top + 30, paddingBottom: insets.bottom + space.xl }]}
         keyboardShouldPersistTaps="handled"
       >
-        <Image
-          source={require("../../../assets/logo.png")}
-          style={styles.logo}
-          resizeMode="contain"
-          accessibilityLabel="The Office On Rent"
-          accessibilityIgnoresInvertColors
-        />
+        <BrandLogo height={46} />
 
         <View style={styles.heading}>
           <Text variant="display" style={styles.title}>
@@ -65,6 +60,14 @@ export const LoginScreen = () => {
         </View>
 
         <View style={styles.form}>
+          {sessionExpired ? (
+            <View style={[styles.expired, { backgroundColor: colors.primarySoft }]} accessibilityRole="alert">
+              <Icon name="time-outline" size={18} color={colors.primary} />
+              <Text variant="small" color="primary" style={styles.expiredText}>
+                Your session expired, so you were signed out. Sign in again to carry on.
+              </Text>
+            </View>
+          ) : null}
           <Field
             label="Work email"
             icon="mail-outline"
@@ -146,10 +149,11 @@ export const LoginScreen = () => {
 const styles = StyleSheet.create({
   flex: { flex: 1 },
   content: { flexGrow: 1, paddingHorizontal: 24, gap: 28, maxWidth: 480, width: "100%", alignSelf: "center" },
-  logo: { height: 46, width: 97, alignSelf: "flex-start" },
   heading: { gap: 6 },
   title: { fontSize: 28, lineHeight: 34 },
   form: { gap: 14 },
+  expired: { flexDirection: "row", alignItems: "flex-start", gap: 8, padding: 12, borderRadius: 13 },
+  expiredText: { flex: 1 },
   optionsRow: { flexDirection: "row", alignItems: "center", justifyContent: "space-between" },
   remember: { flexDirection: "row", alignItems: "center", gap: 8 },
   rememberText: { fontSize: 13, fontFamily: "PlusJakartaSans_600SemiBold" },

@@ -11,8 +11,8 @@ import { DEFAULT_TAGS, PRIORITY, STATUS_ORDER, subtaskStatus, TASK_STATUS, TASK_
 import { useQuery } from "../../lib/useQuery";
 import type { RootScreenProps } from "../../navigation/types";
 import { useTheme } from "../../theme/ThemeProvider";
-import { toneColors, type Tone } from "../../theme/tokens";
-import { Body, CheckSquare, Field, Icon, InlineError, PickerSheet, Text } from "../../ui";
+import { toneColors } from "../../theme/tokens";
+import { Body, CheckSquare, Field, Icon, InlineError, PickerSheet, Select, Text } from "../../ui";
 import { SubtaskEditor } from "./SubtaskEditor";
 
 const PRODUCTION_ROLES = ["PRODUCTION_EXECUTIVE", "COMMUNITY_MANAGER"];
@@ -152,8 +152,12 @@ export const NewTaskScreen = ({ route, navigation }: RootScreenProps<"NewTask">)
         return;
       }
       const task = await createTask(payload);
-      if (task?._id) navigation.replace("TaskDetail", { taskId: task._id });
-      else navigation.goBack();
+      if (!task?._id) return navigation.goBack();
+      navigation.replace("Success", {
+        title: "Task created",
+        message: `"${task.title || payload.title}" is on the list.`,
+        next: { label: "Open the task", screen: "TaskDetail", params: { taskId: task._id } },
+      });
     } catch (err) {
       setError(errorMessage(err));
       setSaving(false);
@@ -184,25 +188,12 @@ export const NewTaskScreen = ({ route, navigation }: RootScreenProps<"NewTask">)
       ) : null}
       <Field label="Description" value={description} onChangeText={setDescription} placeholder="Add context, instructions, or expected outcome" multiline maxLength={10000} />
 
-      <View style={styles.block}>
-        <Text variant="smallStrong" color="muted">
-          Status
-        </Text>
-        <View style={styles.choices}>
-          {STATUS_ORDER.map((key) => (
-            <Choice key={key} label={TASK_STATUS[key]!.label} on={status === key} tone={!TASK_STATUS_TONE[key] || TASK_STATUS_TONE[key] === "neutral" ? "primary" : TASK_STATUS_TONE[key]!} onPress={() => setStatus(key)} />
-          ))}
+      <View style={styles.choices}>
+        <View style={styles.flex}>
+          <Select label="Status" options={STATUS_ORDER.map((key) => ({ key, label: TASK_STATUS[key]!.label, dot: toneColors(colors, TASK_STATUS_TONE[key] || "neutral").fg }))} value={status} onChange={setStatus} />
         </View>
-      </View>
-
-      <View style={styles.block}>
-        <Text variant="smallStrong" color="muted">
-          Priority
-        </Text>
-        <View style={styles.choices}>
-          {(["LOW", "MEDIUM", "HIGH"] as const).map((key) => (
-            <Choice key={key} label={PRIORITY[key]!.label} on={priority === key} tone={PRIORITY[key]!.tone === "neutral" ? "primary" : PRIORITY[key]!.tone} onPress={() => setPriority(key)} />
-          ))}
+        <View style={styles.flex}>
+          <Select label="Priority" options={(["LOW", "MEDIUM", "HIGH"] as const).map((key) => ({ key, label: PRIORITY[key]!.label, dot: toneColors(colors, PRIORITY[key]!.tone).fg }))} value={priority} onChange={setPriority} />
         </View>
       </View>
 
@@ -400,23 +391,6 @@ export const NewTaskScreen = ({ route, navigation }: RootScreenProps<"NewTask">)
   );
 };
 
-const Choice = ({ label, on, tone, onPress }: { label: string; on: boolean; tone: Tone; onPress: () => void }) => {
-  const { colors } = useTheme();
-  const t = toneColors(colors, tone);
-  return (
-    <Pressable
-      accessibilityRole="radio"
-      accessibilityState={{ selected: on }}
-      onPress={onPress}
-      style={[styles.choice, on ? { borderWidth: 1.5, borderColor: t.fg, backgroundColor: t.bg } : { borderColor: colors.border }]}
-    >
-      <Text variant="smallStrong" color={on ? t.fg : colors.text} style={styles.choiceText} numberOfLines={1}>
-        {label}
-      </Text>
-    </Pressable>
-  );
-};
-
 const styles = StyleSheet.create({
   flex: { flex: 1, minWidth: 0 },
   body: { paddingTop: 16, paddingHorizontal: 18, gap: 14 },
@@ -425,9 +399,7 @@ const styles = StyleSheet.create({
   rowLabel: { fontSize: 13 },
   rowValue: { fontSize: 13, maxWidth: "55%" },
   block: { gap: 8 },
-  choices: { flexDirection: "row", flexWrap: "wrap", gap: 8 },
-  choice: { flexGrow: 1, minWidth: 70, height: 40, borderRadius: 12, borderWidth: 1, alignItems: "center", justifyContent: "center", paddingHorizontal: 8 },
-  choiceText: { fontSize: 12.5 },
+  choices: { flexDirection: "row", gap: 10 },
   assignMe: { flexDirection: "row", alignItems: "center", gap: 5, alignSelf: "flex-start" },
   hint: { flexDirection: "row", alignItems: "center", gap: 5 },
   tagEditor: { flexDirection: "row", flexWrap: "wrap", alignItems: "center", gap: 6, borderWidth: 1, borderRadius: 14, padding: 8, minHeight: 48 },

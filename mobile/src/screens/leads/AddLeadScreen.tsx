@@ -7,7 +7,7 @@ import { errorMessage } from "../../api/client";
 import { createLead } from "../../api/leads";
 import { validateNewLead } from "../../lib/leadForm";
 import type { RootScreenProps } from "../../navigation/types";
-import { Body, Chip, Field, Icon, InlineError, Text } from "../../ui";
+import { Body, Field, Icon, InlineError, Select, Text } from "../../ui";
 
 const SOURCES = [
   { key: "DIRECT_CALL", label: "Direct call" },
@@ -59,8 +59,12 @@ export const AddLeadScreen = ({ navigation }: RootScreenProps<"AddLead">) => {
         sourceChannel: sourceChannel || undefined,
         temperature,
       });
-      if (lead?._id) navigation.replace("LeadDetail", { leadId: lead._id, name: lead.name });
-      else navigation.goBack();
+      if (!lead?._id) return navigation.goBack();
+      navigation.replace("Success", {
+        title: "Lead added",
+        message: `${lead.name} is in your leads${lead.assignedTo?.name ? `, with ${lead.assignedTo.name}` : ""}.`,
+        next: { label: "Open the lead", screen: "LeadDetail", params: { leadId: lead._id, name: lead.name } },
+      });
     } catch (err) {
       setError(errorMessage(err));
       setSaving(false);
@@ -127,11 +131,15 @@ export const AddLeadScreen = ({ navigation }: RootScreenProps<"AddLead">) => {
           <Text variant="smallStrong" color="muted" style={styles.label}>
             Requirement
           </Text>
-          <View style={styles.chips}>
-            {REQUIREMENTS.map((item) => (
-              <Chip key={item} label={item} selected={form.projectInterested === item} onPress={() => set("projectInterested")(form.projectInterested === item ? "" : item)} />
-            ))}
-          </View>
+          <Select
+            placeholder="What are they looking for?"
+            title="Requirement"
+            allowClear
+            clearLabel="Not sure yet"
+            options={REQUIREMENTS.map((item) => ({ key: item, label: item }))}
+            value={REQUIREMENTS.includes(form.projectInterested) ? form.projectInterested : ""}
+            onChange={set("projectInterested")}
+          />
           <Field
             icon="resize-outline"
             value={REQUIREMENTS.includes(form.projectInterested) ? "" : form.projectInterested}
@@ -155,11 +163,12 @@ export const AddLeadScreen = ({ navigation }: RootScreenProps<"AddLead">) => {
           <Text variant="smallStrong" color="muted" style={styles.label}>
             How warm is it?
           </Text>
-          <View style={styles.chips}>
-            {TEMPERATURES.map((item) => (
-              <Chip key={item.key} label={item.label} tone={item.key === "HOT" ? "danger" : item.key === "WARM" ? "warning" : "primary"} selected={temperature === item.key} onPress={() => setTemperature(item.key)} />
-            ))}
-          </View>
+          <Select
+            title="How warm is it?"
+            options={TEMPERATURES.map((item) => ({ key: item.key, label: item.label, dot: item.key === "HOT" ? colors.danger : item.key === "WARM" ? colors.warning : colors.primary }))}
+            value={temperature}
+            onChange={setTemperature}
+          />
         </View>
         <InlineError message={error} />
       </Body>
@@ -185,7 +194,6 @@ const styles = StyleSheet.create({
   save: { fontFamily: "PlusJakartaSans_800ExtraBold" },
   group: { gap: 6 },
   label: { fontSize: 11.5 },
-  chips: { flexDirection: "row", flexWrap: "wrap", gap: 6 },
   select: { height: 46, borderRadius: 13, borderWidth: 1, paddingHorizontal: 13, flexDirection: "row", alignItems: "center", justifyContent: "space-between" },
   selectText: { fontFamily: "PlusJakartaSans_500Medium" },
 });

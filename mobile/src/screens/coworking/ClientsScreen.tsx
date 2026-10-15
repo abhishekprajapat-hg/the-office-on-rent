@@ -10,7 +10,7 @@ import { initials } from "../../lib/format";
 import { useBoard } from "../../lib/useBoard";
 import { useQuery } from "../../lib/useQuery";
 import { useTheme } from "../../theme/ThemeProvider";
-import { Body, Card, Chip, EmptyState, ErrorState, Field, HeaderButton, Icon, ListCard, Loading, Text } from "../../ui";
+import { Body, Card, EmptyState, ErrorState, Field, FilterDropdown, HeaderButton, Icon, ListCard, Loading, Text } from "../../ui";
 
 type Tab = "all" | "active" | "former" | "kyc";
 
@@ -77,12 +77,18 @@ export const ClientsScreen = () => {
         </Card>
       ) : null}
       <Field compact icon="search-outline" value={query} onChangeText={setQuery} placeholder="Search name, contact or cabin" />
-      <View style={styles.chips}>
-        <Chip variant="filter" label="All" count={directory.length} selected={tab === "all"} onPress={() => setTab("all")} />
-        <Chip variant="filter" label="Current" count={active.length} selected={tab === "active"} onPress={() => setTab("active")} />
-        <Chip variant="filter" label="Former" count={former.length} selected={tab === "former"} onPress={() => setTab("former")} />
-        <Chip variant="filter" label="KYC due" count={pendingKyc.length} selected={tab === "kyc"} onPress={() => setTab("kyc")} />
-      </View>
+      <FilterDropdown
+        label="Show"
+        icon="funnel-outline"
+        options={[
+          { key: "all", label: "All clients", count: directory.length },
+          { key: "active", label: "Current", count: active.length },
+          { key: "former", label: "Former", count: former.length },
+          { key: "kyc", label: "KYC due", count: pendingKyc.length },
+        ]}
+        value={tab}
+        onChange={setTab}
+      />
 
       {!shown.length ? (
         <EmptyState icon="people-outline" title={directory.length ? "No client matches that" : "No clients yet"} message={directory.length ? "Try another search or filter." : "Onboard a client from the booking board and they appear here."} />
@@ -128,7 +134,6 @@ const styles = StyleSheet.create({
   flex: { flex: 1, minWidth: 0 },
   headerActions: { flexDirection: "row", gap: 8 },
   birthdays: { gap: 4 },
-  chips: { flexDirection: "row", flexWrap: "wrap", gap: 6 },
   row: { flexDirection: "row", alignItems: "center", gap: 12, padding: 12 },
   avatar: { width: 36, height: 36, borderRadius: 18, alignItems: "center", justifyContent: "center" },
   nameRow: { flexDirection: "row", alignItems: "center", gap: 5 },

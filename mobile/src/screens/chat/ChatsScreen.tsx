@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import { FlatList, Pressable, RefreshControl, StyleSheet, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { listConversations, type ChatMessage, type Conversation } from "../../api/chat";
@@ -8,6 +8,7 @@ import { isManagement } from "../../lib/roles";
 import { useQuery } from "../../lib/useQuery";
 import type { RootScreenProps } from "../../navigation/types";
 import { useSocketEvent } from "../../realtime/socket";
+import { chatInbox } from "../../notifications/chatInbox";
 import { useTheme } from "../../theme/ThemeProvider";
 import { ActionSheet, Avatar, Segmented, EmptyState, ErrorState, Field, Icon, Loading, Text } from "../../ui";
 
@@ -25,6 +26,10 @@ export const ChatsScreen = ({ navigation }: RootScreenProps<"Chats">) => {
   const [composeMenu, setComposeMenu] = useState(false);
   const { data, loading, error, refreshing, refresh, setData, reload } = useQuery(async () => (await listConversations()).sort(byRecent), []);
   const canGroup = isManagement(user.role);
+  // The list is the freshest count there is; the Home chat icon follows it.
+  useEffect(() => {
+    if (data) chatInbox.set(data.reduce((sum, item) => sum + (item.unreadCount || 0), 0));
+  }, [data]);
 
   /* A new message anywhere moves its conversation to the top without a refetch. */
   useSocketEvent<{ conversation?: Conversation; message?: ChatMessage }>("messenger:message:new", ({ conversation, message }) => {
@@ -176,7 +181,6 @@ const styles = StyleSheet.create({
   headRow: { flexDirection: "row", alignItems: "center", gap: 10 },
   title: { flex: 1, fontSize: 26 },
   compose: { width: 44, height: 44, borderRadius: 14, alignItems: "center", justifyContent: "center" },
-  chips: { flexDirection: "row", gap: 6 },
   list: { paddingHorizontal: 14 },
   row: { flexDirection: "row", alignItems: "center", gap: 12, paddingVertical: 12 },
   name: { fontSize: 14 },

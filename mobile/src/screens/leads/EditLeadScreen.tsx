@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from "react";
-import { StyleSheet, View } from "react-native";
+import { StyleSheet } from "react-native";
 import { BrokerPhoneHint } from "../../components/BrokerPhoneHint";
 import { errorMessage } from "../../api/client";
 import { getLeadDetail, updateLeadBasics, updateLeadDetails, type LeadDetail } from "../../api/leads";
@@ -7,7 +7,7 @@ import { validateNewLead } from "../../lib/leadForm";
 import { leadTemperature } from "../../lib/leadStatus";
 import type { RootScreenProps } from "../../navigation/types";
 import { space } from "../../theme/tokens";
-import { Body, Button, Card, Chip, ErrorState, Field, InlineError, Loading, Text } from "../../ui";
+import { Body, Button, Card, ErrorState, Field, InlineError, Loading, Select } from "../../ui";
 
 const SOURCES = [
   { key: "", label: "Not set" },
@@ -101,18 +101,8 @@ export const EditLeadScreen = ({ route, navigation }: RootScreenProps<"EditLead"
         <Field label="Project interested" value={form.projectInterested} onChangeText={set("projectInterested")} />
       </Card>
       <Card style={styles.gap}>
-        <Text variant="heading">Temperature</Text>
-        <View style={styles.chips}>
-          {["HOT", "WARM", "COLD"].map((key) => (
-            <Chip key={key} label={key.charAt(0) + key.slice(1).toLowerCase()} selected={temperature === key} onPress={() => setTemperature(key)} />
-          ))}
-        </View>
-        <Text variant="heading">Source</Text>
-        <View style={styles.chips}>
-          {SOURCES.map((item) => (
-            <Chip key={item.key || "none"} label={item.label} selected={sourceChannel === item.key} onPress={() => setSourceChannel(item.key)} />
-          ))}
-        </View>
+        <Select label="Temperature" options={["HOT", "WARM", "COLD"].map((key) => ({ key, label: key.charAt(0) + key.slice(1).toLowerCase() }))} value={temperature} onChange={setTemperature} />
+        <Select label="Source" allowClear clearLabel="Not set" placeholder="Not set" options={SOURCES.filter((item) => item.key)} value={sourceChannel} onChange={setSourceChannel} />
       </Card>
       <InlineError message={error} />
       <Button label="Save changes" icon="checkmark" loading={saving} onPress={save} />
@@ -122,5 +112,4 @@ export const EditLeadScreen = ({ route, navigation }: RootScreenProps<"EditLead"
 
 const styles = StyleSheet.create({
   gap: { gap: space.md },
-  chips: { flexDirection: "row", flexWrap: "wrap", gap: space.sm },
 });

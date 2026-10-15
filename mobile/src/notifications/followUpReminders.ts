@@ -3,16 +3,28 @@ import * as Notifications from "expo-notifications";
 import { listFollowUpsBetween } from "../api/leads";
 import { planReminders } from "../lib/reminderPlan";
 import { prefs } from "../lib/prefs";
+import { chatInbox } from "./chatInbox";
+import { inAppAlerts } from "./inAppAlert";
 
 const KIND = "followup";
 
-/* How a reminder looks while the app is open: a banner, like when it's closed. */
+/*
+ * How a notification looks while the app is open: a banner, like when it's
+ * closed - except a chat message for the conversation on screen (nothing),
+ * or one the in-app banner already announced (no second banner).
+ */
 Notifications.setNotificationHandler({
   handleNotification: async (notification) => {
-    // "Chat sounds" off silences chat pushes while the app is open.
     const tag = String((notification.request.content.data as Record<string, unknown> | undefined)?.tag || "");
-    const silent = tag.startsWith("chat:") && !prefs.get().chatSounds;
-    return { shouldShowBanner: true, shouldShowList: true, shouldPlaySound: !silent, shouldSetBadge: false };
+    if (tag.startsWith("chat:")) {
+      if (tag.slice(5) === chatInbox.activeRoom()) return { shouldShowBanner: false, shouldShowList: false, shouldPlaySound: false, shouldSetBadge: false };
+      // "Chat sounds" off silences chat pushes while the app is open.
+      const sound = prefs.get().chatSounds;
+      if (inAppAlerts.banneredRecently(tag)) return { shouldShowBanner: false, shouldShowList: true, shouldPlaySound: sound, shouldSetBadge: false };
+      inAppAlerts.markPushed(tag);
+      return { shouldShowBanner: true, shouldShowList: true, shouldPlaySound: sound, shouldSetBadge: false };
+    }
+    return { shouldShowBanner: true, shouldShowList: true, shouldPlaySound: true, shouldSetBadge: false };
   },
 });
 

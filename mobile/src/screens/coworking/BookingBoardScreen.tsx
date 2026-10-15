@@ -12,7 +12,7 @@ import { useBoard } from "../../lib/useBoard";
 import { useQuery } from "../../lib/useQuery";
 import type { RootStackParamList } from "../../navigation/types";
 import { useTheme } from "../../theme/ThemeProvider";
-import { ActionSheet, Body, Button, Card, Chip, ErrorState, Field, HeaderButton, Icon, InlineError, Loading, ProgressBar, Segmented, Text } from "../../ui";
+import { ActionSheet, Body, Button, Card, ErrorState, Field, FilterBar, HeaderButton, Icon, InlineError, Loading, ProgressBar, Segmented, Text } from "../../ui";
 
 /*
  * Web: modules/coworking/booking/BookingBoard. The 65 cabins of the floor by
@@ -152,29 +152,28 @@ export const BookingBoardScreen = () => {
           onChange={setView}
         />
 
-        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.chips}>
-          <Chip variant="filter" label="All" count={summary.counts.all} selected={statusFilter === "all"} onPress={() => setStatusFilter("all")} />
-          {STATUS_ORDER.map((status) => (
-            <Chip
-              key={status}
-              variant="filter"
-              label={STATUS_META[status].label}
-              dot={STATUS_META[status].color}
-              count={summary.counts[status]}
-              selected={statusFilter === status}
-              onPress={() => setStatusFilter(statusFilter === status ? "all" : status)}
-            />
-          ))}
-        </ScrollView>
-        <View style={styles.chipWrap}>
-          {WINGS.map((item) => (
-            <Chip key={item.id} variant="filter" label={`Wing ${item.id}`} selected={wing === item.id} onPress={() => setWing(wing === item.id ? "" : item.id)} />
-          ))}
-          {SEAT_BANDS.map((item) => (
-            <Chip key={item.id} variant="filter" label={item.label} selected={band === item.id} onPress={() => setBand(band === item.id ? "" : item.id)} />
-          ))}
-          {canEdit ? <Chip variant="filter" label={selectMode ? "Selecting" : "Select cabins"} selected={selectMode} onPress={toggleSelect} /> : null}
-        </View>
+        <FilterBar
+          filters={[
+            {
+              label: "Status",
+              icon: "funnel-outline",
+              options: [{ key: "all", label: "All cabins", count: summary.counts.all }, ...STATUS_ORDER.map((status) => ({ key: status, label: STATUS_META[status].label, count: summary.counts[status] }))],
+              value: statusFilter,
+              onChange: setStatusFilter,
+            },
+            { label: "Wing", options: [{ key: "", label: "All wings" }, ...WINGS.map((item) => ({ key: item.id, label: `Wing ${item.id}` }))], value: wing, onChange: setWing },
+            { label: "Seats", options: [{ key: "", label: "Any size" }, ...SEAT_BANDS.map((item) => ({ key: item.id, label: item.label }))], value: band, onChange: setBand },
+          ]}
+        />
+        {canEdit ? (
+          <Button
+            size="sm"
+            variant={selectMode ? "primary" : "secondary"}
+            icon={selectMode ? "checkbox" : "checkbox-outline"}
+            label={selectMode ? "Selecting cabins · tap to stop" : "Select cabins"}
+            onPress={toggleSelect}
+          />
+        ) : null}
 
         {view === "wings" ? (
           WINGS.map((item) => {
@@ -365,8 +364,6 @@ const styles = StyleSheet.create({
   birthdays: { gap: 4 },
   occupancy: { gap: 6 },
   percent: { fontSize: 26, lineHeight: 30 },
-  chips: { gap: 6, alignItems: "center" },
-  chipWrap: { flexDirection: "row", flexWrap: "wrap", gap: 6 },
   wing: { gap: 10, padding: 12 },
   wingHead: { flexDirection: "row", alignItems: "center", gap: 8 },
   grid: { flexDirection: "row", flexWrap: "wrap", gap: 6 },

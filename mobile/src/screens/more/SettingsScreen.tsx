@@ -6,7 +6,8 @@ import Constants from "expo-constants";
 import { errorMessage } from "../../api/client";
 import { useAuth } from "../../auth/AuthProvider";
 import { IDLE_SIGN_OUT_CHOICES, idleLabel, prefs, usePrefs } from "../../lib/prefs";
-import { sendTestPush } from "../../notifications/pushRegistration";
+import { registerForPush, sendTestPush, usePushStatus } from "../../notifications/pushRegistration";
+import { pushStatusLabel } from "../../lib/pushStatus";
 import { ACCENTS } from "../../theme/accents";
 import { useTheme, type ThemePreference } from "../../theme/ThemeProvider";
 import { ActionSheet, Body, GroupLabel, Icon, IconTile, ListCard, Sheet, Text, Toggle, type IconName } from "../../ui";
@@ -18,6 +19,7 @@ export const SettingsScreen = () => {
   const { colors, preference, setPreference } = useTheme();
   const { signOut } = useAuth();
   const settings = usePrefs();
+  const pushStatus = usePushStatus();
   const navigation = useNavigation();
   const [themeOpen, setThemeOpen] = useState(false);
   const [accentOpen, setAccentOpen] = useState(false);
@@ -47,6 +49,24 @@ export const SettingsScreen = () => {
         <GroupLabel>Notifications</GroupLabel>
         <ListCard style={styles.card}>
           <Row icon="notifications" label="Push notifications" right={<Toggle label="Push notifications" value={settings.push} onChange={(push) => prefs.set({ push })} />} />
+          {Platform.OS !== "web" && settings.push ? (
+            <Row
+              icon={pushStatus.state === "registered" ? "checkmark-circle" : "alert-circle"}
+              label="This phone"
+              value={pushStatusLabel(pushStatus)}
+              chevron={pushStatus.state === "error" || pushStatus.state === "denied" || pushStatus.state === "idle"}
+              onPress={
+                pushStatus.state === "error" || pushStatus.state === "denied" || pushStatus.state === "idle"
+                  ? () => {
+                      setNote(null);
+                      registerForPush()
+                        .then((token) => token && setNote("This phone is set up for notifications."))
+                        .catch(() => {});
+                    }
+                  : undefined
+              }
+            />
+          ) : null}
           <Row icon="alarm" label="Follow-up reminders" right={<Toggle label="Follow-up reminders" value={settings.reminders} onChange={(reminders) => prefs.set({ reminders })} />} />
           <Row icon="chatbubble" label="Chat sounds" right={<Toggle label="Chat sounds" value={settings.chatSounds} onChange={(chatSounds) => prefs.set({ chatSounds })} />} />
           {Platform.OS !== "web" ? (
@@ -63,6 +83,11 @@ export const SettingsScreen = () => {
             />
           ) : null}
         </ListCard>
+        {settings.push && pushStatus.detail ? (
+          <Text variant="small" color={pushStatus.state === "registered" ? "muted" : "danger"}>
+            {pushStatus.detail}
+          </Text>
+        ) : null}
         {note ? (
           <Text variant="small" color="muted">
             {note}

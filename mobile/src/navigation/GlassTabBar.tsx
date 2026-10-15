@@ -11,8 +11,8 @@ import { useTheme } from "../theme/ThemeProvider";
 import { ActionSheet, Icon, Text, type IconName, type SheetAction } from "../ui";
 
 /*
- * "Home by Role" tab bar: a floating, translucent pill with the role's four
- * tabs (active one in a soft blue capsule, red count badges) and a round
+ * "Home by Role" tab bar: a floating, translucent pill with the role's tabs
+ * (up to five) (active one in a soft blue capsule, red count badges) and a round
  * button beside it for the role's main action.
  */
 export const GlassTabBar = ({ state, navigation }: BottomTabBarProps) => {
@@ -38,12 +38,15 @@ export const GlassTabBar = ({ state, navigation }: BottomTabBarProps) => {
     community: canDoPageAction(user, access, "coworking_booking", "create"),
     production: createTask,
   })[kind];
+  // Admins and managers run the team, so their Create sheet carries the team actions.
+  const runsTeam = kind === "manager" || kind === "admin";
   const createActions: SheetAction[] = [
     createLead ? { key: "lead", icon: "person-add-outline", label: "New lead", onPress: () => navigation.navigate("AddLead" as never) } : null,
     createTask ? { key: "task", icon: "checkbox-outline", label: "New task", onPress: () => navigation.navigate("NewTask" as never) } : null,
-    kind === "manager" && canOpenPage(user, access, "leads") ? { key: "pool", icon: "file-tray-full-outline", label: "Assign from lead pool", onPress: () => navigation.navigate("LeadPool" as never) } : null,
-    kind === "manager" && createChat ? { key: "broadcast", icon: "megaphone-outline", label: "Broadcast to the team", onPress: () => navigation.navigate("Broadcast" as never) } : null,
-    kind !== "manager" && createChat ? { key: "chat", icon: "chatbubble-outline", label: "New chat", onPress: () => navigation.navigate("NewChat" as never) } : null,
+    runsTeam && canOpenPage(user, access, "leads") ? { key: "pool", icon: "file-tray-full-outline", label: "Assign from lead pool", onPress: () => navigation.navigate("LeadPool" as never) } : null,
+    runsTeam && createChat ? { key: "broadcast", icon: "megaphone-outline", label: "Broadcast to the team", onPress: () => navigation.navigate("Broadcast" as never) } : null,
+    !runsTeam && createChat ? { key: "chat", icon: "chatbubble-outline", label: "New chat", onPress: () => navigation.navigate("NewChat" as never) } : null,
+    kind === "admin" && canOpenPage(user, access, "admin_team") ? { key: "user", icon: "person-add-outline", label: "Add a teammate", onPress: () => navigation.navigate("AddUser" as never) } : null,
   ].filter(Boolean) as SheetAction[];
   const glass = scheme === "dark" ? "rgba(28,34,54,0.92)" : "rgba(255,255,255,0.94)";
   const glassLine = scheme === "dark" ? "rgba(255,255,255,0.12)" : "rgba(14,22,48,0.08)";
@@ -58,7 +61,6 @@ export const GlassTabBar = ({ state, navigation }: BottomTabBarProps) => {
   const onFab = () => {
     switch (kind) {
       case "admin":
-        return navigation.navigate("Search" as never);
       case "manager":
       case "sales":
         return setCreateOpen(true);
@@ -90,7 +92,7 @@ export const GlassTabBar = ({ state, navigation }: BottomTabBarProps) => {
                 style={[styles.tab, active && { backgroundColor: colors.primarySoft }]}
               >
                 <Icon name={(active ? tab.icon : `${tab.icon}-outline`) as IconName} size={22} color={active ? colors.primary : colors.textMuted} />
-                <Text variant="tiny" color={active ? colors.primary : colors.textMuted} style={styles.label} numberOfLines={1} allowFontScaling={false}>
+                <Text variant="tiny" color={active ? colors.primary : colors.textMuted} style={styles.label} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.8} allowFontScaling={false}>
                   {tab.label}
                 </Text>
                 {badge ? (

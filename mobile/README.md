@@ -26,6 +26,32 @@ Version 2.1.0 added native modules (`expo-print`, `expo-sharing`,
 `react-native-maps`), so it needs a new build; with `runtimeVersion` set to the
 app version, 2.1.0 updates never reach 2.0.0 installs.
 
+## Push notifications
+
+The server sends chat, task and approval alerts through Expo's push service.
+On Android that service runs on Firebase Cloud Messaging (FCM), and an app
+build without Firebase's config file can't get a push token at all, so no
+notification ever arrives. Settings → "This phone" shows whether this phone is
+registered, and the reason when it isn't. To set it up once:
+
+1. In the [Firebase console](https://console.firebase.google.com) create a
+   project (or use an existing one), add an Android app with the package
+   `com.theofficeonrent.crm`, and download `google-services.json`.
+2. Give the build the file: `eas env:create --name GOOGLE_SERVICES_JSON
+   --type file --value ./google-services.json --visibility secret` (or put the
+   file next to `app.config.js` for a local build). `app.config.js` passes it
+   on as `android.googleServicesFile`.
+3. Give Expo permission to send through FCM: Firebase console → Project
+   settings → Service accounts → "Generate new private key", then
+   `eas credentials` → Android → production → Google Service Account →
+   "Upload a Google Service Account Key (FCM V1)" with that JSON.
+4. Make a new build (`eas build -p android`) and install it. Expo Go can't
+   receive push notifications on Android, so test on the installed build.
+
+iOS needs no extra file: `eas build -p ios` sets up the APNs key when asked.
+While the app is open, messages also show as an in-app banner over the
+socket connection, whether or not push is set up.
+
 ## Check
 
 ```bash

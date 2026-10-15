@@ -11,7 +11,7 @@ import { statusMeta } from "../../lib/leadStatus";
 import { formatPrice } from "../../lib/money";
 import type { RootScreenProps } from "../../navigation/types";
 import { useTheme } from "../../theme/ThemeProvider";
-import { ActionSheet, Avatar, Badge, Chip, HeaderButton, Icon, Text } from "../../ui";
+import { ActionSheet, Avatar, Badge, HeaderButton, Icon, Text } from "../../ui";
 
 const newId = () => `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
 
@@ -105,9 +105,20 @@ export const AssistantScreen = ({ navigation }: RootScreenProps<"Assistant">) =>
             <Text variant="small" color="muted" align="center">
               Answers only cover what you can see in the CRM.
             </Text>
-            <View style={styles.prompts}>
-              {SUGGESTED_PROMPTS.map((prompt) => (
-                <Chip key={prompt} label={prompt} onPress={() => ask(prompt)} />
+            <View style={[styles.suggestions, { borderColor: colors.border, backgroundColor: colors.surface }]}>
+              {SUGGESTED_PROMPTS.map((prompt, index) => (
+                <Pressable
+                  key={prompt}
+                  accessibilityRole="button"
+                  onPress={() => ask(prompt)}
+                  style={({ pressed }) => [styles.suggestion, index > 0 && { borderTopColor: colors.border, borderTopWidth: StyleSheet.hairlineWidth }, pressed && { backgroundColor: colors.surfaceAlt }]}
+                >
+                  <Icon name="sparkles-outline" size={16} color={colors.primary} />
+                  <Text variant="small" style={styles.suggestionText}>
+                    {prompt}
+                  </Text>
+                  <Icon name="arrow-forward" size={15} color={colors.textFaint} />
+                </Pressable>
               ))}
             </View>
           </View>
@@ -265,6 +276,9 @@ const styles = StyleSheet.create({
   list: { padding: 14, gap: 10, flexGrow: 1 },
   intro: { alignItems: "center", gap: 8, paddingVertical: 20 },
   introIcon: { width: 48, height: 48, borderRadius: 16, alignItems: "center", justifyContent: "center" },
+  suggestions: { alignSelf: "stretch", borderWidth: 1, borderRadius: 16, overflow: "hidden" },
+  suggestion: { flexDirection: "row", alignItems: "center", gap: 10, paddingHorizontal: 14, paddingVertical: 12 },
+  suggestionText: { flex: 1 },
   prompts: { flexDirection: "row", flexWrap: "wrap", gap: 6, justifyContent: "center" },
   bubble: { maxWidth: "88%", borderRadius: 18, paddingHorizontal: 14, paddingVertical: 10, gap: 8 },
   mine: { alignSelf: "flex-end", borderBottomRightRadius: 6 },

@@ -13,7 +13,7 @@ import {
 import { PER_DAY_BASES, fromRuleDraft, ruleDraftError, toRuleDraft, type RuleDraft } from "../../lib/payroll";
 import { useQuery } from "../../lib/useQuery";
 import { useTheme } from "../../theme/ThemeProvider";
-import { Body, Button, Chip, ErrorState, Field, GroupLabel, InlineError, Loading, Text } from "../../ui";
+import { Body, Button, ErrorState, Field, GroupLabel, InlineError, Loading, Select, Text } from "../../ui";
 import { DeductionList, DeductionSheet, RulesEditor } from "./SalaryAdminKit";
 
 const whole = (value: string, min: number, max: number) => {
@@ -80,11 +80,7 @@ export const PayrollPolicyScreen = () => {
       </Text>
 
       <GroupLabel>Per-day salary</GroupLabel>
-      <View style={styles.chips}>
-        {PER_DAY_BASES.map((item) => (
-          <Chip key={item.key} label={item.label} selected={basis === item.key} onPress={() => setBasis(item.key)} />
-        ))}
-      </View>
+      <Select title="Per-day salary" options={PER_DAY_BASES.map((item) => ({ key: item.key, label: item.label }))} value={basis} onChange={setBasis} />
       {basis === "FIXED_DAYS" ? <Field label="Days per month" value={fixedDays} onChangeText={(v) => setFixedDays(v.replace(/[^0-9]/g, ""))} keyboardType="number-pad" /> : null}
 
       <GroupLabel>Late check-ins</GroupLabel>
@@ -130,6 +126,5 @@ export const PayrollPolicyScreen = () => {
 
 const styles = StyleSheet.create({
   flex: { flex: 1, minWidth: 0 },
-  chips: { flexDirection: "row", flexWrap: "wrap", gap: 6 },
   pair: { flexDirection: "row", gap: 8 },
 });

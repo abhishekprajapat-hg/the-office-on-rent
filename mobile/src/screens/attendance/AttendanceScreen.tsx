@@ -20,27 +20,7 @@ import { useTheme } from "../../theme/ThemeProvider";
 import { space, toneColors, type Tone } from "../../theme/tokens";
 import type { AttendanceDay } from "../../api/types";
 import { MonthCalendar } from "../../components/MonthCalendar";
-import {
-  Badge,
-  Button,
-  Card,
-  Chip,
-  ErrorState,
-  GroupLabel,
-  Icon,
-  IconTile,
-  InlineError,
-  ListCard,
-  ListRow,
-  Loading,
-  MiniStat,
-  ProgressBar,
-  Ring,
-  Screen,
-  SectionTitle,
-  Text,
-  type IconName,
-} from "../../ui";
+import { Badge, Button, Card, ErrorState, GroupLabel, Icon, IconTile, InlineError, ListCard, ListRow, Loading, MiniStat, ProgressBar, Ring, Screen, SectionTitle, Select, Text, type IconName } from "../../ui";
 
 const monthStart = () => {
   const date = new Date();
@@ -170,14 +150,14 @@ export const AttendanceScreen = () => {
         ) : phase === "working" ? (
           choosingBreak ? (
             <View style={[styles.fill, styles.gapSm]}>
-              <Text variant="smallStrong" color="muted">
-                What kind of break?
-              </Text>
-              <View style={styles.chips}>
-                {BREAK_TYPES.map((item) => (
-                  <Chip key={item.key} variant="pick" label={item.label} onPress={() => run("break", () => startBreak(item.key))} />
-                ))}
-              </View>
+              <Select
+                label="What kind of break?"
+                placeholder="Choose the break"
+                icon="cafe-outline"
+                options={BREAK_TYPES.map((item) => ({ key: item.key, label: item.label }))}
+                value=""
+                onChange={(key) => run("break", () => startBreak(key))}
+              />
               <Button label="Cancel" variant="ghost" size="sm" onPress={() => setChoosingBreak(false)} />
             </View>
           ) : (
@@ -363,7 +343,6 @@ const styles = StyleSheet.create({
   shift: { fontFamily: "PlusJakartaSans_600SemiBold" },
   row: { flexDirection: "row", gap: space.sm, alignSelf: "stretch" },
   gapSm: { gap: space.sm },
-  chips: { flexDirection: "row", flexWrap: "wrap", gap: 6 },
   note: { flexDirection: "row", alignItems: "center", gap: 6, alignSelf: "stretch", justifyContent: "center" },
   noteText: { fontFamily: "PlusJakartaSans_500Medium", flexShrink: 1 },
   timeline: { gap: 2, borderRadius: 20 },

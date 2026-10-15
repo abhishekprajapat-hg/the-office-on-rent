@@ -1,5 +1,5 @@
 import React, { useLayoutEffect, useState } from "react";
-import { Linking, Pressable, StyleSheet, View } from "react-native";
+import { Linking, StyleSheet, View } from "react-native";
 import { canDoPageAction, canOpenPage } from "../../api/access";
 import { mediaUrl } from "../../api/client";
 import { useAuth } from "../../auth/AuthProvider";
@@ -9,7 +9,7 @@ import { formatDate, initials, rupees } from "../../lib/format";
 import { useBoard } from "../../lib/useBoard";
 import type { RootScreenProps } from "../../navigation/types";
 import { useTheme } from "../../theme/ThemeProvider";
-import { Badge, Body, Button, Card, Chip, ErrorState, FactRow, Field, GroupLabel, InlineError, ListCard, Loading, ProgressBar, Sheet, Text } from "../../ui";
+import { Badge, Body, Button, Card, ErrorState, FactRow, Field, GroupLabel, InlineError, ListCard, Loading, ProgressBar, Select, Sheet, Text } from "../../ui";
 
 const DAY = 24 * 60 * 60 * 1000;
 const daysBetween = (from: string, to: string) => Math.max(0, Math.round((new Date(to).getTime() - new Date(from).getTime()) / DAY));
@@ -314,11 +314,7 @@ export const CabinScreen = ({ route, navigation }: RootScreenProps<"Cabin">) => 
         }
       >
         <Field label="Lead or company name" value={holdName} onChangeText={setHoldName} placeholder="Who is this held for?" />
-        <View style={styles.chips}>
-          {HOLD_DAYS.map((days) => (
-            <Chip key={days} label={`${days} days`} selected={holdDays === days} onPress={() => setHoldDays(days)} />
-          ))}
-        </View>
+        <Select label="Hold for" icon="time-outline" options={HOLD_DAYS.map((days) => ({ key: String(days), label: `${days} days` }))} value={String(holdDays)} onChange={(key) => setHoldDays(Number(key))} />
         <Text variant="small" color={colors.warning}>
           The cabin shows as Reserved and can't be onboarded to anyone else. If the hold lapses, the board releases it automatically and logs it.
         </Text>
@@ -354,26 +350,15 @@ export const CabinScreen = ({ route, navigation }: RootScreenProps<"Cabin">) => 
             {chosen.monthlyRent !== cabin.monthlyRent ? `, ${chosen.monthlyRent > cabin.monthlyRent ? "+" : ""}${rupees(chosen.monthlyRent - cabin.monthlyRent)}` : ", same rent"})
           </Text>
         ) : null}
-        <Text variant="smallStrong" color="muted">
-          Vacant cabins ({vacantTargets.length})
-        </Text>
         {vacantTargets.length ? (
-          <View style={styles.chips}>
-            {vacantTargets.map((item) => (
-              <Pressable
-                key={item.code}
-                accessibilityRole="radio"
-                accessibilityState={{ checked: target === item.code }}
-                onPress={() => setTarget(item.code)}
-                style={[styles.option, { borderColor: target === item.code ? colors.primary : colors.border, backgroundColor: target === item.code ? colors.primarySoft : colors.surface }]}
-              >
-                <Text variant="smallStrong">{item.label}</Text>
-                <Text variant="tiny" color="muted">
-                  {item.seats} seater · {rupees(item.monthlyRent)}
-                </Text>
-              </Pressable>
-            ))}
-          </View>
+          <Select
+            label={`Move to (${vacantTargets.length} vacant)`}
+            placeholder="Choose a vacant cabin"
+            icon="business-outline"
+            options={vacantTargets.map((item) => ({ key: item.code, label: item.label, hint: `${item.seats} seater · ${rupees(item.monthlyRent)}` }))}
+            value={target}
+            onChange={setTarget}
+          />
         ) : (
           <Text variant="small" color="muted">
             No vacant cabin to move into. Release one first, or drop a hold.
@@ -397,6 +382,4 @@ const styles = StyleSheet.create({
   subhead: { marginTop: 6 },
   dues: { borderRadius: 12, padding: 10, gap: 8 },
   stay: { flexDirection: "row", alignItems: "center", gap: 10, padding: 12 },
-  chips: { flexDirection: "row", flexWrap: "wrap", gap: 6 },
-  option: { borderWidth: 1, borderRadius: 12, paddingHorizontal: 12, paddingVertical: 8, minWidth: "30%" },
 });

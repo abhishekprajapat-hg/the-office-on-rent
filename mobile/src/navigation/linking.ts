@@ -90,9 +90,13 @@ export const linking: LinkingOptions<RootStackParamList> = {
       NewChat: "chats/new",
       Broadcast: "chats/broadcast",
       Conversation: "chats/:id",
+      Success: "done",
+      NoAccess: "no-access",
       Inventory: "inventory",
       AddProperty: "inventory/new",
       PropertyDetail: "inventory/:id",
+      // Anything else: an old or mistyped link gets a page that says so.
+      NotFound: "*",
     },
   },
 };

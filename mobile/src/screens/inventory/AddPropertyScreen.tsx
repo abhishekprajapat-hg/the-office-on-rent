@@ -25,7 +25,7 @@ import {
 } from "../../lib/propertyForm";
 import type { RootScreenProps } from "../../navigation/types";
 import { useTheme } from "../../theme/ThemeProvider";
-import { Button, CheckSquare, Chip, ErrorState, Field, FooterBar, Icon, InlineError, Loading, Segmented, Text, Toggle } from "../../ui";
+import { Button, CheckSquare, ErrorState, Field, FooterBar, Icon, InlineError, Loading, Segmented, Select, StatusPage, Text, Toggle } from "../../ui";
 
 const COMMERCIAL_CATEGORIES = ["Office", "Shop", "Showroom", "Coworking", "Warehouse", "Land"];
 const RESIDENTIAL_CATEGORIES = ["Apartment", "Builder Floor", "Villa", "House", "Plot", "PG"];
@@ -346,7 +346,11 @@ export const AddPropertyScreen = ({ navigation, route }: RootScreenProps<"AddPro
       if (result.pendingApproval) {
         setPending(true);
       } else if (result.property?._id) {
-        navigation.replace("PropertyDetail", { id: result.property._id });
+        navigation.replace("Success", {
+          title: "Property listed",
+          message: "It's live in inventory now.",
+          next: { label: "Open the property", screen: "PropertyDetail", params: { id: result.property._id } },
+        });
         return;
       } else {
         navigation.goBack();
@@ -363,17 +367,14 @@ export const AddPropertyScreen = ({ navigation, route }: RootScreenProps<"AddPro
 
   if (pending || pendingEdit) {
     return (
-      <View style={[styles.flex, styles.done, { backgroundColor: colors.surface, paddingTop: insets.top }]}>
-        <View style={[styles.doneIcon, { backgroundColor: colors.successSoft }]}>
-          <Icon name="checkmark" size={30} color={colors.success} />
-        </View>
-        <Text variant="title" align="center">
-          Sent for approval
-        </Text>
-        <Text variant="body" color="muted" align="center">
-          {pendingEdit ? "Your changes apply once an admin approves them. You'll find the request under My requests." : "Your listing goes live once an admin approves it. You'll find it in inventory after that."}
-        </Text>
-        <Button label="Done" onPress={() => navigation.goBack()} style={styles.doneButton} />
+      <View style={[styles.flex, { backgroundColor: colors.bg, paddingTop: insets.top, paddingBottom: insets.bottom + 12 }]}>
+        <StatusPage
+          kind="success"
+          title="Sent for approval"
+          message={pendingEdit ? "Your changes apply once an admin approves them. You'll find the request under My requests." : "Your listing goes live once an admin approves it. You'll find it in inventory after that."}
+          primary={{ label: "Done", icon: "checkmark", onPress: () => navigation.goBack() }}
+          secondary={{ label: "See my requests", onPress: () => navigation.replace("MyRequests") }}
+        />
       </View>
     );
   }
@@ -422,16 +423,19 @@ export const AddPropertyScreen = ({ navigation, route }: RootScreenProps<"AddPro
                 setCategory((key === "COMMERCIAL" ? COMMERCIAL_CATEGORIES : RESIDENTIAL_CATEGORIES)[0]!);
               }}
             />
-            <Group label="Property type">
-              {(commercial ? COMMERCIAL_CATEGORIES : RESIDENTIAL_CATEGORIES).map((item) => (
-                <Chip key={item} label={item} selected={category === item} onPress={() => setCategory(item)} />
-              ))}
-            </Group>
-            <Group label="Available for">
-              {(["Rent", "Sale", "Both"] as DealType[]).map((item) => (
-                <Chip key={item} label={item === "Both" ? "Sale & rent" : item === "Rent" ? "Rent / lease" : "Sale"} selected={deal === item} onPress={() => setDeal(item)} />
-              ))}
-            </Group>
+            <Pair>
+              <Select label="Property type" options={(commercial ? COMMERCIAL_CATEGORIES : RESIDENTIAL_CATEGORIES).map((item) => ({ key: item, label: item }))} value={category} onChange={setCategory} />
+              <Select
+                label="Available for"
+                options={[
+                  { key: "Rent", label: "Rent / lease" },
+                  { key: "Sale", label: "Sale" },
+                  { key: "Both", label: "Sale & rent" },
+                ]}
+                value={deal}
+                onChange={(key) => setDeal(key as DealType)}
+              />
+            </Pair>
             <Field label="Project / building" value={form.projectName} onChangeText={set("projectName")} placeholder="e.g. DLF Cyber Park" error={show("projectName")} />
             <Field label="Tower / block / unit" value={form.towerName} onChangeText={set("towerName")} placeholder="e.g. Tower B, unit 702" error={show("towerName")} />
             {editId && original?.propertyId ? (
@@ -471,11 +475,7 @@ export const AddPropertyScreen = ({ navigation, route }: RootScreenProps<"AddPro
 
         {step === 1 ? (
           <>
-            <Group label="Condition">
-              {Object.entries(FURNISHING).map(([key, label]) => (
-                <Chip key={key} label={label} selected={furnishing === key} onPress={() => setFurnishing((current) => (current === key ? "" : key))} />
-              ))}
-            </Group>
+            <Select label="Condition" placeholder="Not set" allowClear clearLabel="Not set" options={Object.entries(FURNISHING).map(([key, label]) => ({ key, label }))} value={furnishing} onChange={setFurnishing} />
             <Pair>
               <Field label="Carpet area" value={form.carpetArea} onChangeText={setArea("carpetArea")} keyboardType="numeric" placeholder="3,200" suffix="sq ft" />
               <Field label="Super area" value={form.superArea} onChangeText={setArea("superArea")} keyboardType="numeric" placeholder="4,100" suffix="sq ft" />
@@ -509,11 +509,7 @@ export const AddPropertyScreen = ({ navigation, route }: RootScreenProps<"AddPro
                 <Field label="Agreement" value={form.agreementYears} onChangeText={set("agreementYears")} keyboardType="numeric" placeholder="9" suffix="years" />
               </Pair>
             ) : null}
-            <Group label="Deal">
-              {DEAL_TYPES.map((item) => (
-                <Chip key={item.key} label={item.label} selected={form.dealType === item.key} onPress={() => set("dealType")(form.dealType === item.key ? "" : item.key)} />
-              ))}
-            </Group>
+            <Select label="Deal" placeholder="Not set" allowClear clearLabel="Not set" options={DEAL_TYPES} value={form.dealType} onChange={set("dealType")} />
             <View style={styles.toggleRow}>
               <Text variant="bodyStrong" style={styles.flex}>
                 GST applicable
@@ -618,11 +614,7 @@ export const AddPropertyScreen = ({ navigation, route }: RootScreenProps<"AddPro
               <Field value={form.keyName} onChangeText={set("keyName")} placeholder="Name" autoCapitalize="words" />
               <Field value={form.keyNumber} onChangeText={set("keyNumber")} placeholder="Phone" keyboardType="phone-pad" />
             </Pair>
-            <Group label="Ownership">
-              {OWNER_TYPES.map((item) => (
-                <Chip key={item.key} label={item.label} selected={form.ownerType === item.key} onPress={() => set("ownerType")(form.ownerType === item.key ? "" : item.key)} />
-              ))}
-            </Group>
+            <Select label="Ownership" placeholder="Not set" allowClear clearLabel="Not set" options={OWNER_TYPES} value={form.ownerType} onChange={set("ownerType")} />
             <Group label="Papers in hand">
               {DOCUMENT_CHECKS.map((item) => (
                 <Pressable key={item.key} accessibilityRole="checkbox" accessibilityState={{ checked: docs[item.key] }} onPress={() => setDocs((prev) => ({ ...prev, [item.key]: !prev[item.key] }))} style={styles.check}>
@@ -631,33 +623,36 @@ export const AddPropertyScreen = ({ navigation, route }: RootScreenProps<"AddPro
                 </Pressable>
               ))}
             </Group>
-            <Group label="Revenue">
-              {OWNERSHIP.map((item) => (
-                <Chip
-                  key={item.key}
-                  label={item.label}
-                  selected={form.ownershipType === item.key}
-                  onPress={() =>
-                    setForm((prev) => {
-                      const ownershipType = prev.ownershipType === item.key ? "" : item.key;
-                      const keep = (MODELS_BY_OWNERSHIP[ownershipType] || []).some((model) => model.key === prev.businessModel);
-                      return { ...prev, ownershipType, businessModel: keep ? prev.businessModel : "" };
-                    })
-                  }
-                />
-              ))}
-            </Group>
+            <Pair>
+              <Select
+                label="Revenue"
+                placeholder="Not set"
+                allowClear
+                clearLabel="Not set"
+                options={OWNERSHIP.map((item) => ({ key: item.key, label: item.label, hint: item.income }))}
+                value={form.ownershipType}
+                onChange={(ownershipType) =>
+                  setForm((prev) => {
+                    const keep = (MODELS_BY_OWNERSHIP[ownershipType] || []).some((model) => model.key === prev.businessModel);
+                    return { ...prev, ownershipType, businessModel: keep ? prev.businessModel : "" };
+                  })
+                }
+              />
+              <Select
+                label="Business model"
+                placeholder={form.ownershipType ? "Not set" : "Pick revenue first"}
+                allowClear
+                clearLabel="Not set"
+                disabled={!form.ownershipType}
+                options={MODELS_BY_OWNERSHIP[form.ownershipType] || []}
+                value={form.businessModel}
+                onChange={set("businessModel")}
+              />
+            </Pair>
             {form.ownershipType ? (
-              <>
-                <Text variant="tiny" color="muted">
-                  Counts as {OWNERSHIP.find((item) => item.key === form.ownershipType)?.income.toLowerCase()} in Finance.
-                </Text>
-                <View style={styles.chips}>
-                  {(MODELS_BY_OWNERSHIP[form.ownershipType] || []).map((model) => (
-                    <Chip key={model.key} label={model.label} selected={form.businessModel === model.key} onPress={() => set("businessModel")(form.businessModel === model.key ? "" : model.key)} />
-                  ))}
-                </View>
-              </>
+              <Text variant="tiny" color="muted">
+                Counts as {OWNERSHIP.find((item) => item.key === form.ownershipType)?.income.toLowerCase()} in Finance.
+              </Text>
             ) : null}
             {form.businessModel === "ENTERPRISE" ? (
               <>
@@ -671,13 +666,8 @@ export const AddPropertyScreen = ({ navigation, route }: RootScreenProps<"AddPro
                 <Field label="Client" value={form.clientName} onChangeText={set("clientName")} placeholder="Who sublets it" autoCapitalize="words" />
                 <Pair>
                   <Field label="Rent due day" value={form.rentDueDay} onChangeText={(value) => set("rentDueDay")(value.replace(/\D/g, "").slice(0, 2))} keyboardType="number-pad" placeholder="5" error={show("rentDueDay")} />
-                  <View />
+                  <Select label="Payment" placeholder="Not set" allowClear clearLabel="Not set" options={PAYMENT_STATUSES} value={form.paymentStatus} onChange={set("paymentStatus")} />
                 </Pair>
-                <View style={styles.chips}>
-                  {PAYMENT_STATUSES.map((item) => (
-                    <Chip key={item.key} label={item.label} selected={form.paymentStatus === item.key} onPress={() => set("paymentStatus")(form.paymentStatus === item.key ? "" : item.key)} />
-                  ))}
-                </View>
               </>
             ) : null}
           </>
@@ -801,7 +791,4 @@ const styles = StyleSheet.create({
   toggleRow: { flexDirection: "row", alignItems: "center", gap: 12 },
   check: { flexDirection: "row", alignItems: "center", gap: 8, width: "48%", paddingVertical: 4 },
   fileRow: { flexDirection: "row", alignItems: "center", gap: 8, borderWidth: 1, borderRadius: 10, paddingHorizontal: 10, paddingVertical: 8 },
-  done: { alignItems: "center", justifyContent: "center", padding: 28, gap: 12 },
-  doneIcon: { width: 64, height: 64, borderRadius: 22, alignItems: "center", justifyContent: "center" },
-  doneButton: { alignSelf: "stretch", marginTop: 8 },
 });

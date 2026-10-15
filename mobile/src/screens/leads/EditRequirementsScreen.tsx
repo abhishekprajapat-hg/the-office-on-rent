@@ -6,7 +6,7 @@ import { formatPrice, parseAmount } from "../../lib/money";
 import { FURNISHING } from "../../lib/property";
 import type { RootScreenProps } from "../../navigation/types";
 import { space } from "../../theme/tokens";
-import { Body, Button, Card, Chip, ErrorState, Field, InlineError, Loading, Text } from "../../ui";
+import { Body, Button, Card, ErrorState, Field, InlineError, Loading, MultiSelect, Select, Text } from "../../ui";
 
 const TYPES = [
   { key: "COMMERCIAL", label: "Commercial" },
@@ -67,9 +67,11 @@ export const EditRequirementsScreen = ({ route, navigation }: RootScreenProps<"E
   const budgetMin = parseAmount(budget.min);
   const budgetMax = parseAmount(budget.max);
   const patch = (next: Partial<LeadRequirements>) => setReq((prev) => ({ ...prev, ...next }));
-  const toggle = (group: "commercial" | "residential", key: string) => {
-    if (group === "commercial") patch({ commercial: { ...(req.commercial || {}), [key]: !req.commercial?.[key] } });
-    else patch({ residential: { ...(req.residential || {}), amenities: { ...(req.residential?.amenities || {}), [key]: !req.residential?.amenities?.[key] } } });
+  /* Every flag in the list set from what the dropdown has ticked. */
+  const setFlags = (group: "commercial" | "residential", all: string[], keys: string[]) => {
+    const flags = Object.fromEntries(all.map((key) => [key, keys.includes(key)]));
+    if (group === "commercial") patch({ commercial: { ...(req.commercial || {}), ...flags } });
+    else patch({ residential: { ...(req.residential || {}), amenities: { ...(req.residential?.amenities || {}), ...flags } } });
   };
 
   const save = async () => {
@@ -102,34 +104,35 @@ export const EditRequirementsScreen = ({ route, navigation }: RootScreenProps<"E
     <Body>
       <Card style={styles.gap}>
         <Text variant="heading">Looking for</Text>
-        <View style={styles.chips}>
-          {TYPES.map((item) => (
-            <Chip key={item.key} label={item.label} selected={type === item.key} onPress={() => patch({ inventoryType: item.key, propertySubtype: "" })} />
-          ))}
-        </View>
-        <View style={styles.chips}>
-          {DEALS.map((item) => (
-            <Chip key={item.key} label={item.label} selected={req.transactionType === item.key} onPress={() => patch({ transactionType: item.key })} />
-          ))}
+        <View style={styles.row}>
+          <View style={styles.flex}>
+            <Select label="Property" placeholder="Any" options={[...TYPES]} value={type} onChange={(key) => patch({ inventoryType: key, propertySubtype: "" })} />
+          </View>
+          <View style={styles.flex}>
+            <Select label="Deal" placeholder="Any" options={[...DEALS]} value={req.transactionType || ""} onChange={(key) => patch({ transactionType: key })} />
+          </View>
         </View>
         {type ? (
-          <View style={styles.chips}>
-            {(SUBTYPES[type] || []).map((item) => (
-              <Chip key={item} label={item} selected={req.propertySubtype === item} onPress={() => patch({ propertySubtype: req.propertySubtype === item ? "" : item })} />
-            ))}
-          </View>
+          <Select
+            label="Type"
+            placeholder="Any type"
+            allowClear
+            clearLabel="Any type"
+            options={(SUBTYPES[type] || []).map((item) => ({ key: item, label: item }))}
+            value={req.propertySubtype || ""}
+            onChange={(key) => patch({ propertySubtype: key })}
+          />
         ) : null}
         {type === "RESIDENTIAL" ? (
-          <View style={styles.chips}>
-            {BHK.map((item) => (
-              <Chip
-                key={item}
-                label={item === "STUDIO" ? "Studio" : item}
-                selected={req.residential?.bhkType === item}
-                onPress={() => patch({ residential: { ...(req.residential || {}), bhkType: req.residential?.bhkType === item ? "" : item } })}
-              />
-            ))}
-          </View>
+          <Select
+            label="Layout"
+            placeholder="Any layout"
+            allowClear
+            clearLabel="Any layout"
+            options={BHK.map((item) => ({ key: item, label: item === "STUDIO" ? "Studio" : item }))}
+            value={req.residential?.bhkType || ""}
+            onChange={(key) => patch({ residential: { ...(req.residential || {}), bhkType: key } })}
+          />
         ) : null}
       </Card>
 
@@ -152,12 +155,15 @@ export const EditRequirementsScreen = ({ route, navigation }: RootScreenProps<"E
             <Field label="Up to" value={area.max} onChangeText={(max) => setArea((prev) => ({ ...prev, max }))} keyboardType="numeric" />
           </View>
         </View>
-        <Text variant="heading">Furnishing</Text>
-        <View style={styles.chips}>
-          {Object.entries(FURNISHING).map(([key, label]) => (
-            <Chip key={key} label={label} selected={req.furnishingStatus === key} onPress={() => patch({ furnishingStatus: req.furnishingStatus === key ? "" : key })} />
-          ))}
-        </View>
+        <Select
+          label="Furnishing"
+          placeholder="Any"
+          allowClear
+          clearLabel="Any"
+          options={Object.entries(FURNISHING).map(([key, label]) => ({ key, label }))}
+          value={req.furnishingStatus || ""}
+          onChange={(key) => patch({ furnishingStatus: key })}
+        />
       </Card>
 
       {type === "COMMERCIAL" || type === "COWORKING" ? (
@@ -174,22 +180,26 @@ export const EditRequirementsScreen = ({ route, navigation }: RootScreenProps<"E
               <Field label="Conference" value={space_.conferenceRooms} onChangeText={(conferenceRooms) => setSpace((prev) => ({ ...prev, conferenceRooms }))} keyboardType="numeric" />
             </View>
           </View>
-          <View style={styles.chips}>
-            {COMMERCIAL_FLAGS.map((key) => (
-              <Chip key={key} label={human(key)} selected={Boolean(req.commercial?.[key])} onPress={() => toggle("commercial", key)} />
-            ))}
-          </View>
+          <MultiSelect
+            label="Must have"
+            placeholder="Nothing specific"
+            options={COMMERCIAL_FLAGS.map((key) => ({ key, label: human(key) }))}
+            value={COMMERCIAL_FLAGS.filter((key) => Boolean(req.commercial?.[key]))}
+            onChange={(keys) => setFlags("commercial", COMMERCIAL_FLAGS, keys)}
+          />
         </Card>
       ) : null}
 
       {type === "RESIDENTIAL" ? (
         <Card style={styles.gap}>
           <Text variant="heading">Must have</Text>
-          <View style={styles.chips}>
-            {RESIDENTIAL_FLAGS.map((key) => (
-              <Chip key={key} label={human(key)} selected={Boolean(req.residential?.amenities?.[key])} onPress={() => toggle("residential", key)} />
-            ))}
-          </View>
+          <MultiSelect
+            placeholder="Nothing specific"
+            title="Must have"
+            options={RESIDENTIAL_FLAGS.map((key) => ({ key, label: human(key) }))}
+            value={RESIDENTIAL_FLAGS.filter((key) => Boolean(req.residential?.amenities?.[key]))}
+            onChange={(keys) => setFlags("residential", RESIDENTIAL_FLAGS, keys)}
+          />
         </Card>
       ) : null}
 
@@ -203,5 +213,4 @@ const styles = StyleSheet.create({
   flex: { flex: 1 },
   gap: { gap: space.md },
   row: { flexDirection: "row", gap: space.md },
-  chips: { flexDirection: "row", flexWrap: "wrap", gap: space.sm },
 });

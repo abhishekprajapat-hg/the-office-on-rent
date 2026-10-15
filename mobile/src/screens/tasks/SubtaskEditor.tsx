@@ -3,7 +3,9 @@ import { StyleSheet, View } from "react-native";
 import type { SubtaskDraft } from "../../api/tasks";
 import { DateTimeField } from "../../components/DateTimeField";
 import { PRIORITY, STATUS_ORDER, TASK_STATUS, TASK_STATUS_TONE, subtaskStatus } from "../../lib/taskMeta";
-import { Button, Chip, Field, InlineError, Sheet, Text } from "../../ui";
+import { useTheme } from "../../theme/ThemeProvider";
+import { toneColors } from "../../theme/tokens";
+import { Button, Field, InlineError, Select, Sheet, Text } from "../../ui";
 
 /*
  * The web's subtask editor as a bottom sheet: title, full instructions, due
@@ -32,6 +34,7 @@ export const SubtaskEditor = ({
   const [title, setTitle] = useState("");
   const [note, setNote] = useState("");
   const [due, setDue] = useState<Date | null>(null);
+  const { colors } = useTheme();
   const [status, setStatus] = useState("TODO");
   const [priority, setPriority] = useState("MEDIUM");
   const [saving, setSaving] = useState(false);
@@ -121,25 +124,14 @@ export const SubtaskEditor = ({
           <DateTimeField label="Due date" mode="date" variant="row" value={due} onChange={setDue} />
         </>
       )}
-      <Text variant="smallStrong" color="muted">
-        Status
-      </Text>
-      <View style={styles.chips}>
-        {STATUS_ORDER.map((key) => (
-          <Chip key={key} label={TASK_STATUS[key]!.label} tone={TASK_STATUS_TONE[key]} selected={status === key} onPress={() => setStatus(key)} />
-        ))}
-      </View>
+      <Select label="Status" options={STATUS_ORDER.map((key) => ({ key, label: TASK_STATUS[key]!.label, dot: toneColors(colors, TASK_STATUS_TONE[key] || "neutral").fg }))} value={status} onChange={setStatus} />
       {!statusOnly ? (
-        <>
-          <Text variant="smallStrong" color="muted">
-            Priority
-          </Text>
-          <View style={styles.chips}>
-            {(["LOW", "MEDIUM", "HIGH"] as const).map((key) => (
-              <Chip key={key} label={PRIORITY[key]!.label} tone={PRIORITY[key]!.tone === "neutral" ? "primary" : PRIORITY[key]!.tone} selected={priority === key} onPress={() => setPriority(key)} />
-            ))}
-          </View>
-        </>
+        <Select
+          label="Priority"
+          options={(["LOW", "MEDIUM", "HIGH"] as const).map((key) => ({ key, label: PRIORITY[key]!.label, dot: toneColors(colors, PRIORITY[key]!.tone).fg }))}
+          value={priority}
+          onChange={setPriority}
+        />
       ) : null}
       <InlineError message={error} />
     </Sheet>
@@ -150,5 +142,4 @@ const styles = StyleSheet.create({
   flex: { flex: 1 },
   wide: { flex: 1.6 },
   row: { flexDirection: "row", gap: 8 },
-  chips: { flexDirection: "row", flexWrap: "wrap", gap: 6 },
 });

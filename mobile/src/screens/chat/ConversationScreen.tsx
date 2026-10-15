@@ -1,6 +1,7 @@
 import React, { useCallback, useEffect, useRef, useState } from "react";
 import { ActivityIndicator, FlatList, Image, KeyboardAvoidingView, Platform, Pressable, StyleSheet, TextInput, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
+import { useFocusEffect } from "@react-navigation/native";
 import { errorMessage, mediaUrl } from "../../api/client";
 import { clearChat, deleteMessage, getMessages, listConversations, markRead, sendMessage, type ChatMessage, type Conversation } from "../../api/chat";
 import { pickDocument, pickImage, uploadFile, type LocalFile } from "../../api/uploads";
@@ -13,6 +14,7 @@ import { formatDate } from "../../lib/format";
 import { formatPrice } from "../../lib/money";
 import type { RootScreenProps } from "../../navigation/types";
 import { emitEvent, emitWithAck, useRoomChannel, useSocketEvent } from "../../realtime/socket";
+import { chatInbox } from "../../notifications/chatInbox";
 import { useTheme } from "../../theme/ThemeProvider";
 import { font, radius, space } from "../../theme/tokens";
 import { ActionSheet, Avatar, ErrorState, Icon, Loading, Text, type IconName } from "../../ui";
@@ -50,6 +52,17 @@ export const ConversationScreen = ({ route, navigation }: RootScreenProps<"Conve
   const typingTimers = useRef(new Map<string, ReturnType<typeof setTimeout>>());
   const localTyping = useRef<{ on: boolean; timer: ReturnType<typeof setTimeout> | null }>({ on: false, timer: null });
   const seenSent = useRef(new Set<string>());
+
+  // While this chat is on screen its messages are read as they land: no banner, no count.
+  useFocusEffect(
+    useCallback(() => {
+      chatInbox.setActiveRoom(id);
+      return () => {
+        chatInbox.setActiveRoom(null);
+        chatInbox.refresh();
+      };
+    }, [id]),
+  );
 
   // The room (for the header, members and a lead link) and, for a direct chat, the other person's phone.
   useEffect(() => {

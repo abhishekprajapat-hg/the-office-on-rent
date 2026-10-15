@@ -1,4 +1,6 @@
 import axios, { AxiosError, type InternalAxiosRequestConfig } from "axios";
+import { AppState } from "react-native";
+import { FAST_MS, SLOW_MS, isServerDownStatus, type ConnectionState } from "../lib/connection";
 import { session } from "./session";
 
 const DEFAULT_API_BASE_URL = "https://crm.theofficeonrent.com/api";
@@ -43,21 +45,59 @@ export const api = axios.create({
 /*
  * Reachability, learned from real traffic: a request that dies without a
  * response marks the app offline, the next one that gets any answer marks it
- * back online. Drives the offline banner.
+ * back online; a 502/503/504 means the server is down; a request still
+ * waiting after a few seconds means a slow line. Drives the connection strip.
+ * While offline or down, a light /health probe notices recovery even when
+ * nobody is pulling to refresh.
  */
-let online = true;
-const onlineListeners = new Set<(value: boolean) => void>();
-const setOnline = (value: boolean) => {
-  if (online === value) return;
-  online = value;
-  onlineListeners.forEach((listener) => listener(value));
+let connection: ConnectionState = { online: true, slow: false, serverDown: false };
+const connectionListeners = new Set<(value: ConnectionState) => void>();
+let probeTimer: ReturnType<typeof setInterval> | null = null;
+
+const probe = () => {
+  axios
+    .get(`${API_BASE_URL}/health`, { timeout: 6000 })
+    .then(() => setConnection({ online: true, serverDown: false }))
+    .catch((error: AxiosError) => {
+      if (error.response) setConnection({ online: true, serverDown: isServerDownStatus(error.response.status) });
+    });
 };
-export const subscribeOnline = (listener: (value: boolean) => void) => {
-  onlineListeners.add(listener);
-  listener(online);
+
+const setConnection = (patch: Partial<ConnectionState>) => {
+  const next = { ...connection, ...patch };
+  if (next.online === connection.online && next.slow === connection.slow && next.serverDown === connection.serverDown) return;
+  connection = next;
+  connectionListeners.forEach((listener) => listener(next));
+  const troubled = !next.online || next.serverDown;
+  if (troubled && !probeTimer) probeTimer = setInterval(probe, 10000);
+  if (!troubled && probeTimer) {
+    clearInterval(probeTimer);
+    probeTimer = null;
+  }
+};
+const setOnline = (online: boolean) => setConnection(online ? { online } : { online, slow: false });
+
+export const subscribeConnection = (listener: (value: ConnectionState) => void) => {
+  connectionListeners.add(listener);
+  listener(connection);
   return () => {
-    onlineListeners.delete(listener);
+    connectionListeners.delete(listener);
   };
+};
+export const subscribeOnline = (listener: (value: boolean) => void) => subscribeConnection((value) => listener(value.online));
+/* Checks straight away (the "Try again" on the strip, or the app coming back to the front). */
+export const recheckConnection = () => {
+  if (!connection.online || connection.serverDown) probe();
+};
+AppState.addEventListener("change", (state) => {
+  if (state === "active") recheckConnection();
+});
+
+type Timed = { _startedAt?: number; _slowTimer?: ReturnType<typeof setTimeout> };
+const finished = (config: Timed | undefined) => {
+  if (!config) return;
+  if (config._slowTimer) clearTimeout(config._slowTimer);
+  if (config._startedAt && Date.now() - config._startedAt < FAST_MS) setConnection({ slow: false });
 };
 
 let onUnauthorized: null | (() => void) = null;
@@ -66,6 +106,10 @@ export const setUnauthorizedHandler = (handler: null | (() => void)) => {
 };
 
 api.interceptors.request.use(async (config) => {
+  const timed = config as typeof config & Timed;
+  timed._startedAt = Date.now();
+  if (timed._slowTimer) clearTimeout(timed._slowTimer);
+  timed._slowTimer = setTimeout(() => setConnection({ slow: true }), SLOW_MS);
   const token = await session.getToken();
   if (token && !config.headers.Authorization) config.headers.Authorization = `Bearer ${token}`;
   return config;
@@ -88,13 +132,16 @@ type RetryConfig = InternalAxiosRequestConfig & { _authRetry?: boolean; _netRetr
 
 api.interceptors.response.use(
   (response) => {
-    setOnline(true);
+    finished(response.config as Timed);
+    setConnection({ online: true, serverDown: false });
     return response;
   },
   async (error: AxiosError) => {
-    const config = (error.config || {}) as RetryConfig;
-    if (error.response) setOnline(true);
-    else if (error.code !== "ECONNABORTED" && config._netRetry) setOnline(false);
+    const config = (error.config || {}) as RetryConfig & Timed;
+    finished(config);
+    if (error.response) setConnection({ online: true, serverDown: isServerDownStatus(error.response.status) });
+    else if (error.code === "ECONNABORTED") setConnection({ slow: true });
+    else if (config._netRetry) setOnline(false);
 
     // One quiet retry for reads that died on the network (tunnel, lift, signal
     // handover). Writes are never retried: they may already have landed.

@@ -1,11 +1,10 @@
 import React, { useState } from "react";
-import { StyleSheet, View } from "react-native";
 import { errorMessage } from "../../api/client";
 import { createUser } from "../../api/admin";
 import { useUser } from "../../auth/AuthProvider";
 import { ROLE_LABELS } from "../../lib/roles";
 import type { RootScreenProps } from "../../navigation/types";
-import { Body, Button, Chip, Field, InlineError, Text } from "../../ui";
+import { Body, Button, Field, InlineError, Select } from "../../ui";
 
 const ROLES = ["EXECUTIVE", "FIELD_EXECUTIVE", "INSIDE_EXECUTIVE", "MANAGER", "PRODUCTION_EXECUTIVE", "COMMUNITY_MANAGER", "CHANNEL_PARTNER", "COWORKING_ADMIN"];
 
@@ -27,7 +26,12 @@ export const AddUserScreen = ({ navigation }: RootScreenProps<"AddUser">) => {
     setError(null);
     try {
       await createUser({ name: form.name.trim(), email: form.email.trim().toLowerCase(), phone: form.phone.replace(/[^\d+]/g, ""), role, password: form.password });
-      navigation.goBack();
+      navigation.replace("Success", {
+        title: "Account created",
+        message: `${form.name.trim()} can sign in now with ${form.email.trim().toLowerCase()} and the temporary password.`,
+        detail: "They'll be asked to choose their own password.",
+        next: { label: "Add another person", screen: "AddUser" },
+      });
     } catch (err) {
       setError(errorMessage(err));
       setSaving(false);
@@ -39,21 +43,10 @@ export const AddUserScreen = ({ navigation }: RootScreenProps<"AddUser">) => {
       <Field label="Full name" icon="person-outline" value={form.name} onChangeText={set("name")} autoCapitalize="words" placeholder="e.g. Rahul Verma" />
       <Field label="Work email" icon="mail-outline" value={form.email} onChangeText={set("email")} keyboardType="email-address" autoCapitalize="none" placeholder="name@theofficeonrent.com" />
       <Field label="Phone" icon="call-outline" value={form.phone} onChangeText={set("phone")} keyboardType="phone-pad" placeholder="98100 12345" />
-      <Text variant="smallStrong" color="muted">
-        Role
-      </Text>
-      <View style={styles.chips}>
-        {roles.map((key) => (
-          <Chip key={key} label={ROLE_LABELS[key as keyof typeof ROLE_LABELS]} selected={role === key} onPress={() => setRole(key)} />
-        ))}
-      </View>
+      <Select label="Role" icon="briefcase-outline" options={roles.map((key) => ({ key, label: ROLE_LABELS[key as keyof typeof ROLE_LABELS] }))} value={role} onChange={setRole} />
       <Field label="Temporary password" value={form.password} onChangeText={set("password")} secure autoCapitalize="none" hint="Share it privately; they can change it after signing in." />
       <InlineError message={error} />
       <Button label="Create account" icon="person-add" loading={saving} onPress={save} />
     </Body>
   );
 };
-
-const styles = StyleSheet.create({
-  chips: { flexDirection: "row", flexWrap: "wrap", gap: 6 },
-});

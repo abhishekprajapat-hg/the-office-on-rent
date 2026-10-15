@@ -8,7 +8,7 @@ import { formatWhen } from "../../lib/format";
 import { canScheduleFollowUp, defaultFollowUpOn, followUpQuickPicks, phoneSearch, toFollowUpPayload } from "../../lib/followUp";
 import { statusMeta } from "../../lib/leadStatus";
 import { useTheme } from "../../theme/ThemeProvider";
-import { Avatar, Badge, Button, Chip, Field, Icon, InlineError, Sheet, Text } from "../../ui";
+import { Avatar, Badge, Button, Field, Icon, InlineError, Select, Sheet, Text } from "../../ui";
 
 /*
  * Schedule a follow-up for any lead from the calendar (web MasterSchedule
@@ -148,14 +148,29 @@ export const ScheduleFollowUpSheet = ({
           ) : null}
         </>
       )}
-      <View style={styles.chips}>
-        {followUpQuickPicks().map((pick) => (
-          <Chip key={pick.key} label={pick.label} selected={Boolean(at) && at!.getTime() === pick.date.getTime()} onPress={() => setAt(pick.date)} />
-        ))}
-      </View>
+      <QuickPick at={at} onPick={setAt} />
       <DateTimeField label="Follow-up at" value={at} onChange={setAt} minimumDate={new Date()} />
       <InlineError message={error} />
     </Sheet>
+  );
+};
+
+/* The follow-up shortcuts (in 2 hours, tomorrow 11 AM…) as one dropdown beside the exact time. */
+const QuickPick = ({ at, onPick }: { at: Date | null; onPick: (date: Date) => void }) => {
+  const picks = followUpQuickPicks();
+  const current = picks.find((pick) => at && Math.abs(at.getTime() - pick.date.getTime()) < 60000);
+  return (
+    <Select
+      label="Quick pick"
+      placeholder="Choose a time"
+      icon="flash-outline"
+      options={picks.map((pick) => ({ key: pick.key, label: pick.label }))}
+      value={current?.key || ""}
+      onChange={(key) => {
+        const pick = picks.find((item) => item.key === key);
+        if (pick) onPick(pick.date);
+      }}
+    />
   );
 };
 
@@ -216,6 +231,5 @@ const styles = StyleSheet.create({
   flex: { flex: 1, minWidth: 0 },
   picked: { flexDirection: "row", alignItems: "center", gap: 10, borderWidth: 1, borderRadius: 14, padding: 10 },
   result: { flexDirection: "row", alignItems: "center", gap: 10, borderWidth: 1, borderRadius: 12, padding: 8 },
-  chips: { flexDirection: "row", flexWrap: "wrap", gap: 6 },
   entry: { gap: 2 },
 });

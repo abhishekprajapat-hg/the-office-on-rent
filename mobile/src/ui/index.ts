@@ -4,6 +4,7 @@ export { Badge, CountBubble } from "./Badge";
 export { Button } from "./Button";
 export { Card } from "./Card";
 export { Chip, ChipRow } from "./Chip";
+export { MultiSelect, Select, type SelectOption } from "./Select";
 export { Field } from "./Field";
 export { Icon, type IconName } from "./Icon";
 export { CheckSquare, FactRow, Grabber, IconTile, ListCard, ListRow, MiniStat, ProgressBar, Ring, Segmented, StatTile, Toggle } from "./Kit";
@@ -12,5 +13,6 @@ export { FilterBar, FilterDropdown, type FilterDef, type FilterOption } from "./
 export { PickerSheet, type PickerItem } from "./PickerSheet";
 export { Body, FooterBar, GroupLabel, HeaderButton, Screen, SectionTitle } from "./Screen";
 export { EmptyState, ErrorState, InlineError, Loading, OfflineBanner } from "./States";
+export { StatusPage, type StatusAction } from "./StatusPage";
 export { Text } from "./Text";
 export { Sheet } from "./Sheet";

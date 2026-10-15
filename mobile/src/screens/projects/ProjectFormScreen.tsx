@@ -19,7 +19,7 @@ import {
 } from "../../lib/projectForm";
 import type { RootScreenProps } from "../../navigation/types";
 import { useTheme } from "../../theme/ThemeProvider";
-import { Body, Button, Chip, ErrorState, Field, GroupLabel, Icon, InlineError, Loading, Segmented, Text } from "../../ui";
+import { Body, Button, ErrorState, Field, GroupLabel, Icon, InlineError, Loading, MultiSelect, Segmented, Select, Text } from "../../ui";
 
 const str = (value?: number | string | null) => (value === null || value === undefined ? "" : String(value));
 const intOrNull = (value: string) => (value.trim() && Number.isFinite(Number(value)) ? Number(value) : null);
@@ -242,26 +242,18 @@ export const ProjectFormScreen = ({ route, navigation }: RootScreenProps<"Projec
         onChange={(key) => setForm((prev) => ({ ...prev, projectCategory: key }))}
       />
       {residential ? (
-        <Group label="Project type">
-          {PROJECT_TYPES.map((item) => (
-            <Chip key={item.key} label={item.label} selected={form.projectType === item.key} onPress={() => set("projectType")(item.key)} />
-          ))}
-        </Group>
+        <Select label="Project type" options={PROJECT_TYPES.map((item) => ({ key: item.key, label: item.label }))} value={form.projectType} onChange={set("projectType")} />
       ) : null}
       <Field label="Project name" value={form.projectName} onChangeText={set("projectName")} maxLength={200} />
       <Field label="Total land area" value={form.totalLandArea} onChangeText={set("totalLandArea")} placeholder="e.g. 12 acres" maxLength={60} />
-      <Group label="Status">
-        {PROJECT_STATUSES.map((key) => (
-          <Chip key={key} label={humanize(key)} selected={form.status === key} onPress={() => set("status")(key)} />
-        ))}
-      </Group>
       {residential ? (
-        <Group label="Housing category (optional)">
-          {HOUSING_CATEGORIES.map((key) => (
-            <Chip key={key} label={key} selected={form.housingCategory === key} onPress={() => set("housingCategory")(form.housingCategory === key ? "" : key)} />
-          ))}
-        </Group>
-      ) : null}
+        <Pair>
+          <Select label="Status" options={PROJECT_STATUSES.map((key) => ({ key, label: humanize(key) }))} value={form.status} onChange={set("status")} />
+          <Select label="Housing category" placeholder="Optional" allowClear clearLabel="Not set" options={HOUSING_CATEGORIES.map((key) => ({ key, label: key }))} value={form.housingCategory} onChange={set("housingCategory")} />
+        </Pair>
+      ) : (
+        <Select label="Status" options={PROJECT_STATUSES.map((key) => ({ key, label: humanize(key) }))} value={form.status} onChange={set("status")} />
+      )}
 
       <GroupLabel>Pricing</GroupLabel>
       <Pair>
@@ -278,11 +270,7 @@ export const ProjectFormScreen = ({ route, navigation }: RootScreenProps<"Projec
             <Field label="Total plots" value={form.totalPlots} onChangeText={setNum("totalPlots")} keyboardType="number-pad" />
             <Field label="Available" value={form.plotsAvailable} onChangeText={setNum("plotsAvailable")} keyboardType="number-pad" />
           </Pair>
-          <Group label="Plot size (sq yd)">
-            {PLOT_SIZES.map((key) => (
-              <Chip key={key} label={key === "CUSTOM" ? "Custom" : key} selected={form.plotSize === key} onPress={() => set("plotSize")(form.plotSize === key ? "" : key)} />
-            ))}
-          </Group>
+          <Select label="Plot size (sq yd)" placeholder="Not set" allowClear clearLabel="Not set" options={PLOT_SIZES.map((key) => ({ key, label: key === "CUSTOM" ? "Custom" : key }))} value={form.plotSize} onChange={set("plotSize")} />
           {form.plotSize === "CUSTOM" ? <Field label="Custom plot size" value={form.customPlotSize} onChangeText={set("customPlotSize")} maxLength={60} /> : null}
         </>
       ) : null}
@@ -300,14 +288,12 @@ export const ProjectFormScreen = ({ route, navigation }: RootScreenProps<"Projec
           </Text>
           {bhk.map((row, index) => (
             <View key={index} style={styles.bhkRow}>
-              <View style={styles.chips}>
-                {BHK_TYPES.map((key) => (
-                  <Chip key={key} label={bhkLabel(key)} selected={row.bhk === key} onPress={() => setBhk((prev) => prev.map((item, at) => (at === index ? { ...item, bhk: key } : item)))} />
-                ))}
-              </View>
               <View style={styles.bhkSize}>
                 <View style={styles.flex}>
-                  <Field compact value={row.size} onChangeText={(size) => setBhk((prev) => prev.map((item, at) => (at === index ? { ...item, size: size.replace(/[^0-9.]/g, "") } : item)))} keyboardType="decimal-pad" suffix="sq ft" accessibilityLabel={`${bhkLabel(row.bhk)} flat size`} />
+                  <Select title="BHK" options={BHK_TYPES.map((key) => ({ key, label: bhkLabel(key) }))} value={row.bhk} onChange={(key) => setBhk((prev) => prev.map((item, at) => (at === index ? { ...item, bhk: key } : item)))} />
+                </View>
+                <View style={styles.flex}>
+                  <Field value={row.size} onChangeText={(size) => setBhk((prev) => prev.map((item, at) => (at === index ? { ...item, size: size.replace(/[^0-9.]/g, "") } : item)))} keyboardType="decimal-pad" suffix="sq ft" accessibilityLabel={`${bhkLabel(row.bhk)} flat size`} />
                 </View>
                 <Pressable accessibilityRole="button" accessibilityLabel="Remove configuration" hitSlop={8} onPress={() => setBhk((prev) => prev.filter((_, at) => at !== index))}>
                   <Icon name="trash-outline" size={18} color={colors.danger} />
@@ -374,11 +360,7 @@ export const ProjectFormScreen = ({ route, navigation }: RootScreenProps<"Projec
       ) : null}
 
       <GroupLabel>Amenities</GroupLabel>
-      <View style={styles.chips}>
-        {amenityChoices.map((key) => (
-          <Chip key={key} label={humanize(key)} selected={amenities.includes(key)} onPress={() => setAmenities((prev) => (prev.includes(key) ? prev.filter((item) => item !== key) : [...prev, key]))} />
-        ))}
-      </View>
+      <MultiSelect title="Amenities" placeholder="None picked" icon="sparkles-outline" options={amenityChoices.map((key) => ({ key, label: humanize(key) }))} value={amenities} onChange={setAmenities} />
 
       <GroupLabel>Location</GroupLabel>
       <Field label="Address" value={form.location} onChangeText={set("location")} maxLength={500} />
@@ -471,15 +453,6 @@ export const ProjectFormScreen = ({ route, navigation }: RootScreenProps<"Projec
   );
 };
 
-const Group = ({ label, children }: { label: string; children: React.ReactNode }) => (
-  <View style={styles.group}>
-    <Text variant="smallStrong" color="muted">
-      {label}
-    </Text>
-    <View style={styles.chips}>{children}</View>
-  </View>
-);
-
 const Pair = ({ children }: { children: React.ReactNode[] }) => (
   <View style={styles.pair}>
     {children.map((child, index) => (
@@ -493,7 +466,6 @@ const Pair = ({ children }: { children: React.ReactNode[] }) => (
 const styles = StyleSheet.create({
   flex: { flex: 1, minWidth: 0 },
   group: { gap: 8 },
-  chips: { flexDirection: "row", flexWrap: "wrap", gap: 6 },
   pair: { flexDirection: "row", gap: 10 },
   bhkRow: { gap: 8 },
   bhkSize: { flexDirection: "row", alignItems: "center", gap: 10 },

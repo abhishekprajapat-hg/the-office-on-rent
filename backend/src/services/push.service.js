@@ -64,6 +64,13 @@ const sendExpoBatch = async (rows, notification, result) => {
     data: { url: String(notification?.url || "/"), ...(notification?.data || {}) },
     sound: "default",
     channelId: "default",
+    /*
+     * Expo sends Android messages at FCM "normal" priority unless told
+     * otherwise, and Android holds normal messages back while the phone
+     * dozes - a chat message would show up minutes late, or when the phone is
+     * next unlocked. Everything here is something a person is waiting on.
+     */
+    priority: "high",
   }));
 
   try {

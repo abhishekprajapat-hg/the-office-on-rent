@@ -17,7 +17,7 @@ import { INVENTORY_STATUS, priceLine, propertyTitle, FURNISHING } from "../../li
 import { roleLabel } from "../../lib/roles";
 import { useTheme } from "../../theme/ThemeProvider";
 import { radius, space } from "../../theme/tokens";
-import { Avatar, Badge, Button, Card, Chip, Field, Icon, InlineError, Loading, SectionTitle, Segmented, Text, type IconName } from "../../ui";
+import { Avatar, Badge, Button, Card, Field, FilterDropdown, Icon, InlineError, Loading, SectionTitle, Segmented, Text, type IconName } from "../../ui";
 
 const SOURCE_LABELS: Record<string, string> = {
   META: "Meta ads",
@@ -462,19 +462,22 @@ export const LeadActivityTab = ({ lead, activity, tasks }: { lead: LeadDetail; a
         </>
       ) : null}
       <SectionTitle title="Activity timeline" />
-      <View style={styles.chips}>
-        {(
+      <FilterDropdown
+        label="Show"
+        icon="funnel-outline"
+        grow={false}
+        options={(
           [
-            ["ALL", "All"],
+            ["ALL", "Everything"],
             ["NOTES", "Notes"],
             ["CALLS", "Calls"],
             ["VISITS", "Visits"],
             ["ASSIGNMENTS", "Assignments"],
           ] as [TimelineFilter, string][]
-        ).map(([key, label]) => (
-          <Chip key={key} label={label} selected={filter === key} onPress={() => setFilter(key)} />
-        ))}
-      </View>
+        ).map(([key, label]) => ({ key, label }))}
+        value={filter}
+        onChange={setFilter}
+      />
       <Card style={styles.rows}>
         {shown.length ? (
           shown.map((entry, index) => (

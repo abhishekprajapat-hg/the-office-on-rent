@@ -17,7 +17,7 @@ import {
   type ProfileDraft,
 } from "../../lib/userAdmin";
 import { useTheme } from "../../theme/ThemeProvider";
-import { Button, Chip, Field, InlineError, MiniStat, ProgressBar, Segmented, Sheet, Text, Toggle } from "../../ui";
+import { Button, Field, InlineError, MiniStat, ProgressBar, Segmented, Select, Sheet, Text, Toggle } from "../../ui";
 
 /*
  * The parts of web UserDetailsEditor the mobile person page was missing:
@@ -47,22 +47,16 @@ export const EditDetailsSheet = ({
   const [draft, setDraft] = useState<ProfileDraft>(() => profileDraftFrom(person));
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [query, setQuery] = useState("");
 
   useEffect(() => {
     if (!visible) return;
     setDraft(profileDraftFrom(person));
     setError(null);
-    setQuery("");
   }, [visible, person]);
 
   const set = <K extends keyof ProfileDraft>(key: K, value: ProfileDraft[K]) => setDraft((prev) => ({ ...prev, [key]: value }));
   const parents = PARENT_ROLES[role] || [];
-  const candidates = useMemo(() => {
-    const rows = reportingCandidates(users, role, person._id);
-    const needle = query.trim().toLowerCase();
-    return needle ? rows.filter((user) => user.name.toLowerCase().includes(needle) || user._id === draft.reportingToId) : rows;
-  }, [users, role, person._id, query, draft.reportingToId]);
+  const candidates = useMemo(() => reportingCandidates(users, role, person._id), [users, role, person._id]);
   const partner = role === "CHANNEL_PARTNER";
 
   const save = async () => {
@@ -86,27 +80,19 @@ export const EditDetailsSheet = ({
       <Field label="Email" value={draft.email} onChangeText={(value) => set("email", value)} autoCapitalize="none" keyboardType="email-address" placeholder="name@company.com" />
       <Field label="Phone" value={draft.phone} onChangeText={(value) => set("phone", value)} keyboardType="phone-pad" placeholder="Optional" />
 
-      <Text variant="smallStrong" color="muted">
-        Business category
-      </Text>
-      <View style={styles.chips}>
-        {BUSINESS_CATEGORIES.map((item) => (
-          <Chip key={item.key} label={item.label} selected={draft.roleType === item.key} onPress={() => set("roleType", item.key)} />
-        ))}
-      </View>
+      <Select label="Business category" options={BUSINESS_CATEGORIES.map((item) => ({ key: item.key, label: item.label }))} value={draft.roleType} onChange={(key) => set("roleType", key)} />
 
       {parents.length ? (
         <>
-          <Text variant="smallStrong" color="muted">
-            Reports to ({parents.map((key) => ROLE_LABELS[key as keyof typeof ROLE_LABELS] || key).join(" or ")})
-          </Text>
-          {reportingCandidates(users, role, person._id).length > 8 ? <Field value={query} onChangeText={setQuery} placeholder="Search by name" icon="search" compact /> : null}
           {candidates.length ? (
-            <View style={styles.chips}>
-              {candidates.map((user) => (
-                <Chip key={user._id} label={user.name} selected={draft.reportingToId === user._id} onPress={() => set("reportingToId", user._id)} />
-              ))}
-            </View>
+            <Select
+              label={`Reports to (${parents.map((key) => ROLE_LABELS[key as keyof typeof ROLE_LABELS] || key).join(" or ")})`}
+              placeholder="Choose a person"
+              icon="git-network-outline"
+              options={candidates.map((user) => ({ key: user._id, label: user.name, hint: ROLE_LABELS[user.role as keyof typeof ROLE_LABELS] || user.role }))}
+              value={draft.reportingToId}
+              onChange={(key) => set("reportingToId", key)}
+            />
           ) : (
             <Text variant="small" color={colors.warning}>
               No active {parents.map((key) => (ROLE_LABELS[key as keyof typeof ROLE_LABELS] || key).toLowerCase()).join(" or ")} to report to.
@@ -265,7 +251,6 @@ const Block = ({ title, note, children }: { title: string; note?: string; childr
 
 const styles = StyleSheet.create({
   flex: { flex: 1, minWidth: 0 },
-  chips: { flexDirection: "row", flexWrap: "wrap", gap: 6 },
   row: { flexDirection: "row", gap: 10 },
   half: { flex: 1 },
   toggleRow: { flexDirection: "row", alignItems: "center", gap: 12, borderWidth: 1, borderRadius: 12, padding: 12 },

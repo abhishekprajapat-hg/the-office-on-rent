@@ -1,5 +1,6 @@
 import React, { useCallback, useEffect, useRef, useState } from "react";
-import { AppState, Image, StyleSheet, View } from "react-native";
+import { AppState, StyleSheet, View } from "react-native";
+import { BrandLogo } from "./BrandLogo";
 import { useAuth } from "../auth/AuthProvider";
 import { biometricLabel, unlock } from "../lib/biometric";
 import { prefs, usePrefs } from "../lib/prefs";
@@ -52,7 +53,7 @@ export const AppLock = ({ children }: { children: React.ReactNode }) => {
 
   return (
     <View style={[styles.cover, { backgroundColor: colors.bg }]}>
-      <Image source={require("../../assets/logo-mark.png")} style={styles.logo} resizeMode="contain" />
+      <BrandLogo height={44} style={styles.logo} />
       <Text variant="title" align="center">
         Locked
       </Text>
@@ -67,6 +68,6 @@ export const AppLock = ({ children }: { children: React.ReactNode }) => {
 
 const styles = StyleSheet.create({
   cover: { flex: 1, alignItems: "center", justifyContent: "center", padding: 32, gap: 10 },
-  logo: { width: 64, height: 64, marginBottom: 8 },
+  logo: { alignSelf: "center", marginBottom: 8 },
   button: { alignSelf: "stretch", marginTop: 12 },
 });

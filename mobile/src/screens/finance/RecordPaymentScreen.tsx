@@ -1,22 +1,24 @@
 import React, { useState } from "react";
 import { Image, Pressable, StyleSheet, TextInput, View } from "react-native";
 import { useNavigation } from "@react-navigation/native";
+import type { NativeStackNavigationProp } from "@react-navigation/native-stack";
+import type { RootStackParamList } from "../../navigation/types";
 import { errorMessage, mediaUrl } from "../../api/client";
 import { createEntry, EXPENSE_CATEGORIES, INCOME_CATEGORIES, PAYMENT_METHODS } from "../../api/finance";
 import type { UploadedFile } from "../../api/uploads";
 import { AttachButton } from "../../components/AttachButton";
 import { DateTimeField } from "../../components/DateTimeField";
-import { parseAmount } from "../../lib/money";
+import { formatPrice, parseAmount } from "../../lib/money";
 import { useTheme } from "../../theme/ThemeProvider";
 import { font } from "../../theme/tokens";
-import { Body, Button, Field, FooterBar, Icon, InlineError, Segmented, Text } from "../../ui";
+import { Body, Button, Field, FooterBar, Icon, InlineError, Segmented, Select, Text } from "../../ui";
 import { PickerSheet } from "../../ui/PickerSheet";
 
 const human = (value: string) => value.replace(/_/g, " ").toLowerCase().replace(/^\w/, (c) => c.toUpperCase());
 
 /* Design 29 - amount, mode, type, proof. Saves through POST /finance/entries like the web's Add entry. */
 export const RecordPaymentScreen = () => {
-  const navigation = useNavigation();
+  const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
   const { colors } = useTheme();
   const [kind, setKind] = useState<"INCOME" | "EXPENSE">("INCOME");
   const [amount, setAmount] = useState("");
@@ -54,7 +56,11 @@ export const RecordPaymentScreen = () => {
         status: kind === "EXPENSE" ? (paid ? "PAID" : "PENDING") : undefined,
         receipts: receipts.map((file) => ({ name: file.fileName, fileUrl: file.url, fileType: file.mimeType })),
       });
-      navigation.goBack();
+      navigation.replace("Success", {
+        title: kind === "INCOME" ? "Payment recorded" : "Expense recorded",
+        message: `${formatPrice(value)} ${kind === "INCOME" ? "received" : paid ? "paid" : "to be paid"} · ${human(category)}`,
+        next: { label: "Record another", screen: "RecordPayment" },
+      });
     } catch (err) {
       setError(errorMessage(err));
       setSaving(false);
@@ -101,30 +107,7 @@ export const RecordPaymentScreen = () => {
           />
         </View>
 
-        <View style={styles.group}>
-          <Text variant="smallStrong" color="muted" style={styles.label}>
-            Mode
-          </Text>
-          <View style={styles.modes}>
-            {PAYMENT_METHODS.map((item) => {
-              const on = method === item.key;
-              return (
-                <Pressable
-                  key={item.key}
-                  onPress={() => setMethod(item.key)}
-                  accessibilityRole="radio"
-                  accessibilityState={{ selected: on }}
-                  style={[styles.mode, { backgroundColor: on ? colors.primarySoft : colors.surface, borderColor: on ? colors.primary : colors.border }]}
-                >
-                  <Icon name={item.icon} size={18} color={on ? colors.primary : colors.text} />
-                  <Text variant="smallStrong" color={on ? colors.primary : colors.text} style={styles.modeLabel}>
-                    {item.label}
-                  </Text>
-                </Pressable>
-              );
-            })}
-          </View>
-        </View>
+        <Select label="Mode" icon={PAYMENT_METHODS.find((item) => item.key === method)?.icon} options={PAYMENT_METHODS.map((item) => ({ key: item.key, label: item.label }))} value={method} onChange={setMethod} />
 
         <View style={styles.group}>
           <Text variant="smallStrong" color="muted" style={styles.label}>
@@ -216,9 +199,6 @@ const styles = StyleSheet.create({
   party: { fontFamily: font.regular, fontSize: 12, textAlign: "center", minWidth: 240, padding: 0 },
   group: { gap: 8 },
   label: { fontSize: 11.5 },
-  modes: { flexDirection: "row", flexWrap: "wrap", gap: 6 },
-  mode: { width: "23.5%", flexGrow: 1, borderWidth: 1.5, borderRadius: 13, paddingVertical: 10, alignItems: "center", gap: 4 },
-  modeLabel: { fontSize: 11.5 },
   select: { height: 46, borderRadius: 13, borderWidth: 1, paddingHorizontal: 13, flexDirection: "row", alignItems: "center", justifyContent: "space-between" },
   selectText: { fontFamily: font.semibold },
   proof: { height: 84, borderRadius: 14, borderWidth: 1.5, borderStyle: "dashed", alignItems: "center", justifyContent: "center", gap: 4 },

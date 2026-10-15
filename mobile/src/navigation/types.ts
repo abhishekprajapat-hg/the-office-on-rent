@@ -89,7 +89,22 @@ export type RootStackParamList = {
   Legal: { doc: "privacy" | "terms" };
   /* Ask about leads, inventory and the team (POST /assistant/ask). */
   Assistant: undefined;
+  /* The "it worked" page after a create or send; `next` offers the obvious follow-up. */
+  Success: {
+    title: string;
+    message?: string;
+    detail?: string;
+    next?: SuccessNext;
+    doneLabel?: string;
+  };
+  /* Unknown deep links land here. */
+  NotFound: { path?: string } | undefined;
+  /* A link or tap to something this role can't open. */
+  NoAccess: { what?: string } | undefined;
 };
+
+/* Where the Success page's main button goes (a stack screen or a tab). */
+export type SuccessNext = { label: string; screen: string; params?: object };
 
 export type RootScreenProps<T extends keyof RootStackParamList> = NativeStackScreenProps<RootStackParamList, T>;
 

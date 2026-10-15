@@ -13,9 +13,10 @@ import { countByStage, LEAD_STAGES } from "../../lib/leadStatus";
 import { roleLabel } from "../../lib/roles";
 import { useQuery } from "../../lib/useQuery";
 import { useFeed } from "../../notifications/feed";
+import { ChatButton } from "../../components/ChatButton";
 import { useTheme } from "../../theme/ThemeProvider";
 import { gutter, toneColors, type Tone } from "../../theme/tokens";
-import { Avatar, Card, CountBubble, Icon, IconTile, ListCard, Loading, ProgressBar, SectionTitle, Text, type IconName } from "../../ui";
+import { Avatar, Card, Icon, IconTile, ListCard, Loading, OfflineBanner, ProgressBar, SectionTitle, Text, type IconName } from "../../ui";
 
 const settle = <T,>(promise: Promise<T>) => promise.catch(() => null);
 
@@ -92,6 +93,7 @@ export const ManagerHome = () => {
                 Hi, {firstName(user.name)}
               </Text>
             </View>
+            <ChatButton style={{ backgroundColor: colors.bg }} />
             <Pressable
               accessibilityRole="button"
               accessibilityLabel={unread ? `Notifications, ${unread} unread` : "Notifications"}
@@ -112,6 +114,7 @@ export const ManagerHome = () => {
             <StripTile value={data?.team ? onLeave : "—"} label="On leave" tone="violet" />
           </View>
         </View>
+        <OfflineBanner inset={false} style={styles.connection} />
 
         {loading ? (
           <View style={styles.loading}>
@@ -260,6 +263,7 @@ const styles = StyleSheet.create({
   bell: { width: 42, height: 42, borderRadius: 14, alignItems: "center", justifyContent: "center" },
   dot: { position: "absolute", top: 9, right: 10, width: 8, height: 8, borderRadius: 4 },
   strip: { flexDirection: "row", gap: 6 },
+  connection: { marginHorizontal: 18, marginTop: 12, marginBottom: 0 },
   stripTile: { flex: 1, borderRadius: 14, paddingVertical: 10, paddingHorizontal: 6, alignItems: "center", gap: 1 },
   stripValue: { fontSize: 17 },
   stripLabel: { fontFamily: "PlusJakartaSans_600SemiBold" },

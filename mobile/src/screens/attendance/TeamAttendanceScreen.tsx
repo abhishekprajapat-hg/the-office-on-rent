@@ -8,23 +8,7 @@ import { formatDayLong, formatMinutes, formatTime } from "../../lib/format";
 import { useQuery } from "../../lib/useQuery";
 import type { RootScreenProps } from "../../navigation/types";
 import { useTheme } from "../../theme/ThemeProvider";
-import {
-  ActionSheet,
-  Avatar,
-  Badge,
-  Body,
-  Chip,
-  EmptyState,
-  ErrorState,
-  Field,
-  Icon,
-  InlineError,
-  ListCard,
-  Loading,
-  MiniStat,
-  Text,
-  type SheetAction,
-} from "../../ui";
+import { ActionSheet, Avatar, Badge, Body, EmptyState, ErrorState, Field, FilterDropdown, Icon, InlineError, ListCard, Loading, MiniStat, Text, type SheetAction } from "../../ui";
 import { BreakCorrectionSheet, DayStatusSheet, type DayTarget } from "./AttendanceAdminSheets";
 
 const FILTERS: { key: TeamFilter; label: string }[] = [
@@ -153,18 +137,13 @@ export const TeamAttendanceScreen = ({ navigation }: RootScreenProps<"TeamAttend
         </View>
       ) : null}
 
-      <View style={styles.chips}>
-        {FILTERS.map((item) => (
-          <Chip
-            key={item.key}
-            variant="filter"
-            label={item.label}
-            count={item.key === "all" ? data?.rows.length : counts[item.key]}
-            selected={filter === item.key}
-            onPress={() => setFilter(item.key)}
-          />
-        ))}
-      </View>
+      <FilterDropdown
+        label="Show"
+        icon="funnel-outline"
+        options={FILTERS.map((item) => ({ key: item.key, label: item.label, count: item.key === "all" ? data?.rows.length : counts[item.key] }))}
+        value={filter}
+        onChange={setFilter}
+      />
       <Field compact icon="search-outline" value={query} onChangeText={setQuery} placeholder="Search people" />
 
       {notice ? (
@@ -234,7 +213,6 @@ const styles = StyleSheet.create({
   dateLabel: { alignItems: "center" },
   disabled: { opacity: 0.3 },
   stats: { flexDirection: "row", gap: 6 },
-  chips: { flexDirection: "row", flexWrap: "wrap", gap: 6 },
   row: { flexDirection: "row", alignItems: "center", gap: 12, padding: 12 },
   name: { fontSize: 14 },
 });

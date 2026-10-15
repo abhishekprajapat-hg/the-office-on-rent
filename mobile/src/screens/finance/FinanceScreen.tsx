@@ -352,7 +352,6 @@ const styles = StyleSheet.create({
   heroTileValue: { fontSize: 14, fontFamily: "PlusJakartaSans_800ExtraBold" },
   heroFoot: { marginTop: -2 },
   chipScroll: { flexGrow: 0 },
-  chips: { gap: 6, alignItems: "center" },
   chip: { paddingHorizontal: 12, paddingVertical: 7, borderRadius: 999 },
   card: { borderWidth: 1, borderRadius: 18, padding: 12, gap: 10 },
   cardHead: { flexDirection: "row", alignItems: "center", gap: 10 },
