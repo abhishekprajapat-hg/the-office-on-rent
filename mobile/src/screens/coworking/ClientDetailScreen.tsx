@@ -1,286 +1,242 @@
-import React, { useState } from "react";
+import React, { useLayoutEffect, useMemo, useState } from "react";
 import { Linking, Pressable, StyleSheet, View } from "react-native";
-import { errorMessage } from "../../api/client";
-import {
-  CW_PAYMENT_METHODS,
-  getCwClient,
-  invoiceDue,
-  isOpenInvoice,
-  listBookings,
-  listContracts,
-  listCwInvoices,
-  recordCwPayment,
-  renewContract,
-  type Contract,
-  type CwInvoice,
-} from "../../api/coworking";
-import { DateTimeField } from "../../components/DateTimeField";
-import { isoDay } from "../../lib/attendanceState";
-import { dialable, formatDate } from "../../lib/format";
-import { formatRupees, parseAmount } from "../../lib/money";
-import { useQuery } from "../../lib/useQuery";
-import type { RootScreenProps } from "../../navigation/types";
+import { canDoPageAction, canOpenPage } from "../../api/access";
+import { useAuth } from "../../auth/AuthProvider";
 import { BillstackCard } from "../../components/BillstackCard";
+import { DocumentChecklist } from "../../components/coworking/DocumentChecklist";
+import { StatusDot } from "../../components/coworking/CabinTile";
+import { directoryFrom, type BoardDocument } from "../../lib/coworkingBoard";
+import { CLIENT_KINDS, kycStatusOf } from "../../lib/coworkingKyc";
+import { formatDate, initials, rupees } from "../../lib/format";
+import { useBoard } from "../../lib/useBoard";
+import type { RootScreenProps } from "../../navigation/types";
 import { useTheme } from "../../theme/ThemeProvider";
-import { Avatar, Badge, Body, Button, Chip, ErrorState, Field, GroupLabel, Icon, InlineError, ListCard, Loading, Sheet, Text } from "../../ui";
+import { Badge, Body, Button, Card, ErrorState, FactRow, GroupLabel, Icon, InlineError, ListCard, Loading, Text } from "../../ui";
 
-const CONTRACT_TONE = { DRAFT: "neutral", ACTIVE: "success", EXPIRING: "warning", EXPIRED: "neutral", TERMINATED: "danger" } as const;
-const INVOICE_TONE = { PENDING: "warning", PARTIALLY_PAID: "warning", PAID: "success", OVERDUE: "danger", CANCELLED: "neutral" } as const;
-const human = (value: string) => value.charAt(0) + value.slice(1).toLowerCase().replace(/_/g, " ");
-
+/*
+ * Web: coworking/clients/components/ClientProfile. One client, current or
+ * former: what they pay, the cabins they hold, their documents (editable here),
+ * and every earlier stay.
+ */
 export const ClientDetailScreen = ({ route, navigation }: RootScreenProps<"ClientDetail">) => {
   const { id } = route.params;
   const { colors } = useTheme();
-  const { data, loading, error, refreshing, refresh, reload } = useQuery(async () => {
-    const [client, contracts, invoices, bookings] = await Promise.all([
-      getCwClient(id),
-      listContracts({ clientId: id }),
-      listCwInvoices({ clientId: id }).catch(() => [] as CwInvoice[]),
-      listBookings({ clientId: id, limit: 20 }).catch(() => []),
-    ]);
-    if (!client) throw new Error("This client no longer exists.");
-    return { client, contracts, invoices, bookings };
-  }, [id]);
+  const { user, access } = useAuth();
+  const canEdit = canDoPageAction(user, access, "coworking_clients", "edit") || canDoPageAction(user, access, "coworking_booking", "edit");
+  const boardAllowed = canOpenPage(user, access, "coworking_booking");
+  const { board, loading, error, refresh, refreshing, busy, actionError, run } = useBoard();
+  const [notice, setNotice] = useState<string | null>(null);
+  const client = useMemo(() => directoryFrom(board?.cabins || []).find((item) => item.id === id) || null, [board, id]);
 
-  const [paying, setPaying] = useState<CwInvoice | null>(null);
-  const [amount, setAmount] = useState("");
-  const [method, setMethod] = useState<string>("UPI");
-  const [reference, setReference] = useState("");
-  const [renewing, setRenewing] = useState<Contract | null>(null);
-  const [newEnd, setNewEnd] = useState<Date | null>(null);
-  const [newRent, setNewRent] = useState("");
-  const [busy, setBusy] = useState(false);
-  const [sheetError, setSheetError] = useState<string | null>(null);
-
-  React.useLayoutEffect(() => {
-    if (data?.client) navigation.setOptions({ title: data.client.companyName });
-  }, [navigation, data?.client]);
+  useLayoutEffect(() => {
+    navigation.setOptions({ title: client?.name || "Client" });
+  }, [navigation, client?.name]);
 
   if (loading) return <Loading />;
-  if (error || !data) return <ErrorState message={error || "Couldn't load this client."} onRetry={refresh} />;
-  const { client, contracts, invoices, bookings } = data;
-  const tel = dialable(client.phone);
-  const outstanding = invoices.filter(isOpenInvoice).reduce((sum, item) => sum + invoiceDue(item), 0);
+  if (error || !board) return <ErrorState message={error || "Couldn't load this client."} onRetry={refresh} />;
+  if (!client) return <ErrorState message="This client isn't on the booking board any more." onRetry={refresh} />;
 
-  const pay = async () => {
-    const value = parseAmount(amount);
-    if (!paying || !value) return setSheetError("Enter the amount received.");
-    setBusy(true);
-    setSheetError(null);
-    try {
-      await recordCwPayment({ invoiceId: paying._id, amount: value, method, transactionReference: reference.trim() || undefined, paymentDate: new Date().toISOString() });
-      setPaying(null);
-      reload();
-    } catch (err) {
-      setSheetError(errorMessage(err));
-    } finally {
-      setBusy(false);
-    }
-  };
+  const isActive = client.kind === "active";
+  const kyc = kycStatusOf({ kind: client.entityKind, documents: client.documents });
+  const kindLabel = CLIENT_KINDS.find((option) => option.id === client.entityKind)?.label;
+  const dob = client.dateOfBirth || client.documents.find((doc) => doc.extractedDateOfBirth)?.extractedDateOfBirth;
+  const booked = client.cabins.find((cabin) => cabin.status === "BOOKED");
+  const openCabin = (code: string) => boardAllowed && navigation.navigate("Cabin", { code });
 
-  const renew = async () => {
-    if (!renewing || !newEnd) return setSheetError("Pick the new end date.");
-    setBusy(true);
-    setSheetError(null);
-    try {
-      await renewContract(renewing._id, { newEndDate: isoDay(newEnd), newRent: parseAmount(newRent) ?? renewing.rent });
-      setRenewing(null);
-      reload();
-    } catch (err) {
-      setSheetError(errorMessage(err));
-    } finally {
-      setBusy(false);
-    }
+  const saveDocuments = async (documents: BoardDocument[]) => {
+    setNotice(null);
+    if (await run({ type: "SET_CLIENT_DOCUMENTS", clientId: client.id, documents })) setNotice("Documents updated.");
   };
 
   return (
     <Body refreshing={refreshing} onRefresh={refresh}>
-      <View style={[styles.hero, { backgroundColor: colors.surface, borderColor: colors.border }]}>
-        <Avatar name={client.companyName} size={54} />
-        <View style={styles.flex}>
-          <Text variant="heading" numberOfLines={2}>
-            {client.companyName}
-          </Text>
-          <Text variant="small" color="muted">
-            {[client.contactPerson, client.clientCode, client.clientType ? human(client.clientType) : ""].filter(Boolean).join(" · ")}
-          </Text>
+      <Card style={styles.head}>
+        <View style={styles.headRow}>
+          <View style={[styles.avatar, { backgroundColor: isActive ? colors.primary : colors.textFaint }]}>
+            <Text variant="bodyStrong" color={colors.onPrimary}>
+              {initials(client.name)}
+            </Text>
+          </View>
+          <View style={styles.flex}>
+            <Text variant="title" numberOfLines={2}>
+              {client.name}
+            </Text>
+            <Text variant="small" color="muted">
+              {client.industry || "Industry not recorded"}
+              {isActive && client.since ? ` · with us since ${formatDate(client.since)}` : ""}
+              {!isActive && client.lastLeft ? ` · left ${formatDate(client.lastLeft)}` : ""}
+            </Text>
+          </View>
         </View>
-        {client.status ? <Badge label={human(client.status)} tone={client.status === "ACTIVE" ? "success" : "neutral"} /> : null}
+        <View style={styles.badges}>
+          <Badge label={isActive ? "Current client" : "Former client"} tone={isActive ? "success" : "neutral"} />
+          {kindLabel ? <Badge label={`${kindLabel}${client.entityType ? ` · ${client.entityType}` : ""}`} /> : null}
+          <Badge label={kyc.complete ? "KYC complete" : `KYC ${kyc.uploaded}/${kyc.required}`} tone={kyc.complete ? "success" : "warning"} />
+          {client.returning ? <Badge label="Returning" tone="primary" /> : null}
+        </View>
+      </Card>
+
+      <View style={styles.stats}>
+        {isActive ? (
+          <>
+            <Stat label="Monthly rent" value={rupees(client.monthlyRent)} />
+            <Stat label="Cabins" value={String(client.cabins.length)} />
+            <Stat label="Seats" value={String(client.capacity)} />
+          </>
+        ) : (
+          <>
+            <Stat label="Cabins held" value={String(client.stays.length)} />
+            <Stat label="Total tenancy" value={`${client.totalMonths} mo`} />
+            <Stat label="Last seen" value={formatDate(client.lastLeft) || "—"} />
+          </>
+        )}
       </View>
 
-      <View style={styles.actions}>
-        {tel ? <Button label="Call" icon="call" variant="soft" style={styles.flex} onPress={() => Linking.openURL(`tel:${tel}`)} /> : null}
-        {tel ? <Button label="WhatsApp" icon="logo-whatsapp" variant="soft" style={styles.flex} onPress={() => Linking.openURL(`https://wa.me/${tel.replace(/^\+/, "").replace(/^(\d{10})$/, "91$1")}`)} /> : null}
-        {client.email ? <Button label="Email" icon="mail" variant="soft" style={styles.flex} onPress={() => Linking.openURL(`mailto:${client.email}`)} /> : null}
-      </View>
-
-      <ListCard>
-        {[
-          ["Phone", client.phone],
-          ["Email", client.email],
-          ["GST", client.gstNumber],
-          ["KYC", client.kycStatus ? human(client.kycStatus) : ""],
-          ["Outstanding", outstanding ? formatRupees(outstanding) : "Nothing due"],
-        ]
-          .filter(([, value]) => value)
-          .map(([label, value]) => (
-            <View key={label} style={styles.fact}>
-              <Text variant="small" color="muted">
-                {label}
-              </Text>
-              <Text variant="smallStrong" color={label === "Outstanding" && outstanding ? colors.danger : colors.text} selectable>
-                {value}
-              </Text>
-            </View>
-          ))}
-      </ListCard>
-
-      <GroupLabel>{`Contracts · ${contracts.length}`}</GroupLabel>
-      {contracts.length ? (
-        <ListCard>
-          {contracts.map((item) => (
-            <View key={item._id} style={styles.item}>
-              <View style={styles.itemTop}>
-                <Text variant="bodyStrong" style={styles.flex}>
-                  {item.contractCode} · {typeof item.cabinId === "object" && item.cabinId ? item.cabinId.cabinCode : "Cabin"}
-                  {item.seatCode ? ` / ${item.seatCode}` : ""}
-                </Text>
-                <Badge label={human(item.status)} tone={CONTRACT_TONE[item.status]} />
-              </View>
-              <Text variant="small" color="muted">
-                {formatRupees(item.rent)} / mo · {formatDate(item.startDate)} – {formatDate(item.endDate)}
-                {item.lockInPeriodMonths ? ` · ${item.lockInPeriodMonths}-month lock-in` : ""}
-              </Text>
-              {["ACTIVE", "EXPIRING"].includes(item.status) ? (
-                <Pressable
-                  accessibilityRole="button"
-                  onPress={() => {
-                    const next = new Date(item.endDate);
-                    next.setFullYear(next.getFullYear() + 1);
-                    setNewEnd(next);
-                    setNewRent(String(item.rent));
-                    setSheetError(null);
-                    setRenewing(item);
-                  }}
-                >
-                  <Text variant="smallStrong" color="primary">
-                    Renew
-                  </Text>
-                </Pressable>
-              ) : null}
-            </View>
-          ))}
-        </ListCard>
-      ) : (
-        <Text variant="small" color="muted">
-          No contracts yet.
+      {notice ? (
+        <Text variant="smallStrong" color={colors.success}>
+          {notice}
         </Text>
-      )}
+      ) : null}
+      <InlineError message={actionError} />
 
-      <BillstackCard entityType="coworking-client" entityId={client._id} />
+      {client.duesAmount > 0 ? (
+        <Card style={[styles.gap, { backgroundColor: colors.dangerSoft, borderColor: colors.dangerSoft }]}>
+          <Text variant="smallStrong" color="danger">
+            {rupees(client.duesAmount)} overdue
+          </Text>
+          {canEdit
+            ? client.cabins
+                .filter((cabin) => (cabin.contract?.duesAmount || 0) > 0)
+                .map((cabin) => (
+                  <Button
+                    key={cabin.code}
+                    size="sm"
+                    variant="secondary"
+                    icon="cash-outline"
+                    label={`Record payment for ${cabin.label}`}
+                    loading={busy}
+                    onPress={async () => {
+                      setNotice(null);
+                      if (await run({ type: "RECORD_PAYMENT", cabinCode: cabin.code })) setNotice(`Payment recorded for ${cabin.label}.`);
+                    }}
+                  />
+                ))
+            : null}
+        </Card>
+      ) : null}
 
-      <GroupLabel>{`Invoices · ${invoices.length}`}</GroupLabel>
-      {invoices.length ? (
-        <ListCard>
-          {invoices.map((item) => (
-            <View key={item._id} style={styles.item}>
-              <View style={styles.itemTop}>
-                <Text variant="bodyStrong" style={styles.flex}>
-                  {item.invoiceNumber}
-                </Text>
-                <Badge label={human(item.status)} tone={INVOICE_TONE[item.status]} />
-              </View>
-              <Text variant="small" color="muted">
-                {formatRupees(item.totalAmount)}
-                {item.amountPaid ? ` · paid ${formatRupees(item.amountPaid)}` : ""} · due {formatDate(item.dueDate)}
-              </Text>
-              {isOpenInvoice(item) ? (
-                <Pressable
-                  accessibilityRole="button"
-                  onPress={() => {
-                    setAmount(String(invoiceDue(item)));
-                    setReference("");
-                    setSheetError(null);
-                    setPaying(item);
-                  }}
-                >
-                  <Text variant="smallStrong" color="primary">
-                    Record payment
-                  </Text>
-                </Pressable>
-              ) : null}
-            </View>
-          ))}
-        </ListCard>
-      ) : (
-        <Text variant="small" color="muted">
-          No invoices yet.
-        </Text>
-      )}
+      {booked ? <BillstackCard entityType="board" entityId={booked.code} /> : null}
 
-      {bookings.length ? (
+      <GroupLabel>Contact</GroupLabel>
+      <Card>
+        <FactRow label={client.entityKind === "company" ? "Signing authority 1" : "Contact"} value={client.contactPerson || "Not recorded"} />
+        {client.signingAuthority2 ? <FactRow label="Signing authority 2" value={client.signingAuthority2} /> : null}
+        {client.secondPersonName ? <FactRow label="Person 2" value={client.secondPersonName} /> : null}
+        <FactRow label="Work profile" value={client.industry || "Not recorded"} />
+        <FactRow icon="call-outline" label="Phone" value={client.phone || "Not recorded"} />
+        <FactRow icon="mail-outline" label="Email" value={client.email || "Not recorded"} />
+        <FactRow label="GSTIN" value={client.gstin || "Not recorded"} />
+        <FactRow label="Date of birth" value={dob ? formatDate(dob) : "Not recorded"} />
+        <View style={styles.pair}>
+          {client.phone ? <Button size="sm" variant="secondary" icon="call-outline" label="Call" style={styles.flex} onPress={() => Linking.openURL(`tel:${client.phone}`)} /> : null}
+          {client.email ? <Button size="sm" variant="secondary" icon="mail-outline" label="Email" style={styles.flex} onPress={() => Linking.openURL(`mailto:${client.email}`)} /> : null}
+        </View>
+        {isActive && canEdit && client.cabins.some((cabin) => cabin.contract) ? (
+          <Button size="sm" variant="secondary" icon="create-outline" label="Edit client and agreement" style={styles.top} onPress={() => navigation.navigate("Onboard", { clientId: client.id })} />
+        ) : null}
+      </Card>
+
+      {isActive ? (
         <>
-          <GroupLabel>Recent bookings</GroupLabel>
+          <GroupLabel>{`Cabins held · ${client.cabins.length}`}</GroupLabel>
           <ListCard>
-            {bookings.map((item) => (
-              <View key={item._id} style={styles.fact}>
-                <Text variant="small" style={styles.flex}>
-                  {[item.cabinId?.cabinCode, item.seatCode].filter(Boolean).join(" / ")} · {formatDate(item.startDate)}
+            {client.cabins.map((cabin) => (
+              <Pressable key={cabin.code} accessibilityRole="button" disabled={!boardAllowed} onPress={() => openCabin(cabin.code)} style={({ pressed }) => [styles.row, pressed && { backgroundColor: colors.surfaceAlt }]}>
+                <StatusDot status={cabin.status} />
+                <Text variant="bodyStrong">{cabin.label}</Text>
+                <Text variant="small" color="muted" style={styles.flex}>
+                  {cabin.seats} seater
                 </Text>
-                <Text variant="tiny" color="muted">
-                  {human(item.status)}
-                </Text>
-              </View>
+                <View style={styles.right}>
+                  <Text variant="smallStrong">{rupees(cabin.contract?.monthlyRent ?? cabin.monthlyRent)}</Text>
+                  <Text variant="tiny" color={(cabin.contract?.endsInDays ?? 99) <= 45 ? colors.warning : colors.textMuted}>
+                    {cabin.contract ? `${cabin.contract.endsInDays}d left` : "—"}
+                  </Text>
+                </View>
+                {boardAllowed ? <Icon name="chevron-forward" size={15} color={colors.textFaint} /> : null}
+              </Pressable>
             ))}
           </ListCard>
+          {client.earliestEnd ? (
+            <Text variant="small" color="muted">
+              Next renewal {formatDate(client.earliestEnd)}
+            </Text>
+          ) : null}
         </>
       ) : null}
 
-      <Sheet
-        visible={Boolean(paying)}
-        title="Record payment"
-        subtitle={paying ? `${paying.invoiceNumber} · ${formatRupees(invoiceDue(paying))} due` : ""}
-        onClose={() => setPaying(null)}
-        footer={<Button label="Save payment" icon="checkmark" loading={busy} onPress={pay} />}
-      >
-        <Field label="Amount" value={amount} onChangeText={setAmount} keyboardType="numeric" suffix="₹" />
-        <View style={styles.chips}>
-          {CW_PAYMENT_METHODS.map((key) => (
-            <Chip key={key} label={key === "BANK_TRANSFER" ? "Bank transfer" : key === "UPI" ? "UPI" : human(key)} selected={method === key} onPress={() => setMethod(key)} />
-          ))}
-        </View>
-        <Field label="Reference" value={reference} onChangeText={setReference} placeholder="UTR / cheque no. (optional)" />
-        <InlineError message={sheetError} />
-      </Sheet>
+      <GroupLabel>{`Documents · ${kyc.totalUploaded}/${kyc.total}`}</GroupLabel>
+      <DocumentChecklist kind={client.entityKind || "company"} documents={client.documents || []} onChange={saveDocuments} readOnly={!canEdit || busy} />
 
-      <Sheet
-        visible={Boolean(renewing)}
-        title="Renew contract"
-        subtitle={renewing ? `${renewing.contractCode} ends ${formatDate(renewing.endDate)}` : ""}
-        onClose={() => setRenewing(null)}
-        footer={<Button label="Renew" icon="refresh" loading={busy} onPress={renew} />}
-      >
-        <DateTimeField label="New end date" mode="date" variant="tile" value={newEnd} onChange={setNewEnd} minimumDate={renewing ? new Date(renewing.endDate) : undefined} />
-        <Field label="New monthly rent" value={newRent} onChangeText={setNewRent} keyboardType="numeric" suffix="₹" />
-        <View style={styles.note}>
-          <Icon name="information-circle-outline" size={15} color={colors.textMuted} />
-          <Text variant="tiny" color="muted" style={styles.flex}>
-            Creates the follow-on contract; the current one stays until it ends.
+      <GroupLabel>{`Tenancy history · ${client.stays.length}`}</GroupLabel>
+      {client.stays.length ? (
+        <>
+          <ListCard>
+            {client.stays.map((stay) => (
+              <Pressable key={stay.id} accessibilityRole="button" disabled={!boardAllowed} onPress={() => openCabin(stay.cabinCode)} style={styles.row}>
+                <Text variant="smallStrong" color={boardAllowed ? colors.primary : colors.text}>
+                  {stay.cabinLabel}
+                </Text>
+                <Text variant="small" color="muted">
+                  {stay.seats} seater
+                </Text>
+                <Text variant="small" style={styles.flex} numberOfLines={1}>
+                  {formatDate(stay.from)} – {formatDate(stay.to)}
+                </Text>
+                <Text variant="small" color="muted">
+                  {stay.months} mo
+                </Text>
+              </Pressable>
+            ))}
+          </ListCard>
+          <Text variant="small" color="muted">
+            {client.totalMonths ? `${client.totalMonths} ${client.totalMonths === 1 ? "month" : "months"} of earlier tenancy.` : "No earlier tenancy on record."}
           </Text>
-        </View>
-        <InlineError message={sheetError} />
-      </Sheet>
+        </>
+      ) : (
+        <Text variant="small" color="muted">
+          This is their first tenancy in this coworking space.
+        </Text>
+      )}
     </Body>
+  );
+};
+
+const Stat = ({ label, value }: { label: string; value: string }) => {
+  const { colors } = useTheme();
+  return (
+    <View style={[styles.stat, { borderColor: colors.border, backgroundColor: colors.surface }]}>
+      <Text variant="tiny" color="muted">
+        {label}
+      </Text>
+      <Text variant="bodyStrong" numberOfLines={1}>
+        {value}
+      </Text>
+    </View>
   );
 };
 
 const styles = StyleSheet.create({
   flex: { flex: 1, minWidth: 0 },
-  hero: { flexDirection: "row", alignItems: "center", gap: 12, padding: 14, borderRadius: 18, borderWidth: 1 },
-  actions: { flexDirection: "row", gap: 8 },
-  fact: { flexDirection: "row", justifyContent: "space-between", gap: 10, paddingHorizontal: 14, paddingVertical: 10 },
-  item: { paddingHorizontal: 14, paddingVertical: 11, gap: 4 },
-  itemTop: { flexDirection: "row", alignItems: "center", gap: 8 },
-  chips: { flexDirection: "row", flexWrap: "wrap", gap: 6 },
-  note: { flexDirection: "row", gap: 6, alignItems: "flex-start" },
+  head: { gap: 10 },
+  headRow: { flexDirection: "row", alignItems: "center", gap: 12 },
+  avatar: { width: 48, height: 48, borderRadius: 24, alignItems: "center", justifyContent: "center" },
+  badges: { flexDirection: "row", flexWrap: "wrap", gap: 6 },
+  stats: { flexDirection: "row", gap: 8 },
+  stat: { flex: 1, borderWidth: 1, borderRadius: 14, padding: 10, gap: 2 },
+  gap: { gap: 8 },
+  pair: { flexDirection: "row", gap: 8, marginTop: 8 },
+  top: { marginTop: 8 },
+  row: { flexDirection: "row", alignItems: "center", gap: 10, padding: 12 },
+  right: { alignItems: "flex-end" },
 });
