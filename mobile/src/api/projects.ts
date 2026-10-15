@@ -106,7 +106,7 @@ export const humanize = (value?: string) =>
     .replace(/\btnc\b/i, "TNC")
     .replace(/\brera\b/i, "RERA");
 
-/* Fields the mobile form edits; unit-by-unit lists (offices, shops, showrooms) and photos are left as they are. */
+/* What the project form sends; the unit lists are commercial only, shaped by lib/projectUnits. */
 export type ProjectPayload = {
   projectCategory: "RESIDENTIAL" | "COMMERCIAL";
   projectType?: string;
@@ -141,6 +141,10 @@ export type ProjectPayload = {
   ownerManagerMobile?: string;
   brokerManagerName?: string;
   brokerManagerMobile?: string;
+  images?: string[];
+  offices?: Record<string, unknown>[];
+  shops?: Record<string, unknown>[];
+  showrooms?: Record<string, unknown>[];
 };
 
 /* POST /projects - admins and managers (or the Projects create grant). */

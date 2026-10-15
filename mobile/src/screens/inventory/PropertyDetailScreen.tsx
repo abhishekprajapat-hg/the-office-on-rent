@@ -5,6 +5,10 @@ import { linkProperty, listLeads } from "../../api/leads";
 import { PickerSheet } from "../../ui/PickerSheet";
 import { errorMessage, mediaUrl, webOrigin } from "../../api/client";
 import { createShareLink, getProperty } from "../../api/inventory";
+import { listConversations, sendMessage } from "../../api/chat";
+import { canOpenPage } from "../../api/access";
+import { useAuth } from "../../auth/AuthProvider";
+import { DOCUMENT_CHECKS, MODELS_BY_OWNERSHIP, OWNER_TYPES, OWNERSHIP } from "../../lib/propertyForm";
 import { dialable, formatDate, whatsappNumber } from "../../lib/format";
 import { formatRupees } from "../../lib/money";
 import { amenityLabels, areaLine, floorLabel, fullAddress, FURNISHING, INVENTORY_STATUS, propertyTitle } from "../../lib/property";
@@ -23,6 +27,10 @@ export const PropertyDetailScreen = ({ route, navigation }: RootScreenProps<"Pro
   const [shareError, setShareError] = useState<string | null>(null);
   const [sharedUrl, setSharedUrl] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
+  const { user, access } = useAuth();
+  const canChat = canOpenPage(user, access, "chat");
+  const [chatPick, setChatPick] = useState(false);
+  const { data: rooms } = useQuery(() => (chatPick ? listConversations() : Promise.resolve([])), [chatPick]);
 
   const { data: property, loading, error, refreshing, refresh, reload } = useQuery(async () => {
     const result = await getProperty(id);
@@ -95,6 +103,31 @@ export const PropertyDetailScreen = ({ route, navigation }: RootScreenProps<"Pro
     property.reservationReason ? ["Reserved", property.reservationReason] : null,
   ].filter(Boolean) as [string, string][];
   const extra = facts.filter((fact) => ["Bathrooms", "Parking", "Category"].includes(fact.label));
+  const files = [
+    ...(property.floorPlans || []).map((url, index) => ({ key: `plan${index}`, icon: "map-outline" as IconName, label: `Floor plan ${index + 1}`, url: mediaUrl(url) || url })),
+    ...(property.documents || []).map((url, index) => ({ key: `doc${index}`, icon: "document-text-outline" as IconName, label: decodeURIComponent(url.split("?")[0]!.split("/").pop() || `Document ${index + 1}`).replace(/^\d{10,}-/, ""), url: mediaUrl(url) || url })),
+    ...(property.videoTours || []).map((url, index) => ({ key: `video${index}`, icon: "videocam-outline" as IconName, label: `Video tour ${index + 1}`, url })),
+  ];
+  const papers = DOCUMENT_CHECKS.filter((item) => property.documentsAvailable?.[item.key]).map((item) => item.label);
+  const ownership = [
+    OWNER_TYPES.find((item) => item.key === property.ownerType)?.label,
+    OWNERSHIP.find((item) => item.key === property.ownershipType)?.label,
+    (MODELS_BY_OWNERSHIP[property.ownershipType || ""] || []).find((item) => item.key === property.businessModel)?.label,
+    property.gstApplicable ? "GST applicable" : null,
+  ].filter(Boolean) as string[];
+
+  /* Sends the property's card into a chat (web: share from inventory to Team Chat). */
+  const shareToChat = async (roomId: string) => {
+    setChatPick(false);
+    setShareError(null);
+    try {
+      await sendMessage(roomId, "", { sharedProperty: { inventoryId: property._id } });
+      const room = (rooms || []).find((item) => item._id === roomId);
+      setNotice(`Shared to ${room?.name || "the chat"}.`);
+    } catch (err) {
+      setShareError(errorMessage(err));
+    }
+  };
 
   return (
     <View style={[styles.flex, { backgroundColor: colors.bg }]}>
@@ -126,6 +159,11 @@ export const PropertyDetailScreen = ({ route, navigation }: RootScreenProps<"Pro
               <Pressable accessibilityRole="button" accessibilityLabel="Share link" onPress={share} style={[styles.round, { backgroundColor: colors.surface }]}>
                 <Icon name="share-social-outline" size={18} color={colors.primary} />
               </Pressable>
+              {canChat ? (
+                <Pressable accessibilityRole="button" accessibilityLabel="Share to a chat" onPress={() => setChatPick(true)} style={[styles.round, { backgroundColor: colors.surface }]}>
+                  <Icon name="chatbubble-ellipses-outline" size={18} color={colors.primary} />
+                </Pressable>
+              ) : null}
               {property.siteLocation?.lat && property.siteLocation?.lng ? (
                 <Pressable
                   accessibilityRole="button"
@@ -211,6 +249,36 @@ export const PropertyDetailScreen = ({ route, navigation }: RootScreenProps<"Pro
             </View>
           ) : null}
 
+          {files.length ? (
+            <ListCard>
+              {files.map((file) => (
+                <Pressable
+                  key={file.key}
+                  accessibilityRole="link"
+                  onPress={() => Linking.openURL(file.url).catch(() => {})}
+                  style={({ pressed }) => [styles.fileRow, pressed && { backgroundColor: colors.surfaceAlt }]}
+                >
+                  <Icon name={file.icon} size={18} color={colors.primary} />
+                  <Text variant="small" numberOfLines={1} style={styles.flex}>
+                    {file.label}
+                  </Text>
+                  <Icon name="open-outline" size={15} color={colors.textFaint} />
+                </Pressable>
+              ))}
+            </ListCard>
+          ) : null}
+
+          {papers.length || ownership.length ? (
+            <View style={styles.amenities}>
+              {ownership.map((label) => (
+                <Badge key={label} label={label} tone="violet" />
+              ))}
+              {papers.map((label) => (
+                <Badge key={label} label={`✓ ${label}`} tone="success" />
+              ))}
+            </View>
+          ) : null}
+
           {property.ownerName ? (
             <PersonCard
               label="Owner"
@@ -271,6 +339,22 @@ export const PropertyDetailScreen = ({ route, navigation }: RootScreenProps<"Pro
         onClose={() => setLinking(false)}
         searchPlaceholder="Search your leads"
       />
+      <PickerSheet
+        visible={chatPick}
+        title="Share to a chat"
+        subtitle="Sends the property card; teammates open it from the chat."
+        items={(rooms || [])
+          .filter((room) => room.type !== "broadcast")
+          .map((room) => ({
+            key: room._id,
+            label: room.name || room.participants.filter((person) => person._id !== (user?.id || user?._id)).map((person) => person.name).join(", ") || "Chat",
+            sub: room.type === "group" ? "Group" : room.type === "lead" ? "Lead room" : "Direct",
+            avatar: true,
+          }))}
+        onPick={shareToChat}
+        onClose={() => setChatPick(false)}
+        searchPlaceholder="Search chats"
+      />
     </View>
   );
 };
@@ -314,6 +398,7 @@ const PersonCard = ({ label, name, sub, phone, whatsapp }: { label: string; name
 const humanize = (value: string) => value.replace(/_/g, " ").toLowerCase().replace(/^\w/, (c) => c.toUpperCase());
 
 const styles = StyleSheet.create({
+  fileRow: { flexDirection: "row", alignItems: "center", gap: 10, paddingHorizontal: 14, paddingVertical: 12 },
   flex: { flex: 1, minWidth: 0 },
   wide: { flex: 1.4 },
   hero: { height: 230 },

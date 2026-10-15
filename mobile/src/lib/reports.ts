@@ -14,6 +14,7 @@ export type ReportLead = {
   assignedTo?: { _id: string; name: string } | null;
   assignedExecutive?: { _id: string; name: string } | null;
   createdBy?: { _id: string; name: string } | null;
+  assignmentHistory?: { action?: string }[];
 };
 
 export const SITE_VISIT_STATUSES = new Set(["SITE_VISIT", "SITE_VISIT_SCHEDULED", "SITE_VISIT_OVERDUE"]);
@@ -46,10 +47,18 @@ const STAGE: Record<string, number> = {
   CLOSED: 4,
 };
 
-export type RangeKey = "WEEK" | "MONTH" | "QUARTER";
+export type RangeKey = "WEEK" | "MONTH" | "QUARTER" | "YEAR" | "CUSTOM";
+export type DayRange = { from: Date; to: Date };
 
-/* [from, to] for this week/month/quarter; offset -1 gives the one before. */
-export const rangeBounds = (key: RangeKey, offset = 0, now = new Date()) => {
+/* [from, to] for this week/month/quarter/year, or the custom days; offset -1 gives the one before (a custom range has none). */
+export const rangeBounds = (key: RangeKey, offset = 0, now = new Date(), custom?: DayRange): DayRange | null => {
+  if (key === "CUSTOM") {
+    if (offset || !custom) return null;
+    // Picked the wrong way round still means the days between them.
+    const [first, last] = custom.from <= custom.to ? [custom.from, custom.to] : [custom.to, custom.from];
+    return { from: new Date(first.getFullYear(), first.getMonth(), first.getDate()), to: new Date(last.getFullYear(), last.getMonth(), last.getDate(), 23, 59, 59, 999) };
+  }
+  if (key === "YEAR") return { from: new Date(now.getFullYear() + offset, 0, 1), to: new Date(now.getFullYear() + offset, 11, 31, 23, 59, 59, 999) };
   if (key === "WEEK") {
     const start = new Date(now);
     start.setHours(0, 0, 0, 0);
@@ -67,10 +76,14 @@ export const rangeBounds = (key: RangeKey, offset = 0, now = new Date()) => {
 };
 
 const upper = (value?: string) => String(value || "").toUpperCase();
-const inRange = (value: string | undefined, bounds: { from: Date; to: Date }) => {
+const inRange = (value: string | undefined, bounds: DayRange | null) => {
+  if (!bounds) return false;
   const time = value ? new Date(value).getTime() : NaN;
   return Number.isFinite(time) && time >= bounds.from.getTime() && time <= bounds.to.getTime();
 };
+
+/* Web getLeadRangeDate: a finished lead counts in the period it finished, an open one in the period it came in. */
+export const rangeDateOf = (lead: ReportLead) => (["CLOSED", "LOST", "INVALID"].includes(upper(lead.status)) ? lead.updatedAt || lead.createdAt : lead.createdAt);
 
 export const sourceLabel = (lead: ReportLead) => {
   if (lead.sourceChannel) return lead.sourceChannel;
@@ -78,11 +91,11 @@ export const sourceLabel = (lead: ReportLead) => {
   return source === "META" ? "Meta ads" : source === "MANUAL" ? "Manual entry" : source ? source.charAt(0) + source.slice(1).toLowerCase() : "Other";
 };
 
-export const buildReport = (all: ReportLead[], key: RangeKey, now = new Date()) => {
-  const current = rangeBounds(key, 0, now);
-  const previous = rangeBounds(key, -1, now);
-  const leads = all.filter((lead) => inRange(lead.createdAt, current));
-  const before = all.filter((lead) => inRange(lead.createdAt, previous));
+export const buildReport = (all: ReportLead[], key: RangeKey, now = new Date(), custom?: DayRange) => {
+  const current = rangeBounds(key, 0, now, custom);
+  const previous = rangeBounds(key, -1, now, custom);
+  const leads = all.filter((lead) => inRange(rangeDateOf(lead), current));
+  const before = all.filter((lead) => inRange(rangeDateOf(lead), previous));
 
   const summarize = (rows: ReportLead[]) => {
     const closed = rows.filter((lead) => upper(lead.status) === "CLOSED");
@@ -144,8 +157,33 @@ export const buildReport = (all: ReportLead[], key: RangeKey, now = new Date()) 
   });
   const lostReasons = [...lost.entries()].map(([label, count]) => ({ label, count })).sort((a, b) => b.count - a.count).slice(0, 5);
 
-  return { bounds: current, summary: summarize(leads), previous: summarize(before), funnel, sourceMix, executives, lostReasons };
+  // Transfers stay countable after the lead moves on, so they come off the assignment history.
+  const transferred = leads.filter((lead) => (lead.assignmentHistory || []).some((entry) => entry.action === "MANUAL_TRANSFER")).length;
+
+  /* The last six months, leads in and closed (web monthlyBars). */
+  const monthly = Array.from({ length: 6 }, (_, index) => {
+    const month = new Date(now.getFullYear(), now.getMonth() - 5 + index, 1);
+    const bounds = { from: month, to: new Date(month.getFullYear(), month.getMonth() + 1, 0, 23, 59, 59, 999) };
+    const rows = all.filter((lead) => inRange(rangeDateOf(lead), bounds));
+    return { label: month.toLocaleString("en-IN", { month: "short" }), leads: rows.length, closed: rows.filter((lead) => upper(lead.status) === "CLOSED").length };
+  });
+
+  return { bounds: current, summary: summarize(leads), previous: summarize(before), hasPrevious: Boolean(previous), funnel, sourceMix, executives, lostReasons, transferred, monthly };
 };
+
+export type Report = ReturnType<typeof buildReport>;
+
+/* The web's "Export CSV" rows: Section, Metric, Value. */
+export const reportCsvRows = (report: Report): (string | number)[][] => [
+  ["Section", "Metric", "Value"],
+  ["Summary", "Leads received", report.summary.received],
+  ["Summary", "Transferred leads", report.transferred],
+  ["Summary", "Conversion", `${report.summary.conversion.toFixed(1).replace(/\.0$/, "")}%`],
+  ["Summary", "Avg. days to close", Math.round(report.summary.avgDaysToClose)],
+  ["Summary", "Revenue", report.summary.revenue],
+  ...report.executives.map((row) => ["Executive performance", row.name, `${row.leads} leads, ${row.visits} visits, ${row.closed} closed, ${row.conversion.toFixed(1).replace(/\.0$/, "")}%`]),
+  ...report.lostReasons.map((row) => ["Where leads are lost", row.label, row.count]),
+];
 
 /* "▲ 18%" / "▼ 12 min" style change against the previous period. */
 export const delta = (current: number, previous: number, inverse = false) => {

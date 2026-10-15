@@ -56,3 +56,16 @@ export const mergeMessage = <T extends Message & { localState?: string; clientId
 /* Whether to print a day divider above message i (list in time order). */
 export const startsNewDay = (list: { createdAt: string }[], index: number) =>
   index === 0 || new Date(list[index - 1]!.createdAt).toDateString() !== new Date(list[index]!.createdAt).toDateString();
+
+/* "Riya is typing…", "Riya and Aman are typing…", "3 people are typing…" */
+export const typingLine = (names: string[]) => {
+  const first = names.map((name) => name.trim().split(/\s+/)[0] || "Someone");
+  if (!first.length) return "";
+  if (first.length === 1) return `${first[0]} is typing…`;
+  if (first.length === 2) return `${first[0]} and ${first[1]} are typing…`;
+  return `${first.length} people are typing…`;
+};
+
+/* Messages from others in this list I haven't marked seen yet, newest last, at most `limit` of them. */
+export const unseenByMe = (list: Message[], myId: string, limit = 20) =>
+  list.filter((item) => item.sender?._id && item.sender._id !== myId && !(item.seenBy || []).some((entry) => String(entry.user) === myId) && !item._id.startsWith("local-")).slice(-limit);

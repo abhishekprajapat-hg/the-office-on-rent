@@ -9,6 +9,12 @@ import { datedFileName, toCsv } from "../src/lib/csv.ts";
 import { contactRowsFromMatrix } from "../src/lib/contactImport.ts";
 import { logModeOf, matchesTimeline, withLogMode } from "../src/lib/leadLog.ts";
 import { canScheduleFollowUp, defaultFollowUpOn, isUnpaidCollection, phoneSearch } from "../src/lib/followUp.ts";
+import { buildFieldDashboard, directionsUrl, fieldExecutiveOf, validPoint } from "../src/lib/fieldOps.ts";
+import { newUnit, unitDraftFrom, unitError, unitPayload, unitsError, unitSummary, withDimension } from "../src/lib/projectUnits.ts";
+import { buildReport, rangeBounds, rangeDateOf, reportCsvRows } from "../src/lib/reports.ts";
+import { brokerageReportRows, financialYearStart, summaryReportRows } from "../src/lib/revenueCsv.ts";
+import { badLink, enterpriseProfit, parseLinks, pincodeError } from "../src/lib/propertyForm.ts";
+import { typingLine, unseenByMe } from "../src/lib/chat.ts";
 import { profileDraftError, profileDraftFrom, profilePatch, reportingCandidates, targetProgress, taskStats } from "../src/lib/userAdmin.ts";
 
 const draft = (over = {}) => ({ ...profileDraftFrom({ name: "Riya Shah", email: "riya@acme.in", parentId: "m1" }), ...over });
@@ -199,4 +205,118 @@ test("follow-up rules match the server", () => {
   assert.equal(defaultFollowUpOn(new Date(2026, 9, 15), now).getHours(), 15);
   assert.equal(defaultFollowUpOn(new Date(2026, 9, 16), now).getHours(), 11);
   assert.equal(defaultFollowUpOn(new Date(2026, 9, 15), new Date(2026, 9, 15, 23, 30)).getHours(), 23);
+});
+
+test("field dashboard matches the web's numbers", () => {
+  const now = new Date(2026, 9, 15, 12);
+  const users = [
+    { _id: "f1", name: "Fiza", role: "FIELD_EXECUTIVE", liveLocation: { lat: 28.5, lng: 77.3 } },
+    { _id: "f2", name: "Farhan", role: "FIELD_EXECUTIVE" },
+    { _id: "f3", name: "Old", role: "FIELD_EXECUTIVE", isActive: false },
+    { _id: "e1", name: "Esha", role: "EXECUTIVE" },
+  ];
+  const leads = [
+    { _id: "l1", name: "A", status: "SITE_VISIT", nextFollowUp: new Date(2026, 9, 15, 16).toISOString(), assignedTo: { _id: "e1", role: "EXECUTIVE" }, assignedFieldExecutive: { _id: "f1" } },
+    { _id: "l2", name: "B", status: "INTERESTED", nextFollowUp: new Date(2026, 9, 14).toISOString(), assignedTo: { _id: "f1", role: "FIELD_EXECUTIVE" } },
+    { _id: "l3", name: "C", status: "NEW" },
+    { _id: "l4", name: "D", status: "CLOSED", assignedTo: { _id: "f2", role: "FIELD_EXECUTIVE" } },
+  ];
+  const d = buildFieldDashboard(leads, users, now);
+  assert.equal(d.fieldExecutives.length, 2);
+  assert.equal(d.activeLeads.length, 3);
+  assert.equal(d.siteVisitLeads.length, 1);
+  assert.deepEqual(d.unassignedQueue.map((lead) => lead._id), ["l3"]);
+  assert.equal(d.overdueFollowUps.length, 1);
+  assert.deepEqual(d.workload.map((row) => [row.executive._id, row.activeAssigned, row.siteVisits, row.overdue, row.todaysVisits]), [["f1", 2, 1, 1, 1], ["f2", 0, 0, 0, 0]]);
+  assert.equal(d.tracked, 1);
+  assert.equal(d.coveragePercent, 50);
+  assert.equal(d.averageLoad, 1);
+  assert.equal(fieldExecutiveOf({ _id: "x", name: "x", assignedTo: { _id: "e1", role: "EXECUTIVE" } }), null);
+  assert.equal(validPoint(0, 0), null);
+  assert.equal(validPoint(null, 77), null);
+  assert.deepEqual(validPoint("28.5", 77.1), { lat: 28.5, lng: 77.1 });
+  assert.equal(directionsUrl({ lat: 1, lng: 2 }, { lat: 3, lng: 4 }), "https://www.google.com/maps/dir/?api=1&destination=1,2&travelmode=driving&origin=3,4");
+});
+
+test("project units follow the web form's rules", () => {
+  const office = newUnit("offices", 2);
+  assert.equal(office.officeCode, "OFF-003");
+  assert.equal(office.status, "AVAILABLE");
+  assert.match(unitError(office, "Office 3")!, /length/);
+  const sized = withDimension(withDimension(office, "length", "20"), "breadth", "12.5");
+  assert.equal(sized.carpetArea, "250");
+  assert.equal(unitError({ ...sized, startingRate: "9000", currentRate: "8000" }, "Office 3"), "Office 3: current rate can't be below the starting rate");
+  assert.equal(unitError(sized, "Office 3"), null);
+  const payload = unitPayload("offices", { ...sized, floorNumber: "4", officeName: " Corner ", reservedParking: "", plc: "" });
+  assert.equal(payload.officeCode, "OFF-003");
+  assert.equal(payload.floorNumber, 4);
+  assert.equal(payload.carpetArea, 250);
+  assert.equal(payload.reservedParking, 0);
+  assert.equal(payload.officeName, "Corner");
+  assert.equal(payload.height, null);
+  const shop = unitPayload("shops", unitDraftFrom("shops", { _id: "s1", shopCode: "SHOP-001", floorNumber: 0, length: 10, breadth: 10, parking: 2, status: "SOLD" }));
+  assert.equal(shop.parking, 2);
+  assert.equal("officeName" in shop, false);
+  assert.equal(unitsError({ offices: [sized], shops: [], showrooms: [newUnit("showrooms", 0)] }), "Showroom 1: length must be more than 0");
+  assert.equal(unitSummary({ ...sized, floorNumber: "2" }), "Floor 2 · 250 sq ft · Available");
+});
+
+test("reports: year, custom ranges and the web's date rule", () => {
+  const now = new Date(2026, 9, 15);
+  assert.equal(rangeBounds("YEAR", 0, now)!.from.getMonth(), 0);
+  assert.equal(rangeBounds("CUSTOM", -1, now, { from: now, to: now }), null);
+  const custom = rangeBounds("CUSTOM", 0, now, { from: new Date(2026, 9, 10, 15), to: new Date(2026, 9, 1) })!;
+  assert.equal(custom.from.getDate(), 1);
+  assert.equal(custom.to.getDate(), 10);
+  assert.equal(rangeDateOf({ status: "CLOSED", createdAt: "2026-01-01", updatedAt: "2026-10-02" }), "2026-10-02");
+  assert.equal(rangeDateOf({ status: "NEW", createdAt: "2026-01-01", updatedAt: "2026-10-02" }), "2026-01-01");
+  const leads = [
+    { status: "CLOSED", createdAt: new Date(2026, 3, 1).toISOString(), updatedAt: new Date(2026, 9, 3).toISOString(), brokerageReceived: 50000, assignmentHistory: [{ action: "MANUAL_TRANSFER" }] },
+    { status: "NEW", createdAt: new Date(2026, 9, 5).toISOString() },
+    { status: "NEW", createdAt: new Date(2026, 8, 5).toISOString() },
+  ];
+  const report = buildReport(leads, "MONTH", now);
+  assert.equal(report.summary.received, 2);
+  assert.equal(report.transferred, 1);
+  assert.equal(report.monthly.length, 6);
+  assert.deepEqual(report.monthly.at(-1), { label: report.monthly.at(-1)!.label, leads: 2, closed: 1 });
+  const rows = reportCsvRows(report);
+  assert.deepEqual(rows[0], ["Section", "Metric", "Value"]);
+  assert.deepEqual(rows[2], ["Summary", "Transferred leads", 1]);
+  assert.equal(buildReport(leads, "CUSTOM", now, { from: new Date(2026, 8, 1), to: new Date(2026, 8, 30) }).hasPrevious, false);
+});
+
+test("revenue CSVs carry the web's columns", () => {
+  const rows = brokerageReportRows([{ dealId: "D-1", model: "BUY_SELL", brokerageAgreed: null, closingDate: "2026-10-01T06:00:00Z" }]);
+  assert.equal(rows[0]!.length, 14);
+  assert.equal(rows[1]![1], "Buy & Sell");
+  assert.equal(rows[1]![9], "");
+  assert.match(String(rows[1]![12]), /01 Oct 2026/);
+  assert.deepEqual(summaryReportRows({ summary: { totalRevenue: 9 } })[7], ["Total revenue", 9]);
+  assert.equal(financialYearStart(new Date(2026, 1, 10)), "2025-04-01");
+  assert.equal(financialYearStart(new Date(2026, 3, 1)), "2026-04-01");
+});
+
+test("property form helpers", () => {
+  assert.deepEqual(parseLinks(" https://a.io/v \n\nhttps://a.io/v\nhttps://b.io "), ["https://a.io/v", "https://b.io"]);
+  assert.equal(badLink(["https://a.io", "youtube.com/x"]), "youtube.com/x");
+  assert.equal(badLink(["https://a.io"]), null);
+  assert.equal(enterpriseProfit("50,000", "65000"), 15000);
+  assert.equal(enterpriseProfit("", "65000"), null);
+  assert.equal(pincodeError("12345"), "PIN code is 6 digits");
+  assert.equal(pincodeError(""), null);
+});
+
+test("chat typing line and unseen messages", () => {
+  assert.equal(typingLine(["Riya Shah"]), "Riya is typing…");
+  assert.equal(typingLine(["Riya Shah", "Aman"]), "Riya and Aman are typing…");
+  assert.equal(typingLine(["a", "b", "c"]), "3 people are typing…");
+  assert.equal(typingLine([]), "");
+  const list = [
+    { _id: "1", sender: { _id: "me", name: "Me" }, createdAt: "1" },
+    { _id: "2", sender: { _id: "u2", name: "U" }, createdAt: "2", seenBy: [{ user: "me" }] },
+    { _id: "3", sender: { _id: "u2", name: "U" }, createdAt: "3" },
+    { _id: "local-9", sender: { _id: "u2", name: "U" }, createdAt: "4" },
+  ];
+  assert.deepEqual(unseenByMe(list, "me").map((item) => item._id), ["3"]);
 });
