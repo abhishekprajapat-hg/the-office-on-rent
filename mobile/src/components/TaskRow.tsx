@@ -1,84 +1,112 @@
 import React from "react";
 import { Pressable, StyleSheet, View } from "react-native";
 import type { Task } from "../api/types";
-import { formatDate, isOverdue } from "../lib/format";
-import { priorityMeta, taskStatusMeta } from "../lib/taskMeta";
+import { formatDueDay } from "../lib/format";
+import { dayKey, hasOverdueWork, isSubtaskDone, priorityMeta } from "../lib/taskMeta";
 import { useTheme } from "../theme/ThemeProvider";
-import { space } from "../theme/tokens";
-import { Badge, Card, Icon, Text } from "../ui";
+import { Avatar, Badge, CheckSquare, Icon, Text } from "../ui";
 
-type Props = { task: Task; onPress: () => void; onToggle?: () => void; showAssignee?: boolean };
+type Props = { task: Task; onPress: () => void; onToggle?: () => void; onMenu?: () => void; showAssignee?: boolean };
 
-export const TaskRow = ({ task, onPress, onToggle, showAssignee }: Props) => {
+/*
+ * Task card: square checkbox, title, the description's first line, then due
+ * date (Overdue / Today flagged, an overdue subtask counts), subtask progress,
+ * lead and assignee; priority on the right and a ⋯ for edit / move / delete.
+ */
+export const TaskRow = ({ task, onPress, onToggle, onMenu, showAssignee }: Props) => {
   const { colors } = useTheme();
   const done = task.status === "COMPLETED";
   const priority = priorityMeta(task.priority);
-  const overdue = !done && Boolean(task.dueDate) && isOverdue(endOfDay(task.dueDate!));
+  const overdue = !done && hasOverdueWork(task);
   const subtasks = task.subtasks || [];
-  const doneSubtasks = subtasks.filter((subtask) => subtask.isCompleted).length;
+  const doneSubtasks = subtasks.filter(isSubtaskDone).length;
+  const leadName = task.leadId && typeof task.leadId === "object" ? task.leadId.name : "";
+  const dueToday = !done && Boolean(task.dueDate) && dayKey(task.dueDate!) === dayKey();
+  const dueLabel = task.dueDate ? formatDueDay(task.dueDate) : "No date";
+  const dueColor = overdue ? colors.danger : dueToday ? colors.warning : colors.textMuted;
+  const assignee = task.assignedTo && typeof task.assignedTo === "object" ? task.assignedTo : null;
 
   return (
-    <Card onPress={onPress} style={styles.card} accessibilityLabel={task.title}>
+    <Pressable
+      onPress={onPress}
+      onLongPress={onMenu}
+      accessibilityRole="button"
+      accessibilityLabel={task.title}
+      style={({ pressed }) => [styles.card, { backgroundColor: pressed ? colors.surfaceAlt : colors.surface, borderColor: overdue ? colors.dangerSoft : colors.border }]}
+    >
       <Pressable
         accessibilityRole="checkbox"
         accessibilityState={{ checked: done }}
-        accessibilityLabel={done ? "Mark as not done" : "Mark as done"}
+        accessibilityLabel={done ? "Reopen task" : "Complete task"}
         hitSlop={10}
         onPress={onToggle}
         disabled={!onToggle}
+        style={styles.check}
       >
-        <Icon name={done ? "checkmark-circle" : "ellipse-outline"} size={24} color={done ? colors.success : colors.textFaint} />
+        <CheckSquare checked={done} />
       </Pressable>
       <View style={styles.body}>
-        <Text
-          variant="bodyStrong"
-          numberOfLines={2}
-          color={done ? "faint" : "text"}
-          style={done ? styles.strike : undefined}
-        >
-          {task.title}
-        </Text>
+        <View style={styles.titleRow}>
+          <Text variant="body" numberOfLines={2} color={done ? "faint" : "text"} style={[styles.title, done && styles.strike]}>
+            {task.title}
+          </Text>
+          {!done ? <Badge label={priority.label} tone={priority.tone} /> : null}
+        </View>
+        {task.description ? (
+          <Text variant="small" color="muted" numberOfLines={1} style={styles.desc}>
+            {task.description}
+          </Text>
+        ) : null}
         <View style={styles.meta}>
-          <Badge label={priority.label} tone={priority.tone} />
-          {!done && task.status !== "TODO" ? <Badge label={taskStatusMeta(task.status).label} tone="info" /> : null}
-          {task.dueDate ? (
+          <View style={styles.inline}>
+            <Icon name={overdue ? "alert-circle" : "calendar-outline"} size={12} color={dueColor} />
+            <Text variant="small" color={dueColor} style={styles.metaText}>
+              {dueToday ? (overdue ? "Today · subtask overdue" : "Today") : overdue ? `Overdue · ${dueLabel}` : dueLabel}
+            </Text>
+          </View>
+          <View style={styles.inline}>
+            <Icon name="list-outline" size={12} color={colors.textMuted} />
+            <Text variant="small" color="muted" style={styles.metaText}>
+              {subtasks.length ? `${doneSubtasks}/${subtasks.length}` : "No subtasks"}
+            </Text>
+          </View>
+          {leadName ? (
             <View style={styles.inline}>
-              <Icon name="calendar-outline" size={13} color={overdue ? colors.danger : colors.textMuted} />
-              <Text variant="tiny" color={overdue ? colors.danger : colors.textMuted}>
-                {overdue ? `Overdue · ${formatDate(task.dueDate)}` : formatDate(task.dueDate)}
-              </Text>
-            </View>
-          ) : null}
-          {subtasks.length ? (
-            <View style={styles.inline}>
-              <Icon name="list-outline" size={13} color={colors.textMuted} />
-              <Text variant="tiny" color="muted">
-                {doneSubtasks}/{subtasks.length}
+              <Icon name="link-outline" size={12} color={colors.textMuted} />
+              <Text variant="small" color="muted" style={styles.metaText} numberOfLines={1}>
+                {leadName}
               </Text>
             </View>
           ) : null}
         </View>
-        {showAssignee && task.assignedTo?.name ? (
-          <Text variant="tiny" color="faint" numberOfLines={1}>
-            {task.assignedTo.name}
-          </Text>
+        {showAssignee ? (
+          <View style={styles.inline}>
+            {assignee ? <Avatar name={assignee.name} uri={assignee.profileImageUrl} size={18} tinted /> : <Icon name="person-outline" size={13} color={colors.textFaint} />}
+            <Text variant="small" color="muted" style={styles.metaText} numberOfLines={1}>
+              {assignee?.name || "Unassigned"}
+            </Text>
+          </View>
         ) : null}
       </View>
-    </Card>
+      {onMenu ? (
+        <Pressable accessibilityRole="button" accessibilityLabel="Task actions" hitSlop={10} onPress={onMenu} style={styles.menu}>
+          <Icon name="ellipsis-vertical" size={16} color={colors.textFaint} />
+        </Pressable>
+      ) : null}
+    </Pressable>
   );
 };
 
-/* A due date is a day, not an instant: it is overdue once that day is over. */
-const endOfDay = (value: string) => {
-  const date = new Date(value);
-  date.setHours(23, 59, 59, 999);
-  return date;
-};
-
 const styles = StyleSheet.create({
-  card: { flexDirection: "row", alignItems: "flex-start", gap: space.md, paddingVertical: space.md },
-  body: { flex: 1, gap: 6 },
+  card: { flexDirection: "row", alignItems: "flex-start", gap: 10, padding: 12, borderRadius: 16, borderWidth: 1 },
+  check: { marginTop: 1 },
+  body: { flex: 1, minWidth: 0, gap: 4 },
+  titleRow: { flexDirection: "row", alignItems: "flex-start", gap: 8 },
+  title: { flex: 1, fontSize: 13.5, lineHeight: 18, fontFamily: "PlusJakartaSans_600SemiBold" },
+  desc: { fontSize: 12, lineHeight: 16 },
   strike: { textDecorationLine: "line-through" },
-  meta: { flexDirection: "row", alignItems: "center", flexWrap: "wrap", gap: space.sm },
-  inline: { flexDirection: "row", alignItems: "center", gap: 3 },
+  meta: { flexDirection: "row", alignItems: "center", flexWrap: "wrap", columnGap: 10, rowGap: 2 },
+  inline: { flexDirection: "row", alignItems: "center", gap: 4 },
+  metaText: { fontSize: 11.5, lineHeight: 15 },
+  menu: { paddingTop: 1 },
 });

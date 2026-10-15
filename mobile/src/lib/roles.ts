@@ -22,7 +22,7 @@ export const isManagement = (role?: string) => role === "ADMIN" || role === "MAN
  * The server still has the final say on every request; this only avoids
  * showing a tab that would answer "no access".
  */
-export const canUseLeads = (role?: string) => role !== "COWORKING_ADMIN";
+export const canUseLeads = (role?: string) => role !== "COWORKING_ADMIN" && role !== "PRODUCTION_EXECUTIVE";
 /* Mirrors inventory.routes.js; a channel partner also needs the per-user inventory switch. */
 export const canUseInventory = (role?: string, canViewInventory?: boolean) =>
   ["ADMIN", "MANAGER", "EXECUTIVE", "FIELD_EXECUTIVE"].includes(String(role)) || (role === "CHANNEL_PARTNER" && Boolean(canViewInventory));

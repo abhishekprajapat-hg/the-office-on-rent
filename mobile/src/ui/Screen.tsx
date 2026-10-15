@@ -2,9 +2,10 @@ import React from "react";
 import { Pressable, RefreshControl, ScrollView, StyleSheet, View, type StyleProp, type ViewStyle } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useTheme } from "../theme/ThemeProvider";
-import { space } from "../theme/tokens";
+import { gutter, space } from "../theme/tokens";
 import { Icon, type IconName } from "./Icon";
 import { Text } from "./Text";
+import { OfflineBanner } from "./States";
 
 /*
  * A tab-root screen: large title header plus scrolling content. Pushed
@@ -19,6 +20,7 @@ export const Screen = ({
   refreshing,
   onRefresh,
   contentStyle,
+  background,
 }: {
   title?: string;
   subtitle?: string;
@@ -28,6 +30,7 @@ export const Screen = ({
   refreshing?: boolean;
   onRefresh?: () => void;
   contentStyle?: StyleProp<ViewStyle>;
+  background?: string;
 }) => {
   const { colors } = useTheme();
   const insets = useSafeAreaInsets();
@@ -49,7 +52,8 @@ export const Screen = ({
   ) : null;
 
   return (
-    <View style={[styles.root, { backgroundColor: colors.bg, paddingTop: insets.top }]}>
+    <View style={[styles.root, { backgroundColor: background || colors.bg, paddingTop: insets.top }]}>
+      <OfflineBanner />
       {scroll ? (
         <ScrollView
           contentContainerStyle={[styles.content, contentStyle]}
@@ -79,18 +83,21 @@ export const Body = ({
   refreshing,
   onRefresh,
   style,
+  footerSpace,
 }: {
   children: React.ReactNode;
   refreshing?: boolean;
   onRefresh?: () => void;
   style?: StyleProp<ViewStyle>;
+  /* Extra bottom room when a <FooterBar> sits over the content. */
+  footerSpace?: boolean;
 }) => {
   const { colors } = useTheme();
   const insets = useSafeAreaInsets();
   return (
     <ScrollView
       style={{ backgroundColor: colors.bg }}
-      contentContainerStyle={[styles.body, { paddingBottom: insets.bottom + space.xxl }, style]}
+      contentContainerStyle={[styles.body, { paddingBottom: insets.bottom + space.xxl + (footerSpace ? 76 : 0) }, style]}
       keyboardShouldPersistTaps="handled"
       refreshControl={
         onRefresh ? (
@@ -103,8 +110,36 @@ export const Body = ({
   );
 };
 
-export const HeaderButton = ({ icon, label, onPress }: { icon: IconName; label: string; onPress: () => void }) => {
+/* White action bar pinned to the bottom of a pushed screen ("Add task" / "Update status"). */
+export const FooterBar = ({ children }: { children: React.ReactNode }) => {
   const { colors } = useTheme();
+  const insets = useSafeAreaInsets();
+  return (
+    <View
+      style={[
+        styles.footer,
+        { backgroundColor: colors.surface, borderTopColor: colors.border, paddingBottom: Math.max(insets.bottom, 12) + 8 },
+      ]}
+    >
+      {children}
+    </View>
+  );
+};
+
+/* 42px rounded-square header action: solid blue (add) or white outlined (filter, map). */
+export const HeaderButton = ({
+  icon,
+  label,
+  onPress,
+  variant = "primary",
+}: {
+  icon: IconName;
+  label: string;
+  onPress: () => void;
+  variant?: "primary" | "secondary";
+}) => {
+  const { colors } = useTheme();
+  const solid = variant === "primary";
   return (
     <Pressable
       accessibilityRole="button"
@@ -113,10 +148,12 @@ export const HeaderButton = ({ icon, label, onPress }: { icon: IconName; label: 
       hitSlop={8}
       style={({ pressed }) => [
         styles.headerButton,
-        { backgroundColor: pressed ? colors.primaryPressed : colors.primary },
+        solid
+          ? { backgroundColor: pressed ? colors.primaryPressed : colors.primary }
+          : { backgroundColor: pressed ? colors.surfaceAlt : colors.surface, borderColor: colors.border, borderWidth: 1 },
       ]}
     >
-      <Icon name={icon} size={22} color={colors.onPrimary} />
+      <Icon name={icon} size={solid ? 24 : 20} color={solid ? colors.onPrimary : colors.primary} />
     </Pressable>
   );
 };
@@ -134,14 +171,33 @@ export const SectionTitle = ({ title, action, onAction }: { title: string; actio
   </View>
 );
 
+/* Uppercase faint group label: "TODAY", "MY REQUESTS". */
+export const GroupLabel = ({ children, color }: { children: string; color?: string }) => (
+  <Text variant="label" color={color || "faint"}>
+    {children}
+  </Text>
+);
+
 const styles = StyleSheet.create({
   root: { flex: 1 },
   flex: { flex: 1 },
-  content: { paddingHorizontal: space.lg, paddingBottom: space.xxl, gap: space.lg },
-  header: { flexDirection: "row", alignItems: "center", paddingTop: space.md, gap: space.md },
-  fixedHeader: { paddingHorizontal: space.lg, paddingBottom: space.md },
+  content: { paddingHorizontal: gutter, paddingBottom: space.xxl, gap: space.md },
+  header: { flexDirection: "row", alignItems: "center", paddingTop: 4, gap: space.sm },
+  fixedHeader: { paddingHorizontal: gutter, paddingBottom: space.md },
   headerText: { flex: 1 },
-  headerButton: { width: 42, height: 42, borderRadius: 21, alignItems: "center", justifyContent: "center" },
-  body: { padding: space.lg, gap: space.lg },
-  section: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", marginTop: space.xs },
+  headerButton: { width: 42, height: 42, borderRadius: 14, alignItems: "center", justifyContent: "center" },
+  body: { paddingHorizontal: gutter, paddingTop: 2, gap: space.md },
+  footer: {
+    position: "absolute",
+    left: 0,
+    right: 0,
+    bottom: 0,
+    paddingTop: 10,
+    paddingHorizontal: gutter,
+    borderTopWidth: 1,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: space.sm,
+  },
+  section: { flexDirection: "row", alignItems: "baseline", justifyContent: "space-between", marginTop: space.xs },
 });

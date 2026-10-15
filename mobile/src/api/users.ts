@@ -25,3 +25,25 @@ export const updateMyLiveLocation = async (point: { lat: number; lng: number; ac
   const res = await api.patch("/users/location", point);
   return res.data;
 };
+
+/* POST /users/rebalance-executives - spreads open (and unassigned) leads evenly over the team. Managers and admins. */
+export const rebalanceExecutives = async () => {
+  const res = await api.post<{ message?: string; reassigned?: number; assigned?: number }>("/users/rebalance-executives");
+  return res.data || {};
+};
+
+export type FieldLocation = {
+  _id: string;
+  name: string;
+  phone?: string;
+  role: string;
+  profileImageUrl?: string;
+  liveLocation?: { lat: number | null; lng: number | null; accuracy?: number | null; updatedAt?: string | null } | null;
+  isLocationFresh?: boolean;
+};
+
+/* GET /users/field-locations - field executives' last shared positions (leadership roles). */
+export const getFieldLocations = async () => {
+  const res = await api.get<{ users: FieldLocation[]; staleMinutes?: number }>("/users/field-locations");
+  return { users: res.data?.users || [], staleMinutes: res.data?.staleMinutes || null };
+};

@@ -3,6 +3,7 @@ import { FlatList, StyleSheet, View } from "react-native";
 import { errorMessage } from "../../api/client";
 import { listInventory, type Property } from "../../api/inventory";
 import { linkProperty, selectLinkedProperty } from "../../api/leads";
+import { sendMessage } from "../../api/chat";
 import { PropertyCard } from "../../components/PropertyCard";
 import type { RootScreenProps } from "../../navigation/types";
 import { useTheme } from "../../theme/ThemeProvider";
@@ -11,7 +12,7 @@ import { EmptyState, Field, InlineError, Loading } from "../../ui";
 
 /* Search available inventory and link one to the lead. */
 export const PickPropertyScreen = ({ route, navigation }: RootScreenProps<"PickProperty">) => {
-  const { leadId, select } = route.params;
+  const { leadId, select, chatId } = route.params;
   const { colors } = useTheme();
   const [query, setQuery] = useState("");
   const [items, setItems] = useState<Property[] | null>(null);
@@ -36,9 +37,14 @@ export const PickPropertyScreen = ({ route, navigation }: RootScreenProps<"PickP
     setLinking(true);
     setError(null);
     try {
-      await linkProperty(leadId, property._id);
-      // Picked for a closing: it must also be the lead's selected property.
-      if (select) await selectLinkedProperty(leadId, property._id);
+      if (chatId) {
+        // Shared into a chat: the server builds the card from the listing.
+        await sendMessage(chatId, "", { sharedProperty: { inventoryId: property._id } });
+      } else if (leadId) {
+        await linkProperty(leadId, property._id);
+        // Picked for a closing: it must also be the lead's selected property.
+        if (select) await selectLinkedProperty(leadId, property._id);
+      }
       navigation.goBack();
     } catch (err) {
       setError(errorMessage(err));

@@ -66,6 +66,12 @@
         {
           "color": "#02805d"
         }
+      ],
+      [
+        "expo-local-authentication",
+        {
+          "faceIDPermission": "Unlock The Office on Rent with Face ID."
+        }
       ]
     ],
     "extra": {

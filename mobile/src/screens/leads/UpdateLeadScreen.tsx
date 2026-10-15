@@ -1,5 +1,8 @@
 import React, { useEffect, useMemo, useState } from "react";
-import { StyleSheet, View } from "react-native";
+import { Pressable, ScrollView, StyleSheet, View } from "react-native";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
+import { useTheme } from "../../theme/ThemeProvider";
+import { formatWhen } from "../../lib/format";
 import { errorMessage } from "../../api/client";
 import { addLeadNote, getLeadDetail, updateLeadDetails, type LeadDetail } from "../../api/leads";
 import { updateMyLiveLocation } from "../../api/users";
@@ -15,8 +18,7 @@ import { LEAD_STATUS, normalizeStatus, suggestsFollowUp } from "../../lib/leadSt
 import { currentPosition } from "../../lib/location";
 import { isManagement } from "../../lib/roles";
 import type { RootScreenProps } from "../../navigation/types";
-import { space } from "../../theme/tokens";
-import { Body, Button, Card, ErrorState, Field, InlineError, Loading, Text } from "../../ui";
+import { Button, ErrorState, Field, Grabber, InlineError, Loading, Text } from "../../ui";
 import { DealClosureSection, dealPayload, type DealDraft } from "./DealClosureSection";
 
 /* The status picker, grouped the way the web colours them, so twenty options read as six choices. */
@@ -34,6 +36,8 @@ const DEAL_STATUSES = ["CLOSED", "REQUESTED"];
 export const UpdateLeadScreen = ({ route, navigation }: RootScreenProps<"UpdateLead">) => {
   const { leadId } = route.params;
   const user = useUser();
+  const { colors } = useTheme();
+  const insets = useSafeAreaInsets();
   const isAdmin = user.role === "ADMIN";
   // Admins and managers close deals themselves; anyone else's closing waits for approval.
   const closesDirectly = isManagement(user.role);
@@ -155,93 +159,141 @@ export const UpdateLeadScreen = ({ route, navigation }: RootScreenProps<"UpdateL
   const unchanged =
     status === originalStatus && !note.trim() && (followUp?.getTime() ?? null) === originalFollowUp && !site && !isDeal;
 
+  const pickTiles = picks.slice(0, 3);
+  const pickedQuick = pickTiles.some((pick) => followUp && Math.abs(followUp.getTime() - pick.date.getTime()) < 60000);
+
   return (
-    <Body>
-      <Card style={styles.gap}>
-        <Text variant="heading">Status</Text>
-        {GROUPS.map((group) => (
-          <View key={group.title} style={styles.group}>
-            <Text variant="tiny" color="faint">
-              {group.title.toUpperCase()}
-            </Text>
-            <View style={styles.chips}>
-              {group.statuses
-                // Only an admin may set Requested directly; for everyone else it is what closing becomes.
-                .filter((key) => key !== "REQUESTED" || isAdmin || originalStatus === "REQUESTED")
-                .map((key) => (
-                  <Chip key={key} label={LEAD_STATUS[key]!.label} selected={status === key} onPress={() => setStatus(key)} />
-                ))}
-            </View>
-          </View>
-        ))}
-      </Card>
-
-      {isDeal ? (
-        <Card style={styles.gap}>
-          <Text variant="heading">Property being closed</Text>
-          <Text variant="small" color={selectedProperty ? "text" : "danger"}>
-            {selectedProperty || "No property selected. A deal can only close against a selected property."}
+    <View style={[styles.backdrop, { backgroundColor: colors.overlay }]}>
+      <Pressable style={styles.dismiss} onPress={() => navigation.goBack()} accessibilityLabel="Close" />
+      <View style={[styles.panel, { backgroundColor: colors.surface, paddingBottom: Math.max(insets.bottom, 12) + 14 }]}>
+        <Grabber />
+        <View style={styles.head}>
+          <Text variant="title" style={styles.title}>
+            Update status
           </Text>
-          <Button
-            label={selectedProperty ? "Change property" : "Choose the property"}
-            icon="business-outline"
-            variant="secondary"
-            size="sm"
-            onPress={() => navigation.navigate("PickProperty", { leadId, select: true })}
-          />
-        </Card>
-      ) : null}
-      {isDeal ? <DealClosureSection draft={deal} onChange={setDeal} needsApproval={!closesDirectly} /> : null}
-
-      {wantsFollowUp ? (
-        <Card style={styles.gap}>
-          <Text variant="heading">{collectingBalance ? "Collect the rest on" : status === "SITE_VISIT_SCHEDULED" ? "Visit time" : "Next follow-up"}</Text>
+          <Text variant="small" color="muted" style={styles.sub}>
+            {lead.name} · now {LEAD_STATUS[originalStatus]?.label || originalStatus}
+          </Text>
+        </View>
+        <ScrollView style={styles.scroll} contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled">
           <View style={styles.chips}>
-            {picks.map((pick) => (
-              <Chip
-                key={pick.key}
-                label={pick.label}
-                selected={Boolean(followUp && Math.abs(followUp.getTime() - pick.date.getTime()) < 60000)}
-                onPress={() => setFollowUp(pick.date)}
-              />
-            ))}
+            {GROUPS.flatMap((group) => group.statuses)
+              // Only an admin may set Requested directly; for everyone else it is what closing becomes.
+              .filter((key) => key !== "REQUESTED" || isAdmin || originalStatus === "REQUESTED")
+              .map((key) => (
+                <Chip
+                  key={key}
+                  label={LEAD_STATUS[key]!.label}
+                  tone={LEAD_STATUS[key]!.tone}
+                  dot={toneDot(LEAD_STATUS[key]!.tone)}
+                  selected={status === key}
+                  onPress={() => setStatus(key)}
+                />
+              ))}
           </View>
-          <DateTimeField label="Or pick a date and time" value={followUp} onChange={setFollowUp} minimumDate={new Date()} clearable />
-        </Card>
-      ) : null}
 
-      {(status === "SITE_VISIT_SCHEDULED" || status === "SITE_VISIT") && isManagement(user.role) ? (
-        <Card style={styles.gap}>
-          <Text variant="heading">Site location</Text>
-          <Text variant="small" color="muted">
-            {site
-              ? `Will be saved as ${site.lat.toFixed(5)}, ${site.lng.toFixed(5)}.`
-              : hasSite
-                ? "Set. Field executives must be within range of it to mark the visit."
-                : "Not set yet. Field executives can only mark a visit once the site is pinned."}
-          </Text>
-          <Button label="Use my current location" icon="locate-outline" variant="secondary" size="sm" loading={locating} onPress={useMyLocationAsSite} />
-        </Card>
-      ) : null}
+          {isDeal ? (
+            <View style={styles.gap}>
+              <Text variant="smallStrong" color="muted">
+                Property being closed
+              </Text>
+              <Text variant="small" color={selectedProperty ? "text" : "danger"}>
+                {selectedProperty || "No property selected. A deal can only close against a selected property."}
+              </Text>
+              <Button
+                label={selectedProperty ? "Change property" : "Choose the property"}
+                icon="business-outline"
+                variant="secondary"
+                size="sm"
+                onPress={() => navigation.navigate("PickProperty", { leadId, select: true })}
+              />
+            </View>
+          ) : null}
+          {isDeal ? <DealClosureSection draft={deal} onChange={setDeal} needsApproval={!closesDirectly} /> : null}
 
-      {status === "SITE_VISIT" && user.role === "FIELD_EXECUTIVE" ? (
-        <Text variant="small" color="muted">
-          Your current location is sent with this update; you need to be at the site.
-        </Text>
-      ) : null}
+          {wantsFollowUp ? (
+            <View style={styles.gap}>
+              <Text variant="smallStrong" color="muted">
+                {collectingBalance ? "Collect the rest on" : status === "SITE_VISIT_SCHEDULED" ? "Visit time" : "Next follow-up"}
+              </Text>
+              <View style={styles.grid}>
+                {pickTiles.map((pick) => {
+                  const on = Boolean(followUp && Math.abs(followUp.getTime() - pick.date.getTime()) < 60000);
+                  return (
+                    <Pressable
+                      key={pick.key}
+                      onPress={() => setFollowUp(pick.date)}
+                      accessibilityRole="radio"
+                      accessibilityState={{ selected: on }}
+                      style={[styles.tile, { backgroundColor: on ? colors.primarySoft : colors.surface, borderColor: on ? colors.primary : colors.border }]}
+                    >
+                      <Text variant="smallStrong" color={on ? colors.primary : colors.text} style={styles.tileTitle}>
+                        {pick.label}
+                      </Text>
+                      <Text variant="tiny" color="muted" style={styles.tileSub}>
+                        {formatWhen(pick.date)}
+                      </Text>
+                    </Pressable>
+                  );
+                })}
+                <View style={[styles.tile, styles.pickTile, { borderColor: !pickedQuick && followUp ? colors.primary : colors.border, backgroundColor: !pickedQuick && followUp ? colors.primarySoft : colors.surface }]}>
+                  <DateTimeField label="Pick date…" variant="tile" value={!pickedQuick ? followUp : null} onChange={setFollowUp} minimumDate={new Date()} />
+                </View>
+              </View>
+              {followUp && !pickedQuick ? null : null}
+            </View>
+          ) : null}
 
-      <Card style={styles.gap}>
-        <Field label="Note (optional)" value={note} onChangeText={setNote} placeholder="What happened on this call?" multiline maxLength={1000} />
-      </Card>
+          {(status === "SITE_VISIT_SCHEDULED" || status === "SITE_VISIT") && isManagement(user.role) ? (
+            <View style={styles.gap}>
+              <Text variant="smallStrong" color="muted">
+                Site location
+              </Text>
+              <Text variant="small" color="muted">
+                {site
+                  ? `Will be saved as ${site.lat.toFixed(5)}, ${site.lng.toFixed(5)}.`
+                  : hasSite
+                    ? "Set. Field executives must be within range of it to mark the visit."
+                    : "Not set yet. Field executives can only mark a visit once the site is pinned."}
+              </Text>
+              <Button label="Use my current location" icon="locate-outline" variant="secondary" size="sm" loading={locating} onPress={useMyLocationAsSite} />
+            </View>
+          ) : null}
 
-      <InlineError message={error} />
-      <Button label={isDeal && !closesDirectly && originalStatus !== "CLOSED" ? "Send for approval" : "Save"} icon="checkmark" onPress={save} loading={saving} disabled={unchanged} />
-    </Body>
+          {status === "SITE_VISIT" && user.role === "FIELD_EXECUTIVE" ? (
+            <Text variant="small" color="muted">
+              Your current location is sent with this update; you need to be at the site.
+            </Text>
+          ) : null}
+
+          <Field value={note} onChangeText={setNote} placeholder="What happened on this call?" multiline maxLength={1000} />
+          <InlineError message={error} />
+        </ScrollView>
+        <Button label={isDeal && !closesDirectly && originalStatus !== "CLOSED" ? "Send for approval" : "Save update"} onPress={save} loading={saving} disabled={unchanged} />
+      </View>
+    </View>
   );
 };
 
+const toneDot = (tone: string) => {
+  const map: Record<string, string> = { primary: "#2549d6", info: "#2549d6", violet: "#7a4fd8", warning: "#b86e00", danger: "#d0392b", success: "#12925f", neutral: "#5a6380" };
+  return map[tone] || map.neutral!;
+};
+
 const styles = StyleSheet.create({
-  gap: { gap: space.md },
-  group: { gap: 6 },
-  chips: { flexDirection: "row", flexWrap: "wrap", gap: space.sm },
+  backdrop: { flex: 1, justifyContent: "flex-end" },
+  dismiss: { flex: 1 },
+  panel: { borderTopLeftRadius: 26, borderTopRightRadius: 26, paddingTop: 10, paddingHorizontal: 18, gap: 14, maxHeight: "92%" },
+  head: { gap: 2 },
+  title: { fontSize: 19 },
+  sub: { fontSize: 12.5 },
+  scroll: { flexGrow: 0 },
+  content: { gap: 14 },
+  gap: { gap: 8 },
+  chips: { flexDirection: "row", flexWrap: "wrap", gap: 6 },
+  grid: { flexDirection: "row", flexWrap: "wrap", gap: 8 },
+  tile: { width: "48.5%", flexGrow: 1, borderWidth: 1.5, borderRadius: 13, paddingVertical: 10, paddingHorizontal: 12 },
+  tileTitle: { fontSize: 12.5 },
+  tileSub: { fontFamily: "PlusJakartaSans_400Regular" },
+  pickTile: { padding: 0, overflow: "hidden" },
 });

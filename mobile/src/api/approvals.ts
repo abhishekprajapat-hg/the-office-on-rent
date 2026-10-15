@@ -6,7 +6,7 @@ import { api } from "./client";
  * not see (a manager and user deletes, say) is simply empty.
  */
 
-export type ApprovalKind = "payment" | "leave" | "delete" | "inventory" | "status" | "user";
+export type ApprovalKind = "payment" | "leave" | "delete" | "inventory" | "status" | "user" | "fix";
 
 type Person = { _id: string; name: string; role?: string; profileImageUrl?: string } | null | undefined;
 
@@ -34,13 +34,16 @@ const rupees = (value: unknown) => `₹${Math.round(Number(value) || 0).toLocale
 type AnyRecord = Record<string, any>; // eslint-disable-line @typescript-eslint/no-explicit-any
 
 export const loadApprovals = async (): Promise<ApprovalItem[]> => {
-  const [payments, leaves, deletes, inventory, statuses, users] = await Promise.all([
+  const month = new Date().toISOString().slice(0, 7);
+  const [payments, leaves, deletes, inventory, statuses, users, violations] = await Promise.all([
     settle(api.get("/leads/payment-requests", { params: { approvalStatus: "ALL" } }).then((r) => (r.data?.requests || []) as AnyRecord[]), []),
     settle(api.get("/attendance/leave-requests/admin").then((r) => (r.data?.leaveRequests || []) as AnyRecord[]), []),
     settle(api.get("/delete-requests", { params: { status: "ALL" } }).then((r) => (r.data?.requests || []) as AnyRecord[]), []),
     settle(api.get("/inventory-request/pending").then((r) => (r.data?.requests || []) as AnyRecord[]), []),
     settle(api.get("/leads/status-requests/pending").then((r) => (r.data?.requests || []) as AnyRecord[]), []),
     settle(api.get("/users/delete-requests/admin").then((r) => (r.data?.requests || []) as AnyRecord[]), []),
+    // Attendance marks nobody has reviewed yet: excuse them or record a warning.
+    settle(api.get("/attendance/violations", { params: { month } }).then((r) => (r.data?.violations || []) as AnyRecord[]), []),
   ]);
 
   const items: ApprovalItem[] = [
@@ -120,6 +123,18 @@ export const loadApprovals = async (): Promise<ApprovalItem[]> => {
       status: upper(request.status),
       raw: request,
     })),
+    ...violations
+      .filter((v) => v.active && !v.excused && !(v.history || []).length && v.userId !== undefined)
+      .map((v): ApprovalItem => ({
+        kind: "fix",
+        id: v._id,
+        title: `Attendance fix · ${v.userName || "Team member"}`,
+        detail: `${v.kind === "REJECTED_LEAVE" ? "Absent after leave was rejected" : "Uninformed absence"} · ${new Date(`${v.date}T00:00:00`).toLocaleDateString("en-IN", { day: "numeric", month: "short" })}${v.ordinal ? ` · #${v.ordinal} this month` : ""}`,
+        requestedBy: v.userName ? { _id: String(v.userId), name: v.userName } : null,
+        createdAt: `${v.date}T09:00:00`,
+        status: "PENDING",
+        raw: v,
+      })),
   ];
 
   return items.sort((a, b) => {
@@ -152,6 +167,9 @@ export const decide = async (item: ApprovalItem, approve: boolean, note: string,
       return api.patch(`/leads/status-requests/${item.id}/${approve ? "approve" : "reject"}`, approve ? {} : { rejectionReason: trimmed });
     case "user":
       return api.patch(`/users/delete-requests/${item.id}/review`, { action: approve ? "APPROVE" : "REJECT", note: trimmed });
+    case "fix":
+      // Approving the fix excuses the mark; rejecting it records a warning.
+      return api.patch(`/attendance/violations/${item.id}`, { action: approve ? "EXCUSED" : "WARNING_ISSUED", note: trimmed });
   }
 };
 

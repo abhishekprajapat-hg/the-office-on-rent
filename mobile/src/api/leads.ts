@@ -53,6 +53,13 @@ export const getLeadSummary = async () => {
   return res.data?.summary || null;
 };
 
+/* How many leads match (reads the pagination total, fetching a single row). */
+export const countLeads = async (params: Record<string, string>) => {
+  const res = await api.get<{ leads: Lead[]; pagination?: Pagination & { totalCount?: number; total?: number } }>("/leads", { params: { page: 1, limit: 1, fields: "_id", ...params } });
+  const p = res.data?.pagination as { totalCount?: number; total?: number } | undefined;
+  return Number(p?.totalCount ?? p?.total ?? res.data?.leads?.length ?? 0);
+};
+
 export const getTodayFollowUps = async (limit = 5) => {
   const res = await api.get<{ leads: Lead[] }>("/leads/followups/today", { params: { limit, fields: LIST_FIELDS } });
   return res.data?.leads || [];
@@ -233,4 +240,36 @@ export const getDiary = async (leadId: string) => {
 export const deleteLead = async (leadId: string) => {
   const res = await api.delete<{ approvalRequired?: boolean; message?: string }>(`/leads/${leadId}`);
   return { pendingApproval: res.status === 202 || Boolean(res.data?.approvalRequired), message: res.data?.message || "" };
+};
+
+/*
+ * Every lead the caller can see, 200 at a time (at most 25 pages), with the
+ * fields reports need. Mirrors the web's getAllLeads.
+ */
+export const listAllLeadsForReports = async () => {
+  const fields = "_id,status,source,sourceChannel,createdAt,updatedAt,lastContactedAt,brokerageReceived,assignedTo";
+  const rows: Lead[] = [];
+  for (let page = 1; page <= 25; page += 1) {
+    const res = await api.get<{ leads: Lead[]; pagination?: Pagination }>("/leads", { params: { page, limit: 200, fields } });
+    rows.push(...(res.data?.leads || []));
+    if (!res.data?.pagination?.hasNextPage) break;
+  }
+  return rows;
+};
+
+export type VisitLead = Lead & { siteLocation?: { lat: number | null; lng: number | null } | null };
+
+/* Today's site visits (scheduled or done) with their pinned locations, for Field ops. */
+export const listVisitsBetween = async (from: Date, to: Date) => {
+  const res = await api.get<{ leads: VisitLead[] }>("/leads", {
+    params: {
+      page: 1,
+      limit: 100,
+      fields: "_id,name,phone,status,projectInterested,city,nextFollowUp,siteLocation,assignedTo,assignedFieldExecutive,updatedAt",
+      followUpFrom: from.toISOString(),
+      followUpTo: to.toISOString(),
+      sortBy: "nextFollowUp",
+    },
+  });
+  return res.data?.leads || [];
 };

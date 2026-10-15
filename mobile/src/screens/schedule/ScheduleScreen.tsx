@@ -1,49 +1,82 @@
 import React, { useMemo, useState } from "react";
-import { Pressable, StyleSheet, View } from "react-native";
+import { Pressable, RefreshControl, ScrollView, StyleSheet, View } from "react-native";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { errorMessage } from "../../api/client";
 import { completeFollowUp, listFollowUpsBetween } from "../../api/leads";
+import type { Lead, Task } from "../../api/types";
 import { listTasks } from "../../api/tasks";
-import { LeadRow } from "../../components/LeadRow";
-import { TaskRow } from "../../components/TaskRow";
+import { canDoPageAction, canOpenPage } from "../../api/access";
 import { addMonths, dayKey, gridRange, groupByDay, monthGrid, MONTH_NAMES, WEEKDAYS } from "../../lib/calendar";
-import { canUseLeads, canUseTasks } from "../../lib/roles";
-import { sortTasks } from "../../lib/taskMeta";
+import { useAuth } from "../../auth/AuthProvider";
 import { useQuery } from "../../lib/useQuery";
 import { useUser } from "../../auth/AuthProvider";
 import type { RootScreenProps } from "../../navigation/types";
 import { useTheme } from "../../theme/ThemeProvider";
-import { radius, space } from "../../theme/tokens";
-import { Body, Button, Card, ErrorState, Icon, InlineError, Loading, SectionTitle, Text } from "../../ui";
+import { ActivityIndicator } from "react-native";
+import { ErrorState, Icon, InlineError, Sheet, Text } from "../../ui";
 
 const settle = <T,>(promise: Promise<T>, fallback: T) => promise.catch(() => fallback);
+const mondayOf = (date: Date) => {
+  const start = new Date(date.getFullYear(), date.getMonth(), date.getDate());
+  start.setDate(start.getDate() - ((start.getDay() + 6) % 7));
+  return start;
+};
+const hourLabel = (hour: number) => `${hour % 12 || 12} ${hour < 12 ? "AM" : "PM"}`;
+const PRIORITY: Record<string, string> = { URGENT: "Urgent", HIGH: "High priority", MEDIUM: "Medium priority", LOW: "Low priority" };
+const VISIT_STATUSES = ["SITE_VISIT_SCHEDULED", "SITE_VISIT"];
 
+type Item =
+  | { kind: "lead"; at: Date; lead: Lead }
+  | { kind: "task"; at: Date; task: Task; allDay: boolean };
+
+/* Design 32: a Monday-first week strip over an hourly agenda of follow-ups, site visits and tasks due. */
 export const ScheduleScreen = ({ navigation }: RootScreenProps<"Schedule">) => {
   const user = useUser();
+  const { access } = useAuth();
   const { colors } = useTheme();
-  const [cursor, setCursor] = useState(() => addMonths(new Date(), 0));
+  const insets = useSafeAreaInsets();
   const [selected, setSelected] = useState(() => dayKey(new Date()));
+  const [picking, setPicking] = useState(false);
+  const [cursor, setCursor] = useState(() => addMonths(new Date(), 0));
   const [busyLead, setBusyLead] = useState<string | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
 
-  const { data, loading, error, refreshing, refresh, reload } = useQuery(async () => {
-    const { from, to } = gridRange(cursor);
+  const selectedDate = new Date(`${selected}T00:00:00`);
+  const weekStart = mondayOf(selectedDate);
+  const week = Array.from({ length: 7 }, (_, index) => new Date(weekStart.getFullYear(), weekStart.getMonth(), weekStart.getDate() + index));
+  // Fetch the whole month grid around the week, so the month picker shows its dots too.
+  const range = gridRange(picking ? cursor : selectedDate);
+  const from = new Date(Math.min(range.from.getTime(), weekStart.getTime()));
+  const to = new Date(Math.max(range.to.getTime(), week[6]!.getTime() + 86400000));
+
+  const { data, error, refreshing, refresh, reload, loading } = useQuery(async () => {
     const [leads, tasks] = await Promise.all([
-      canUseLeads(user.role) ? settle(listFollowUpsBetween(from, to), []) : [],
-      canUseTasks(user.role) ? settle(listTasks({ dueDateStart: from.toISOString(), dueDateEnd: to.toISOString() }), []) : [],
+      canOpenPage(user, access, "leads") || canOpenPage(user, access, "my_leads") ? settle(listFollowUpsBetween(from, to), []) : [],
+      canOpenPage(user, access, "tasks") ? settle(listTasks({ dueDateStart: from.toISOString(), dueDateEnd: to.toISOString() }), []) : [],
     ]);
     return {
       followUps: groupByDay(leads, (lead) => lead.nextFollowUp),
       tasks: groupByDay(tasks.filter((task) => task.status !== "COMPLETED"), (task) => task.dueDate),
     };
-  }, [cursor.getTime(), user.role]);
+  }, [from.getTime(), to.getTime(), user.role, access]);
 
-  const days = useMemo(() => monthGrid(cursor), [cursor]);
+  const busyDays = (key: string) => (data?.followUps[key]?.length || 0) + (data?.tasks[key]?.length || 0);
   const today = dayKey(new Date());
 
-  const dayFollowUps = (data?.followUps[selected] || [])
-    .slice()
-    .sort((a, b) => new Date(a.nextFollowUp || 0).getTime() - new Date(b.nextFollowUp || 0).getTime());
-  const dayTasks = sortTasks(data?.tasks[selected] || []);
+  const items: Item[] = useMemo(() => {
+    const leads = (data?.followUps[selected] || []).map((lead) => ({ kind: "lead" as const, at: new Date(lead.nextFollowUp || 0), lead }));
+    const tasks = (data?.tasks[selected] || []).map((task) => {
+      const at = new Date(task.dueDate || 0);
+      return { kind: "task" as const, at, task, allDay: at.getHours() === 0 && at.getMinutes() === 0 };
+    });
+    return [...leads, ...tasks].sort((a, b) => a.at.getTime() - b.at.getTime());
+  }, [data, selected]);
+
+  const allDay = items.filter((item) => item.kind === "task" && item.allDay);
+  const timed = items.filter((item) => !(item.kind === "task" && item.allDay));
+  const hours = timed.map((item) => item.at.getHours());
+  const first = Math.min(9, ...hours);
+  const last = Math.max(18, ...hours);
 
   const markDone = async (leadId: string) => {
     setBusyLead(leadId);
@@ -58,160 +91,216 @@ export const ScheduleScreen = ({ navigation }: RootScreenProps<"Schedule">) => {
     }
   };
 
-  const selectedDate = new Date(`${selected}T00:00:00`);
+  const open = (item: Item) =>
+    item.kind === "lead" ? navigation.navigate("LeadDetail", { leadId: item.lead._id, name: item.lead.name }) : navigation.navigate("TaskDetail", { taskId: item.task._id });
+
+  const renderEvent = (item: Item) => {
+    let tone = { fg: colors.textMuted, bg: colors.track };
+    let title = "";
+    let sub = "";
+    if (item.kind === "lead") {
+      const visit = VISIT_STATUSES.includes(item.lead.status || "");
+      tone = visit ? { fg: colors.primary, bg: colors.primarySoft } : { fg: colors.violet, bg: colors.violetSoft };
+      title = `${visit ? "Site visit" : "Call"} · ${item.lead.name}`;
+      sub = visit ? item.lead.projectInterested || "Site visit" : `Follow-up${item.at.getMinutes() ? ` · ${item.at.toLocaleTimeString("en-IN", { hour: "numeric", minute: "2-digit" })}` : ""}`;
+    } else {
+      const urgent = ["HIGH", "URGENT"].includes(item.task.priority);
+      tone = urgent ? { fg: colors.warning, bg: colors.warningSoft } : { fg: colors.textMuted, bg: colors.track };
+      title = item.task.title;
+      sub = ["Task", PRIORITY[item.task.priority] || ""].filter(Boolean).join(" · ");
+    }
+    const key = item.kind === "lead" ? `l${item.lead._id}` : `t${item.task._id}`;
+    return (
+      <Pressable key={key} accessibilityRole="button" onPress={() => open(item)} style={({ pressed }) => [styles.event, { backgroundColor: tone.bg, opacity: pressed ? 0.8 : 1 }]}>
+        <View style={styles.flex}>
+          <Text variant="bodyStrong" color={tone.fg} numberOfLines={1} style={styles.eventTitle}>
+            {title}
+          </Text>
+          <Text variant="small" color="muted" numberOfLines={1}>
+            {sub}
+          </Text>
+        </View>
+        {item.kind === "lead" ? (
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel={`Mark follow-up with ${item.lead.name} done`}
+            hitSlop={8}
+            onPress={() => markDone(item.lead._id)}
+            style={[styles.doneButton, { borderColor: tone.fg }]}
+          >
+            {busyLead === item.lead._id ? <ActivityIndicator size="small" color={tone.fg} /> : <Icon name="checkmark" size={15} color={tone.fg} />}
+          </Pressable>
+        ) : null}
+      </Pressable>
+    );
+  };
 
   return (
-    <Body refreshing={refreshing} onRefresh={refresh}>
-      <Card style={styles.calendar}>
-        <View style={styles.monthRow}>
-          <Pressable accessibilityRole="button" accessibilityLabel="Previous month" hitSlop={10} onPress={() => setCursor((value) => addMonths(value, -1))}>
-            <Icon name="chevron-back" size={22} color={colors.primary} />
+    <View style={[styles.flex, { backgroundColor: colors.bg }]}>
+      <View style={[styles.top, { backgroundColor: colors.surface, borderBottomColor: colors.border, paddingTop: insets.top + 8 }]}>
+        <View style={styles.headRow}>
+          <Pressable accessibilityRole="button" accessibilityLabel="Back" hitSlop={10} onPress={() => navigation.goBack()}>
+            <Icon name="chevron-back" size={24} color={colors.primary} />
           </Pressable>
-          <Text variant="heading">
-            {MONTH_NAMES[cursor.getMonth()]} {cursor.getFullYear()}
-          </Text>
-          <Pressable accessibilityRole="button" accessibilityLabel="Next month" hitSlop={10} onPress={() => setCursor((value) => addMonths(value, 1))}>
-            <Icon name="chevron-forward" size={22} color={colors.primary} />
-          </Pressable>
-        </View>
-        <View style={styles.week}>
-          {WEEKDAYS.map((label, index) => (
-            <Text key={index} variant="tiny" color="faint" align="center" style={styles.cell}>
-              {label}
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel="Pick a month"
+            onPress={() => {
+              setCursor(addMonths(selectedDate, 0));
+              setPicking(true);
+            }}
+            style={styles.titleWrap}
+          >
+            <Text variant="title" style={styles.title}>
+              {MONTH_NAMES[selectedDate.getMonth()]}
             </Text>
-          ))}
-        </View>
-        <View style={styles.grid}>
-          {days.map((day) => {
-            const isSelected = day.key === selected;
-            const leadCount = data?.followUps[day.key]?.length || 0;
-            const taskCount = data?.tasks[day.key]?.length || 0;
-            return (
-              <Pressable
-                key={day.key}
-                accessibilityRole="button"
-                accessibilityState={{ selected: isSelected }}
-                accessibilityLabel={`${day.date.getDate()} ${MONTH_NAMES[day.date.getMonth()]}: ${leadCount} follow-ups, ${taskCount} tasks`}
-                onPress={() => {
-                  setSelected(day.key);
-                  if (!day.inMonth) setCursor(addMonths(day.date, 0));
-                }}
-                style={styles.cell}
-              >
-                <View
-                  style={[
-                    styles.dayCircle,
-                    isSelected && { backgroundColor: colors.primary },
-                    !isSelected && day.key === today && { borderColor: colors.primary, borderWidth: 1.5 },
-                  ]}
-                >
-                  <Text variant="smallStrong" color={isSelected ? colors.onPrimary : day.inMonth ? colors.text : colors.textFaint}>
-                    {day.date.getDate()}
-                  </Text>
-                </View>
-                <View style={styles.dots}>
-                  {leadCount ? <View style={[styles.dot, { backgroundColor: colors.primary }]} /> : null}
-                  {taskCount ? <View style={[styles.dot, { backgroundColor: colors.info }]} /> : null}
-                </View>
-              </Pressable>
-            );
-          })}
-        </View>
-        <View style={styles.legend}>
-          <View style={[styles.dot, { backgroundColor: colors.primary }]} />
-          <Text variant="tiny" color="muted">
-            Follow-ups
-          </Text>
-          <View style={[styles.dot, { backgroundColor: colors.info }]} />
-          <Text variant="tiny" color="muted">
-            Tasks due
-          </Text>
+            <Icon name="chevron-down" size={16} color={colors.textMuted} />
+          </Pressable>
           {selected !== today ? (
-            <Pressable
-              accessibilityRole="button"
-              onPress={() => {
-                setCursor(addMonths(new Date(), 0));
-                setSelected(today);
-              }}
-              style={styles.todayLink}
-            >
+            <Pressable accessibilityRole="button" onPress={() => setSelected(today)} hitSlop={8} style={styles.todayLink}>
               <Text variant="smallStrong" color="primary">
                 Today
               </Text>
             </Pressable>
           ) : null}
+          {canDoPageAction(user, access, "tasks", "create") ? (
+            <Pressable accessibilityRole="button" accessibilityLabel="New task" onPress={() => navigation.navigate("NewTask")} style={[styles.add, { backgroundColor: colors.primary }]}>
+              <Icon name="add" size={24} color={colors.onPrimary} />
+            </Pressable>
+          ) : null}
         </View>
-      </Card>
+        <View style={styles.weekRow}>
+          <Pressable accessibilityLabel="Previous week" hitSlop={6} onPress={() => setSelected(dayKey(new Date(weekStart.getTime() - 7 * 86400000)))} style={styles.arrow}>
+            <Icon name="chevron-back" size={14} color={colors.textFaint} />
+          </Pressable>
+          {week.map((date, index) => {
+            const key = dayKey(date);
+            const active = key === selected;
+            const count = busyDays(key);
+            return (
+              <Pressable
+                key={key}
+                accessibilityRole="button"
+                accessibilityState={{ selected: active }}
+                accessibilityLabel={`${date.toDateString()}, ${count} items`}
+                onPress={() => setSelected(key)}
+                style={[styles.day, active && { backgroundColor: colors.primary }]}
+              >
+                <Text variant="smallStrong" color={active ? colors.onPrimary : colors.textMuted} style={styles.dayLetter}>
+                  {WEEKDAYS[index]}
+                </Text>
+                <Text variant="title" color={active ? colors.onPrimary : key === today ? colors.primary : colors.text} style={styles.dayNumber}>
+                  {date.getDate()}
+                </Text>
+                <View style={[styles.dot, { backgroundColor: count ? (active ? colors.onPrimary : colors.primary) : "transparent" }]} />
+              </Pressable>
+            );
+          })}
+          <Pressable accessibilityLabel="Next week" hitSlop={6} onPress={() => setSelected(dayKey(new Date(weekStart.getTime() + 7 * 86400000)))} style={styles.arrow}>
+            <Icon name="chevron-forward" size={14} color={colors.textFaint} />
+          </Pressable>
+        </View>
+      </View>
 
-      <Text variant="title">
-        {selected === today ? "Today" : selectedDate.toLocaleDateString("en-IN", { weekday: "long", day: "numeric", month: "long" })}
-      </Text>
-
-      {loading ? (
-        <Loading />
-      ) : error ? (
+      {error && !data ? (
         <ErrorState message={error} onRetry={refresh} />
       ) : (
-        <>
+        <ScrollView contentContainerStyle={[styles.agenda, { paddingBottom: insets.bottom + 30 }]} refreshControl={<RefreshControl refreshing={refreshing} onRefresh={refresh} />}>
           <InlineError message={actionError} />
-          {canUseLeads(user.role) ? (
-            <>
-              <SectionTitle title={`Follow-ups · ${dayFollowUps.length}`} />
-              {dayFollowUps.length ? (
-                dayFollowUps.map((lead) => (
-                  <View key={lead._id}>
-                    <View>
-                      <LeadRow lead={lead} onPress={() => navigation.navigate("LeadDetail", { leadId: lead._id, name: lead.name })} />
-                      <View style={styles.followActions}>
-                        <Button label="Done" icon="checkmark" size="sm" variant="secondary" loading={busyLead === lead._id} onPress={() => markDone(lead._id)} />
-                        <Button label="Reschedule" icon="calendar-outline" size="sm" variant="ghost" onPress={() => navigation.navigate("UpdateLead", { leadId: lead._id })} />
-                      </View>
-                    </View>
-                  </View>
-                ))
-              ) : (
-                <Card>
-                  <Text variant="small" color="muted">
-                    No follow-ups on this day.
-                  </Text>
-                </Card>
-              )}
-            </>
+          {loading && !data ? <ActivityIndicator color={colors.primary} style={styles.loading} /> : null}
+          {allDay.length ? (
+            <View style={styles.hour}>
+              <Text variant="mono" color="muted" style={styles.hourLabel}>
+                DUE
+              </Text>
+              <View style={[styles.slot, { borderTopColor: colors.border }]}>{allDay.map(renderEvent)}</View>
+            </View>
           ) : null}
-
-          {canUseTasks(user.role) ? (
-            <>
-              <SectionTitle title={`Tasks due · ${dayTasks.length}`} action="New task" onAction={() => navigation.navigate("NewTask")} />
-              {dayTasks.length ? (
-                dayTasks.map((task) => (
-                  <TaskRow key={task._id} task={task} showAssignee onPress={() => navigation.navigate("TaskDetail", { taskId: task._id })} />
-                ))
-              ) : (
-                <Card>
-                  <Text variant="small" color="muted">
-                    No open tasks due on this day.
-                  </Text>
-                </Card>
-              )}
-            </>
+          {Array.from({ length: last - first + 1 }, (_, index) => first + index).map((hour) => {
+            const inHour = timed.filter((item) => item.at.getHours() === hour);
+            return (
+              <View key={hour} style={styles.hour}>
+                <Text variant="mono" color="muted" style={styles.hourLabel}>
+                  {hourLabel(hour)}
+                </Text>
+                <View style={[styles.slot, { borderTopColor: colors.border }]}>{inHour.map(renderEvent)}</View>
+              </View>
+            );
+          })}
+          {data && !items.length ? (
+            <Text variant="small" color="muted" align="center" style={styles.empty}>
+              Nothing scheduled{selected === today ? " today" : ""}.
+            </Text>
           ) : null}
-        </>
+        </ScrollView>
       )}
-    </Body>
+
+      <Sheet visible={picking} title={`${MONTH_NAMES[cursor.getMonth()]} ${cursor.getFullYear()}`} onClose={() => setPicking(false)}>
+        <View style={styles.monthNav}>
+          <Pressable accessibilityLabel="Previous month" hitSlop={10} onPress={() => setCursor((value) => addMonths(value, -1))}>
+            <Icon name="chevron-back" size={22} color={colors.primary} />
+          </Pressable>
+          <Pressable accessibilityLabel="Next month" hitSlop={10} onPress={() => setCursor((value) => addMonths(value, 1))}>
+            <Icon name="chevron-forward" size={22} color={colors.primary} />
+          </Pressable>
+        </View>
+        <View style={styles.grid}>
+          {WEEKDAYS.map((label, index) => (
+            <Text key={`h${index}`} variant="tiny" color="faint" align="center" style={styles.cell}>
+              {label}
+            </Text>
+          ))}
+          {monthGrid(cursor).map((day) => {
+            const active = day.key === selected;
+            return (
+              <Pressable
+                key={day.key}
+                onPress={() => {
+                  setSelected(day.key);
+                  setPicking(false);
+                }}
+                style={styles.cell}
+              >
+                <View style={[styles.circle, active && { backgroundColor: colors.primary }, !active && day.key === today && { borderColor: colors.primary, borderWidth: 1.5 }]}>
+                  <Text variant="smallStrong" color={active ? colors.onPrimary : day.inMonth ? colors.text : colors.textFaint}>
+                    {day.date.getDate()}
+                  </Text>
+                </View>
+                <View style={[styles.dot, { backgroundColor: busyDays(day.key) ? colors.primary : "transparent" }]} />
+              </Pressable>
+            );
+          })}
+        </View>
+      </Sheet>
+    </View>
   );
 };
 
 const styles = StyleSheet.create({
-  flex: { flex: 1 },
-  calendar: { gap: space.sm, paddingHorizontal: space.sm },
-  monthRow: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", paddingHorizontal: space.sm },
-  week: { flexDirection: "row" },
+  flex: { flex: 1, minWidth: 0 },
+  top: { paddingHorizontal: 14, paddingBottom: 12, borderBottomWidth: 1, gap: 12 },
+  headRow: { flexDirection: "row", alignItems: "center", gap: 12 },
+  titleWrap: { flexDirection: "row", alignItems: "center", gap: 6, flex: 1 },
+  title: { fontSize: 24 },
+  todayLink: { paddingHorizontal: 4 },
+  add: { width: 44, height: 44, borderRadius: 14, alignItems: "center", justifyContent: "center" },
+  weekRow: { flexDirection: "row", alignItems: "center" },
+  arrow: { width: 12, alignItems: "center" },
+  day: { flex: 1, alignItems: "center", paddingVertical: 7, borderRadius: 14, gap: 1 },
+  dayLetter: { fontSize: 11 },
+  dayNumber: { fontSize: 17 },
+  dot: { width: 5, height: 5, borderRadius: 3, marginTop: 2 },
+  agenda: { paddingHorizontal: 14, paddingTop: 12 },
+  loading: { marginVertical: 20 },
+  hour: { flexDirection: "row", minHeight: 68 },
+  hourLabel: { width: 52, fontSize: 11, paddingTop: 8 },
+  slot: { flex: 1, borderTopWidth: 1, paddingTop: 7, paddingBottom: 7, gap: 6 },
+  event: { flexDirection: "row", alignItems: "center", gap: 10, borderRadius: 14, paddingHorizontal: 12, paddingVertical: 9 },
+  eventTitle: { fontSize: 13.5 },
+  doneButton: { width: 28, height: 28, borderRadius: 14, borderWidth: 1.5, alignItems: "center", justifyContent: "center" },
+  empty: { marginTop: 16 },
+  monthNav: { flexDirection: "row", justifyContent: "space-between" },
   grid: { flexDirection: "row", flexWrap: "wrap" },
   cell: { width: `${100 / 7}%`, alignItems: "center", paddingVertical: 3 },
-  dayCircle: { width: 34, height: 34, borderRadius: 17, alignItems: "center", justifyContent: "center" },
-  dots: { flexDirection: "row", gap: 3, height: 6, marginTop: 2 },
-  dot: { width: 6, height: 6, borderRadius: 3 },
-  legend: { flexDirection: "row", alignItems: "center", gap: 6, paddingHorizontal: space.sm, paddingTop: space.xs },
-  todayLink: { marginLeft: "auto" },
-  followActions: { flexDirection: "row", gap: space.sm, marginTop: space.xs },
+  circle: { width: 34, height: 34, borderRadius: 17, alignItems: "center", justifyContent: "center" },
 });

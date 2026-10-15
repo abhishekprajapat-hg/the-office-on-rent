@@ -7,7 +7,7 @@ import { completionRate, WORKLOAD, workloadFor, type Workload } from "../../lib/
 import type { RootScreenProps } from "../../navigation/types";
 import { useTheme } from "../../theme/ThemeProvider";
 import { space, toneColors } from "../../theme/tokens";
-import { Avatar, Badge, Card, ChipRow, EmptyState, ErrorState, Icon, Loading, Text } from "../../ui";
+import { Avatar, Badge, Card, FilterBar, EmptyState, ErrorState, Icon, Loading, Text } from "../../ui";
 
 type Sort = "tasks" | "overdue" | "progress" | "name";
 
@@ -62,27 +62,36 @@ export const TeamWorkloadScreen = ({ navigation }: RootScreenProps<"TeamWorkload
               <Tile label="Done rate" value={`${completionRate(totals)}%`} />
             </View>
           ) : null}
-          <ChipRow
-            options={[
-              { key: "ALL", label: "Everyone", count: data.members.length },
-              { key: "busy", label: "Busy", count: counts("busy") },
-              { key: "balanced", label: "Balanced", count: counts("balanced") },
-              { key: "available", label: "Available", count: counts("available") },
-              { key: "offline", label: "No tasks", count: counts("offline") },
+          <FilterBar
+            inset
+            filters={[
+              {
+                label: "Load",
+                icon: "pulse-outline",
+                options: [
+                  { key: "ALL", label: "Everyone", count: data.members.length },
+                  { key: "busy", label: "Busy", count: counts("busy") },
+                  { key: "balanced", label: "Balanced", count: counts("balanced") },
+                  { key: "available", label: "Available", count: counts("available") },
+                  { key: "offline", label: "No tasks", count: counts("offline") },
+                ],
+                value: filter,
+                onChange: (key: string) => setFilter(key as typeof filter),
+              },
+              { label: "Role", icon: "people-outline", options: [{ key: "ALL", label: "All roles" }, ...roles.map((item) => ({ key: item, label: roleLabel(item) }))], value: role, onChange: setRole },
+              {
+                label: "Sort",
+                icon: "swap-vertical",
+                options: [
+                  { key: "tasks", label: "Most tasks" },
+                  { key: "overdue", label: "Most overdue" },
+                  { key: "progress", label: "Least progress" },
+                  { key: "name", label: "Name" },
+                ],
+                value: sort,
+                onChange: (key: string) => setSort(key as Sort),
+              },
             ]}
-            value={filter}
-            onChange={(key) => setFilter(key as typeof filter)}
-          />
-          <ChipRow options={[{ key: "ALL", label: "All roles" }, ...roles.map((item) => ({ key: item, label: roleLabel(item) }))]} value={role} onChange={setRole} />
-          <ChipRow
-            options={[
-              { key: "tasks", label: "Most tasks" },
-              { key: "overdue", label: "Most overdue" },
-              { key: "progress", label: "Least progress" },
-              { key: "name", label: "Name" },
-            ]}
-            value={sort}
-            onChange={(key) => setSort(key as Sort)}
           />
         </View>
       }

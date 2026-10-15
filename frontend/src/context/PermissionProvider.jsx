@@ -34,10 +34,7 @@ export const PermissionProvider = ({ children, enabled = true, userRole }) => {
         enforcePageAccess: data.enforcePageAccess,
       });
     } catch {
-      // Fail closed on permissions, but never on page access: leaving
-      // enforcePageAccess false means a transient network error cannot lock a
-      // user out of pages their role legitimately has. The backend guard is
-      // the real gate either way.
+      // A missing access profile must not expose pages while the server is unavailable.
       if (!background) setAccess(EMPTY_ACCESS);
       setError("permissions_unavailable");
     } finally {
@@ -79,20 +76,20 @@ export const PermissionProvider = ({ children, enabled = true, userRole }) => {
     [isAdmin, permissionSet],
   );
 
-  // Explicit employee selections drive navigation; otherwise use role defaults.
+  // /access/me resolves role defaults and employee overrides for both clients.
   const canPage = useCallback(
     (pageKeys) => {
-      if (isAdmin || !access.enforcePageAccess) return true;
+      if (isAdmin) return true;
       const keys = Array.isArray(pageKeys) ? pageKeys : [pageKeys];
       return keys.some((pageKey) => permissionSet.has(toPagePermission(pageKey, "view")));
     },
-    [isAdmin, access.enforcePageAccess, permissionSet],
+    [isAdmin, permissionSet],
   );
 
   const canPageAction = useCallback(
     (pageKey, action) =>
-      isAdmin || !access.enforcePageAccess || permissionSet.has(toPagePermission(pageKey, action)),
-    [isAdmin, access.enforcePageAccess, permissionSet],
+      isAdmin || permissionSet.has(toPagePermission(pageKey, action)),
+    [isAdmin, permissionSet],
   );
 
   const value = useMemo(

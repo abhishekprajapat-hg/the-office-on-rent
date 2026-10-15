@@ -111,6 +111,18 @@ export type NewProperty = {
   floorNumber?: number | null;
   ownerName?: string;
   ownerNumber?: string;
+  ownerWhatsappNumber?: string;
+  keyManagerName?: string;
+  keyManagerNumber?: string;
+  carpetArea?: number | null;
+  superBuiltUpArea?: number | null;
+  depositMonths?: number | null;
+  lockInYears?: number | null;
+  maintenanceCharges?: number | null;
+  totalFloors?: number | null;
+  images?: string[];
+  commercialDetails?: { officeLayout?: { workstations?: number | null; totalCabins?: number | null; conferenceRooms?: number | null } };
+  residentialDetails?: { bedrooms?: number | null; bathrooms?: number | null; parking?: number | null };
 };
 
 /*

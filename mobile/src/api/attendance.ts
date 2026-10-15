@@ -80,3 +80,65 @@ export const applyLeave = async (payload: { fromDate: string; toDate: string; le
   const res = await api.post("/attendance/leave-requests", payload);
   return res.data;
 };
+
+/* ---------------------------------------------------------------- team -- */
+
+export type TeamAttendanceRow = {
+  user: { _id: string; name: string; role?: string; profileImageUrl?: string };
+  attendance: AttendanceDay & { isOnBreak?: boolean };
+};
+
+export type TeamAttendanceSummary = {
+  totalUsers: number;
+  checkedIn: number;
+  checkedOut: number;
+  activeLogins: number;
+  onBreak: number;
+  leave: number;
+  weekOff: number;
+  absent: number;
+};
+
+/* GET /attendance/daily - managers and admins: everyone in scope for one day. */
+export const getTeamAttendance = async (date?: string) => {
+  const res = await api.get("/attendance/daily", { params: date ? { date } : {} });
+  return {
+    summary: (res.data?.summary || null) as TeamAttendanceSummary | null,
+    rows: (Array.isArray(res.data?.attendance) ? res.data.attendance : []) as TeamAttendanceRow[],
+  };
+};
+
+/* ---------------------------------------------------------- violations -- */
+
+export type Violation = {
+  _id: string;
+  userId: string;
+  userName?: string;
+  date: string;
+  month: string;
+  kind: "REJECTED_LEAVE" | "UNINFORMED" | string;
+  active: boolean;
+  ordinal: number;
+  level: "RECORDED" | "WARNING" | "MANAGEMENT_REVIEW" | string;
+  excused?: boolean;
+  history?: { action: string; note?: string; at?: string }[];
+};
+
+export type ViolationReport = {
+  month: string;
+  violations: Violation[];
+  summaries: { userId: string; name: string; rejectedLeave: number; uninformed: number; rejectedLevel: string; uninformedLevel: string }[];
+  policyNote?: string;
+};
+
+/* GET /attendance/violations?month=YYYY-MM - your own, or your team's for a manager. */
+export const getViolations = async (month: string) => {
+  const res = await api.get<ViolationReport>("/attendance/violations", { params: { month } });
+  return res.data;
+};
+
+/* PATCH /attendance/violations/:id - managers record a warning, review or excuse. */
+export const reviewViolation = async (id: string, action: "WARNING_ISSUED" | "MANAGEMENT_REVIEW" | "EXCUSED", note: string) => {
+  const res = await api.patch(`/attendance/violations/${id}`, { action, note: note.trim() });
+  return res.data;
+};

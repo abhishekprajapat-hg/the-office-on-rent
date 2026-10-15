@@ -17,6 +17,8 @@ import { AuthProvider, useAuth } from "./src/auth/AuthProvider";
 import { RootNavigator } from "./src/navigation/RootNavigator";
 import { ThemeProvider, useTheme } from "./src/theme/ThemeProvider";
 import { NotificationBridge } from "./src/notifications/NotificationBridge";
+import { BootSplash } from "./src/screens/auth/BootSplash";
+import { AppLock } from "./src/components/AppLock";
 
 SplashScreen.preventAutoHideAsync().catch(() => {});
 
@@ -34,19 +36,24 @@ const Shell = () => {
 
   // A font that fails to load falls back to the system face rather than
   // holding the splash forever.
-  const ready = themeReady && !booting && (fontsLoaded || Boolean(fontError));
+  const fontsReady = themeReady && (fontsLoaded || Boolean(fontError));
 
+  // The native splash only covers font loading; restoring the session then
+  // shows the design's own splash (01) with its progress bar.
   useEffect(() => {
-    if (ready) SplashScreen.hideAsync().catch(() => {});
-  }, [ready]);
+    if (fontsReady) SplashScreen.hideAsync().catch(() => {});
+  }, [fontsReady]);
 
-  if (!ready) return null;
+  if (!fontsReady) return null;
+  if (booting) return <BootSplash />;
 
   return (
     <View style={{ flex: 1, backgroundColor: colors.bg }}>
       <StatusBar style={scheme === "dark" ? "light" : "dark"} />
-      <RootNavigator />
-      <NotificationBridge />
+      <AppLock>
+        <RootNavigator />
+        <NotificationBridge />
+      </AppLock>
     </View>
   );
 };

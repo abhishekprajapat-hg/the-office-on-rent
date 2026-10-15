@@ -14,7 +14,7 @@ npm run start:go     # Expo Go
 npm run web          # browser preview
 ```
 
-The app talks to `https://nemnidhi.cloud/api` unless `EXPO_PUBLIC_API_BASE_URL`
+The app talks to `https://crm.theofficeonrent.com/api` unless `EXPO_PUBLIC_API_BASE_URL`
 is set (see `.env.example`).
 
 ## Check

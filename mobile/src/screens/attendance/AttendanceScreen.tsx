@@ -13,12 +13,34 @@ import {
   PHASE_LABEL,
   workedMinutesSoFar,
 } from "../../lib/attendanceState";
-import { formatDate, formatMinutes, formatTime } from "../../lib/format";
+import { formatClock, formatDate, formatDayLong, formatMinutes, formatTime } from "../../lib/format";
 import { currentPosition } from "../../lib/location";
 import { useQuery } from "../../lib/useQuery";
 import { useTheme } from "../../theme/ThemeProvider";
-import { radius, space, toneColors, type Tone } from "../../theme/tokens";
-import { Badge, Button, Card, Chip, ErrorState, Icon, InlineError, Loading, Screen, SectionTitle, Text } from "../../ui";
+import { space, toneColors, type Tone } from "../../theme/tokens";
+import type { AttendanceDay } from "../../api/types";
+import { MonthCalendar } from "../../components/MonthCalendar";
+import {
+  Badge,
+  Button,
+  Card,
+  Chip,
+  ErrorState,
+  GroupLabel,
+  Icon,
+  IconTile,
+  InlineError,
+  ListCard,
+  ListRow,
+  Loading,
+  MiniStat,
+  ProgressBar,
+  Ring,
+  Screen,
+  SectionTitle,
+  Text,
+  type IconName,
+} from "../../ui";
 
 const monthStart = () => {
   const date = new Date();
@@ -97,65 +119,70 @@ export const AttendanceScreen = () => {
 
   const worked = workedMinutesSoFar(today);
   const phaseTone: Tone = phase === "working" ? "success" : phase === "on_break" ? "warning" : phase === "done" ? "neutral" : "primary";
-  const { fg, bg } = toneColors(colors, phaseTone);
   const summary = data.summary;
   const history = data.days.filter((day) => day.attendanceDate !== isoDay(new Date())).slice(0, 14);
   const shift = policy ? `${minutesToClock(policy.shiftStartMinutes)} – ${minutesToClock(policy.shiftEndMinutes)}` : "";
   const onBreakSince = breakStartedAt(today);
 
-  return (
-    <Screen title="Attendance" subtitle={formatDate(new Date())} refreshing={refreshing} onRefresh={refresh}>
-      <Card style={styles.hero}>
-        <View style={styles.heroTop}>
-          <View style={[styles.heroIcon, { backgroundColor: bg }]}>
-            <Icon name={phase === "on_break" ? "cafe" : phase === "done" ? "moon" : "finger-print"} size={26} color={fg} />
-          </View>
-          <View style={styles.flex}>
-            <Text variant="heading">{PHASE_LABEL[phase]}</Text>
-            <Text variant="small" color="muted">
-              {phase === "not_started"
-                ? shift
-                  ? `Shift ${shift}`
-                  : "Check in to start your day"
-                : phase === "on_break"
-                  ? `Break since ${formatTime(onBreakSince)}`
-                  : phase === "done"
-                    ? `${formatTime(today?.checkInAt)} – ${formatTime(today?.checkOutAt)}`
-                    : `Checked in at ${formatTime(today?.checkInAt)}`}
-            </Text>
-          </View>
-          {today?.isLateCheckIn ? <Badge label="Late" tone="warning" /> : null}
-        </View>
+  const shiftMinutes =
+    policy && typeof policy.shiftStartMinutes === "number" && typeof policy.shiftEndMinutes === "number" && policy.shiftEndMinutes > policy.shiftStartMinutes
+      ? policy.shiftEndMinutes - policy.shiftStartMinutes
+      : 540;
+  const timeline = buildTimeline(today);
 
-        {phase !== "not_started" ? (
-          <View style={styles.counter}>
-            <Text variant="display" style={styles.counterValue}>
-              {formatMinutes(worked)}
-            </Text>
-            <Text variant="small" color="muted">
-              worked{today?.totalBreakMinutes ? ` · ${formatMinutes(today.totalBreakMinutes)} on breaks` : ""}
+  return (
+    <Screen
+      title="My day"
+      subtitle={formatDayLong()}
+      refreshing={refreshing}
+      onRefresh={refresh}
+      right={
+        needsLocation ? (
+          <View style={[styles.zone, { backgroundColor: colors.successSoft }]}>
+            <Icon name="location" size={12} color={colors.success} />
+            <Text variant="tiny" color={colors.success} style={styles.zoneText}>
+              Office check-in
             </Text>
           </View>
-        ) : null}
+        ) : null
+      }
+    >
+      <Card style={styles.hero}>
+        <Ring size={176} stroke={12} progress={phase === "not_started" ? 0 : worked / shiftMinutes} color={phase === "on_break" ? colors.warning : colors.primary}>
+          <Badge label={today?.isLateCheckIn && phase === "working" ? "Working · late" : PHASE_LABEL[phase]} tone={phaseTone} />
+          <Text variant="monoLarge" style={styles.clock}>
+            {formatClock(worked)}
+          </Text>
+          <Text variant="tiny" color="muted" style={styles.target}>
+            of {formatMinutes(shiftMinutes)} target
+          </Text>
+        </Ring>
 
         {phase === "not_started" ? (
-          <Button label="Check in" icon="log-in-outline" loading={busy === "in"} onPress={() => run("in", checkIn)} />
+          <View style={styles.fill}>
+            {shift ? (
+              <Text variant="small" color="muted" align="center" style={styles.shift}>
+                Shift {shift}
+              </Text>
+            ) : null}
+            <Button label="Check in" icon="finger-print" loading={busy === "in"} onPress={() => run("in", checkIn)} />
+          </View>
         ) : phase === "working" ? (
           choosingBreak ? (
-            <View style={styles.gapSm}>
+            <View style={[styles.fill, styles.gapSm]}>
               <Text variant="smallStrong" color="muted">
                 What kind of break?
               </Text>
               <View style={styles.chips}>
                 {BREAK_TYPES.map((item) => (
-                  <Chip key={item.key} label={item.label} onPress={() => run("break", () => startBreak(item.key))} />
+                  <Chip key={item.key} variant="pick" label={item.label} onPress={() => run("break", () => startBreak(item.key))} />
                 ))}
               </View>
               <Button label="Cancel" variant="ghost" size="sm" onPress={() => setChoosingBreak(false)} />
             </View>
           ) : (
             <View style={styles.row}>
-              <Button label="Take a break" icon="cafe-outline" variant="secondary" style={styles.flex} loading={busy === "break"} onPress={() => setChoosingBreak(true)} />
+              <Button label="Break" icon="cafe-outline" variant="secondary" style={[styles.flex, { backgroundColor: colors.bg }]} loading={busy === "break"} onPress={() => setChoosingBreak(true)} />
               <Button
                 label={confirmOut ? "Tap to confirm" : "Check out"}
                 icon="log-out-outline"
@@ -167,22 +194,29 @@ export const AttendanceScreen = () => {
             </View>
           )
         ) : phase === "on_break" ? (
-          <Button label="End break" icon="play" loading={busy === "resume"} onPress={() => run("resume", () => endBreak())} />
+          <View style={styles.fill}>
+            <Text variant="small" color="muted" align="center" style={styles.shift}>
+              Break since {formatTime(onBreakSince)}
+            </Text>
+            <Button label="End break" icon="play" loading={busy === "resume"} onPress={() => run("resume", () => endBreak())} />
+          </View>
         ) : (
           <Text variant="small" color="muted" align="center">
-            You're done for today. See you tomorrow!
+            {formatTime(today?.checkInAt)} – {formatTime(today?.checkOutAt)} · You're done for today. See you tomorrow!
           </Text>
         )}
 
         {needsLocation && (phase === "not_started" || phase === "working") ? (
           <View style={styles.note}>
-            <Icon name="location-outline" size={14} color={colors.textFaint} />
-            <Text variant="tiny" color="faint">
+            <Icon name="location-outline" size={13} color={colors.textFaint} />
+            <Text variant="tiny" color="faint" style={styles.noteText}>
               Your location is checked against the office when you check in or out.
             </Text>
           </View>
         ) : null}
-        <InlineError message={actionError} />
+        <View style={styles.fill}>
+          <InlineError message={actionError} />
+        </View>
         {notice && !actionError ? (
           <Text variant="small" color="primary" align="center">
             {notice}
@@ -190,12 +224,39 @@ export const AttendanceScreen = () => {
         ) : null}
       </Card>
 
-      <SectionTitle title="This month" />
+      {timeline.length ? (
+        <Card style={styles.timeline}>
+          <Text variant="heading" style={styles.cardTitle}>
+            Timeline
+          </Text>
+          {timeline.map((entry, index) => (
+            <View key={entry.key} style={styles.tlRow}>
+              <View style={styles.tlRail}>
+                <IconTile icon={entry.icon} tone={entry.tone} size={28} iconSize={14} />
+                {index < timeline.length - 1 ? <View style={[styles.tlLine, { backgroundColor: colors.border }]} /> : null}
+              </View>
+              <View style={styles.tlBody}>
+                <Text variant="bodyStrong" style={styles.tlTitle}>
+                  {entry.title}
+                </Text>
+                {entry.subtitle ? (
+                  <Text variant="small" color="muted" style={styles.tlSub}>
+                    {entry.subtitle}
+                  </Text>
+                ) : null}
+              </View>
+            </View>
+          ))}
+        </Card>
+      ) : null}
+
+      <SectionTitle title={MONTH_NAMES[new Date().getMonth()]} action="History" onAction={() => navigation.navigate("AttendanceHistory")} />
+      <MonthCalendar days={data.days} />
       <View style={styles.stats}>
-        <Stat label="Present" value={summary.presentDays ?? 0} tone="success" />
-        <Stat label="Late" value={summary.lateDays ?? 0} tone="warning" />
-        <Stat label="Absent" value={summary.absentDays ?? 0} tone="danger" />
-        <Stat label="Leave" value={summary.leaveDays ?? 0} tone="info" />
+        <MiniStat label="Present" value={summary.presentDays ?? 0} tone="success" />
+        <MiniStat label="Late" value={summary.lateDays ?? 0} tone="warning" />
+        <MiniStat label="Leave" value={summary.leaveDays ?? 0} tone="primary" />
+        <MiniStat label="Absent" value={summary.absentDays ?? 0} tone="danger" />
       </View>
       <Card style={styles.rowCard}>
         <Meter label="Attendance" value={summary.attendancePercent ?? 0} />
@@ -203,67 +264,76 @@ export const AttendanceScreen = () => {
         <Meter label="On time" value={summary.punctualityPercent ?? 0} />
       </Card>
 
-      <Card onPress={() => navigation.navigate("Leave")} style={styles.leaveRow} accessibilityLabel="Leave">
-        <View style={[styles.heroIcon, { backgroundColor: colors.infoSoft }]}>
-          <Icon name="airplane" size={20} color={colors.info} />
-        </View>
-        <View style={styles.flex}>
-          <Text variant="bodyStrong">Leave</Text>
-          <Text variant="small" color="muted">
-            Balance, requests and applying for time off
-          </Text>
-        </View>
-        <Icon name="chevron-forward" size={18} color={colors.textFaint} />
-      </Card>
+      <ListCard>
+        <ListRow
+          title="Leave"
+          subtitle="Balance, requests and applying for time off"
+          left={<IconTile icon="airplane" tone="primary" />}
+          chevron
+          onPress={() => navigation.navigate("Leave")}
+        />
+      </ListCard>
 
-      <SectionTitle title="Recent days" />
-      <Card style={styles.list}>
-        {history.length ? (
-          history.map((day, index) => {
-            const meta = dayStatusMeta(day);
-            return (
-              <View
-                key={day._id || day.attendanceDate}
-                style={[styles.dayRow, index < history.length - 1 && { borderBottomColor: colors.border, borderBottomWidth: StyleSheet.hairlineWidth }]}
-              >
-                <View style={styles.flex}>
-                  <Text variant="smallStrong">{day.attendanceDate ? formatDate(new Date(`${day.attendanceDate}T00:00:00`)) : "—"}</Text>
-                  <Text variant="tiny" color="faint">
-                    {day.checkInAt ? `${formatTime(day.checkInAt)} – ${day.checkOutAt ? formatTime(day.checkOutAt) : "no check-out"}` : "No check-in"}
-                  </Text>
+      {history.length ? (
+        <>
+          <GroupLabel>Recent days</GroupLabel>
+          <ListCard>
+            {history.map((day) => {
+              const meta = dayStatusMeta(day);
+              return (
+                <View key={day._id || day.attendanceDate} style={styles.dayRow}>
+                  <View style={styles.flex}>
+                    <Text variant="smallStrong">{day.attendanceDate ? formatDate(new Date(`${day.attendanceDate}T00:00:00`)) : "—"}</Text>
+                    <Text variant="tiny" color="faint" style={styles.dayTimes}>
+                      {day.checkInAt ? `${formatTime(day.checkInAt)} – ${day.checkOutAt ? formatTime(day.checkOutAt) : "no check-out"}` : "No check-in"}
+                    </Text>
+                  </View>
+                  {day.workedMinutes ? (
+                    <Text variant="mono" color={colors.textMuted} style={styles.dayWorked}>
+                      {formatClock(day.workedMinutes)}
+                    </Text>
+                  ) : null}
+                  <Badge label={meta.label} tone={meta.tone} />
                 </View>
-                {day.workedMinutes ? (
-                  <Text variant="small" color="muted">
-                    {formatMinutes(day.workedMinutes)}
-                  </Text>
-                ) : null}
-                <Badge label={meta.label} tone={meta.tone} />
-              </View>
-            );
-          })
-        ) : (
-          <Text variant="small" color="muted">
-            Nothing recorded yet this month.
-          </Text>
-        )}
-      </Card>
+              );
+            })}
+          </ListCard>
+        </>
+      ) : null}
     </Screen>
   );
 };
 
-const Stat = ({ label, value, tone }: { label: string; value: number; tone: Tone }) => {
-  const { colors } = useTheme();
-  const { fg } = toneColors(colors, tone);
-  return (
-    <Card style={styles.stat}>
-      <Text variant="title" color={fg}>
-        {value}
-      </Text>
-      <Text variant="tiny" color="muted">
-        {label}
-      </Text>
-    </Card>
-  );
+const MONTH_NAMES = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
+
+type TimelineEntry = { key: string; icon: IconName; tone: Tone; title: string; subtitle?: string };
+
+/* Check-in, each break, and check-out, in order - the design's "Timeline" card. */
+const buildTimeline = (today: AttendanceDay | null): TimelineEntry[] => {
+  if (!today?.checkInAt) return [];
+  const entries: TimelineEntry[] = [
+    {
+      key: "in",
+      icon: "finger-print",
+      tone: today.isLateCheckIn ? "warning" : "success",
+      title: `Checked in · ${formatTime(today.checkInAt)}`,
+      subtitle: today.isLateCheckIn ? "Late check-in" : "On time",
+    },
+  ];
+  (today.breakSessions || []).forEach((session, index) => {
+    if (!session.startAt) return;
+    entries.push({
+      key: `b${session._id || index}`,
+      icon: "cafe",
+      tone: "warning",
+      title: `Break · ${formatTime(session.startAt)}${session.endAt ? ` – ${formatTime(session.endAt)}` : ""}`,
+      subtitle: session.endAt ? formatMinutes(session.durationMinutes ?? 0) : "In progress",
+    });
+  });
+  if (today.checkOutAt) {
+    entries.push({ key: "out", icon: "log-out", tone: "primary", title: `Checked out · ${formatTime(today.checkOutAt)}`, subtitle: `${formatMinutes(today.workedMinutes ?? 0)} worked` });
+  }
+  return entries;
 };
 
 const Meter = ({ label, value }: { label: string; value: number }) => {
@@ -272,38 +342,54 @@ const Meter = ({ label, value }: { label: string; value: number }) => {
   return (
     <View style={styles.meter}>
       <View style={styles.meterHead}>
-        <Text variant="small" color="muted">
+        <Text variant="small" color="muted" style={styles.meterLabel}>
           {label}
         </Text>
         <Text variant="smallStrong">{pct}%</Text>
       </View>
-      <View style={[styles.track, { backgroundColor: colors.surfaceAlt }]}>
-        <View style={[styles.fill, { width: `${pct}%`, backgroundColor: pct >= 75 ? colors.success : pct >= 50 ? colors.warning : colors.danger }]} />
-      </View>
+      <ProgressBar height={8} value={pct / 100} color={pct >= 75 ? colors.success : pct >= 50 ? colors.warning : colors.danger} />
     </View>
   );
 };
 
 const styles = StyleSheet.create({
   flex: { flex: 1 },
-  hero: { gap: space.lg },
-  heroTop: { flexDirection: "row", alignItems: "center", gap: space.md },
-  heroIcon: { width: 48, height: 48, borderRadius: radius.md, alignItems: "center", justifyContent: "center" },
-  counter: { alignItems: "center", gap: 2 },
-  counterValue: { fontSize: 40, lineHeight: 46 },
-  row: { flexDirection: "row", gap: space.md },
+  fill: { alignSelf: "stretch", gap: 10 },
+  zone: { flexDirection: "row", alignItems: "center", gap: 4, paddingHorizontal: 10, paddingVertical: 6, borderRadius: 999, alignSelf: "flex-end" },
+  zoneText: { fontSize: 11.5 },
+  hero: { alignItems: "center", gap: 16, paddingTop: 20, borderRadius: 24 },
+  clock: { marginTop: 2 },
+  target: { fontFamily: "PlusJakartaSans_400Regular", fontSize: 11 },
+  shift: { fontFamily: "PlusJakartaSans_600SemiBold" },
+  row: { flexDirection: "row", gap: space.sm, alignSelf: "stretch" },
   gapSm: { gap: space.sm },
-  chips: { flexDirection: "row", flexWrap: "wrap", gap: space.sm },
-  note: { flexDirection: "row", alignItems: "center", gap: 6, justifyContent: "center" },
-  stats: { flexDirection: "row", gap: space.sm },
-  stat: { flex: 1, alignItems: "center", paddingVertical: space.md, paddingHorizontal: space.xs, gap: 2 },
+  chips: { flexDirection: "row", flexWrap: "wrap", gap: 6 },
+  note: { flexDirection: "row", alignItems: "center", gap: 6, alignSelf: "stretch", justifyContent: "center" },
+  noteText: { fontFamily: "PlusJakartaSans_500Medium", flexShrink: 1 },
+  timeline: { gap: 2, borderRadius: 20 },
+  cardTitle: { fontSize: 13, paddingBottom: 8 },
+  tlRow: { flexDirection: "row", gap: 10 },
+  tlRail: { alignItems: "center" },
+  tlLine: { flex: 1, width: 2, minHeight: 10 },
+  tlBody: { paddingBottom: 10, flex: 1 },
+  tlTitle: { fontSize: 13 },
+  tlSub: { fontSize: 11.5 },
+  calendar: { gap: 4, borderRadius: 20 },
+  calRow: { flexDirection: "row", gap: 4 },
+  calCell: { flex: 1 },
+  calDay: { height: 34, borderRadius: 10, alignItems: "center", justifyContent: "center", gap: 2 },
+  calDot: { width: 5, height: 5, borderRadius: 3 },
+  legend: { flexDirection: "row", flexWrap: "wrap", gap: 10, paddingTop: 6 },
+  legendItem: { flexDirection: "row", alignItems: "center", gap: 4 },
+  legendDot: { width: 7, height: 7, borderRadius: 4 },
+  legendText: { fontFamily: "PlusJakartaSans_600SemiBold" },
+  stats: { flexDirection: "row", gap: 6 },
   rowCard: { flexDirection: "row", alignItems: "center", gap: space.lg },
-  divider: { width: StyleSheet.hairlineWidth, alignSelf: "stretch" },
+  divider: { width: 1, alignSelf: "stretch" },
   meter: { flex: 1, gap: space.sm },
   meterHead: { flexDirection: "row", justifyContent: "space-between" },
-  track: { height: 8, borderRadius: 4, overflow: "hidden" },
-  fill: { height: 8, borderRadius: 4 },
-  leaveRow: { flexDirection: "row", alignItems: "center", gap: space.md },
-  list: { paddingVertical: space.xs },
-  dayRow: { flexDirection: "row", alignItems: "center", gap: space.md, paddingVertical: space.md },
+  meterLabel: { fontSize: 12.5 },
+  dayRow: { flexDirection: "row", alignItems: "center", gap: 10, paddingVertical: 11, paddingHorizontal: 12 },
+  dayTimes: { fontFamily: "PlusJakartaSans_500Medium" },
+  dayWorked: { fontSize: 12 },
 });

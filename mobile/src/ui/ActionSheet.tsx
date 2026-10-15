@@ -42,7 +42,7 @@ export const ActionSheet = ({
               }}
               style={({ pressed }) => [styles.row, pressed && { backgroundColor: colors.surfaceAlt }]}
             >
-              <Icon name={action.icon} size={22} color={action.destructive ? colors.danger : colors.text} />
+              <Icon name={action.icon} size={20} color={action.destructive ? colors.danger : colors.primary} />
               <View style={styles.flex}>
                 <Text variant="body" color={action.destructive ? "danger" : "text"}>
                   {action.label}
@@ -64,8 +64,8 @@ export const ActionSheet = ({
 const styles = StyleSheet.create({
   flex: { flex: 1 },
   backdrop: { flex: 1, justifyContent: "flex-end" },
-  sheet: { borderTopLeftRadius: radius.xl, borderTopRightRadius: radius.xl, paddingTop: space.sm },
-  grabber: { width: 40, height: 4, borderRadius: 2, alignSelf: "center", marginBottom: space.sm },
+  sheet: { borderTopLeftRadius: radius.sheet, borderTopRightRadius: radius.sheet, paddingTop: 10 },
+  grabber: { width: 40, height: 5, borderRadius: 3, alignSelf: "center", marginBottom: space.sm },
   title: { paddingHorizontal: space.xl, paddingVertical: space.sm },
   row: { flexDirection: "row", alignItems: "center", gap: space.lg, paddingHorizontal: space.xl, paddingVertical: space.md + 2 },
 });

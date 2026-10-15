@@ -18,20 +18,33 @@ export const getTask = async (taskId: string) => {
   return res.data || null;
 };
 
+export type SubtaskDraft = {
+  _id?: string;
+  title: string;
+  description?: string;
+  dueDate?: string | null;
+  status?: string;
+  priority?: string;
+  isCompleted?: boolean;
+  assignedTo?: string;
+};
+
 export const createTask = async (payload: {
   title: string;
   description?: string;
+  status?: string;
   priority: string;
   dueDate: string;
   assignedTo: string;
-  leadId?: string;
+  leadId?: string | null;
   tags?: string[];
+  subtasks?: SubtaskDraft[];
 }) => {
   const res = await api.post<Task>("/tasks", payload);
   return res.data || null;
 };
 
-export const updateTask = async (taskId: string, payload: Partial<Pick<Task, "status" | "priority">>) => {
+export const updateTask = async (taskId: string, payload: Partial<Pick<Task, "status" | "priority">> & { dueDate?: string | null; assignedTo?: string; leadId?: string | null; tags?: string[] }) => {
   const res = await api.patch<Task>(`/tasks/${taskId}`, payload);
   return res.data || null;
 };
@@ -49,7 +62,7 @@ export const getAssignees = async () => {
 /* ---------------------------------------------------------------- depth -- */
 
 
-export type TaskEdit = Partial<{ title: string; description: string; priority: string; status: string; dueDate: string | null; assignedTo: string; tags: string[] }>;
+export type TaskEdit = Partial<{ title: string; description: string; priority: string; status: string; dueDate: string | null; assignedTo: string; tags: string[]; leadId: string | null; subtasks: SubtaskDraft[] }>;
 
 export const editTask = async (taskId: string, payload: TaskEdit) => {
   const res = await api.patch<Task>(`/tasks/${taskId}`, payload);
@@ -63,7 +76,7 @@ export const deleteTask = async (taskId: string) => {
 };
 
 /* Subtasks inherit the task's owner (the server enforces it) and need a due date - the task's, unless given. */
-export const addSubtask = async (taskId: string, payload: { title: string; dueDate?: string | null }) => {
+export const addSubtask = async (taskId: string, payload: SubtaskDraft) => {
   const res = await api.post<Task>(`/tasks/${taskId}/subtasks`, payload);
   return res.data || null;
 };
@@ -109,7 +122,7 @@ export const getTaskStatsByUser = async () => {
 };
 
 /* Edit a checklist item's own title, note or due date (the task's manager only). */
-export const editSubtask = async (taskId: string, subtaskId: string, payload: { title?: string; description?: string; dueDate?: string | null }) => {
+export const editSubtask = async (taskId: string, subtaskId: string, payload: Partial<SubtaskDraft>) => {
   const res = await api.patch<Task>(`/tasks/${taskId}/subtasks/${subtaskId}`, payload);
   return res.data || null;
 };

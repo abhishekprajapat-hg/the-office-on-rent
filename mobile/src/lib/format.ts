@@ -67,6 +67,7 @@ export const initials = (name?: string) =>
   String(name || "")
     .trim()
     .split(/\s+/)
+    .map((part) => part.replace(/[^\p{L}\p{N}]/gu, ""))
     .filter(Boolean)
     .slice(0, 2)
     .map((part) => part[0]!.toUpperCase())
@@ -85,4 +86,77 @@ export const dialable = (phone?: string) => {
 export const whatsappNumber = (phone?: string) => {
   const digits = String(phone || "").replace(/[^\d]/g, "");
   return digits.length === 10 ? `91${digits}` : digits;
+};
+
+const WEEKDAYS_SHORT = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
+const WEEKDAYS_LONG = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
+const MONTHS_LONG = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
+
+/* "Mon, 12 Oct" - the date line under greetings. */
+export const formatDayShort = (now = new Date()) => `${WEEKDAYS_SHORT[now.getDay()]}, ${now.getDate()} ${MONTHS[now.getMonth()]}`;
+
+/* "Monday, 12 October" */
+export const formatDayLong = (now = new Date()) => `${WEEKDAYS_LONG[now.getDay()]}, ${now.getDate()} ${MONTHS_LONG[now.getMonth()]}`;
+
+/* 138 -> "2:18" (hours:minutes on a clock face). */
+export const formatClock = (minutes?: number | null) => {
+  const total = Math.max(0, Math.floor(Number(minutes) || 0));
+  return `${Math.floor(total / 60)}:${String(total % 60).padStart(2, "0")}`;
+};
+
+/* "9:00" + "AM" split, for the time column in follow-up lists. */
+export const splitTime = (value?: string | Date | null) => {
+  const label = formatTime(value);
+  const [clock = "", meridiem = ""] = label.split(" ");
+  return { clock, meridiem };
+};
+
+/* "now", "2m", "41m", "3h", "Sun", "14 Oct" - compact age for feeds. */
+export const formatAgo = (value?: string | Date | null, now = new Date()) => {
+  const date = value ? new Date(value) : null;
+  if (!date || Number.isNaN(date.getTime())) return "";
+  const minutes = Math.floor((now.getTime() - date.getTime()) / 60000);
+  if (minutes < 1) return "now";
+  if (minutes < 60) return `${minutes}m`;
+  if (minutes < 24 * 60 && date.getDate() === now.getDate()) return `${Math.floor(minutes / 60)}h`;
+  if (minutes < 7 * 24 * 60) return WEEKDAYS_SHORT[date.getDay()]!;
+  return `${date.getDate()} ${MONTHS[date.getMonth()]}`;
+};
+
+/* Task due line: "12:00 PM" today, "Yesterday", "Tomorrow", "Fri, 16 Oct" this week, else "16 Oct". */
+export const formatDueDay = (value?: string | Date | null, now = new Date()) => {
+  const date = value ? new Date(value) : null;
+  if (!date || Number.isNaN(date.getTime())) return "";
+  const start = (d: Date) => new Date(d.getFullYear(), d.getMonth(), d.getDate()).getTime();
+  const days = Math.round((start(date) - start(now)) / 86400000);
+  if (days === 0) return formatTime(date);
+  if (days === -1) return "Yesterday";
+  if (days === 1) return "Tomorrow";
+  if (days > 1 && days < 7) return `${WEEKDAYS_SHORT[date.getDay()]}, ${date.getDate()} ${MONTHS[date.getMonth()]}`;
+  return formatDate(date, now);
+};
+
+/* ------------------------------------------------------------- months -- */
+
+/* "2026-10" for a date, in the device calendar. */
+export const monthKeyOf = (date = new Date()) => `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}`;
+
+/* "2026-10" + -1 -> "2026-09" */
+export const shiftMonth = (key: string, delta: number) => {
+  const [y, m] = key.split("-").map(Number);
+  return monthKeyOf(new Date(y!, m! - 1 + delta, 1));
+};
+
+/* "2026-10" -> "October 2026" / short: "Oct" */
+export const monthLabel = (key: string, short = false) => {
+  const [y, m] = key.split("-").map(Number);
+  if (!y || !m) return key;
+  return short ? MONTHS[m - 1]! : `${MONTHS_LONG[m - 1]} ${y}`;
+};
+
+/* "₹40,280" - whole rupees with Indian grouping (paise only when present). */
+export const rupees = (value?: number | null) => {
+  const amount = Number(value) || 0;
+  const fixed = Math.round(amount * 100) / 100;
+  return `₹${fixed.toLocaleString("en-IN", { maximumFractionDigits: 2 })}`;
 };

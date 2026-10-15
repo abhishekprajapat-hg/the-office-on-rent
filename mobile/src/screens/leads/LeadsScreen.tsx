@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useRef, useState } from "react";
-import { ActivityIndicator, FlatList, Pressable, RefreshControl, StyleSheet, View } from "react-native";
+import { ActivityIndicator, FlatList, RefreshControl, StyleSheet, View } from "react-native";
 import { useFocusEffect, useNavigation } from "@react-navigation/native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { errorMessage } from "../../api/client";
@@ -11,8 +11,8 @@ import { activeFilterCount, filterParams, type LeadFilters } from "../../lib/lea
 import { isManagement } from "../../lib/roles";
 import { LeadFiltersSheet } from "./LeadFiltersSheet";
 import { useTheme } from "../../theme/ThemeProvider";
-import { space } from "../../theme/tokens";
-import { ChipRow, EmptyState, ErrorState, Field, HeaderButton, Icon, Loading, Text } from "../../ui";
+import { gutter, space } from "../../theme/tokens";
+import { ActionSheet, FilterDropdown, EmptyState, ErrorState, Field, HeaderButton, Loading, Text, OfflineBanner } from "../../ui";
 
 /*
  * The web list filters on any of 20 statuses from a flyout. On a phone the
@@ -41,6 +41,7 @@ export const LeadsScreen = () => {
   const { colors } = useTheme();
   const [filters, setFilters] = useState<LeadFilters>({});
   const [filtersOpen, setFiltersOpen] = useState(false);
+  const [menuOpen, setMenuOpen] = useState(false);
   const filterCount = activeFilterCount(filters);
   const insets = useSafeAreaInsets();
 
@@ -123,58 +124,47 @@ export const LeadsScreen = () => {
             {total === null ? " " : `${total.toLocaleString("en-IN")} ${filtered ? "matching" : "in your pipeline"}`}
           </Text>
         </View>
-        {isManagement(user.role) ? (
-          <Pressable
-            accessibilityRole="button"
-            accessibilityLabel="Team pipeline"
-            onPress={() => navigation.navigate("TeamPipeline")}
-            style={[styles.teamButton, { borderColor: colors.border, backgroundColor: colors.surface }]}
-          >
-            <Icon name="people" size={20} color={colors.primary} />
-          </Pressable>
-        ) : null}
-        <Pressable
-          accessibilityRole="button"
-          accessibilityLabel="Bulk upload leads"
-          onPress={() => navigation.navigate("BulkUpload")}
-          style={[styles.teamButton, { borderColor: colors.border, backgroundColor: colors.surface }]}
-        >
-          <Icon name="cloud-upload-outline" size={20} color={colors.primary} />
-        </Pressable>
+        <HeaderButton icon="ellipsis-horizontal" label="More lead actions" variant="secondary" onPress={() => setMenuOpen(true)} />
+        <View>
+          <HeaderButton
+            icon="options-outline"
+            label={filterCount ? `Filters, ${filterCount} active` : "Filters"}
+            variant="secondary"
+            onPress={() => setFiltersOpen(true)}
+          />
+          {filterCount ? (
+            <View style={[styles.filterBadge, { backgroundColor: colors.primary, borderColor: colors.bg }]} pointerEvents="none">
+              <Text variant="tiny" color={colors.onPrimary}>
+                {filterCount}
+              </Text>
+            </View>
+          ) : null}
+        </View>
         <HeaderButton icon="add" label="Add lead" onPress={() => navigation.navigate("AddLead")} />
       </View>
-      <View style={styles.search}>
-        <View style={styles.flex}>
+      <View style={styles.offline}>
+        <OfflineBanner />
+      </View>
+      <View style={[styles.search, styles.searchRow]}>
+        <View style={styles.flexMin}>
         <Field
           icon="search"
+          surface
+          compact
           value={query}
           onChangeText={setQuery}
-          placeholder="Search name, phone, city, project"
+          placeholder="Search leads"
           autoCorrect={false}
           autoCapitalize="none"
           returnKeyType="search"
           clearButtonMode="while-editing"
         />
         </View>
-        <Pressable
-          accessibilityRole="button"
-          accessibilityLabel={filterCount ? `Filters, ${filterCount} active` : "Filters"}
-          onPress={() => setFiltersOpen(true)}
-          style={[styles.filterButton, { backgroundColor: filterCount ? colors.primary : colors.surface, borderColor: filterCount ? colors.primary : colors.border }]}
-        >
-          <Icon name="options" size={20} color={filterCount ? colors.onPrimary : colors.text} />
-          {filterCount ? (
-            <View style={[styles.filterBadge, { backgroundColor: colors.danger }]}>
-              <Text variant="tiny" color="#fff">
-                {filterCount}
-              </Text>
-            </View>
-          ) : null}
-        </Pressable>
+        <View style={styles.dropdown}>
+          <FilterDropdown label="Show" icon="funnel-outline" options={[...FILTERS].map((item) => ({ ...item, label: item.key === "ALL" ? "All leads" : item.label }))} value={filter} onChange={setFilter} />
+        </View>
       </View>
-      <View style={styles.chips}>
-        <ChipRow options={[...FILTERS]} value={filter} onChange={setFilter} />
-      </View>
+      <View style={styles.chips} />
 
       {loading ? (
         <Loading />
@@ -224,9 +214,22 @@ export const LeadsScreen = () => {
           keyboardDismissMode="on-drag"
         />
       )}
+      <ActionSheet
+        visible={menuOpen}
+        title="Leads"
+        onClose={() => setMenuOpen(false)}
+        actions={[
+          ...(isManagement(user.role)
+            ? [{ key: "team", label: "Team pipeline", icon: "people-outline" as const, onPress: () => navigation.navigate("TeamPipeline") }]
+            : []),
+          { key: "upload", label: "Bulk upload", hint: "Import leads from an Excel or CSV file", icon: "cloud-upload-outline" as const, onPress: () => navigation.navigate("BulkUpload") },
+        ]}
+      />
       <LeadFiltersSheet
         visible={filtersOpen}
         value={filters}
+        status={filter}
+        onStatus={(next) => setFilter((FILTERS.some((item) => item.key === next) ? next : "ALL") as FilterKey)}
         canFilterAssignee={isManagement(user.role)}
         onApply={setFilters}
         onClose={() => setFiltersOpen(false)}
@@ -238,16 +241,18 @@ export const LeadsScreen = () => {
 const Separator = () => <View style={styles.separator} />;
 
 const styles = StyleSheet.create({
+  offline: { paddingTop: 10, marginBottom: -8 },
   root: { flex: 1 },
   flex: { flex: 1 },
   flexGrow: { flexGrow: 1 },
-  header: { flexDirection: "row", alignItems: "center", paddingHorizontal: space.lg, paddingTop: space.md, gap: space.md },
-  search: { paddingHorizontal: space.lg, paddingTop: space.md, flexDirection: "row", gap: space.sm, alignItems: "center" },
-  teamButton: { width: 42, height: 42, borderRadius: 21, borderWidth: 1, alignItems: "center", justifyContent: "center" },
-  filterButton: { width: 48, height: 48, borderRadius: 12, borderWidth: 1, alignItems: "center", justifyContent: "center" },
-  filterBadge: { position: "absolute", top: -4, right: -4, minWidth: 18, height: 18, borderRadius: 9, alignItems: "center", justifyContent: "center", paddingHorizontal: 4 },
-  chips: { paddingVertical: space.md },
-  list: { paddingHorizontal: space.lg, paddingBottom: space.xxl },
+  header: { flexDirection: "row", alignItems: "center", paddingHorizontal: gutter, paddingTop: 4, gap: space.sm },
+  search: { paddingHorizontal: gutter, paddingTop: 10 },
+  searchRow: { flexDirection: "row", alignItems: "center", gap: 8 },
+  flexMin: { flex: 1, minWidth: 0 },
+  dropdown: { width: 148 },
+  filterBadge: { position: "absolute", top: -5, right: -5, minWidth: 18, height: 18, borderRadius: 9, borderWidth: 2, alignItems: "center", justifyContent: "center", paddingHorizontal: 4 },
+  chips: { height: 10 },
+  list: { paddingHorizontal: gutter, paddingBottom: space.xxl },
   separator: { height: space.sm },
   more: { paddingVertical: space.lg },
 });

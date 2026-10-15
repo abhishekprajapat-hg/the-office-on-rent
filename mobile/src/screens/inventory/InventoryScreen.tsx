@@ -1,13 +1,15 @@
 import React, { useCallback, useEffect, useRef, useState } from "react";
-import { ActivityIndicator, FlatList, Platform, RefreshControl, StyleSheet, View } from "react-native";
+import { ActivityIndicator, FlatList, Pressable, RefreshControl, StyleSheet, View } from "react-native";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useFocusEffect } from "@react-navigation/native";
 import { errorMessage } from "../../api/client";
 import { listInventory, type Property } from "../../api/inventory";
 import { PropertyCard } from "../../components/PropertyCard";
 import type { RootScreenProps } from "../../navigation/types";
 import { useTheme } from "../../theme/ThemeProvider";
-import { space } from "../../theme/tokens";
-import { ChipRow, EmptyState, ErrorState, Field, HeaderButton, Loading, Text } from "../../ui";
+import { useInTabs } from "../../lib/useInTabs";
+import { gutter, space } from "../../theme/tokens";
+import { FilterBar, EmptyState, ErrorState, Field, HeaderButton, Icon, Loading, Segmented, Text } from "../../ui";
 
 const STATUS = [
   { key: "ALL", label: "All" },
@@ -23,7 +25,7 @@ const DEAL = [
 ] as const;
 
 const KIND = [
-  { key: "ALL", label: "All types" },
+  { key: "ALL", label: "All" },
   { key: "COMMERCIAL", label: "Commercial" },
   { key: "RESIDENTIAL", label: "Residential" },
 ] as const;
@@ -32,6 +34,8 @@ const PAGE_SIZE = 20;
 
 export const InventoryScreen = ({ navigation }: RootScreenProps<"Inventory">) => {
   const { colors } = useTheme();
+  const inTabs = useInTabs();
+  const insets = useSafeAreaInsets();
   const [query, setQuery] = useState("");
   const [search, setSearch] = useState("");
   const [status, setStatus] = useState<(typeof STATUS)[number]["key"]>("Available");
@@ -47,7 +51,6 @@ export const InventoryScreen = ({ navigation }: RootScreenProps<"Inventory">) =>
   const [error, setError] = useState<string | null>(null);
   const requestId = useRef(0);
 
-  useLayoutHeader(navigation);
 
   useEffect(() => {
     const timer = setTimeout(() => setSearch(query.trim()), 350);
@@ -96,25 +99,37 @@ export const InventoryScreen = ({ navigation }: RootScreenProps<"Inventory">) =>
   const filtered = Boolean(search) || status !== "ALL" || deal !== "ALL" || kind !== "ALL";
 
   return (
-    <View style={[styles.root, { backgroundColor: colors.bg }]}>
+    <View style={[styles.root, { backgroundColor: colors.bg, paddingTop: insets.top }]}>
+      <View style={styles.header}>
+        {inTabs ? null : (
+          <Pressable accessibilityRole="button" accessibilityLabel="Back" hitSlop={10} onPress={() => navigation.goBack()}>
+            <Icon name="chevron-back" size={22} color={colors.primary} />
+          </Pressable>
+        )}
+        <View style={styles.flex}>
+          <Text variant="display" style={styles.title}>
+            Inventory
+          </Text>
+          <Text variant="small" color="muted">
+            {total === null ? " " : `${total} propert${total === 1 ? "y" : "ies"}${status !== "ALL" ? ` · ${STATUS.find((item) => item.key === status)?.label.toLowerCase()}` : ""}`}
+          </Text>
+        </View>
+        <HeaderButton icon="people-outline" label="Owners and brokers" variant="secondary" onPress={() => navigation.navigate("Contacts")} />
+        <HeaderButton icon="add" label="Add property" onPress={() => navigation.navigate("AddProperty")} />
+      </View>
       <View style={styles.top}>
-        <Field
-          icon="search"
-          value={query}
-          onChangeText={setQuery}
-          placeholder="Search project, location, owner"
-          autoCorrect={false}
-          returnKeyType="search"
-        />
+        <Segmented options={[...KIND]} value={kind} onChange={setKind} />
+        <Field icon="search" surface compact value={query} onChangeText={setQuery} placeholder="Search project, location, owner" autoCorrect={false} returnKeyType="search" />
       </View>
       <View style={styles.chips}>
-        <ChipRow options={[...STATUS]} value={status} onChange={setStatus} />
-        <ChipRow options={[...DEAL]} value={deal} onChange={setDeal} />
-        <ChipRow options={[...KIND]} value={kind} onChange={setKind} />
+        <FilterBar
+          inset
+          filters={[
+            { label: "Status", icon: "ellipse-outline", options: STATUS.map((item) => ({ key: item.key, label: item.key === "ALL" ? "Any status" : item.label })), value: status, onChange: (key: string) => setStatus(key as typeof status) },
+            { label: "Deal", icon: "pricetag-outline", options: DEAL.map((item) => ({ key: item.key, label: item.label })), value: deal, onChange: (key: string) => setDeal(key as typeof deal) },
+          ]}
+        />
       </View>
-      <Text variant="small" color="muted" style={styles.count}>
-        {total === null ? " " : `${total} propert${total === 1 ? "y" : "ies"}`}
-      </Text>
 
       {loading ? (
         <Loading />
@@ -155,30 +170,18 @@ export const InventoryScreen = ({ navigation }: RootScreenProps<"Inventory">) =>
   );
 };
 
-/* The add button lives in the native header, so the list keeps the full height. */
-const useLayoutHeader = (navigation: RootScreenProps<"Inventory">["navigation"]) => {
-  React.useLayoutEffect(() => {
-    navigation.setOptions({
-      // Native headers inset their buttons; the web header does not.
-      headerRight: () => (
-        <View style={Platform.OS === "web" ? styles.webInset : undefined}>
-          <HeaderButton icon="add" label="Add property" onPress={() => navigation.navigate("AddProperty")} />
-        </View>
-      ),
-    });
-  }, [navigation]);
-};
-
 const Separator = () => <View style={styles.separator} />;
 
 const styles = StyleSheet.create({
   root: { flex: 1 },
   grow: { flexGrow: 1 },
-  top: { paddingHorizontal: space.lg, paddingTop: space.md },
-  chips: { gap: space.sm, paddingTop: space.md },
+  flex: { flex: 1, minWidth: 0 },
+  header: { flexDirection: "row", alignItems: "center", gap: 8, paddingHorizontal: gutter, paddingTop: 4 },
+  title: { fontSize: 24, lineHeight: 30 },
+  top: { paddingHorizontal: gutter, paddingTop: 10, gap: 10 },
+  chips: { paddingVertical: 10 },
   count: { paddingHorizontal: space.lg, paddingVertical: space.sm },
-  list: { paddingHorizontal: space.lg, paddingBottom: space.xxl },
-  separator: { height: space.md },
+  list: { paddingHorizontal: gutter, paddingBottom: space.xxl },
+  separator: { height: 10 },
   more: { paddingVertical: space.lg },
-  webInset: { marginRight: space.lg },
 });

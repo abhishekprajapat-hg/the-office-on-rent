@@ -14,10 +14,14 @@ Every page goes through the same three steps before it is ticked:
 
 ## Design language
 
-Green brand (`#02805d`), Inter, solid Ionicons, cards on a soft green-grey
-canvas. Tokens live in `src/theme/tokens.ts`. Phone adaptations of web:
-tables → cards, sidebar → bottom tabs + a "More" menu, flyout filters →
-horizontal chips and bottom sheets.
+v3 (Claude Design, Oct 2026): white + blue (`#2549d6`), Plus Jakarta Sans,
+JetBrains Mono for times and money, outline Ionicons with filled active tabs,
+rounded-square avatars and icon tiles, 18px cards with a 1px line border, a
+blue hero band on Home and a pill-style tab bar. Tokens live in
+`src/theme/tokens.ts`; shared pieces (Segmented, IconTile, ListCard, StatTile,
+Ring, Toggle) in `src/ui/Kit.tsx`. Phone adaptations of web: tables → cards,
+sidebar → bottom tabs + a "More" grid, flyout filters → horizontal chips and
+bottom sheets.
 
 ## Modules
 

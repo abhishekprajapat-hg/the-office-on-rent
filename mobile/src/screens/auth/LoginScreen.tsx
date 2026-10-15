@@ -1,11 +1,11 @@
 import React, { useRef, useState } from "react";
-import { Image, KeyboardAvoidingView, Platform, ScrollView, StyleSheet, TextInput, View } from "react-native";
+import { Image, KeyboardAvoidingView, Platform, Pressable, ScrollView, StyleSheet, TextInput, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { errorMessage } from "../../api/client";
 import { useAuth } from "../../auth/AuthProvider";
 import { useTheme } from "../../theme/ThemeProvider";
-import { radius, space } from "../../theme/tokens";
-import { Button, Card, Field, InlineError, Text } from "../../ui";
+import { space } from "../../theme/tokens";
+import { Button, CheckSquare, Field, InlineError, Text } from "../../ui";
 
 const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
@@ -20,6 +20,8 @@ export const LoginScreen = () => {
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [touched, setTouched] = useState(false);
+  const [remember, setRemember] = useState(true);
+  const [showForgot, setShowForgot] = useState(false);
 
   const emailError = touched && !EMAIL_PATTERN.test(email.trim()) ? "Enter a valid email address" : undefined;
   const passwordError = touched && !password ? "Enter your password" : undefined;
@@ -30,7 +32,7 @@ export const LoginScreen = () => {
     setSubmitting(true);
     setError(null);
     try {
-      await signIn(email, password);
+      await signIn(email, password, remember);
     } catch (err) {
       setError(errorMessage(err, "Couldn't sign you in. Please try again."));
       setSubmitting(false);
@@ -38,28 +40,35 @@ export const LoginScreen = () => {
   };
 
   return (
-    <KeyboardAvoidingView style={[styles.flex, { backgroundColor: colors.bg }]} behavior={Platform.OS === "ios" ? "padding" : undefined}>
+    <KeyboardAvoidingView style={[styles.flex, { backgroundColor: colors.surface }]} behavior={Platform.OS === "ios" ? "padding" : undefined}>
       <ScrollView
-        contentContainerStyle={[styles.content, { paddingTop: insets.top + space.xxl, paddingBottom: insets.bottom + space.xxl }]}
+        contentContainerStyle={[styles.content, { paddingTop: insets.top + 30, paddingBottom: insets.bottom + space.xl }]}
         keyboardShouldPersistTaps="handled"
       >
-        <View style={styles.brand}>
-          <Image source={require("../../../assets/icon.png")} style={styles.logo} accessibilityIgnoresInvertColors />
-          <Text variant="display" align="center">
+        <Image
+          source={require("../../../assets/logo.png")}
+          style={styles.logo}
+          resizeMode="contain"
+          accessibilityLabel="The Office On Rent"
+          accessibilityIgnoresInvertColors
+        />
+
+        <View style={styles.heading}>
+          <Text variant="display" style={styles.title}>
             Welcome back
           </Text>
-          <Text variant="body" color="muted" align="center">
-            Sign in to Office On Rent CRM
+          <Text variant="body" color="muted">
+            Sign in with your CRM account to see your leads, tasks and day.
           </Text>
         </View>
 
-        <Card style={styles.card}>
+        <View style={styles.form}>
           <Field
-            label="Email"
+            label="Work email"
             icon="mail-outline"
             value={email}
             onChangeText={setEmail}
-            placeholder="you@company.com"
+            placeholder="you@theofficeonrent.com"
             autoCapitalize="none"
             autoComplete="email"
             autoCorrect={false}
@@ -86,12 +95,38 @@ export const LoginScreen = () => {
             error={passwordError}
             testID="login-password"
           />
+          <View style={styles.optionsRow}>
+            <Pressable
+              accessibilityRole="checkbox"
+              accessibilityState={{ checked: remember }}
+              onPress={() => setRemember((value) => !value)}
+              hitSlop={6}
+              style={styles.remember}
+            >
+              <CheckSquare checked={remember} size={20} />
+              <Text variant="small" style={styles.rememberText}>
+                Keep me signed in
+              </Text>
+            </Pressable>
+            <Pressable accessibilityRole="button" onPress={() => setShowForgot((value) => !value)} hitSlop={8}>
+              <Text variant="smallStrong" color="primary" style={styles.forgotLink}>
+                Forgot?
+              </Text>
+            </Pressable>
+          </View>
+          {showForgot ? (
+            <Text variant="small" color="muted">
+              Passwords are reset by your admin. Ask them to set a new one for you from Admin → Users.
+            </Text>
+          ) : null}
           <InlineError message={error} />
-          <Button label="Sign in" onPress={submit} loading={submitting} testID="login-submit" />
-        </Card>
+        </View>
 
-        <Text variant="small" color="faint" align="center">
-          Forgot your password? Ask your admin to reset it.
+        <Button label="Sign in" trailingIcon="arrow-forward" onPress={submit} loading={submitting} testID="login-submit" />
+
+        <View style={styles.spacer} />
+        <Text variant="tiny" color="faint" align="center" style={styles.legal}>
+          By signing in you agree to the Terms and the Data Use Notice.
         </Text>
       </ScrollView>
     </KeyboardAvoidingView>
@@ -100,8 +135,15 @@ export const LoginScreen = () => {
 
 const styles = StyleSheet.create({
   flex: { flex: 1 },
-  content: { flexGrow: 1, justifyContent: "center", paddingHorizontal: space.xl, gap: space.xl, maxWidth: 480, width: "100%", alignSelf: "center" },
-  brand: { alignItems: "center", gap: space.sm },
-  logo: { width: 72, height: 72, borderRadius: radius.xl, marginBottom: space.sm },
-  card: { gap: space.lg },
+  content: { flexGrow: 1, paddingHorizontal: 24, gap: 28, maxWidth: 480, width: "100%", alignSelf: "center" },
+  logo: { height: 46, width: 97, alignSelf: "flex-start" },
+  heading: { gap: 6 },
+  title: { fontSize: 28, lineHeight: 34 },
+  form: { gap: 14 },
+  optionsRow: { flexDirection: "row", alignItems: "center", justifyContent: "space-between" },
+  remember: { flexDirection: "row", alignItems: "center", gap: 8 },
+  rememberText: { fontSize: 13, fontFamily: "PlusJakartaSans_600SemiBold" },
+  forgotLink: { fontSize: 13 },
+  spacer: { flex: 1, minHeight: 12 },
+  legal: { fontFamily: "PlusJakartaSans_400Regular", fontSize: 11, lineHeight: 16 },
 });

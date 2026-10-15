@@ -20,7 +20,7 @@ export type ChatMessage = {
   type?: "text" | "property" | "media" | "system" | string;
   text?: string;
   sharedProperty?: SharedProperty | null;
-  mediaAttachments?: { url: string; name?: string; mimeType?: string }[];
+  mediaAttachments?: { url: string; name?: string; mimeType?: string; kind?: string }[];
   deliveredTo?: Receipt[];
   seenBy?: Receipt[];
   isDeleted?: boolean;
@@ -59,13 +59,42 @@ export const getMessages = async (conversationId: string, before?: string, limit
   return res.data?.messages || [];
 };
 
-export const sendMessage = async (conversationId: string, text: string) => {
-  const res = await api.post<{ conversation: Conversation; message: ChatMessage }>("/chat/messages", { conversationId, text });
+export type Attachment = { url: string; name?: string; mimeType?: string; size?: number };
+
+export const sendMessage = async (
+  conversationId: string,
+  text: string,
+  extra: { mediaAttachments?: Attachment[]; sharedProperty?: { inventoryId: string } } = {},
+) => {
+  const res = await api.post<{ conversation: Conversation; message: ChatMessage }>("/chat/messages", { conversationId, text, ...extra });
   return res.data?.message || null;
+};
+
+/* Managers and admins only (POST /chat/rooms/group). */
+export const createGroup = async (name: string, participantIds: string[]) => {
+  const res = await api.post<{ room: Conversation }>("/chat/rooms/group", { name, participantIds });
+  return res.data?.room || null;
+};
+
+/* A one-way announcement to everyone, or to one role. */
+export const createBroadcast = async (text: string, targetRole?: string | null) => {
+  const res = await api.post<{ room?: Conversation; message?: ChatMessage }>("/chat/broadcasts", { text, targetRole: targetRole || null });
+  return res.data;
+};
+
+export const listBroadcasts = async () => {
+  const res = await api.get<{ rooms: Conversation[] }>("/chat/broadcasts");
+  return res.data?.rooms || [];
 };
 
 export const openDirectChat = async (recipientId: string) => {
   const res = await api.post<{ room: Conversation }>("/chat/rooms/direct", { recipientId });
+  return res.data?.room || null;
+};
+
+/* The team room attached to a lead (created on first use). */
+export const openLeadRoom = async (leadId: string) => {
+  const res = await api.post<{ room: Conversation }>("/chat/rooms/lead", { leadId });
   return res.data?.room || null;
 };
 

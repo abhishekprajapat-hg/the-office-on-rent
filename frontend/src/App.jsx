@@ -4,6 +4,7 @@ import api from "./services/api";
 import ErrorBoundary from "./components/ErrorBoundary";
 import { ChatNotificationProvider } from "./context/chatNotificationProvider";
 import PermissionProvider from "./context/PermissionProvider";
+import { usePermissions } from "./context/usePermissions";
 import CoworkingPermissionGate from "./components/coworking/CoworkingPermissionGate";
 import PageAccessGate from "./components/auth/PageAccessGate";
 import { updateMyLiveLocation } from "./services/userService";
@@ -126,6 +127,48 @@ const NotFound = () => (
     </Link>
   </div>
 );
+
+const DASHBOARD_DESTINATIONS = [
+  ["leads", "/leads", "Pipeline"], ["my_leads", "/my-leads", "My Leads"],
+  ["inventory", "/inventory", "Inventory"], ["projects", "/projects", "Projects"],
+  ["field_ops", "/map", "Field Ops"], ["finance", "/finance", "Finance"],
+  ["reports", "/reports", "Reports"], ["leaderboard", "/leaderboard", "Leaderboard"],
+  ["targets", "/targets", "Targets"], ["calendar", "/calendar", "Calendar"],
+  ["tasks", "/tasks", "Tasks"], ["attendance", "/attendance", "Attendance"],
+  ["chat", "/chat", "Team Chat"], ["coworking_booking", "/coworking/booking-board", "Booking Board"],
+  ["coworking_clients", "/coworking/clients", "Clients"],
+];
+
+const GrantedDashboard = () => {
+  const { canPage, loading } = usePermissions();
+  if (loading) return <div className="p-6 text-sm text-slate-500">Loading your workspace...</div>;
+  const destinations = DASHBOARD_DESTINATIONS.filter(([page]) => canPage(page));
+  return (
+    <div className="p-6">
+      <h1 className="text-2xl font-semibold text-slate-900 dark:text-slate-100">Your workspace</h1>
+      <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">Open a page assigned to you.</p>
+      <div className="mt-6 grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+        {destinations.map(([page, path, label]) => (
+          <Link key={page} to={path} className="rounded-xl border border-slate-200 bg-white p-4 font-medium text-slate-800 hover:border-blue-400 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100">
+            {label}
+          </Link>
+        ))}
+        {!destinations.length && <Link to="/profile" className="text-blue-600">Open profile</Link>}
+      </div>
+    </div>
+  );
+};
+
+const AccessAwareDashboard = ({ role, theme }) => {
+  const { canPage, loading } = usePermissions();
+  if (loading) return <div className="p-6 text-sm text-slate-500">Loading your workspace...</div>;
+  if (role === "ADMIN") return <ManagerDashboard theme={theme} />;
+  if (role === "MANAGER" && ["leads", "inventory", "admin_team", "calendar", "coworking_clients", "tasks"].every(canPage)) return <ManagerDashboard theme={theme} />;
+  if (["EXECUTIVE", "INSIDE_EXECUTIVE"].includes(role) && ["leads", "my_leads", "inventory", "chat", "calendar", "targets"].every(canPage)) return <ExecutiveDashboard />;
+  if (role === "FIELD_EXECUTIVE" && ["my_leads", "tasks", "field_ops", "calendar"].every(canPage)) return <FieldDashboard />;
+  if (isProductionRole(role)) return <ProductionExecutiveDashboard />;
+  return <GrantedDashboard />;
+};
 
 const isProductionRole = (role) => PRODUCTION_ROLES.includes(role);
 
@@ -299,14 +342,6 @@ const resolvePageHeader = (pathname, userRole) => {
   }
 
   if (pathname.startsWith("/targets")) {
-    if (isProductionRole(userRole)) {
-      return {
-        title: "Performance Command Center",
-        subtitle: "Task completion, pending work and productivity signals",
-        scopeLabel: "Performance",
-      };
-    }
-
     return {
       title: "Targets Command Center",
       subtitle: "Goal pacing, conversion momentum and ownership tracking",
@@ -656,27 +691,7 @@ export default function App() {
   }, [isLoggedIn, userRole]);
 
   /* 🔥 Dashboard by role */
-  const DashboardByRole = useMemo(() => {
-    switch (userRole) {
-      case "ADMIN":
-        return <ManagerDashboard theme={theme} />;
-      case "MANAGER":
-        return <ManagerDashboard theme={theme} />;
-      case "EXECUTIVE":
-        return <ExecutiveDashboard />;
-      case "FIELD_EXECUTIVE":
-        return <FieldDashboard />;
-      case "PRODUCTION_EXECUTIVE":
-      case "COMMUNITY_MANAGER":
-        return <ProductionExecutiveDashboard />;
-      case "CHANNEL_PARTNER":
-        return <Navigate to="/leads" />;
-      case "COWORKING_ADMIN":
-        return <Navigate to="/coworking/booking-board" />;
-      default:
-        return <Navigate to="/login" />;
-    }
-  }, [userRole, theme]);
+  const DashboardByRole = <AccessAwareDashboard role={userRole} theme={theme} />;
 
   /* 🔥 Logout */
   const handleLogout = useCallback(async () => {
@@ -869,13 +884,7 @@ export default function App() {
       <Route
         path="/targets"
         element={
-          isProductionRole(userRole)
-            ? withPageAccess("targets", <ProductionExecutiveDashboard mode="performance" />)
-            : withPageAccess(
-              "targets",
-              <Performance />,
-              ["ADMIN", ...MANAGEMENT_ROLES, "EXECUTIVE", "FIELD_EXECUTIVE"],
-            )
+          withPageAccess("targets", <Performance />)
         }
       />
       <Route

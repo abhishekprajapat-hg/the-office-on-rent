@@ -161,7 +161,7 @@ export const WORKBENCH_MENU = {
         { label: "Reports", path: "/reports", icon: BarChart3, page: "reports", roles: MANAGEMENT_ROLES },
         { label: "Leaderboard", path: "/leaderboard", icon: Trophy, page: "leaderboard", roles: [...SALES_ROLES, ...PARTNER_ROLES] },
         { label: "Targets", path: "/targets", icon: Target, page: "targets", roles: SALES_ROLES },
-        { label: "Performance", path: "/targets", icon: Target, page: "targets", roles: PRODUCTION_ROLES },
+        { label: "Targets", path: "/targets", icon: Target, page: "targets", roles: PRODUCTION_ROLES },
       ],
     },
   ],
@@ -308,21 +308,9 @@ const ROLE_ONLY_PAGES = new Set([
 export const roleCanSeeItem = (item, userRole, user = {}) => {
   const permissions = Array.isArray(user?.permissions) ? user.permissions : null;
 
-  // Explicit employee pages override the menu defaults. Protected admin
-  // pages also retain their built-in role requirements.
-  const isConfiguredRole =
-    userRole !== "ADMIN" && Boolean(user?.enforcePageAccess) && Boolean(permissions);
-  const pageIsWidenable = Boolean(item.page) && !ROLE_ONLY_PAGES.has(item.page);
-
-  if (isConfiguredRole && pageIsWidenable) {
-    if (!permissions.includes(`page.${item.page}.view`)) return false;
-  } else {
-    if (!item?.roles?.includes(userRole)) return false;
-    // Role-only pages can still be revoked from a configured role.
-    if (isConfiguredRole && item.page && !permissions.includes(`page.${item.page}.view`)) {
-      return false;
-    }
-  }
+  // Use the effective grants returned by /access/me for every role.
+  if (userRole !== "ADMIN" && item.page && !permissions?.includes(`page.${item.page}.view`)) return false;
+  if (ROLE_ONLY_PAGES.has(item.page) && !item?.roles?.includes(userRole)) return false;
 
   if (
     item.requiresInventoryAccessForPartner &&
@@ -335,7 +323,7 @@ export const roleCanSeeItem = (item, userRole, user = {}) => {
     // Permissions haven't loaded yet (null) — don't hide the item mid-fetch,
     // avoid nav flicker; the route itself still gates on load via
     // CoworkingPermissionGate. Once loaded, enforce the real list.
-    if (permissions && !permissions.includes(item.permission)) return false;
+    if (!permissions?.includes(item.permission)) return false;
   }
   return true;
 };

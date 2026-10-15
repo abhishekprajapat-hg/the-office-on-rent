@@ -1,5 +1,7 @@
-import React, { createContext, useCallback, useContext, useEffect, useMemo, useState } from "react";
+import React, { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
+import { AppState } from "react-native";
 import * as authApi from "../api/auth";
+import { getMyAccess, type AccessProfile } from "../api/access";
 import { setUnauthorizedHandler } from "../api/client";
 import { session } from "../api/session";
 import { resetSocket } from "../realtime/socket";
@@ -10,7 +12,10 @@ import type { User } from "../api/types";
 type AuthValue = {
   booting: boolean;
   user: User | null;
-  signIn: (email: string, password: string) => Promise<void>;
+  access: AccessProfile | null;
+  accessLoading: boolean;
+  refreshAccess: () => Promise<void>;
+  signIn: (email: string, password: string, remember?: boolean) => Promise<void>;
   signOut: () => Promise<void>;
   refreshUser: () => Promise<void>;
 };
@@ -20,17 +25,36 @@ const AuthContext = createContext<AuthValue | null>(null);
 export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
   const [booting, setBooting] = useState(true);
   const [user, setUser] = useState<User | null>(null);
+  const [access, setAccess] = useState<AccessProfile | null>(null);
+  const [accessLoading, setAccessLoading] = useState(false);
+  const accessRequest = useRef(0);
+
+  const refreshAccess = useCallback(async () => {
+    const request = ++accessRequest.current;
+    setAccessLoading(true);
+    setAccess(null);
+    try {
+      const next = await getMyAccess();
+      if (request === accessRequest.current) setAccess(next);
+    } catch {
+      if (request === accessRequest.current) setAccess(null);
+    } finally {
+      if (request === accessRequest.current) setAccessLoading(false);
+    }
+  }, []);
 
   useEffect(() => {
     // The API client calls this once a refresh has failed and the session is
     // already cleared; all that is left is to show the login screen.
-    setUnauthorizedHandler(() => setUser(null));
+    setUnauthorizedHandler(() => { accessRequest.current++; setAccess(null); setAccessLoading(false); setUser(null); });
     return () => setUnauthorizedHandler(null);
   }, []);
 
   useEffect(() => {
     let alive = true;
     (async () => {
+      // A session started without "Keep me signed in" ends when the app is closed.
+      if (await session.isEphemeral()) await session.clear();
       const [token, stored] = await Promise.all([session.getToken(), session.getUser()]);
       if (!token || !stored) {
         if (alive) setBooting(false);
@@ -42,6 +66,7 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
         setUser(stored);
         setBooting(false);
       }
+      await refreshAccess();
       try {
         const fresh = await authApi.getMe();
         if (fresh && alive) {
@@ -57,17 +82,27 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
     return () => {
       alive = false;
     };
-  }, []);
+  }, [refreshAccess]);
 
-  const signIn = useCallback(async (email: string, password: string) => {
+  useEffect(() => {
+    if (!user) return;
+    const subscription = AppState.addEventListener("change", (state) => {
+      if (state === "active") refreshAccess();
+    });
+    return () => subscription.remove();
+  }, [user?.id, refreshAccess]);
+
+  const signIn = useCallback(async (email: string, password: string, remember = true) => {
     const payload = await authApi.login(email, password);
     const token = String(payload.accessToken || payload.token || "").trim();
     if (!token || !payload.user) throw new Error("The server did not return a session. Please try again.");
-    await session.set(token, payload.user, payload.refreshToken || null);
+    await session.set(token, payload.user, payload.refreshToken || null, remember);
+    await refreshAccess();
     setUser(payload.user);
-  }, []);
+  }, [refreshAccess]);
 
   const signOut = useCallback(async () => {
+    accessRequest.current++;
     // Stop this phone receiving the outgoing user's notifications first, while still signed in.
     await Promise.race([unregisterPush().catch(() => {}), new Promise((resolve) => setTimeout(resolve, 3000))]);
     const refreshToken = await session.getRefreshToken().catch(() => null);
@@ -81,6 +116,8 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
     // The next person to sign in on this phone must not inherit this socket.
     resetSocket();
     await clearFollowUpReminders().catch(() => {});
+    setAccess(null);
+    setAccessLoading(false);
     setUser(null);
   }, []);
 
@@ -90,7 +127,7 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
     if (stored) setUser(stored);
   }, []);
 
-  const value = useMemo(() => ({ booting, user, signIn, signOut, refreshUser }), [booting, user, signIn, signOut, refreshUser]);
+  const value = useMemo(() => ({ booting, user, access, accessLoading, refreshAccess, signIn, signOut, refreshUser }), [booting, user, access, accessLoading, refreshAccess, signIn, signOut, refreshUser]);
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
 };
 

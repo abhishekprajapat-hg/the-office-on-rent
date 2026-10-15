@@ -7,17 +7,18 @@ import { formatWhen } from "../../lib/format";
 import { useQuery } from "../../lib/useQuery";
 import type { RootScreenProps } from "../../navigation/types";
 import { useTheme } from "../../theme/ThemeProvider";
-import { space, type Tone } from "../../theme/tokens";
-import { Avatar, Badge, Button, Card, ChipRow, EmptyState, ErrorState, Field, Icon, InlineError, Loading, Text, type IconName } from "../../ui";
+import { space, toneColors, type Tone } from "../../theme/tokens";
+import { Avatar, Badge, Button, Card, FilterBar, EmptyState, ErrorState, Field, Icon, InlineError, Loading, Text, type IconName } from "../../ui";
 
-const KINDS: { key: "ALL" | ApprovalKind; label: string; icon: IconName }[] = [
-  { key: "ALL", label: "All", icon: "file-tray-full-outline" },
-  { key: "payment", label: "Payments", icon: "cash-outline" },
-  { key: "leave", label: "Leave", icon: "airplane-outline" },
-  { key: "delete", label: "Deletes", icon: "trash-outline" },
-  { key: "inventory", label: "Inventory", icon: "business-outline" },
-  { key: "status", label: "Status", icon: "swap-horizontal-outline" },
-  { key: "user", label: "Users", icon: "person-remove-outline" },
+const KINDS: { key: "ALL" | ApprovalKind; label: string; icon: IconName; tone: Tone }[] = [
+  { key: "ALL", label: "All", icon: "file-tray-full-outline", tone: "primary" },
+  { key: "leave", label: "Leave", icon: "airplane", tone: "primary" },
+  { key: "delete", label: "Deletes", icon: "trash", tone: "danger" },
+  { key: "fix", label: "Fixes", icon: "time", tone: "warning" },
+  { key: "payment", label: "Payments", icon: "cash", tone: "success" },
+  { key: "inventory", label: "Inventory", icon: "business", tone: "primary" },
+  { key: "status", label: "Status", icon: "swap-horizontal", tone: "violet" },
+  { key: "user", label: "Users", icon: "person-remove", tone: "danger" },
 ];
 
 const STATUS_TONE: Record<string, Tone> = { PENDING: "warning", APPROVED: "success", REJECTED: "danger", CANCELLED: "neutral" };
@@ -48,15 +49,32 @@ export const ApprovalsScreen = ({ navigation }: RootScreenProps<"Approvals">) =>
       refreshControl={<RefreshControl refreshing={refreshing} onRefresh={refresh} tintColor={colors.primary} colors={[colors.primary]} />}
       ListHeaderComponent={
         <View style={styles.header}>
-          <ChipRow
-            options={[
-              { key: "PENDING", label: "Waiting on you", count: pendingBy("ALL") },
-              { key: "DONE", label: "Decided" },
+          <FilterBar
+            inset
+            filters={[
+              {
+                label: "Type",
+                icon: "file-tray-full-outline",
+                options: KINDS.filter((item) => item.key === "ALL" || (data || []).some((entry) => entry.kind === item.key)).map((item) => ({
+                  key: item.key,
+                  label: item.key === "ALL" ? "Everything" : item.label,
+                  count: show === "PENDING" ? pendingBy(item.key) : undefined,
+                })),
+                value: kind,
+                onChange: (key: string) => setKind(key as typeof kind),
+              },
+              {
+                label: "Show",
+                icon: "time-outline",
+                options: [
+                  { key: "PENDING", label: "Waiting", count: pendingBy("ALL"), hint: "Needs your decision" },
+                  { key: "DONE", label: "Decided", hint: "Approved or rejected" },
+                ],
+                value: show,
+                onChange: (key: string) => setShow(key as typeof show),
+              },
             ]}
-            value={show}
-            onChange={(key) => setShow(key as typeof show)}
           />
-          <ChipRow options={KINDS.map((item) => ({ key: item.key, label: item.label, count: show === "PENDING" ? pendingBy(item.key) : undefined }))} value={kind} onChange={(key) => setKind(key as typeof kind)} />
         </View>
       }
       ListEmptyComponent={
@@ -65,6 +83,15 @@ export const ApprovalsScreen = ({ navigation }: RootScreenProps<"Approvals">) =>
       renderItem={({ item }) => <ApprovalCard item={item} role={user.role} onDone={reload} onOpenLead={(leadId) => navigation.navigate("LeadDetail", { leadId })} />}
     />
   );
+};
+
+const ago = (value?: string) => {
+  if (!value) return "";
+  const minutes = Math.max(0, Math.round((Date.now() - new Date(value).getTime()) / 60000));
+  if (minutes < 60) return `${minutes}m`;
+  if (minutes < 60 * 24) return `${Math.round(minutes / 60)}h`;
+  if (minutes < 60 * 48) return "Yesterday";
+  return new Date(value).toLocaleDateString("en-IN", { day: "numeric", month: "short" });
 };
 
 const ApprovalCard = ({ item, role, onDone, onOpenLead }: { item: ApprovalItem; role: string; onDone: () => void; onOpenLead: (id: string) => void }) => {
@@ -96,22 +123,28 @@ const ApprovalCard = ({ item, role, onDone, onOpenLead }: { item: ApprovalItem; 
   return (
     <Card style={styles.card}>
       <View style={styles.top}>
-        <View style={[styles.kindIcon, { backgroundColor: colors.primarySoft }]}>
-          <Icon name={meta.icon} size={18} color={colors.primary} />
+        <View style={[styles.kindIcon, { backgroundColor: toneColors(colors, meta.tone).bg }]}>
+          <Icon name={meta.icon} size={18} color={toneColors(colors, meta.tone).fg} />
         </View>
         <View style={styles.flex}>
-          <Text variant="bodyStrong">{item.title}</Text>
+          <View style={styles.titleRow}>
+            <Text variant="bodyStrong" style={[styles.flex, styles.title]}>
+              {item.title}
+            </Text>
+            {pending ? (
+              <Text variant="tiny" color="faint">
+                {ago(item.createdAt)}
+              </Text>
+            ) : (
+              <Badge label={item.status.charAt(0) + item.status.slice(1).toLowerCase()} tone={STATUS_TONE[item.status] || "neutral"} />
+            )}
+          </View>
           <Text variant="small" color="muted">
             {item.detail}
+            {item.note ? ` — “${item.note}”` : ""}
           </Text>
         </View>
-        <Badge label={item.status.charAt(0) + item.status.slice(1).toLowerCase()} tone={STATUS_TONE[item.status] || "neutral"} />
       </View>
-      {item.note ? (
-        <Text variant="small" style={[styles.note, { backgroundColor: colors.surfaceAlt }]}>
-          “{item.note}”
-        </Text>
-      ) : null}
       {(item.documents || []).map((doc) => (
         <Pressable key={doc.url} accessibilityRole="link" onPress={() => Linking.openURL(mediaUrl(doc.url) || doc.url)} style={styles.doc}>
           <Icon name="document-attach-outline" size={16} color={colors.primary} />
@@ -125,6 +158,13 @@ const ApprovalCard = ({ item, role, onDone, onOpenLead }: { item: ApprovalItem; 
         <Text variant="tiny" color="faint" style={styles.flex}>
           {[item.requestedBy?.name, formatWhen(item.createdAt)].filter(Boolean).join(" · ")}
         </Text>
+        {pending && !writing ? (
+          <Pressable accessibilityRole="button" onPress={() => setWriting(true)} hitSlop={8}>
+            <Text variant="smallStrong" color="primary">
+              Note
+            </Text>
+          </Pressable>
+        ) : null}
         {item.leadId ? (
           <Pressable accessibilityRole="link" onPress={() => onOpenLead(item.leadId!)} hitSlop={8}>
             <Text variant="smallStrong" color="primary">
@@ -138,17 +178,20 @@ const ApprovalCard = ({ item, role, onDone, onOpenLead }: { item: ApprovalItem; 
           {writing ? <Field value={note} onChangeText={setNote} placeholder="Note for the requester (optional unless rejecting)" multiline maxLength={500} /> : null}
           <InlineError message={error} />
           <View style={styles.actions}>
-            {!writing ? <Button label="Add note" variant="ghost" size="sm" onPress={() => setWriting(true)} /> : null}
-            <View style={styles.flex} />
-            <Button label="Reject" variant="danger" size="sm" loading={busy === "reject"} onPress={() => act(false)} />
+            <Pressable accessibilityRole="button" onPress={() => act(false)} disabled={Boolean(busy)} style={[styles.reject, { borderColor: colors.border }]}>
+              <Text variant="bodyStrong" color="danger">
+                {busy === "reject" ? "Rejecting…" : item.kind === "fix" ? "Warn" : "Reject"}
+              </Text>
+            </Pressable>
             <Button
-              label={item.kind === "inventory" && role !== "ADMIN" ? "Pre-approve" : "Approve"}
-              icon="checkmark"
+              label={item.kind === "inventory" && role !== "ADMIN" ? "Pre-approve" : item.kind === "fix" ? "Excuse" : "Approve"}
               size="sm"
+              style={[styles.flex, styles.approve]}
               loading={busy === "approve"}
               onPress={() => act(true)}
             />
           </View>
+
         </>
       ) : null}
     </Card>
@@ -160,12 +203,19 @@ const styles = StyleSheet.create({
   grow: { flexGrow: 1 },
   list: { paddingVertical: space.lg },
   header: { gap: space.sm, marginBottom: space.md },
+  chipStrip: { flexGrow: 0 },
+  chipScroll: { gap: 6, paddingHorizontal: space.lg, alignItems: "center" },
+  toggle: { alignSelf: "flex-end", paddingHorizontal: space.lg },
+  approve: { minHeight: 42, height: 42, borderRadius: 12 },
+  titleRow: { flexDirection: "row", alignItems: "flex-start", gap: 8 },
+  title: { fontSize: 14 },
+  reject: { flex: 1, height: 42, borderRadius: 12, borderWidth: 1, alignItems: "center", justifyContent: "center" },
   separator: { height: space.sm },
   card: { gap: space.sm, marginHorizontal: space.lg },
   top: { flexDirection: "row", alignItems: "flex-start", gap: space.md },
-  kindIcon: { width: 34, height: 34, borderRadius: 10, alignItems: "center", justifyContent: "center" },
+  kindIcon: { width: 38, height: 38, borderRadius: 12, alignItems: "center", justifyContent: "center" },
   note: { padding: space.sm, borderRadius: 8 },
   doc: { flexDirection: "row", alignItems: "center", gap: 6 },
   by: { flexDirection: "row", alignItems: "center", gap: space.sm },
-  actions: { flexDirection: "row", alignItems: "center", gap: space.sm },
+  actions: { flexDirection: "row", alignItems: "center", gap: 8 },
 });

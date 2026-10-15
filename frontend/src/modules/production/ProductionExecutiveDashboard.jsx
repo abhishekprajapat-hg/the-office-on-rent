@@ -13,6 +13,7 @@ import { getMyAttendance } from "../../services/attendanceService";
 import { getMessengerConversations } from "../../services/chatService";
 import { useChatNotifications } from "../../context/useChatNotifications";
 import { getTaskStats, getTasks } from "../../services/taskService";
+import { usePermissions } from "../../context/usePermissions";
 import { toErrorMessage } from "../../utils/errorMessage";
 
 const pct = (completed, total) => {
@@ -119,6 +120,10 @@ const RecentList = ({ icon: Icon, title, items, emptyText, action }) => (
 );
 
 const ProductionExecutiveDashboard = ({ mode = "home" }) => {
+  const { canPage } = usePermissions();
+  const hasTasks = canPage("tasks");
+  const hasAttendance = canPage("attendance");
+  const hasChat = canPage("chat");
   const currentRole = String(localStorage.getItem("role") || "").trim().toUpperCase();
   const isCommunityManager = currentRole === "COMMUNITY_MANAGER";
   const workspaceLabel = isCommunityManager ? "Community Workspace" : "Production Workspace";
@@ -143,14 +148,19 @@ const ProductionExecutiveDashboard = ({ mode = "home" }) => {
       setLoading(true);
       setError("");
       try {
-        const [taskStats, taskRows, attendanceData, conversationRows] = await Promise.all([
-          getTaskStats(),
-          getTasks(),
-          getMyAttendance(),
-          getMessengerConversations().catch(() => []),
+        const results = await Promise.allSettled([
+          hasTasks ? getTaskStats() : Promise.resolve(null),
+          hasTasks ? getTasks() : Promise.resolve([]),
+          hasAttendance ? getMyAttendance() : Promise.resolve(null),
+          hasChat ? getMessengerConversations() : Promise.resolve([]),
         ]);
 
         if (!alive) return;
+        const [taskStats, taskRows, attendanceData, conversationRows] = results.map((result) =>
+          result.status === "fulfilled" ? result.value : null,
+        );
+        const failed = results.find((result) => result.status === "rejected");
+        if (failed) setError(toErrorMessage(failed.reason, "Some dashboard data could not load"));
         setConversations(Array.isArray(conversationRows) ? conversationRows : []);
         setStats(taskStats || {});
         setTasks(Array.isArray(taskRows) ? taskRows : []);
@@ -166,7 +176,7 @@ const ProductionExecutiveDashboard = ({ mode = "home" }) => {
     return () => {
       alive = false;
     };
-  }, []);
+  }, [hasTasks, hasAttendance, hasChat]);
 
   const upcomingTasks = useMemo(() => {
     const now = new Date();
@@ -212,18 +222,18 @@ const ProductionExecutiveDashboard = ({ mode = "home" }) => {
               </p>
             </div>
             <div className="flex flex-wrap gap-2">
-              <Link
+              {hasTasks ? <Link
                 to="/tasks"
                 className="rounded-xl bg-cyan-600 px-4 py-2 text-sm font-semibold text-white shadow-sm transition hover:bg-cyan-700"
               >
                 Open Tasks
-              </Link>
-              <Link
+              </Link> : null}
+              {hasAttendance ? <Link
                 to="/attendance"
                 className="rounded-xl border border-slate-200 bg-white px-4 py-2 text-sm font-semibold text-slate-700 transition hover:border-cyan-200 hover:text-cyan-700"
               >
                 Attendance
-              </Link>
+              </Link> : null}
             </div>
           </div>
         </div>
@@ -234,15 +244,15 @@ const ProductionExecutiveDashboard = ({ mode = "home" }) => {
           </div>
         ) : null}
 
-        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4">
+        {hasTasks ? <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4">
           <Metric label="Tasks Assigned" value={stats?.total || 0} icon={Target} />
           <Metric label="Tasks Completed" value={stats?.COMPLETED || 0} icon={CheckCircle2} tone="emerald" />
           <Metric label="Pending Tasks" value={stats?.pending || 0} icon={Clock3} tone="amber" />
           <Metric label="Overdue Tasks" value={stats?.overdue || 0} icon={CalendarClock} tone="rose" />
-        </div>
+        </div> : null}
 
         <div className="grid grid-cols-1 gap-5 xl:grid-cols-[1.35fr_0.9fr]">
-          <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+          {hasTasks ? <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
             <div className="flex items-center justify-between gap-3">
               <div>
                 <p className="text-xs font-semibold uppercase tracking-[0.14em] text-slate-500">
@@ -278,10 +288,10 @@ const ProductionExecutiveDashboard = ({ mode = "home" }) => {
                 </div>
               )}
             </div>
-          </div>
+          </div> : null}
 
           <div className="space-y-5">
-            <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+            {hasAttendance ? <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
               <p className="text-xs font-semibold uppercase tracking-[0.14em] text-slate-500">
                 Attendance Status
               </p>
@@ -296,22 +306,22 @@ const ProductionExecutiveDashboard = ({ mode = "home" }) => {
                   Check-out: {(attendance?.checkOutAt || attendance?.checkOut) ? new Date(attendance.checkOutAt || attendance.checkOut).toLocaleTimeString("en-IN", { hour: "2-digit", minute: "2-digit" }) : "-"}
                 </p>
               </div>
-            </div>
+            </div> : null}
 
-            <RecentList
+            {(hasTasks || hasChat) ? <RecentList
               icon={Bell}
               title="Recent Notifications"
               emptyText="No new task or chat notifications."
-              items={recentNotifications.slice(0, 5).map((item) => ({
+              items={recentNotifications.filter((item) => item.source === "task" ? hasTasks : item.source === "chat" ? hasChat : false).slice(0, 5).map((item) => ({
                 id: item.id,
                 to: item.targetPath || (item.source === "task" ? "/tasks" : "/chat"),
                 title: item.senderName || (item.source === "task" ? "Task update" : "Message"),
                 body: item.preview,
                 at: item.createdAt,
               }))}
-            />
+            /> : null}
 
-            <RecentList
+            {hasChat ? <RecentList
               icon={MessageSquare}
               title="Recent Team Messages"
               emptyText="No conversations yet."
@@ -324,7 +334,7 @@ const ProductionExecutiveDashboard = ({ mode = "home" }) => {
                 at: row.lastMessageAt,
                 badge: row.unreadCount,
               }))}
-            />
+            /> : null}
 
             <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-1">
               <ActionCard to="/profile" icon={UserCheck} title="Profile Settings" subtitle="Update identity and account details." />

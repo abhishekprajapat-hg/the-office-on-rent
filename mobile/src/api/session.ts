@@ -10,6 +10,7 @@ const REFRESH = "refresh_token";
 const ROLE = "role";
 const USER = "user";
 const EXPIRES_AT = "session_expires_at";
+const EPHEMERAL = "session_ephemeral";
 const SESSION_TTL_MS = 12 * 60 * 60 * 1000;
 
 const expired = async () => {
@@ -44,7 +45,7 @@ export const session = {
     }
   },
 
-  async set(token: string, user: User, refreshToken?: string | null) {
+  async set(token: string, user: User, refreshToken?: string | null, remember?: boolean) {
     const pairs: [string, string][] = [
       [TOKEN, token],
       [ROLE, user.role],
@@ -53,6 +54,9 @@ export const session = {
     ];
     if (refreshToken) pairs.push([REFRESH, refreshToken]);
     await AsyncStorage.multiSet(pairs);
+    // undefined = a token refresh: keep whatever the user chose at sign-in.
+    if (remember === false) await AsyncStorage.setItem(EPHEMERAL, "1");
+    if (remember === true) await AsyncStorage.removeItem(EPHEMERAL);
   },
 
   async setUser(user: User) {
@@ -62,7 +66,12 @@ export const session = {
     ]);
   },
 
+  /* "Keep me signed in" was off: the session lives only until the app is closed. */
+  async isEphemeral() {
+    return (await AsyncStorage.getItem(EPHEMERAL)) === "1";
+  },
+
   async clear() {
-    await AsyncStorage.multiRemove([TOKEN, REFRESH, ROLE, USER, EXPIRES_AT]);
+    await AsyncStorage.multiRemove([TOKEN, REFRESH, ROLE, USER, EXPIRES_AT, EPHEMERAL]);
   },
 };

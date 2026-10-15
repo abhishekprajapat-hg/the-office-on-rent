@@ -11,7 +11,7 @@ import { isManagement } from "../../lib/roles";
 import { useQuery } from "../../lib/useQuery";
 import type { RootScreenProps } from "../../navigation/types";
 import { useTheme } from "../../theme/ThemeProvider";
-import { radius, space } from "../../theme/tokens";
+import { space } from "../../theme/tokens";
 import { ActionSheet, type SheetAction } from "../../ui/ActionSheet";
 import { Avatar, Badge, Body, Button, Card, ErrorState, Icon, InlineError, Loading, Text, type IconName } from "../../ui";
 import { LeadActivityTab, LeadNotesTab, LeadOverviewTab, LeadPropertiesTab, LeadRequirementsTab } from "./LeadDetailTabs";
@@ -112,16 +112,21 @@ export const LeadDetailScreen = ({ route, navigation }: RootScreenProps<"LeadDet
     <View style={styles.flex}>
       <Body refreshing={refreshing} onRefresh={refresh} style={styles.body}>
         <Card style={styles.hero}>
-          <Avatar name={lead.name} size={64} />
-          <Text variant="title" align="center">
-            {lead.name}
-          </Text>
-          <Text variant="body" color="muted">
-            {lead.phone}
-          </Text>
+          <View style={styles.identity}>
+            <Avatar name={lead.name} size={52} solid />
+            <View style={styles.flex}>
+              <Text variant="title" numberOfLines={2}>
+                {lead.name}
+              </Text>
+              <Text variant="mono" color="muted" style={styles.phone}>
+                {lead.phone}
+              </Text>
+            </View>
+          </View>
           <View style={styles.badges}>
             <Badge label={status.label} tone={status.tone} />
             {temperature ? <Badge label={temperature.label} tone={temperature.tone} /> : null}
+            {lead.sourceChannel ? <Badge label={lead.sourceChannel} /> : null}
             {isOverdue(lead.nextFollowUp) ? <Badge label="Follow-up overdue" tone="danger" /> : null}
           </View>
           <View style={styles.actions}>
@@ -132,12 +137,13 @@ export const LeadDetailScreen = ({ route, navigation }: RootScreenProps<"LeadDet
                 accessibilityLabel={action.label}
                 disabled={!action.onPress}
                 onPress={action.onPress}
-                style={({ pressed }) => [styles.action, { opacity: action.onPress ? (pressed ? 0.6 : 1) : 0.35 }]}
+                style={({ pressed }) => [
+                  styles.action,
+                  { backgroundColor: pressed ? colors.primarySoft : colors.bg, opacity: action.onPress ? 1 : 0.35 },
+                ]}
               >
-                <View style={[styles.actionIcon, { backgroundColor: colors.primarySoft }]}>
-                  <Icon name={action.icon} size={20} color={colors.primary} />
-                </View>
-                <Text variant="tiny" color="muted">
+                <Icon name={action.icon} size={19} color={colors.primary} />
+                <Text variant="tiny" color="muted" style={styles.actionLabel}>
                   {action.label}
                 </Text>
               </Pressable>
@@ -166,7 +172,7 @@ export const LeadDetailScreen = ({ route, navigation }: RootScreenProps<"LeadDet
           </Card>
         ) : null}
 
-        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.tabs}>
+        <ScrollView horizontal showsHorizontalScrollIndicator={false} style={[styles.tabBar, { borderBottomColor: colors.border }]} contentContainerStyle={styles.tabs}>
           {TABS.map((item) => {
             const active = item.key === tab;
             return (
@@ -194,9 +200,9 @@ export const LeadDetailScreen = ({ route, navigation }: RootScreenProps<"LeadDet
         {tab === "activity" ? <LeadActivityTab lead={lead} activity={data.activity} tasks={data.tasks} /> : null}
       </Body>
 
-      <View style={[styles.footer, { backgroundColor: colors.surface, borderTopColor: colors.border, paddingBottom: insets.bottom + space.md }]}>
+      <View style={[styles.footer, { backgroundColor: colors.surface, borderTopColor: colors.border, paddingBottom: Math.max(insets.bottom, 12) + 8 }]}>
         <Button label="Add task" variant="secondary" icon="add-circle-outline" style={styles.flex} onPress={() => navigation.navigate("NewTask", { leadId: lead._id, leadName: lead.name })} />
-        <Button label="Update status" icon="swap-horizontal" style={styles.flex} onPress={() => navigation.navigate("UpdateLead", { leadId: lead._id })} />
+        <Button label="Update status" icon="swap-horizontal" style={styles.wide} onPress={() => navigation.navigate("UpdateLead", { leadId: lead._id })} />
       </View>
 
       <ActionSheet visible={menuOpen} title={lead.name} actions={menu} onClose={() => setMenuOpen(false)} />
@@ -205,17 +211,21 @@ export const LeadDetailScreen = ({ route, navigation }: RootScreenProps<"LeadDet
 };
 
 const styles = StyleSheet.create({
-  flex: { flex: 1 },
+  flex: { flex: 1, minWidth: 0 },
+  wide: { flex: 1.4 },
   body: { paddingBottom: 100 },
   webInset: { marginRight: space.lg },
-  hero: { alignItems: "center", gap: space.xs, paddingTop: space.xl },
-  badges: { flexDirection: "row", flexWrap: "wrap", justifyContent: "center", gap: space.sm, marginTop: space.xs },
-  actions: { flexDirection: "row", justifyContent: "space-around", alignSelf: "stretch", marginTop: space.lg },
-  action: { alignItems: "center", gap: 6, minWidth: 60 },
-  actionIcon: { width: 46, height: 46, borderRadius: 23, alignItems: "center", justifyContent: "center" },
+  hero: { gap: 14, padding: 16, borderRadius: 22 },
+  identity: { flexDirection: "row", alignItems: "center", gap: 12 },
+  phone: { fontSize: 12, marginTop: 2 },
+  badges: { flexDirection: "row", flexWrap: "wrap", gap: 6 },
+  actions: { flexDirection: "row", gap: 6 },
+  action: { flex: 1, alignItems: "center", gap: 5, paddingVertical: 9, borderRadius: 14 },
+  actionLabel: { fontFamily: "PlusJakartaSans_600SemiBold" },
   confirm: { gap: space.sm },
   row: { flexDirection: "row", gap: space.md },
-  tabs: { gap: space.lg, paddingHorizontal: space.xs },
-  tab: { paddingVertical: space.sm, borderBottomWidth: 2, borderBottomColor: "transparent", borderRadius: radius.sm },
-  footer: { flexDirection: "row", gap: space.md, paddingHorizontal: space.lg, paddingTop: space.md, borderTopWidth: StyleSheet.hairlineWidth },
+  tabBar: { borderBottomWidth: 1, flexGrow: 0 },
+  tabs: { gap: 4 },
+  tab: { paddingVertical: 8, paddingHorizontal: 10, borderBottomWidth: 2, borderBottomColor: "transparent", marginBottom: -1 },
+  footer: { flexDirection: "row", gap: space.sm, paddingHorizontal: 14, paddingTop: 10, borderTopWidth: 1 },
 });

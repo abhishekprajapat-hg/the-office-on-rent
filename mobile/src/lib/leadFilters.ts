@@ -13,6 +13,10 @@ export type LeadFilters = {
   createdTo?: string;
   followUpDateFrom?: string;
   followUpDateTo?: string;
+  /* Instant bounds (ISO) for the "Overdue" follow-up preset. */
+  followUpTo?: string;
+  /* createdAt | -createdAt | nextFollowUp | -budget ... (server SORTABLE_LEAD_FIELDS). */
+  sortBy?: string;
 };
 
 /* Only the filters actually set, as query params the API accepts. */

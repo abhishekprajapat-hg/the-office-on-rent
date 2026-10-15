@@ -2,12 +2,18 @@ import { Platform } from "react-native";
 import * as Notifications from "expo-notifications";
 import { listFollowUpsBetween } from "../api/leads";
 import { planReminders } from "../lib/reminderPlan";
+import { prefs } from "../lib/prefs";
 
 const KIND = "followup";
 
 /* How a reminder looks while the app is open: a banner, like when it's closed. */
 Notifications.setNotificationHandler({
-  handleNotification: async () => ({ shouldShowBanner: true, shouldShowList: true, shouldPlaySound: true, shouldSetBadge: false }),
+  handleNotification: async (notification) => {
+    // "Chat sounds" off silences chat pushes while the app is open.
+    const tag = String((notification.request.content.data as Record<string, unknown> | undefined)?.tag || "");
+    const silent = tag.startsWith("chat:") && !prefs.get().chatSounds;
+    return { shouldShowBanner: true, shouldShowList: true, shouldPlaySound: !silent, shouldSetBadge: false };
+  },
 });
 
 /*

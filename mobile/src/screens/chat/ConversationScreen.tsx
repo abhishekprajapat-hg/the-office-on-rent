@@ -2,7 +2,11 @@ import React, { useCallback, useEffect, useRef, useState } from "react";
 import { ActivityIndicator, FlatList, Image, KeyboardAvoidingView, Platform, Pressable, StyleSheet, TextInput, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { errorMessage, mediaUrl } from "../../api/client";
-import { getMessages, listConversations, markRead, sendMessage, type ChatMessage } from "../../api/chat";
+import { getMessages, listConversations, markRead, sendMessage, type ChatMessage, type Conversation } from "../../api/chat";
+import { pickImage, uploadFile } from "../../api/uploads";
+import { listUsers } from "../../api/users";
+import { dialable } from "../../lib/format";
+import { roleLabel } from "../../lib/roles";
 import { useUser } from "../../auth/AuthProvider";
 import { chatTime, conversationTitle, mergeMessage, receipt, startsNewDay, type Tick } from "../../lib/chat";
 import { formatDate } from "../../lib/format";
@@ -11,7 +15,8 @@ import type { RootScreenProps } from "../../navigation/types";
 import { useRoomChannel, useSocketEvent } from "../../realtime/socket";
 import { useTheme } from "../../theme/ThemeProvider";
 import { font, radius, space } from "../../theme/tokens";
-import { ErrorState, Icon, Loading, Text, type IconName } from "../../ui";
+import { ActionSheet, Avatar, ErrorState, Icon, Loading, Text, type IconName } from "../../ui";
+import { Linking } from "react-native";
 
 const PAGE = 40;
 
@@ -30,17 +35,27 @@ export const ConversationScreen = ({ route, navigation }: RootScreenProps<"Conve
   const [draft, setDraft] = useState("");
   const pendingText = useRef(new Map<string, string>());
 
+  const [room, setRoom] = useState<Conversation | null>(null);
+  const [phone, setPhone] = useState<string | null>(null);
+  const [attachMenu, setAttachMenu] = useState(false);
+  const [uploading, setUploading] = useState(false);
+  const [attachError, setAttachError] = useState<string | null>(null);
+
+  // The room (for the header, members and a lead link) and, for a direct chat, the other person's phone.
   useEffect(() => {
-    navigation.setOptions({ title: title || "Chat" });
-    if (title) return;
-    // Opened from a link without a name: look the conversation up for its title.
     listConversations()
       .then((rooms) => {
-        const room = rooms.find((item) => item._id === id);
-        if (room) navigation.setOptions({ title: conversationTitle(room, myId) });
+        const found = rooms.find((item) => item._id === id) || null;
+        setRoom(found);
+        const other = found?.type === "direct" ? found.participants.find((person) => person._id !== myId) : null;
+        if (other) {
+          listUsers()
+            .then((users) => setPhone(users.find((person) => person._id === other._id)?.phone || null))
+            .catch(() => {});
+        }
       })
       .catch(() => {});
-  }, [navigation, title, id, myId]);
+  }, [id, myId]);
 
   const load = useCallback(async () => {
     setError(null);
@@ -103,6 +118,22 @@ export const ConversationScreen = ({ route, navigation }: RootScreenProps<"Conve
     );
   });
 
+  const sendPhoto = async (source: "camera" | "library") => {
+    setAttachError(null);
+    try {
+      const file = await pickImage(source);
+      if (!file) return;
+      setUploading(true);
+      const uploaded = await uploadFile(file, "chat");
+      const saved = await sendMessage(id, "", { mediaAttachments: [{ url: uploaded.url, name: uploaded.fileName, mimeType: uploaded.mimeType, size: uploaded.size }] });
+      if (saved) setMessages((current) => mergeMessage(current, saved));
+    } catch (err) {
+      setAttachError(errorMessage(err));
+    } finally {
+      setUploading(false);
+    }
+  };
+
   const send = async (text: string, retryOf?: string) => {
     const body = text.trim();
     if (!body) return;
@@ -128,8 +159,62 @@ export const ConversationScreen = ({ route, navigation }: RootScreenProps<"Conve
     }
   };
 
-  if (loading) return <Loading />;
-  if (error) return <ErrorState message={error} onRetry={load} />;
+  const other = room?.type === "direct" ? room.participants.find((person) => person._id !== myId) : null;
+  const heading = room ? conversationTitle(room, myId) : title || "Chat";
+  const subline = other
+    ? other.roleLabel || roleLabel(other.role)
+    : room?.type === "broadcast"
+      ? "Broadcast · read only"
+      : room
+        ? `${room.participants.length} members`
+        : "";
+  const lead = room?.leadId && typeof room.leadId === "object" ? room.leadId : null;
+  const tel = dialable(phone || undefined);
+
+  const header = (
+    <View style={[styles.header, { backgroundColor: colors.surface, borderBottomColor: colors.border, paddingTop: insets.top + 6 }]}>
+      <Pressable accessibilityRole="button" accessibilityLabel="Back" hitSlop={10} onPress={() => navigation.goBack()}>
+        <Icon name="chevron-back" size={24} color={colors.primary} />
+      </Pressable>
+      {other ? (
+        <Avatar name={other.name} uri={other.profileImageUrl} size={38} tinted />
+      ) : (
+        <View style={[styles.groupTile, { backgroundColor: colors.primarySoft }]}>
+          <Icon name={room?.type === "broadcast" ? "megaphone" : "people"} size={18} color={colors.primary} />
+        </View>
+      )}
+      <View style={styles.flex}>
+        <Text variant="bodyStrong" numberOfLines={1} style={styles.headName}>
+          {heading}
+        </Text>
+        {subline ? (
+          <Text variant="tiny" color="muted" numberOfLines={1}>
+            {subline}
+          </Text>
+        ) : null}
+      </View>
+      {tel ? (
+        <Pressable accessibilityRole="button" accessibilityLabel={`Call ${heading}`} hitSlop={10} onPress={() => Linking.openURL(`tel:${tel}`)}>
+          <Icon name="call-outline" size={21} color={colors.primary} />
+        </Pressable>
+      ) : null}
+    </View>
+  );
+
+  if (loading)
+    return (
+      <View style={[styles.root, { backgroundColor: colors.bg }]}>
+        {header}
+        <Loading />
+      </View>
+    );
+  if (error)
+    return (
+      <View style={[styles.root, { backgroundColor: colors.bg }]}>
+        {header}
+        <ErrorState message={error} onRetry={load} />
+      </View>
+    );
 
   // Inverted list: newest at the bottom, scrolling up loads history.
   const reversed = [...messages].reverse();
@@ -138,8 +223,8 @@ export const ConversationScreen = ({ route, navigation }: RootScreenProps<"Conve
     <KeyboardAvoidingView
       style={[styles.root, { backgroundColor: colors.bg }]}
       behavior={Platform.OS === "ios" ? "padding" : undefined}
-      keyboardVerticalOffset={Platform.OS === "ios" ? 90 : 0}
     >
+      {header}
       <FlatList
         inverted
         data={reversed}
@@ -147,6 +232,26 @@ export const ConversationScreen = ({ route, navigation }: RootScreenProps<"Conve
         contentContainerStyle={styles.list}
         onEndReached={loadOlder}
         onEndReachedThreshold={0.3}
+        ListHeaderComponent={
+          lead ? (
+            <Pressable
+              accessibilityRole="button"
+              onPress={() => navigation.navigate("LeadDetail", { leadId: lead._id, name: lead.name })}
+              style={[styles.leadCard, { backgroundColor: colors.surface, borderColor: colors.border }]}
+            >
+              <View style={[styles.leadIcon, { backgroundColor: colors.primarySoft }]}>
+                <Icon name="people" size={16} color={colors.primary} />
+              </View>
+              <View>
+                <Text variant="smallStrong">Lead · {lead.name}</Text>
+                <Text variant="tiny" color="muted">
+                  Open the lead
+                </Text>
+              </View>
+              <Icon name="chevron-forward" size={15} color={colors.textFaint} />
+            </Pressable>
+          ) : null
+        }
         ListFooterComponent={olderLoading ? <ActivityIndicator color={colors.primary} style={styles.older} /> : null}
         ListEmptyComponent={
           <View style={styles.empty}>
@@ -161,9 +266,11 @@ export const ConversationScreen = ({ route, navigation }: RootScreenProps<"Conve
           return (
             <View>
               {startsNewDay(messages, chronoIndex) ? (
-                <Text variant="tiny" color="faint" align="center" style={styles.day}>
-                  {formatDate(item.createdAt)}
-                </Text>
+                <View style={styles.dayWrap}>
+                  <Text variant="tiny" color="muted" style={[styles.day, { backgroundColor: colors.track }]}>
+                    {new Date(item.createdAt).toDateString() === new Date().toDateString() ? "Today" : formatDate(item.createdAt)}
+                  </Text>
+                </View>
               ) : null}
               <Bubble
                 message={item}
@@ -176,7 +283,21 @@ export const ConversationScreen = ({ route, navigation }: RootScreenProps<"Conve
           );
         }}
       />
-      <View style={[styles.composer, { backgroundColor: colors.surface, borderTopColor: colors.border, paddingBottom: insets.bottom + space.sm }]}>
+      {attachError ? (
+        <Text variant="small" color="danger" style={styles.attachError}>
+          {attachError}
+        </Text>
+      ) : null}
+            <View style={[styles.composer, { backgroundColor: colors.bg, paddingBottom: insets.bottom + space.sm }]}>
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel="Attach"
+          disabled={uploading}
+          onPress={() => setAttachMenu(true)}
+          style={[styles.attach, { backgroundColor: colors.surface, borderColor: colors.border }]}
+        >
+          {uploading ? <ActivityIndicator size="small" color={colors.primary} /> : <Icon name="add" size={22} color={colors.textMuted} />}
+        </Pressable>
         <TextInput
           value={draft}
           onChangeText={setDraft}
@@ -184,7 +305,7 @@ export const ConversationScreen = ({ route, navigation }: RootScreenProps<"Conve
           placeholderTextColor={colors.textFaint}
           multiline
           maxLength={4000}
-          style={[styles.input, { color: colors.text, backgroundColor: colors.surfaceAlt }]}
+          style={[styles.input, { color: colors.text, backgroundColor: colors.surface, borderColor: colors.border }]}
           accessibilityLabel="Message"
         />
         <Pressable
@@ -192,11 +313,21 @@ export const ConversationScreen = ({ route, navigation }: RootScreenProps<"Conve
           accessibilityLabel="Send"
           disabled={!draft.trim()}
           onPress={() => send(draft)}
-          style={[styles.send, { backgroundColor: draft.trim() ? colors.primary : colors.surfaceAlt }]}
+          style={[styles.send, { backgroundColor: colors.primary, opacity: draft.trim() ? 1 : 0.55 }]}
         >
-          <Icon name="send" size={18} color={draft.trim() ? colors.onPrimary : colors.textFaint} />
+          <Icon name="send" size={18} color={colors.onPrimary} />
         </Pressable>
       </View>
+      <ActionSheet
+        visible={attachMenu}
+        onClose={() => setAttachMenu(false)}
+        title="Send"
+        actions={[
+          { key: "camera", icon: "camera-outline", label: "Take a photo", onPress: () => sendPhoto("camera") },
+          { key: "library", icon: "image-outline", label: "Photo from gallery", onPress: () => sendPhoto("library") },
+          { key: "property", icon: "business-outline", label: "Share a property", hint: "Sends a card from inventory", onPress: () => navigation.navigate("PickProperty", { chatId: id }) },
+        ]}
+      />
     </KeyboardAvoidingView>
   );
 };
@@ -226,7 +357,7 @@ const Bubble = ({
   const bg = mine ? colors.primary : colors.surface;
   const fg = mine ? colors.onPrimary : colors.text;
   const property = message.sharedProperty;
-  const tickColor = tick === "seen" ? (mine ? "#bff5e3" : colors.info) : tick === "failed" ? colors.danger : mine ? "rgba(255,255,255,0.75)" : colors.textFaint;
+  const tickColor = tick === "seen" ? colors.primary : tick === "failed" ? colors.danger : colors.textFaint;
 
   return (
     <View style={[styles.bubbleRow, mine ? styles.mineRow : styles.theirRow]}>
@@ -264,39 +395,68 @@ const Bubble = ({
             </View>
           </Pressable>
         ) : null}
-        {message.text && !property ? (
-          <Text variant="body" color={fg}>
+        {(message.mediaAttachments || []).map((media) =>
+          (media.mimeType || "").startsWith("image") || media.kind === "image" ? (
+            <Pressable key={media.url} accessibilityRole="imagebutton" accessibilityLabel="Open photo" onPress={() => Linking.openURL(mediaUrl(media.url) || media.url)}>
+              <Image source={{ uri: mediaUrl(media.url) }} style={styles.media} />
+            </Pressable>
+          ) : (
+            <Pressable key={media.url} accessibilityRole="button" onPress={() => Linking.openURL(mediaUrl(media.url) || media.url)} style={styles.fileRow}>
+              <Icon name="document-attach-outline" size={18} color={fg} />
+              <Text variant="small" color={fg} numberOfLines={1} style={styles.fileName}>
+                {media.name || "Attachment"}
+              </Text>
+            </Pressable>
+          ),
+        )}
+        {message.text && !property && !(message.mediaAttachments || []).length ? (
+          <Text variant="body" color={fg} style={styles.bubbleText}>
             {message.isDeleted ? "This message was deleted" : message.text}
           </Text>
         ) : null}
-        <View style={styles.meta}>
-          <Text variant="tiny" color={mine ? "rgba(255,255,255,0.75)" : colors.textFaint}>
-            {message.localState === "failed" ? "Not sent · tap to retry" : chatTime(message.createdAt, new Date(message.createdAt))}
-          </Text>
-          {tick ? <Icon name={TICKS[tick].icon} size={14} color={tickColor} /> : null}
-        </View>
       </Pressable>
+      <View style={[styles.meta, mine ? styles.metaMine : null]}>
+        <Text variant="tiny" color={message.localState === "failed" ? colors.danger : colors.textFaint} style={styles.metaText}>
+          {message.localState === "failed" ? "Not sent · tap to retry" : chatTime(message.createdAt, new Date(message.createdAt))}
+        </Text>
+        {tick ? <Icon name={TICKS[tick].icon} size={13} color={tickColor} /> : null}
+      </View>
     </View>
   );
 };
 
 const styles = StyleSheet.create({
   root: { flex: 1 },
+  flex: { flex: 1, minWidth: 0 },
   list: { padding: space.md, gap: 4 },
   older: { paddingVertical: space.md },
   empty: { padding: space.xxl, transform: [{ scaleY: -1 }] },
-  day: { paddingVertical: space.sm },
-  bubbleRow: { flexDirection: "row", marginVertical: 2 },
-  mineRow: { justifyContent: "flex-end" },
-  theirRow: { justifyContent: "flex-start" },
-  bubble: { maxWidth: "82%", borderRadius: radius.lg, paddingHorizontal: space.md, paddingVertical: space.sm, gap: 4 },
-  mineBubble: { borderBottomRightRadius: 4 },
-  theirBubble: { borderBottomLeftRadius: 4, borderWidth: StyleSheet.hairlineWidth },
-  meta: { flexDirection: "row", alignItems: "center", gap: 4, alignSelf: "flex-end" },
+  day: { paddingHorizontal: 10, paddingVertical: 3, borderRadius: 999, overflow: "hidden" },
+  bubbleRow: { marginVertical: 3 },
+  mineRow: { alignItems: "flex-end" },
+  theirRow: { alignItems: "flex-start" },
+  bubble: { maxWidth: "80%", borderRadius: 20, paddingHorizontal: 13, paddingVertical: 10, gap: 6 },
+  mineBubble: { borderBottomRightRadius: 6 },
+  theirBubble: { borderBottomLeftRadius: 6, borderWidth: 1 },
+  meta: { flexDirection: "row", alignItems: "center", gap: 3, marginTop: 3, paddingHorizontal: 2 },
+  metaMine: { alignSelf: "flex-end" },
+  metaText: { fontSize: 10.5 },
+  bubbleText: { fontSize: 14, lineHeight: 20 },
+  media: { width: 220, height: 160, borderRadius: 14 },
+  fileRow: { flexDirection: "row", alignItems: "center", gap: 6, maxWidth: 220 },
+  fileName: { flexShrink: 1 },
+  header: { flexDirection: "row", alignItems: "center", gap: 10, paddingHorizontal: 14, paddingBottom: 10, borderBottomWidth: 1 },
+  headName: { fontSize: 15 },
+  groupTile: { width: 38, height: 38, borderRadius: 12, alignItems: "center", justifyContent: "center" },
+  dayWrap: { alignItems: "center", paddingVertical: 8 },
+  leadCard: { flexDirection: "row", alignItems: "center", gap: 10, alignSelf: "flex-start", borderWidth: 1, borderRadius: 16, padding: 10, marginTop: 8 },
+  leadIcon: { width: 32, height: 32, borderRadius: 10, alignItems: "center", justifyContent: "center" },
+  attach: { width: 42, height: 42, borderRadius: 14, borderWidth: 1, alignItems: "center", justifyContent: "center" },
+  attachError: { paddingHorizontal: 16, paddingBottom: 4 },
   property: { borderRadius: radius.md, overflow: "hidden", width: 220 },
   propertyImage: { width: 220, height: 110 },
   propertyText: { padding: space.sm, gap: 2 },
-  composer: { flexDirection: "row", alignItems: "flex-end", gap: space.sm, paddingHorizontal: space.md, paddingTop: space.sm, borderTopWidth: StyleSheet.hairlineWidth },
-  input: { flex: 1, minHeight: 42, maxHeight: 120, borderRadius: 21, paddingHorizontal: space.lg, paddingTop: 11, paddingBottom: 11, fontFamily: font.regular, fontSize: 15 },
-  send: { width: 42, height: 42, borderRadius: 21, alignItems: "center", justifyContent: "center" },
+  composer: { flexDirection: "row", alignItems: "flex-end", gap: 8, paddingHorizontal: 12, paddingTop: 8 },
+  input: { flex: 1, minHeight: 42, maxHeight: 120, borderRadius: 14, borderWidth: 1, paddingHorizontal: 14, paddingTop: 10, paddingBottom: 10, fontFamily: font.regular, fontSize: 14.5, lineHeight: 20 },
+  send: { width: 42, height: 42, borderRadius: 14, alignItems: "center", justifyContent: "center" },
 });

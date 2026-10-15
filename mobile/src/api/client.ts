@@ -1,7 +1,7 @@
 import axios, { AxiosError, type InternalAxiosRequestConfig } from "axios";
 import { session } from "./session";
 
-const DEFAULT_API_BASE_URL = "https://nemnidhi.cloud/api";
+const DEFAULT_API_BASE_URL = "https://crm.theofficeonrent.com/api";
 
 /*
  * EXPO_PUBLIC_API_BASE_URL wins when set. A dev build can opt into a local
@@ -40,6 +40,26 @@ export const api = axios.create({
   timeout: 30000,
 });
 
+/*
+ * Reachability, learned from real traffic: a request that dies without a
+ * response marks the app offline, the next one that gets any answer marks it
+ * back online. Drives the offline banner.
+ */
+let online = true;
+const onlineListeners = new Set<(value: boolean) => void>();
+const setOnline = (value: boolean) => {
+  if (online === value) return;
+  online = value;
+  onlineListeners.forEach((listener) => listener(value));
+};
+export const subscribeOnline = (listener: (value: boolean) => void) => {
+  onlineListeners.add(listener);
+  listener(online);
+  return () => {
+    onlineListeners.delete(listener);
+  };
+};
+
 let onUnauthorized: null | (() => void) = null;
 export const setUnauthorizedHandler = (handler: null | (() => void)) => {
   onUnauthorized = handler;
@@ -67,9 +87,14 @@ const refreshAccessToken = async () => {
 type RetryConfig = InternalAxiosRequestConfig & { _authRetry?: boolean; _netRetry?: boolean };
 
 api.interceptors.response.use(
-  (response) => response,
+  (response) => {
+    setOnline(true);
+    return response;
+  },
   async (error: AxiosError) => {
     const config = (error.config || {}) as RetryConfig;
+    if (error.response) setOnline(true);
+    else if (error.code !== "ECONNABORTED" && config._netRetry) setOnline(false);
 
     // One quiet retry for reads that died on the network (tunnel, lift, signal
     // handover). Writes are never retried: they may already have landed.

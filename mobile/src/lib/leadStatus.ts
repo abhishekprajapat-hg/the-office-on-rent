@@ -8,11 +8,11 @@ import type { Tone } from "../theme/tokens";
 type StatusMeta = { label: string; tone: Tone };
 
 export const LEAD_STATUS: Record<string, StatusMeta> = {
-  NEW: { label: "New", tone: "info" },
-  CONTACTED: { label: "Contacted", tone: "info" },
-  FOLLOW_UP_1: { label: "Follow-Up 1", tone: "primary" },
-  FOLLOW_UP_2: { label: "Follow-Up 2", tone: "primary" },
-  FOLLOW_UP_3: { label: "Follow-Up 3", tone: "primary" },
+  NEW: { label: "New", tone: "primary" },
+  CONTACTED: { label: "Contacted", tone: "primary" },
+  FOLLOW_UP_1: { label: "Follow-Up 1", tone: "violet" },
+  FOLLOW_UP_2: { label: "Follow-Up 2", tone: "violet" },
+  FOLLOW_UP_3: { label: "Follow-Up 3", tone: "violet" },
   QUALIFIED_LEAD: { label: "Qualified Lead", tone: "warning" },
   INTERESTED: { label: "Interested", tone: "warning" },
   REQUESTED: { label: "Requested", tone: "warning" },
@@ -110,7 +110,7 @@ export const suggestsFollowUp = (status?: string) => {
 export const TEMPERATURE: Record<string, { label: string; tone: Tone }> = {
   HOT: { label: "Hot", tone: "danger" },
   WARM: { label: "Warm", tone: "warning" },
-  COLD: { label: "Cold", tone: "info" },
+  COLD: { label: "Cold", tone: "primary" },
 };
 
 /* "" predates the field: read it as HOT when the old hotClient flag is set. */

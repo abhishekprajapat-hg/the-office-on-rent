@@ -32,7 +32,7 @@ export type AuthResponse = {
   tenant?: Tenant;
 };
 
-export type PersonRef = { _id: string; name: string; role?: string; phone?: string; email?: string } | null;
+export type PersonRef = { _id: string; name: string; role?: string; phone?: string; email?: string; profileImageUrl?: string } | null;
 
 export type LeadTemperature = "COLD" | "WARM" | "HOT" | "";
 
@@ -81,7 +81,7 @@ export type LeadSummary = {
   overdueFollowUps: number;
 };
 
-export type Subtask = { _id?: string; title: string; isCompleted: boolean; status?: string; dueDate?: string | null; description?: string };
+export type Subtask = { _id?: string; title: string; isCompleted: boolean; status?: string; priority?: string; dueDate?: string | null; description?: string; assignedTo?: PersonRef | string | null };
 
 export type TaskFile = { _id?: string; url: string; name?: string; mimeType?: string; size?: number; uploadedBy?: { _id: string; name: string } | string | null; uploadedAt?: string };
 
