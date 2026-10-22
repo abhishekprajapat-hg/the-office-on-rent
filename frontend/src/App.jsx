@@ -9,7 +9,6 @@ import CoworkingPermissionGate from "./components/coworking/CoworkingPermissionG
 import PageAccessGate from "./components/auth/PageAccessGate";
 import { updateMyLiveLocation } from "./services/userService";
 import BackToTopButton from "./components/layout/BackToTopButton";
-import Loader from "./components/layout/Loader";
 import RouteLoadingSkeleton from "./components/layout/RouteLoadingSkeleton";
 import {
   applySystemSettingsToDocument,
@@ -30,6 +29,24 @@ import {
   writeColorTheme,
   writeThemeMode,
 } from "./utils/themePreferences";
+import HomeStatusStrip from "./components/dashboard/HomeStatusStrip";
+
+// Leads: Admin and Manager use the Pipeline (/leads); every other role uses
+// My Leads (/my-leads). An old link to the other one opens the same lead in
+// the right place.
+const PIPELINE_ROLES = ["ADMIN", "MANAGER"];
+const LeadsRouteSwitch = ({ base, children }) => {
+  const { role, loading } = usePermissions();
+  const location = useLocation();
+  if (!loading && role) {
+    const wantsPipeline = PIPELINE_ROLES.includes(String(role).toUpperCase());
+    const target = wantsPipeline ? "/leads" : "/my-leads";
+    if (target !== base) {
+      return <Navigate to={`${location.pathname.replace(base, target)}${location.search}`} replace />;
+    }
+  }
+  return children;
+};
 
 /* =======================
    LAZY IMPORTS
@@ -56,6 +73,7 @@ const OwnerDatabase = lazy(() => import("./modules/inventory/OwnerDatabase"));
 const BrokerDatabase = lazy(() => import("./modules/inventory/BrokerDatabase"));
 const AssetVault = lazy(() => import("./modules/inventory/AssetVault"));
 const InventoryDetails = lazy(() => import("./modules/inventory/InventoryDetails"));
+const ContactProfilePage = lazy(() => import("./modules/inventory/ContactProfilePage"));
 const Projects = lazy(() => import("./modules/inventory/Projects"));
 const ProjectDetails = lazy(() => import("./modules/inventory/ProjectDetails"));
 const FinancialCore = lazy(() => import("./modules/finance/FinancialCore"));
@@ -66,6 +84,7 @@ const MasterSchedule = lazy(() => import("./modules/calendar/MasterSchedule"));
 const AttendanceHub = lazy(() => import("./modules/attendance/AttendanceHub"));
 const SalaryHub = lazy(() => import("./modules/salary/SalaryHub"));
 const PerformanceHub = lazy(() => import("./modules/performance/PerformanceHub"));
+const DailyReportsHub = lazy(() => import("./modules/dailyReports/DailyReportsHub"));
 const SystemSettings = lazy(() => import("./modules/admin/SystemSettings"));
 const DataUseNotice = lazy(() => import("./modules/legal/DataUseNotice"));
 const ServiceTermsNotice = lazy(() => import("./modules/legal/ServiceTermsNotice"));
@@ -147,6 +166,7 @@ const GrantedDashboard = () => {
     <div className="p-6">
       <h1 className="text-2xl font-semibold text-slate-900 dark:text-slate-100">Your workspace</h1>
       <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">Open a page assigned to you.</p>
+      <div className="mt-4"><HomeStatusStrip /></div>
       <div className="mt-6 grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
         {destinations.map(([page, path, label]) => (
           <Link key={page} to={path} className="rounded-xl border border-slate-200 bg-white p-4 font-medium text-slate-800 hover:border-blue-400 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100">
@@ -282,6 +302,14 @@ const resolvePageHeader = (pathname, userRole) => {
       title: "Attendance",
       subtitle: "Daily check-in, work-hour tracking and team attendance visibility",
       scopeLabel: "Attendance",
+    };
+  }
+
+  if (pathname.startsWith("/daily-reports")) {
+    return {
+      title: "Daily Reports",
+      subtitle: "Today's report, history and downloads",
+      scopeLabel: "Daily Reports",
     };
   }
 
@@ -756,21 +784,21 @@ export default function App() {
       <Route path="/dashboard" element={DashboardByRole} />
       <Route
         path="/leads"
-        element={withPageAccess("leads", <LeadsMatrix />, ["ADMIN", ...MANAGEMENT_ROLES, "EXECUTIVE", "FIELD_EXECUTIVE", "CHANNEL_PARTNER"])}
+        element={<LeadsRouteSwitch base="/leads">{withPageAccess("leads", <LeadsMatrix />, ["ADMIN", ...MANAGEMENT_ROLES, "EXECUTIVE", "FIELD_EXECUTIVE", "CHANNEL_PARTNER"])}</LeadsRouteSwitch>}
       />
       <Route
         path="/leads/:leadId"
-        element={withPageAccess("leads", <LeadsMatrix />, ["ADMIN", ...MANAGEMENT_ROLES, "EXECUTIVE", "FIELD_EXECUTIVE", "CHANNEL_PARTNER"])}
+        element={<LeadsRouteSwitch base="/leads">{withPageAccess("leads", <LeadsMatrix />, ["ADMIN", ...MANAGEMENT_ROLES, "EXECUTIVE", "FIELD_EXECUTIVE", "CHANNEL_PARTNER"])}</LeadsRouteSwitch>}
       />
       <Route
         path="/my-leads"
         element={
-          withPageAccess("my_leads", <LeadsMatrix />, ["EXECUTIVE", "FIELD_EXECUTIVE"])
+          <LeadsRouteSwitch base="/my-leads">{withPageAccess(["my_leads", "leads"], <LeadsMatrix />, ["EXECUTIVE", "FIELD_EXECUTIVE"])}</LeadsRouteSwitch>
         }
       />
       <Route
         path="/my-leads/:leadId"
-        element={withPageAccess("my_leads", <LeadsMatrix />, ["EXECUTIVE", "FIELD_EXECUTIVE"])}
+        element={<LeadsRouteSwitch base="/my-leads">{withPageAccess(["my_leads", "leads"], <LeadsMatrix />, ["EXECUTIVE", "FIELD_EXECUTIVE"])}</LeadsRouteSwitch>}
       />
       <Route
         path="/inventory"
@@ -783,6 +811,14 @@ export default function App() {
       <Route
         path="/inventory/brokers"
         element={withPageAccess("inventory", <BrokerDatabase />, ["ADMIN", ...MANAGEMENT_ROLES, "EXECUTIVE", "FIELD_EXECUTIVE"])}
+      />
+      <Route
+        path="/inventory/owners/:contactId"
+        element={withPageAccess("inventory", <ContactProfilePage />, ["ADMIN", ...MANAGEMENT_ROLES, "EXECUTIVE", "FIELD_EXECUTIVE"])}
+      />
+      <Route
+        path="/inventory/brokers/:contactId"
+        element={withPageAccess("inventory", <ContactProfilePage />, ["ADMIN", ...MANAGEMENT_ROLES, "EXECUTIVE", "FIELD_EXECUTIVE"])}
       />
       {/* Replaced by the two pages above; existing links still resolve. */}
       <Route path="/inventory/contacts" element={<Navigate to="/inventory/owners" replace />} />
@@ -841,6 +877,11 @@ export default function App() {
         path="/performance"
         // Scored from attendance, so the same people who keep attendance.
         element={withPageAccess("performance", <PerformanceHub />, ["ADMIN", ...MANAGEMENT_ROLES, "EXECUTIVE", "FIELD_EXECUTIVE", ...PRODUCTION_ROLES, "CHANNEL_PARTNER"])}
+      />
+      <Route
+        path="/daily-reports"
+        // Everyone who checks in files a report; the API decides whose they can read.
+        element={withPageAccess("daily_reports", <DailyReportsHub />, ["ADMIN", ...MANAGEMENT_ROLES, "EXECUTIVE", "INSIDE_EXECUTIVE", "FIELD_EXECUTIVE", ...PRODUCTION_ROLES, "COWORKING_ADMIN"])}
       />
       <Route
         path="/salary"
@@ -956,12 +997,7 @@ export default function App() {
 
   if (!sessionReady && !isPublicPage) {
     return (
-      <div className="flex min-h-screen items-center justify-center bg-void text-slate-400 text-sm" aria-busy="true" aria-live="polite">
-        <div className="flex items-center gap-3 rounded-full border border-slate-200 bg-white px-4 py-3 text-slate-900 shadow-sm">
-          <Loader />
-          <span>Restoring session...</span>
-        </div>
-      </div>
+      <RouteLoadingSkeleton />
     );
   }
 

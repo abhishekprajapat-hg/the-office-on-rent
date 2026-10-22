@@ -1,5 +1,6 @@
 const mongoose = require("mongoose");
 const Inventory = require("../models/Inventory");
+const { INVENTORY_SOURCE_TYPES, STALE_AFTER_DAYS } = require("../constants/relationship.constants");
 const InventoryIdCounter = require("../models/InventoryIdCounter");
 const InventoryRequest = require("../models/InventoryRequest");
 const InventoryActivity = require("../models/InventoryActivity");
@@ -1130,6 +1131,29 @@ const pickInventoryDiff = (inventoryDoc, patch) => {
   return { oldValue, newValue };
 };
 
+
+/*
+ * Project link (21 Oct 2026). A chosen project must belong to the company. A
+ * unit saved without one, whose project name matches a company project,
+ * is linked to it, so older units typed by name show on the project too.
+ */
+const resolveInventoryProject = async ({ user, payload, currentProjectId = null }) => {
+  if (!payload) return;
+  const Project = require("../models/Project");
+  const companyId = getCompanyIdForUser(user);
+  if (payload.projectId) {
+    const exists = await Project.exists({ _id: payload.projectId, companyId, deletedAt: null });
+    if (!exists) throw createHttpError(400, "That project doesn't exist in your company");
+    return;
+  }
+  if (payload.projectId === null || currentProjectId) return;
+  const name = String(payload.projectName || payload.title || "").trim();
+  if (!name) return;
+  const escaped = name.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  const match = await Project.findOne({ companyId, deletedAt: null, projectName: { $regex: `^${escaped}$`, $options: "i" } }).select("_id").lean();
+  if (match) payload.projectId = String(match._id);
+};
+
 const sanitizeInventoryPayload = ({
   payload,
   mode = "create",
@@ -1360,6 +1384,28 @@ const sanitizeInventoryPayload = ({
 
     if (field === "gstApplicable") {
       safePayload[field] = toBoolean(value, false);
+      return;
+    }
+
+    if (field === "sourceType") {
+      const clean = toUpperSnake(value);
+      if (!INVENTORY_SOURCE_TYPES.includes(clean)) throw createHttpError(400, "sourceType is invalid");
+      safePayload[field] = clean;
+      return;
+    }
+
+    if (field === "lastConfirmedAt") {
+      if (value === "" || value === null) { safePayload[field] = null; return; }
+      const parsed = new Date(value);
+      if (Number.isNaN(parsed.getTime())) throw createHttpError(400, "lastConfirmedAt must be a valid date");
+      safePayload[field] = parsed;
+      return;
+    }
+
+    if (field === "projectId" || field === "originLeadId") {
+      if (value === "" || value === null) { safePayload[field] = null; return; }
+      if (!mongoose.isValidObjectId(String(value))) throw createHttpError(400, `${field} is invalid`);
+      safePayload[field] = String(value);
       return;
     }
 
@@ -1610,6 +1656,9 @@ const applyInventoryPopulates = (query) =>
     .populate("updatedBy", "name role companyId profileImageUrl")
     .populate("reservationLeadId", "name phone status projectInterested")
     .populate("saleDetails.leadId", "name phone status projectInterested")
+    .populate("sourceLinks.contactId", "name phone kind")
+    .populate("sourceLinks.firmId", "name")
+    .populate("projectId", "projectName projectId")
     .lean();
 
 const applyRequestPopulates = (query) =>
@@ -1804,6 +1853,32 @@ const getInventoryList = async ({
     }
   }
 
+  // Source and relationship filters (requirements 16 Oct 2026, 7.3/17.3).
+  // Channel Partners never see source relationships, so they can't filter by them.
+  if (user.role !== USER_ROLES.CHANNEL_PARTNER) {
+    const objectIdOrNull = (v) => (mongoose.isValidObjectId(String(v || "")) ? String(v) : null);
+    const sourceTypes = String(filters.sourceType || "").split(",").map((x) => x.trim().toUpperCase())
+      .filter((x) => INVENTORY_SOURCE_TYPES.includes(x) && x);
+    if (sourceTypes.length) query.sourceType = { $in: sourceTypes };
+    const sourceContactId = objectIdOrNull(filters.sourceContactId);
+    if (sourceContactId) query["sourceLinks.contactId"] = sourceContactId;
+    const sourceFirmId = objectIdOrNull(filters.sourceFirmId);
+    if (sourceFirmId) query["sourceLinks.firmId"] = sourceFirmId;
+    const ownerContactId = objectIdOrNull(filters.ownerContactId);
+    if (ownerContactId) query.ownerContactId = ownerContactId;
+    const projectId = objectIdOrNull(filters.projectId);
+    if (projectId) query.projectId = projectId;
+    if (String(filters.stale) === "true") {
+      const cutoff = new Date(Date.now() - STALE_AFTER_DAYS * 86400000);
+      // Stale = neither the record nor any source confirmed since the cutoff.
+      query.$and = [
+        ...(Array.isArray(query.$and) ? query.$and : []),
+        { $or: [{ lastConfirmedAt: null }, { lastConfirmedAt: { $lt: cutoff } }] },
+        { "sourceLinks.confirmedAt": { $not: { $gte: cutoff } } },
+      ];
+    }
+  }
+
   if (filters.search) {
     const safeSearch = sanitizeString(filters.search);
     if (safeSearch) {
@@ -1891,6 +1966,7 @@ const createInventoryDirect = async ({ user, payload }) => {
   });
   ensureInventoryTypeAllowedForUser({ user, inventoryType: proposed.inventoryType });
   await ensureSaleDetailsLeadExists(proposed.saleDetails);
+  await resolveInventoryProject({ user, payload: proposed });
   await ensureReservationLeadExists(proposed.reservationLeadId);
 
   const teamId = await resolveDirectCreateTeamId({
@@ -1966,6 +2042,7 @@ const updateInventoryDirect = async ({ user, inventoryId, payload }) => {
     inventoryType: patch.inventoryType || inventory.inventoryType,
   });
   await ensureSaleDetailsLeadExists(patch.saleDetails);
+  await resolveInventoryProject({ user, payload: patch, currentProjectId: inventory.projectId });
   await ensureReservationLeadExists(patch.reservationLeadId);
 
   const diff = pickInventoryDiff(inventory, patch);
@@ -2075,6 +2152,7 @@ const bulkCreateInventoryDirect = async ({ user, payload = [] }) => {
       });
       ensureInventoryTypeAllowedForUser({ user, inventoryType: proposed.inventoryType });
       await ensureSaleDetailsLeadExists(proposed.saleDetails);
+      await resolveInventoryProject({ user, payload: proposed });
       await ensureReservationLeadExists(proposed.reservationLeadId);
 
       const teamId = row?.teamId || null;
@@ -2145,6 +2223,7 @@ const createInventoryCreateRequest = async ({ user, payload, io }) => {
   });
   ensureInventoryTypeAllowedForUser({ user, inventoryType: proposed.inventoryType });
   await ensureSaleDetailsLeadExists(proposed.saleDetails);
+  await resolveInventoryProject({ user, payload: proposed });
   await ensureReservationLeadExists(proposed.reservationLeadId);
 
   const teamId = getTeamIdForUser(user);
@@ -2220,6 +2299,7 @@ const createInventoryUpdateRequest = async ({
     inventoryType: proposed.inventoryType || inventory.inventoryType,
   });
   await ensureSaleDetailsLeadExists(proposed.saleDetails);
+  await resolveInventoryProject({ user, payload: proposed, currentProjectId: inventory.projectId });
 
   const nextStatus = Object.prototype.hasOwnProperty.call(proposed, "status")
     ? String(proposed.status || "").trim()
@@ -2474,6 +2554,7 @@ const approveRequest = async ({ user, requestId, io }) => {
     });
     ensureInventoryTypeAllowedForUser({ user, inventoryType: proposed.inventoryType });
     await ensureSaleDetailsLeadExists(proposed.saleDetails);
+    await resolveInventoryProject({ user, payload: proposed });
     await ensureReservationLeadExists(proposed.reservationLeadId);
 
     const propertyId = await generatePropertyId({
@@ -2532,6 +2613,7 @@ const approveRequest = async ({ user, requestId, io }) => {
       inventoryType: proposed.inventoryType || inventory.inventoryType,
     });
     await ensureSaleDetailsLeadExists(proposed.saleDetails);
+    await resolveInventoryProject({ user, payload: proposed, currentProjectId: inventory.projectId });
     const nextStatus = Object.prototype.hasOwnProperty.call(proposed, "status")
       ? String(proposed.status || "").trim()
       : String(inventory.status || "").trim();
@@ -2745,4 +2827,5 @@ module.exports = {
   getMyRequests,
   getInventoryActivities,
   sanitizeInventoryPayload,
+  getInventoryScopeQueryForUser,
 };

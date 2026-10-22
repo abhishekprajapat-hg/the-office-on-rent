@@ -68,6 +68,9 @@ const coworkingClientSchema = new mongoose.Schema(
       maxlength: 200,
     },
     dateOfBirth: { type: Date, default: null },
+    // Requirements 16 Oct 2026, 18.2: where the date came from and whether a person checked it.
+    dobSource: { type: String, enum: ["", "ENTERED", "EXTRACTED"], default: "" },
+    dobVerified: { type: Boolean, default: false },
     contactPerson: {
       type: String,
       trim: true,

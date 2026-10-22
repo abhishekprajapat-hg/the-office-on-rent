@@ -347,6 +347,11 @@ const projectSchema = new mongoose.Schema(
       default: "",
       maxlength: 60,
     },
+    // Plots in one project come in different sizes, so the size is a range
+    // in sq.ft (21 Oct 2026). plotSize/customPlotSize above are the older
+    // single size, still shown for projects saved before.
+    plotSizeMin: { type: Number, default: null, min: 0 },
+    plotSizeMax: { type: Number, default: null, min: 0 },
     // Building fields (required only when projectType === "BUILDING"; see pre-validate hook).
     numberOfFlats: {
       type: Number,
@@ -411,6 +416,21 @@ const projectSchema = new mongoose.Schema(
       default: "",
       maxlength: 60,
     },
+    // Location-based PLCs (21 Oct 2026), free text like "5%" or "₹50,000".
+    plcWideRoad: { type: String, trim: true, default: "", maxlength: 60 },
+    plcGardenFacing: { type: String, trim: true, default: "", maxlength: 60 },
+    plcCorner: { type: String, trim: true, default: "", maxlength: 60 },
+    plcGardenCorner: { type: String, trim: true, default: "", maxlength: 60 },
+    // Charges a buyer pays on top of the rate (21 Oct 2026), free text.
+    developmentCharges: { type: String, trim: true, default: "", maxlength: 120 },
+    maintenanceCharges: { type: String, trim: true, default: "", maxlength: 120 },
+    amenityCharges: { type: String, trim: true, default: "", maxlength: 120 },
+    utilityCharges: { type: String, trim: true, default: "", maxlength: 120 },
+    parkingCharges: { type: String, trim: true, default: "", maxlength: 120 },
+    taxes: { type: String, trim: true, default: "", maxlength: 120 },
+    registrationStampDuty: { type: String, trim: true, default: "", maxlength: 120 },
+    // Facilities not in the amenities list.
+    otherFacilities: { type: String, trim: true, default: "", maxlength: 500 },
     group: {
       type: String,
       trim: true,
@@ -439,7 +459,7 @@ const projectSchema = new mongoose.Schema(
       enum: PROJECT_STATUSES,
     },
     amenities: {
-      type: [{ type: String, enum: [...PROJECT_AMENITIES, ...PROJECT_COMMERCIAL_AMENITIES] }],
+      type: [{ type: String, enum: [...new Set([...PROJECT_AMENITIES, ...PROJECT_COMMERCIAL_AMENITIES])] }],
       default: [],
     },
     images: {
@@ -536,6 +556,80 @@ const projectSchema = new mongoose.Schema(
       type: mongoose.Schema.Types.ObjectId,
       ref: "User",
       default: null,
+    },
+    /*
+     * Centralised project knowledge (requirements 16 Oct 2026, section 05).
+     * Field-level values live in `details` and are checked against
+     * constants/projectDetails.constants.js; lists that need their own rows
+     * are kept as sub-documents.
+     */
+    details: {
+      overview: { type: mongoose.Schema.Types.Mixed, default: {} },
+      pricing: { type: mongoose.Schema.Types.Mixed, default: {} },
+      pricingPublished: { type: Boolean, default: false },
+      legal: { type: mongoose.Schema.Types.Mixed, default: {} },
+      approvalStatus: { type: String, enum: ["NOT_STARTED", "APPLIED", "APPROVED", "VERIFIED"], default: "NOT_STARTED" },
+      approvalVerifiedBy: { type: mongoose.Schema.Types.ObjectId, ref: "User", default: null },
+      approvalVerifiedAt: { type: Date, default: null },
+      specs: { type: mongoose.Schema.Types.Mixed, default: {} },
+      internalNotes: { type: String, trim: true, maxlength: 5000, default: "" },
+    },
+    projectContacts: {
+      type: [{
+        name: { type: String, trim: true, maxlength: 120, required: true },
+        organization: { type: String, trim: true, maxlength: 160, default: "" },
+        role: { type: String, trim: true, maxlength: 40, default: "OTHER" },
+        phone: { type: String, trim: true, maxlength: 20, default: "" },
+        whatsapp: { type: String, trim: true, maxlength: 20, default: "" },
+        email: { type: String, trim: true, maxlength: 160, default: "" },
+        notes: { type: String, trim: true, maxlength: 500, default: "" },
+        shareable: { type: Boolean, default: false },
+      }],
+      default: [],
+    },
+    amenityStatuses: {
+      type: [{
+        name: { type: String, trim: true, maxlength: 80, required: true },
+        status: { type: String, enum: ["AVAILABLE", "PLANNED", "NOT_AVAILABLE"], default: "AVAILABLE" },
+        chargeable: { type: Boolean, default: false },
+        notes: { type: String, trim: true, maxlength: 300, default: "" },
+        _id: false,
+      }],
+      default: [],
+    },
+    documentLibrary: {
+      type: [{
+        category: { type: String, trim: true, maxlength: 40, default: "OTHER" },
+        name: { type: String, trim: true, maxlength: 200, required: true },
+        url: { type: String, trim: true, maxlength: 1000, required: true },
+        version: { type: Number, default: 1, min: 1 },
+        uploadedAt: { type: Date, default: Date.now },
+        uploadedBy: { type: mongoose.Schema.Types.ObjectId, ref: "User", default: null },
+        uploadedByName: { type: String, default: "" },
+        superseded: { type: Boolean, default: false },
+        clientShareable: { type: Boolean, default: false },
+      }],
+      default: [],
+    },
+    media: {
+      type: [{
+        url: { type: String, trim: true, maxlength: 1000, required: true },
+        caption: { type: String, trim: true, maxlength: 200, default: "" },
+        category: { type: String, trim: true, maxlength: 40, default: "OTHER" },
+        order: { type: Number, default: 0 },
+        isCover: { type: Boolean, default: false },
+        clientVisible: { type: Boolean, default: true },
+        uploadedAt: { type: Date, default: Date.now },
+        archived: { type: Boolean, default: false },
+      }],
+      default: [],
+    },
+    projectOwnerId: { type: mongoose.Schema.Types.ObjectId, ref: "User", default: null },
+    lastVerifiedAt: { type: Date, default: null },
+    lastVerifiedBy: { type: mongoose.Schema.Types.ObjectId, ref: "User", default: null },
+    history: {
+      type: [{ at: { type: Date, default: Date.now }, by: { type: mongoose.Schema.Types.ObjectId, ref: "User" }, byName: String, change: String, _id: false }],
+      default: [],
     },
     deletedAt: {
       type: Date,

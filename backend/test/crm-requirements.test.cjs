@@ -332,10 +332,21 @@ for (const breakType of ["", "SMOKE", "lunch break"]) {
 test("check-out succeeds away from the office while check-in still refuses", async () => {
   const policy = { companyId, geofenceEnabled: true, officeLatitude: 22.72, officeLongitude: 75.86, geofenceRadiusMeters: 200, timezone: "Asia/Kolkata" };
   const faraway = { latitude: 19.07, longitude: 72.87, accuracy: 10 };
-  const build = (attendance) => load("controllers/attendance.controller.js", {
+  // Today's daily report is in (requirements 16 Oct 2026, 1.1); without it
+  // checkout is held back - see the case just below.
+  const build = (attendance, reportFiled = true) => load("controllers/attendance.controller.js", {
     "../models/Attendance": { ATTENDANCE_STATUS: AttendanceModel.ATTENDANCE_STATUS, ATTENDANCE_SOURCE: AttendanceModel.ATTENDANCE_SOURCE, findOne: () => query(attendance), findOneAndUpdate: () => query(attendance) },
     "../models/AttendancePolicy": { findOne: () => query(policy) },
+    "../models/DailyReport": { exists: async () => (reportFiled ? { _id: "report" } : null) },
   });
+
+  const held = new AttendanceModel({ companyId, userId: employeeId, attendanceDate: todayKey(), checkInAt: recently(2), breakSessions: [] });
+  held.save = async function save() { return this; };
+  const heldRes = response();
+  await build(held, false).checkOut({ user: { _id: employeeId, companyId, role: "EXECUTIVE" }, body: { location: faraway }, headers: {} }, heldRes);
+  assert.equal(heldRes.code, 428, "no daily report, no checkout");
+  assert.equal(heldRes.body.code, "DAILY_REPORT_REQUIRED");
+  assert.equal(held.checkOutAt, null);
 
   const open = new AttendanceModel({ companyId, userId: employeeId, attendanceDate: todayKey(), checkInAt: recently(2), breakSessions: [] });
   open.save = async function save() { return this; };

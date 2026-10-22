@@ -92,6 +92,7 @@ const USER_SELECTABLE_FIELDS = [
   "customRoleId",
   "partnerCode",
   "canViewInventory",
+  "canDownloadClientDocuments",
   "brokerageConfig",
   "isActive",
   "profileImageUrl",
@@ -744,6 +745,9 @@ const toProfileView = (user) => ({
   parentId: user.parentId || null,
   partnerCode: user.partnerCode || null,
   canViewInventory: Boolean(user.canViewInventory),
+  canDownloadClientDocuments: Boolean(user.canDownloadClientDocuments),
+  roleHistory: Array.isArray(user.roleHistory) ? user.roleHistory.slice(-20).reverse() : [],
+  weeklyOffSchedule: Array.isArray(user.weeklyOffSchedule) ? user.weeklyOffSchedule : [],
   brokerageConfig: toBrokerageConfigView(user.brokerageConfig),
   isActive: Boolean(user.isActive),
   department: user.department || "",
@@ -2015,9 +2019,39 @@ exports.updateUserByAdmin = async (req, res) => {
       patch.canViewInventory = false;
     }
 
+    const previousParentId = user.parentId || null;
     Object.entries(patch).forEach(([key, value]) => {
       user[key] = value;
     });
+
+    // Section 10: record the change with its effective date. New access
+    // applies from now on; history keeps the old context.
+    const roleChanged = previousRole !== user.role
+      || String(previousRoleType || "") !== String(user.roleType || "")
+      || String(previousParentId || "") !== String(user.parentId || "");
+    if (roleChanged) {
+      let effectiveFrom = new Date();
+      if (req.body?.effectiveFrom) {
+        const parsed = new Date(req.body.effectiveFrom);
+        if (Number.isNaN(parsed.getTime())) return res.status(400).json({ message: "effectiveFrom must be a date" });
+        if (parsed.getTime() > Date.now() + 60000) {
+          return res.status(400).json({ message: "A change can't take effect in the future yet - save it on the day it starts" });
+        }
+        effectiveFrom = parsed;
+      }
+      user.roleHistory = [...(user.roleHistory || []), {
+        role: user.role,
+        roleType: user.roleType,
+        parentId: user.parentId || null,
+        previousRole,
+        previousRoleType,
+        previousParentId,
+        effectiveFrom,
+        changedBy: req.user._id,
+        changedAt: new Date(),
+        note: String(req.body?.changeNote || "").trim().slice(0, 300),
+      }].slice(-100);
+    }
 
     await user.save();
 
@@ -2044,7 +2078,7 @@ exports.updateUserByAdmin = async (req, res) => {
       await writeAuditLog({
         companyId: req.user.companyId, actor: req.user,
         action: "USER_ROLE_CHANGED", entityType: "User", entityId: user._id,
-        metadata: { previous: { role: previousRole, roleType: previousRoleType }, next: { role: nextRole, roleType: user.roleType } }, req,
+        metadata: { previous: { role: previousRole, roleType: previousRoleType }, next: { role: nextRole, roleType: user.roleType }, effectiveFrom: user.roleHistory?.[user.roleHistory.length - 1]?.effectiveFrom || new Date() }, req,
       });
     }
 

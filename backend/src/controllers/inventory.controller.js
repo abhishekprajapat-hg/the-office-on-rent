@@ -29,6 +29,8 @@ const PARTNER_HIDDEN_FIELDS = [
   "enterpriseDetails",
   "keyManagerName",
   "keyManagerNumber",
+  // Source brokers are internal relationships too (requirements 16 Oct 2026, 6.3).
+  "sourceLinks",
 ];
 const INVENTORY_SELECTABLE_FIELDS = [
   "_id",
@@ -88,6 +90,12 @@ const INVENTORY_SELECTABLE_FIELDS = [
   "dealType",
   "propertyDate",
   "gstApplicable",
+  "sourceType",
+  "sourceLinks",
+  "lastConfirmedAt",
+  "projectId",
+  "originLeadId",
+  "ownerContactId",
   "teamId",
   "createdBy",
   "approvedBy",
@@ -118,6 +126,59 @@ const toLegacyCategory = (category) => {
   const cleanCategory = String(category || "").trim();
   return cleanCategory || "Apartment";
 };
+
+
+// Requirements 16 Oct 2026 (6.3, 7.1): net rates are Admin/Manager only, and a
+// source not confirmed recently is flagged so nobody quotes it unchecked.
+const { STALE_AFTER_DAYS } = require("../constants/relationship.constants");
+const RESTRICTED_ROLES = ["ADMIN", "MANAGER"];
+const refView = (value, fields) => {
+  if (!value) return null;
+  if (typeof value === "object" && value._id) {
+    return fields.reduce((acc, f) => ({ ...acc, [f]: value[f] ?? "" }), { _id: value._id });
+  }
+  return { _id: value };
+};
+const toSourceLinksView = (links, role) => {
+  if (!Array.isArray(links) || role === CHANNEL_PARTNER_ROLE) return [];
+  const showNet = RESTRICTED_ROLES.includes(role);
+  return links.map((link) => {
+    const row = {
+      _id: link._id,
+      contact: refView(link.contactId, ["name", "phone", "kind"]),
+      firm: refView(link.firmId, ["name"]),
+      askingPrice: link.askingPrice ?? null,
+      askingRent: link.askingRent ?? null,
+      marketRateNote: link.marketRateNote || "",
+      availability: link.availability || "UNVERIFIED",
+      confirmedAt: link.confirmedAt || null,
+      notes: link.notes || "",
+      addedAt: link.addedAt || null,
+    };
+    if (showNet) row.netRate = link.netRate ?? null;
+    return row;
+  });
+};
+const latestConfirmation = (inventory) => {
+  const dates = [inventory.lastConfirmedAt, ...(inventory.sourceLinks || []).map((l) => l.confirmedAt)]
+    .filter(Boolean).map((d) => new Date(d).getTime()).filter(Number.isFinite);
+  return dates.length ? new Date(Math.max(...dates)) : null;
+};
+const isInventoryStale = (inventory, now = Date.now()) => {
+  const last = latestConfirmation(inventory);
+  return !last || now - last.getTime() > STALE_AFTER_DAYS * 86400000;
+};
+const toSourceView = (inventory, role) => ({
+  sourceType: inventory.sourceType || "",
+  sourceLinks: toSourceLinksView(inventory.sourceLinks, role),
+  lastConfirmedAt: latestConfirmation(inventory),
+  stale: isInventoryStale(inventory),
+  staleAfterDays: STALE_AFTER_DAYS,
+  projectId: inventory.projectId?._id || inventory.projectId || null,
+  project: refView(inventory.projectId, ["projectName", "projectId"]),
+  originLeadId: inventory.originLeadId || null,
+  ...(role === CHANNEL_PARTNER_ROLE ? {} : { ownerContactId: inventory.ownerContactId?._id || inventory.ownerContactId || null }),
+});
 
 const toLegacyAsset = (inventory, role) => {
   if (!inventory) return null;
@@ -194,6 +255,7 @@ const toLegacyAsset = (inventory, role) => {
     videoTours: Array.isArray(inventory.videoTours) ? inventory.videoTours : [],
     createdAt: inventory.createdAt,
     updatedAt: inventory.updatedAt,
+    ...toSourceView(inventory, role),
   };
 
   if (role !== FE_ROLE) {
@@ -272,6 +334,7 @@ const toFieldExecutiveInventoryView = (inventory) => ({
   videoTours: Array.isArray(inventory.videoTours) ? inventory.videoTours : [],
   createdAt: inventory.createdAt,
   updatedAt: inventory.updatedAt,
+  ...toSourceView(inventory, FE_ROLE),
 });
 
 const toPartnerInventoryView = (inventory) => {
@@ -288,7 +351,10 @@ const toRoleBasedInventory = (inventory, role) => {
   if (role === CHANNEL_PARTNER_ROLE) {
     return toPartnerInventoryView(inventory);
   }
-  return inventory;
+  if (!inventory || RESTRICTED_ROLES.includes(role)) return inventory;
+  const row = typeof inventory.toObject === "function" ? inventory.toObject() : { ...inventory };
+  if (Array.isArray(row.sourceLinks)) row.sourceLinks = row.sourceLinks.map(({ netRate, ...rest }) => rest);
+  return row;
 };
 
 const resolveControllerErrorStatus = (error) => {
@@ -366,6 +432,12 @@ exports.getInventory = async (req, res) => {
         parkingAvailable: req.query?.parkingAvailable,
         pantry: req.query?.pantry,
         amenities: req.query?.amenities,
+        sourceType: req.query?.sourceType,
+        sourceContactId: req.query?.sourceContactId,
+        sourceFirmId: req.query?.sourceFirmId,
+        ownerContactId: req.query?.ownerContactId,
+        projectId: req.query?.projectId,
+        stale: req.query?.stale,
       },
       pagination,
       selectFields,
@@ -573,3 +645,4 @@ exports.getInventoryAssets = exports.getInventory;
 exports.createInventoryAsset = exports.createInventory;
 exports.updateInventoryAsset = exports.updateInventory;
 exports.deleteInventoryAsset = exports.deleteInventory;
+module.exports._test = { toSourceLinksView, isInventoryStale, toRoleBasedInventory, toLegacyAsset };

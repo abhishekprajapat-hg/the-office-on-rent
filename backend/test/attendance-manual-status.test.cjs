@@ -31,7 +31,7 @@ const checkedInDay = () => ({
 });
 
 test("leave and week off are among the statuses an admin or manager may set", () => {
-  assert.deepEqual([...MANUAL_ATTENDANCE_STATUSES].sort(), ["ABSENT", "HALF_DAY", "LEAVE", "PRESENT", "WEEK_OFF"]);
+  assert.deepEqual([...MANUAL_ATTENDANCE_STATUSES].sort(), ["ABSENT", "HALF_DAY", "HOLIDAY", "LEAVE", "PRESENT", "WEEK_OFF"]);
 });
 
 test("marking leave clears the day's check-in, breaks and hours", () => {
@@ -129,6 +129,44 @@ test("a week off costs nothing from the salary", () => {
     monthlySalary: 31000,
     policy: {},
     days: [{ attendanceDate: "2026-10-06", status: "WEEK_OFF", checkInAt: null }],
+  });
+  assert.equal(result.totalDeduction, 0);
+  assert.equal(result.netSalary, 31000);
+});
+
+/* Holiday (21 Oct 2026): a holiday marked for one person on one day. */
+
+test("marking a holiday clears the day's check-in and notes why", () => {
+  const day = applyManualAttendanceStatus(checkedInDay(), { status: "HOLIDAY", policy, actorId, now });
+  assert.equal(day.status, "HOLIDAY");
+  assert.equal(day.checkInAt, null);
+  assert.equal(day.workedMinutes, 0);
+  assert.equal(day.checkInNote, "Marked holiday manually");
+});
+
+test("a holiday is not a working day: never absent, never in the attendance percentage", () => {
+  const attendanceMap = new Map([
+    ["2026-10-06", { attendanceDate: "2026-10-06", status: "HOLIDAY", source: "MANUAL", checkInAt: null }],
+  ]);
+  const { attendance, summary } = buildAttendanceSummary({
+    attendanceMap,
+    range: { from: "2026-10-01", to: "2026-10-31" },
+    policy: { timezone: "Asia/Kolkata", weeklyOffDays: [0] },
+    now: new Date("2026-10-08T06:30:00.000Z"),
+  });
+  assert.equal(summary.holidayDays, 1);
+  assert.equal(summary.workingDays, 5);
+  assert.equal(summary.absentDays, 5);
+  assert.equal(attendance.find((row) => row.attendanceDate === "2026-10-06").status, "HOLIDAY");
+});
+
+test("a holiday is paid: nothing comes off the salary", () => {
+  const result = calculateMonthlySalary({
+    monthKey: "2026-10",
+    todayKey: "2026-10-08",
+    monthlySalary: 31000,
+    policy: {},
+    days: [{ attendanceDate: "2026-10-06", status: "HOLIDAY", checkInAt: null }],
   });
   assert.equal(result.totalDeduction, 0);
   assert.equal(result.netSalary, 31000);

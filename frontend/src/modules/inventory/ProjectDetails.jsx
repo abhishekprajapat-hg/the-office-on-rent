@@ -7,11 +7,12 @@ import { toErrorMessage } from "../../utils/errorMessage";
 import { usePermissions } from "../../context/usePermissions";
 import ToastNotice from "../../components/ui/ToastNotice";
 import FittedImage from "../../components/ui/FittedImage";
+import ProjectKnowledgePanel from "./ProjectKnowledgePanel";
 import {
   PROJECT_CATEGORY_OPTIONS,
   PROJECT_TYPE_OPTIONS,
   PLOT_BASED_PROJECT_TYPES,
-  PROJECT_PLOT_SIZE_OPTIONS,
+  formatPlotSizeRange,
   PROJECT_BHK_OPTIONS,
   PROJECT_STATUS_OPTIONS,
   PROJECT_AMENITY_OPTIONS,
@@ -247,8 +248,8 @@ const ProjectDetailsPage = () => {
               <InfoRow label="Total Plots" value={project.totalPlots} />
               <InfoRow label="Plots Available" value={project.plotsAvailable ?? 0} />
               <InfoRow
-                label="Plot Size"
-                value={project.plotSize === "CUSTOM" ? project.customPlotSize : getProjectOptionLabel(PROJECT_PLOT_SIZE_OPTIONS, project.plotSize)}
+                label="Plot Size Range"
+                value={formatPlotSizeRange(project) || "-"}
               />
             </>
           )}
@@ -256,9 +257,20 @@ const ProjectDetailsPage = () => {
 
         <SectionCard title="Pricing">
           <InfoRow label="PLC" value={project.plc} />
+          <InfoRow label="Wide Road PLC" value={project.plcWideRoad} />
+          <InfoRow label="Garden Facing PLC" value={project.plcGardenFacing} />
+          <InfoRow label="Corner Plot PLC" value={project.plcCorner} />
+          <InfoRow label="Garden Facing + Corner PLC" value={project.plcGardenCorner} />
           <InfoRow label="Group" value={project.group} />
           <InfoRow label="Starting Rate" value={formatCurrency(project.startingRate)} />
           <InfoRow label="Current Rate" value={formatCurrency(project.currentRate)} />
+          <InfoRow label="Development Charges" value={project.developmentCharges} />
+          <InfoRow label="Maintenance Charges" value={project.maintenanceCharges} />
+          <InfoRow label="Amenity Charges" value={project.amenityCharges} />
+          <InfoRow label="Utilities (Water / Electricity Connection)" value={project.utilityCharges} />
+          <InfoRow label="Parking Charges" value={project.parkingCharges} />
+          <InfoRow label="Taxes (GST etc.)" value={project.taxes} />
+          <InfoRow label="Registration / Stamp Duty" value={project.registrationStampDuty} />
           <InfoRow label="Other Charges" value={project.otherCharges} />
         </SectionCard>
 
@@ -298,15 +310,18 @@ const ProjectDetailsPage = () => {
         </SectionCard>
       </div>
 
-      {project.amenities?.length > 0 && (
-        <SectionCard title="Amenities">
+      {(project.amenities?.length > 0 || project.otherFacilities) && (
+        <SectionCard title="Amenities & Infrastructure">
           <div className="flex flex-wrap gap-1.5">
-            {project.amenities.map((amenity) => (
+            {(project.amenities || []).map((amenity) => (
               <span key={amenity} className="rounded-full bg-slate-100 px-2.5 py-1 text-[10px] font-bold text-slate-600">
                 {getProjectOptionLabel(amenityOptions, amenity)}
               </span>
             ))}
           </div>
+          {project.otherFacilities ? (
+            <p className="mt-2 text-xs text-slate-600"><span className="font-semibold">Other facilities:</span> {project.otherFacilities}</p>
+          ) : null}
         </SectionCard>
       )}
 
@@ -391,6 +406,8 @@ const ProjectDetailsPage = () => {
           </div>
         </SectionCard>
       )}
+
+      <ProjectKnowledgePanel projectId={id} category={project.projectCategory} canManage={canManage} isManagement={PROJECT_MANAGE_ROLES.has(role)} />
 
       {confirmingDelete && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-3">

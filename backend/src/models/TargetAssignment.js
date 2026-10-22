@@ -54,11 +54,27 @@ const targetAssignmentSchema = new mongoose.Schema(
       min: 0,
       default: 0,
     },
+    // Requirements 16 Oct 2026, 3.1: role-specific targets - deals closed for
+    // sales, published posts for production (from their daily reports).
+    dealsTarget: { type: Number, min: 0, default: 0 },
+    productionTarget: { type: Number, min: 0, default: 0 },
     notes: {
       type: String,
       trim: true,
       maxlength: 500,
       default: "",
+    },
+    // Who changed the target, when, and what it was before (3.1).
+    history: {
+      type: [{
+        at: { type: Date, default: Date.now },
+        by: { type: mongoose.Schema.Types.ObjectId, ref: "User" },
+        byName: { type: String, default: "" },
+        previous: { type: mongoose.Schema.Types.Mixed, default: null },
+        next: { type: mongoose.Schema.Types.Mixed, default: null },
+        _id: false,
+      }],
+      default: [],
     },
   },
   { timestamps: true },

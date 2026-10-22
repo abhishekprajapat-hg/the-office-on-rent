@@ -105,6 +105,17 @@ export const ProjectDetailScreen = () => {
         <FactRow label="Current rate" value={rate(project.currentRate)} />
         {/* Free text on the server ("₹200/sq ft", "As applicable"); a bare number reads as a price. */}
         {project.plc ? <FactRow label="PLC" value={typeof project.plc === "number" || /^\d+(\.\d+)?$/.test(project.plc) ? rate(Number(project.plc)) : project.plc} /> : null}
+        {project.plcWideRoad ? <FactRow label="Wide Road PLC" value={project.plcWideRoad} /> : null}
+        {project.plcGardenFacing ? <FactRow label="Garden Facing PLC" value={project.plcGardenFacing} /> : null}
+        {project.plcCorner ? <FactRow label="Corner Plot PLC" value={project.plcCorner} /> : null}
+        {project.plcGardenCorner ? <FactRow label="Garden Facing + Corner PLC" value={project.plcGardenCorner} /> : null}
+        {project.developmentCharges ? <FactRow label="Development charges" value={project.developmentCharges} /> : null}
+        {project.maintenanceCharges ? <FactRow label="Maintenance charges" value={project.maintenanceCharges} /> : null}
+        {project.amenityCharges ? <FactRow label="Amenity charges" value={project.amenityCharges} /> : null}
+        {project.utilityCharges ? <FactRow label="Utilities (water / electricity connection)" value={project.utilityCharges} /> : null}
+        {project.parkingCharges ? <FactRow label="Parking charges" value={project.parkingCharges} /> : null}
+        {project.taxes ? <FactRow label="Taxes (GST etc.)" value={project.taxes} /> : null}
+        {project.registrationStampDuty ? <FactRow label="Registration / stamp duty" value={project.registrationStampDuty} /> : null}
         {project.otherCharges ? (
           <FactRow label="Other charges" value={typeof project.otherCharges === "number" || /^\d+(\.\d+)?$/.test(project.otherCharges) ? rate(Number(project.otherCharges)) : project.otherCharges} />
         ) : null}
@@ -116,7 +127,14 @@ export const ProjectDetailScreen = () => {
         {project.totalFloors || project.numberOfFloors ? <FactRow label="Floors" value={String(project.totalFloors || project.numberOfFloors)} /> : null}
         {project.numberOfFlats ? <FactRow label="Flats" value={String(project.numberOfFlats)} /> : null}
         {project.totalPlots ? <FactRow label="Plots" value={`${project.totalPlots} · ${project.plotsAvailable ?? "—"} available`} /> : null}
-        {project.plotSize ? <FactRow label="Plot size" value={project.plotSize === "CUSTOM" ? `${project.customPlotSize || "—"} sq ft` : `${project.plotSize} sq ft`} /> : null}
+        {project.plotSizeMin != null || project.plotSizeMax != null ? (
+          <FactRow
+            label="Plot size range"
+            value={project.plotSizeMin != null && project.plotSizeMax != null
+              ? (project.plotSizeMin === project.plotSizeMax ? `${project.plotSizeMin} sq ft` : `${project.plotSizeMin} – ${project.plotSizeMax} sq ft`)
+              : project.plotSizeMin != null ? `From ${project.plotSizeMin} sq ft` : `Up to ${project.plotSizeMax} sq ft`}
+          />
+        ) : project.plotSize ? <FactRow label="Plot size" value={project.plotSize === "CUSTOM" ? `${project.customPlotSize || "—"} sq ft` : `${project.plotSize} sq ft`} /> : null}
         {project.totalOffices ? <FactRow label="Offices" value={String(project.totalOffices)} /> : null}
         {project.totalShops ? <FactRow label="Shops" value={String(project.totalShops)} /> : null}
         {project.totalShowrooms ? <FactRow label="Showrooms" value={String(project.totalShowrooms)} /> : null}
@@ -170,14 +188,15 @@ export const ProjectDetailScreen = () => {
         </View>
       ))}
 
-      {project.amenities?.length ? (
+      {project.amenities?.length || project.otherFacilities ? (
         <>
-          <GroupLabel>Amenities</GroupLabel>
+          <GroupLabel>Amenities & infrastructure</GroupLabel>
           <View style={styles.badges}>
-            {project.amenities.map((item) => (
+            {(project.amenities || []).map((item) => (
               <Badge key={item} label={humanize(item)} />
             ))}
           </View>
+          {project.otherFacilities ? <Body>Other facilities: {project.otherFacilities}</Body> : null}
         </>
       ) : null}
 

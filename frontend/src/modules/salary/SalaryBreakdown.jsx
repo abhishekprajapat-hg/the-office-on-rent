@@ -7,6 +7,7 @@ const LINE_TONES = {
   halfDay: "bg-blue-500",
   unpaidLeave: "bg-violet-500",
   paidLeave: "bg-teal-500",
+  leaveBeyondEntitlement: "bg-fuchsia-600",
   late: "bg-amber-500",
   beforeJoining: "bg-slate-400",
 };
@@ -45,6 +46,16 @@ export default function SalaryBreakdown({ salary }) {
         </span>
         <span>Counted: <span className="font-semibold text-slate-700">{describeCoverage(salary)}</span></span>
       </p>
+
+      {salary.paidLeave ? (
+        <p className="rounded-lg bg-teal-50 px-3 py-2 text-[12.5px] text-teal-900">
+          Paid leave this month: <strong>{salary.paidLeave.used}</strong> of {salary.paidLeave.entitlement} used
+          {" · "}{salary.paidLeave.remaining} left
+          {salary.paidLeave.beyondEntitlement ? ` · ${salary.paidLeave.beyondEntitlement} day(s) beyond it charged as unpaid` : ""}
+          {salary.workedOnOffDays?.length ? ` · worked on ${salary.workedOnOffDays.length} day(s) off (recorded, not charged)` : ""}
+          {salary.holidays?.length ? ` · ${salary.holidays.length} holiday(s)` : ""}
+        </p>
+      ) : null}
 
       <div className="overflow-x-auto rounded-lg border border-slate-200">
         <table className="min-w-full border-separate border-spacing-0 text-[13px]">

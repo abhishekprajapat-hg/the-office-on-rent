@@ -4,6 +4,7 @@ import {
   Clock3, Loader2, Mail, MapPin, MessageCircle, NotebookPen, PanelRightOpen,
   Phone, Plus, RefreshCw, Save, Trash2, Users, X,
 } from "lucide-react";
+import { Link } from "react-router-dom";
 import api from "../../services/api";
 import { addLeadDiaryEntry, completeLeadFollowUp, getAllLeads, getLeadDiary } from "../../services/leadService";
 import { getTasks, updateTask, updateTaskSubtask } from "../../services/taskService";
@@ -89,6 +90,7 @@ const MasterSchedule = () => {
   });
   const [selectedDate, setSelectedDate] = useState(() => new Date());
   const [form, setForm] = useState({ leadId: "", nextFollowUp: "" });
+  const [contactFollowUps, setContactFollowUps] = useState([]);
   const isDark = (localStorage.getItem("theme") || "light") === "dark";
 
   const loadScheduleData = useCallback(async () => {
@@ -97,6 +99,13 @@ const MasterSchedule = () => {
       setError("");
       setLoadError("");
       const [leadResult, taskResult] = await Promise.allSettled([getAllLeads(), getTasks()]);
+      // Broker / owner follow-ups (requirements 16 Oct 2026, section 11) - quietly
+      // absent for roles without the contact directories.
+      const from = new Date(Date.now() - 62 * 86400000).toISOString();
+      const to = new Date(Date.now() + 120 * 86400000).toISOString();
+      api.get("/contacts/follow-ups", { params: { from, to } })
+        .then(({ data }) => setContactFollowUps(Array.isArray(data?.followUps) ? data.followUps : []))
+        .catch(() => setContactFollowUps([]));
       if (leadResult.status === "rejected" && taskResult.status === "rejected") {
         throw leadResult.reason || taskResult.reason;
       }
@@ -152,6 +161,14 @@ const MasterSchedule = () => {
     });
     return map;
   }, [followUps]);
+  const contactsByDate = useMemo(() => {
+    const map = new Map();
+    contactFollowUps.forEach((c) => {
+      const key = toCalendarDateKey(c.nextFollowUpAt);
+      if (key) map.set(key, [...(map.get(key) || []), c]);
+    });
+    return map;
+  }, [contactFollowUps]);
   const tasksByDate = useMemo(() => {
     const map = new Map();
     deadlineTasks.forEach((task) => {
@@ -360,7 +377,7 @@ const MasterSchedule = () => {
               const taskCount = tasksByDate.get(key)?.length || 0;
               const selected = key === selectedKey;
               const inMonth = date.getMonth() === monthCursor.getMonth();
-              return <button type="button" key={key} onClick={() => selectDate(date)} aria-pressed={selected} aria-label={`${date.toLocaleDateString("en-IN", { weekday: "long", day: "numeric", month: "long", year: "numeric" })}: ${leadCount} follow-ups and ${taskCount} tasks`} className={`calendar-day p-2 text-left ${selected ? "is-selected" : ""} ${inMonth ? "" : "is-muted"}`}><div className="relative flex h-full w-full items-start justify-between gap-1"><span className={`calendar-date-number flex h-7 w-7 items-center justify-center rounded-full text-xs font-bold ${key === todayKey ? "is-today" : ""}`}>{date.getDate()}</span><div className="calendar-day-counts flex shrink-0 flex-col items-end gap-1">{leadCount > 0 ? <span className="calendar-count-pill is-follow-up">{leadCount} L</span> : null}{taskCount > 0 ? <span className="calendar-count-pill is-task">{taskCount} T</span> : null}</div>{leadCount > 0 || taskCount > 0 ? <span className="calendar-day-caption">{leadCount} lead{leadCount === 1 ? "" : "s"} · {taskCount} task{taskCount === 1 ? "" : "s"}</span> : null}</div></button>;
+              return <button type="button" key={key} onClick={() => selectDate(date)} aria-pressed={selected} aria-label={`${date.toLocaleDateString("en-IN", { weekday: "long", day: "numeric", month: "long", year: "numeric" })}: ${leadCount} follow-ups and ${taskCount} tasks`} className={`calendar-day p-2 text-left ${selected ? "is-selected" : ""} ${inMonth ? "" : "is-muted"}`}><div className="relative flex h-full w-full items-start justify-between gap-1"><span className={`calendar-date-number flex h-7 w-7 items-center justify-center rounded-full text-xs font-bold ${key === todayKey ? "is-today" : ""}`}>{date.getDate()}</span><div className="calendar-day-counts flex shrink-0 flex-col items-end gap-1">{leadCount > 0 ? <span className="calendar-count-pill is-follow-up">{leadCount} L</span> : null}{taskCount > 0 ? <span className="calendar-count-pill is-task">{taskCount} T</span> : null}{contactsByDate.get(key)?.length ? <span className="calendar-count-pill" style={{ background: "#ede9fe", color: "#5b21b6" }}>{contactsByDate.get(key).length} B</span> : null}</div>{leadCount > 0 || taskCount > 0 ? <span className="calendar-day-caption">{leadCount} lead{leadCount === 1 ? "" : "s"} · {taskCount} task{taskCount === 1 ? "" : "s"}</span> : null}</div></button>;
             })}
           </div>
         </section>
@@ -380,6 +397,17 @@ const MasterSchedule = () => {
                   </article>;
                 })}
               </section>
+              {(contactsByDate.get(selectedKey) || []).length ? (
+                <section className="calendar-agenda-section" aria-labelledby="calendar-contacts-title">
+                  <div className="calendar-section-title"><h3 id="calendar-contacts-title">Broker &amp; owner follow-ups</h3><span>{contactsByDate.get(selectedKey).length}</span></div>
+                  {contactsByDate.get(selectedKey).map((c) => (
+                    <Link key={c._id} to={`/inventory/${c.kind === "BROKER" ? "brokers" : "owners"}/${c._id}`} className="block rounded-lg border border-violet-200 bg-violet-50/60 px-3 py-2 text-[12.5px]">
+                      <strong>{c.name}</strong> <span className="text-slate-500">· {c.kind === "BROKER" ? "Broker" : "Owner"} · {c.phone}{c.company ? ` · ${c.company}` : ""}</span>
+                      <span className="block text-[11.5px] text-slate-500">{new Date(c.nextFollowUpAt).toLocaleTimeString("en-IN", { hour: "2-digit", minute: "2-digit" })}</span>
+                    </Link>
+                  ))}
+                </section>
+              ) : null}
               <section className="calendar-agenda-section" aria-labelledby="calendar-tasks-title">
                 <div className="calendar-section-title"><h3 id="calendar-tasks-title">Task deadlines</h3><span>{selectedDayTasks.length}</span></div>
                 {selectedDayTasks.length === 0 ? <div className="calendar-empty-state"><CheckSquare2 size={18} /><span>No task deadlines for this day.</span></div> : selectedDayTasks.map((task) => {

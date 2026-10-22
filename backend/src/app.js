@@ -129,7 +129,15 @@ app.use(
     // and never hand the browser something it will render as a document.
     setHeaders: (res, filePath) => {
       res.setHeader("X-Content-Type-Options", "nosniff");
-      res.setHeader("Cache-Control", "private, max-age=2592000, immutable");
+      const relativeUpload = require("path").relative(uploadsRootDir, filePath).replace(/\\/g, "/");
+      // Client documents can have their access withdrawn, so the browser must
+      // ask the server every time instead of reopening a saved copy.
+      res.setHeader(
+        "Cache-Control",
+        require("./services/documentAccess.service").isProtectedClientDocument(relativeUpload)
+          ? "private, no-store"
+          : "private, max-age=2592000, immutable",
+      );
       if (/\.(html?|svg|xhtml|xml)$/i.test(filePath)) {
         res.setHeader("Content-Type", "application/octet-stream");
         res.setHeader("Content-Disposition", "attachment");
@@ -163,6 +171,7 @@ app.use("/api/tasks", require("./routes/task.routes"));
 app.use("/api/coworking", require("./routes/coworkingAccess.routes"));
 app.use("/api/finance", require("./routes/finance.routes"));
 app.use("/api/reports", require("./routes/report.routes"));
+app.use("/api/daily-reports", require("./routes/dailyReport.routes"));
 app.use("/api/portal/auth", require("./routes/clientPortalAuth.routes"));
 app.use("/api/portal", require("./routes/clientPortalData.routes"));
 

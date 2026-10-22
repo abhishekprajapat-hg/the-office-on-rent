@@ -8,6 +8,7 @@ const EMPTY_ACCESS = {
   pages: [],
   dataScope: "ASSIGNED",
   enforcePageAccess: false,
+  canDownloadClientDocuments: false,
 };
 
 export const PermissionProvider = ({ children, enabled = true, userRole }) => {
@@ -32,6 +33,7 @@ export const PermissionProvider = ({ children, enabled = true, userRole }) => {
         pages: data.pages,
         dataScope: data.dataScope,
         enforcePageAccess: data.enforcePageAccess,
+        canDownloadClientDocuments: data.canDownloadClientDocuments,
       });
     } catch {
       // A missing access profile must not expose pages while the server is unavailable.
@@ -100,6 +102,7 @@ export const PermissionProvider = ({ children, enabled = true, userRole }) => {
       pages: access.pages,
       dataScope: access.dataScope,
       enforcePageAccess: access.enforcePageAccess,
+      canDownloadClientDocuments: isAdmin || Boolean(access.canDownloadClientDocuments),
       loading,
       error,
       can,

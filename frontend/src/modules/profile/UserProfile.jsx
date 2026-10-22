@@ -120,6 +120,7 @@ const formatAttendanceStatus = (status) => {
   if (normalized === "WORKING") return "Working";
   if (normalized === "BREAK") return "Break";
   if (normalized === "WEEK_OFF") return "Week Off";
+  if (normalized === "HOLIDAY") return "Holiday";
   if (!normalized) return "";
   return normalized.replaceAll("_", " ");
 };
@@ -804,7 +805,7 @@ const UserProfile = () => {
                   <div className="profile-leave-card">
                     <div className="profile-leave-balance"><span>Leave balance</span><strong>{leaveBalanceLoading ? "..." : Number(leaveBalance?.available || 0)}</strong><small>days available</small></div>
                     <div className="profile-leave-breakdown"><span>Accrued <b>{Number(leaveBalance?.accrued || 0)}</b></span><span>Used <b>{Number(leaveBalance?.used || 0)}</b></span><span>Pending <b>{Number(leaveBalance?.pending || 0)}</b></span></div>
-                    <p><CheckCircle2 size={13} /> {Number(leaveBalance?.monthlyAccrual || 1)} leave is added monthly; unused leave carries forward.</p>
+                    <p><CheckCircle2 size={13} /> {Number(leaveBalance?.monthlyAccrual || 1)} leave is added monthly; unused leave carries forward. Every {Number(leaveBalance?.halfDaysPerLeave || 2)} half days use 1 leave{Number(leaveBalance?.halfDays || 0) > 0 ? ` (${Number(leaveBalance.halfDays)} half day${Number(leaveBalance.halfDays) === 1 ? "" : "s"} so far, ${Number(leaveBalance?.halfDayLeaveUsed || 0)} leave used)` : ""}.</p>
                   </div>
                 ) : null}
                 <button type="button" className="profile-open-attendance" onClick={() => navigate("/attendance")}><CalendarDays size={14} /> Open full attendance <ArrowRight size={14} /></button>

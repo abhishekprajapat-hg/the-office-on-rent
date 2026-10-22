@@ -171,6 +171,17 @@ const CRM_PAGES = Object.freeze([
     alwaysAccessible: true,
   },
   {
+    // Everyone files a daily report before checkout (requirements 16 Oct 2026),
+    // so this is always available. Whose reports someone may read is decided
+    // by role in the daily report controller.
+    key: "daily_reports",
+    label: "Daily Reports",
+    group: "Workspace",
+    path: "/daily-reports",
+    actions: [PAGE_ACTIONS.VIEW],
+    alwaysAccessible: true,
+  },
+  {
     key: "chat",
     label: "Team Chat",
     group: "Workspace",

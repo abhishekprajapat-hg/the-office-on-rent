@@ -2,6 +2,7 @@ import React, { useEffect, useMemo, useState } from "react";
 import { Loader2 } from "lucide-react";
 import ToastNotice from "../../components/ui/ToastNotice";
 import { getMyTargets } from "../../services/targetService";
+import TargetAssignPanel from "./TargetAssignPanel";
 import { toErrorMessage } from "../../utils/errorMessage";
 
 const MANAGEMENT_ROLES = new Set(["ADMIN", "MANAGER"]);
@@ -107,7 +108,9 @@ const Performance = () => {
   const [month, setMonth] = useState(toMonthKey());
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
+  const [reloadKey, setReloadKey] = useState(0);
   const [targetState, setTargetState] = useState({
+    assignableReports: [],
     canAssign: false,
     myTarget: null,
     incoming: [],
@@ -137,6 +140,7 @@ const Performance = () => {
         if (!alive) return;
         setTargetState({
           canAssign: Boolean(current.canAssign),
+          assignableReports: current.assignableReports || [],
           myTarget: current.myTarget || null,
           incoming: current.incoming || [],
           outgoing: current.outgoing || [],
@@ -157,7 +161,7 @@ const Performance = () => {
     return () => {
       alive = false;
     };
-  }, [month]);
+  }, [month, reloadKey]);
 
   const canSeeTeam = MANAGEMENT_ROLES.has(viewerRole) && targetState.outgoing.length > 0;
   const currentTarget = useMemo(() => {
@@ -327,6 +331,10 @@ const Performance = () => {
           </div>
         </div>
       </div>
+
+      {targetState.canAssign ? (
+        <TargetAssignPanel month={month} people={targetState.assignableReports} outgoing={targetState.outgoing} onSaved={() => setReloadKey((k) => k + 1)} />
+      ) : null}
 
       {!targetState.myTarget && viewMode === "ME" ? (
         <div className="targets-empty">No target is assigned to you for {month} yet.</div>

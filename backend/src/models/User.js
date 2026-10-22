@@ -104,6 +104,47 @@ const userSchema = new mongoose.Schema(
       default: false,
     },
 
+    // The "authorised main manager" of requirements 16 Oct 2026 (section 09):
+    // besides Admins, only accounts with this flag may download coworking
+    // client and cabin documents. Only an Admin can set it.
+    canDownloadClientDocuments: {
+      type: Boolean,
+      default: false,
+    },
+
+    // Own weekly offs (requirements 16 Oct 2026, 4.3), e.g. Production off on
+    // Monday. Empty = the company's weekly off. Each entry applies from its
+    // date onward, so earlier months keep the schedule they had.
+    weeklyOffSchedule: {
+      type: [{
+        days: { type: [Number], default: [] },
+        effectiveFrom: { type: String, match: /^\d{4}-\d{2}-\d{2}$/ },
+        setBy: { type: mongoose.Schema.Types.ObjectId, ref: "User", default: null },
+        _id: false,
+      }],
+      default: [],
+    },
+
+    // Every role / segment / manager change with the date it takes effect
+    // (requirements 16 Oct 2026, section 10). Past records keep the context
+    // they were made in; this says what applied when.
+    roleHistory: {
+      type: [{
+        role: String,
+        roleType: String,
+        parentId: { type: mongoose.Schema.Types.ObjectId, ref: "User", default: null },
+        previousRole: String,
+        previousRoleType: String,
+        previousParentId: { type: mongoose.Schema.Types.ObjectId, ref: "User", default: null },
+        effectiveFrom: { type: Date, default: Date.now },
+        changedBy: { type: mongoose.Schema.Types.ObjectId, ref: "User", default: null },
+        changedAt: { type: Date, default: Date.now },
+        note: { type: String, trim: true, maxlength: 300, default: "" },
+        _id: false,
+      }],
+      default: [],
+    },
+
     brokerageConfig: {
       type: brokerageConfigSchema,
       default: () => ({

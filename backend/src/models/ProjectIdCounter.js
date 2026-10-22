@@ -11,7 +11,7 @@ const projectIdCounterSchema = new mongoose.Schema(
     category: {
       type: String,
       required: true,
-      enum: ["COMMERCIAL", "RESIDENTIAL"],
+      enum: ["COMMERCIAL", "RESIDENTIAL", "COWORKING"],
     },
     seq: {
       type: Number,

@@ -29,3 +29,7 @@ backend/uploads/*
 *.njsproj
 *.sln
 *.sw?
+_to_delete/
+
+# Local before/after copies kept while reworking screens - not source.
+frontend/.glass-backup/

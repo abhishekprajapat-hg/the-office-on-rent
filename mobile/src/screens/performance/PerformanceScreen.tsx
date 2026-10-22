@@ -12,12 +12,19 @@ import { useTheme } from "../../theme/ThemeProvider";
 import type { Tone } from "../../theme/tokens";
 import { Avatar, Badge, Body, Card, EmptyState, ErrorState, FactRow, GroupLabel, Icon, ListCard, Loading, ProgressBar, Ring, Segmented, Text } from "../../ui";
 
-const GRADE_TONE: Record<string, Tone> = { EXCELLENT: "success", GOOD: "primary", AVERAGE: "warning", NEEDS_IMPROVEMENT: "danger" };
+// Grade bands (21 Oct 2026) - keep in step with backend services/performance.calc.js.
+const GRADE_TONE: Record<string, Tone> = {
+  EXCELLENT: "success", GREAT: "success", GOOD: "primary", AVERAGE: "warning", BELOW_AVERAGE: "warning", NEEDS_IMPROVEMENT: "danger",
+};
 const NEXT_GRADE: { min: number; label: string }[] = [
-  { min: 50, label: "Average" },
-  { min: 70, label: "Good" },
-  { min: 85, label: "Excellent" },
+  { min: 75, label: "Below average" },
+  { min: 80, label: "Average" },
+  { min: 85, label: "Good" },
+  { min: 90, label: "Great" },
+  { min: 95, label: "Excellent" },
 ];
+// The overall score has two decimals; differences are shown the same way.
+const points = (value: number) => Math.round(value * 100) / 100;
 const PARTS: { key: "attendance" | "tasks" | "sales"; label: string; tone: Tone }[] = [
   { key: "attendance", label: "Attendance", tone: "success" },
   { key: "tasks", label: "Tasks on time", tone: "primary" },
@@ -121,7 +128,7 @@ const Mine = ({ userId }: { userId?: string }) => {
   const score = perf.score ?? 0;
   const prev = data?.[3]?.performance?.score;
   const next = NEXT_GRADE.find((grade) => score < grade.min);
-  const delta = prev === null || prev === undefined ? null : score - prev;
+  const delta = prev === null || prev === undefined ? null : points(score - prev);
 
   return (
     <>
@@ -139,7 +146,7 @@ const Mine = ({ userId }: { userId?: string }) => {
           <Text variant="heading">{monthLabel(current).split(" ")[0]} so far</Text>
           <Text variant="small" color="muted" style={styles.heroSub}>
             {delta === null ? "First month on record." : delta === 0 ? `Same as ${monthLabel(months[3]!, true)}.` : `${delta > 0 ? "Up" : "Down"} ${Math.abs(delta)} point${Math.abs(delta) === 1 ? "" : "s"} from ${monthLabel(months[3]!).split(" ")[0]}.`}
-            {next ? ` ${next.min - score} more for ${next.label}.` : ""}
+            {next ? ` ${points(next.min - score)} more for ${next.label}.` : ""}
           </Text>
         </View>
       </Card>

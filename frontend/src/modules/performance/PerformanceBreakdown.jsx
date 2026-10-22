@@ -1,15 +1,16 @@
 import React from "react";
-import { CheckSquare, Target, UserCheck } from "lucide-react";
+import { CheckSquare, Clock, Target, UserCheck } from "lucide-react";
 import { IconBox } from "../salary/salaryUi";
 import { describePart, gradeStyle, PART_LABELS } from "./performanceFormat";
 
-const PART_ICONS = { attendance: UserCheck, tasks: CheckSquare, sales: Target };
-const PART_TONES = { attendance: "green", tasks: "violet", sales: "blue" };
+const PART_ICONS = { target: Target, tasks: CheckSquare, attendance: UserCheck, punctuality: Clock };
+const PART_TONES = { target: "blue", tasks: "violet", attendance: "green", punctuality: "amber" };
 
 const NOT_APPLICABLE = {
-  attendance: "No working day has passed yet this month.",
+  target: "No target was set for this month, so the other parts carry its weight.",
   tasks: "No task was due this month, so tasks do not count.",
-  sales: "No leads or targets this month, so sales do not count.",
+  attendance: "No working day has passed yet this month.",
+  punctuality: "No check-ins yet this month.",
 };
 
 export const ScoreBar = ({ score, grade }) => (
@@ -46,12 +47,12 @@ export default function PerformanceBreakdown({ performance }) {
           <GradeChip grade={grade} />
           <ScoreBar score={score} grade={grade} />
           {score === null ? (
-            <p className="text-[12px] text-slate-500">Nothing to score yet this month - no working days, tasks or leads.</p>
+            <p className="text-[12px] text-slate-500">Nothing to score yet this month - no working days, tasks or targets.</p>
           ) : null}
         </div>
       </div>
 
-      <div className="grid gap-3 lg:grid-cols-3">
+      <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
         {Object.keys(PART_LABELS).map((key) => {
           const part = parts?.[key];
           return (
@@ -61,7 +62,7 @@ export default function PerformanceBreakdown({ performance }) {
                 <div className="min-w-0 flex-1">
                   <p className="text-[13px] font-semibold text-slate-900">{PART_LABELS[key]}</p>
                   <p className="text-[11.5px] text-slate-500">
-                    {part ? `${part.effectiveWeight}% of the overall score` : "Not counted this month"}
+                    {part ? `Weight ${part.weight}%${part.effectiveWeight !== part.weight ? ` (carrying ${part.effectiveWeight}% this month)` : ""}` : "Not counted this month"}
                   </p>
                 </div>
                 <span className={`font-mono text-[20px] font-bold tabular-nums ${part ? gradeStyle(part.grade).ink : "text-slate-300"}`}>

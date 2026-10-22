@@ -5,8 +5,10 @@
 
 export const GRADE_STYLES = {
   EXCELLENT: { chip: "border-emerald-200 bg-emerald-50 text-emerald-700", bar: "bg-emerald-500", ink: "text-emerald-700" },
+  GREAT: { chip: "border-teal-200 bg-teal-50 text-teal-700", bar: "bg-teal-500", ink: "text-teal-700" },
   GOOD: { chip: "border-blue-200 bg-blue-50 text-blue-700", bar: "bg-blue-500", ink: "text-blue-700" },
   AVERAGE: { chip: "border-amber-200 bg-amber-50 text-amber-700", bar: "bg-amber-500", ink: "text-amber-700" },
+  BELOW_AVERAGE: { chip: "border-orange-200 bg-orange-50 text-orange-700", bar: "bg-orange-500", ink: "text-orange-700" },
   NEEDS_IMPROVEMENT: { chip: "border-rose-200 bg-rose-50 text-rose-700", bar: "bg-rose-500", ink: "text-rose-700" },
 };
 
@@ -14,10 +16,12 @@ const NO_SCORE = { chip: "border-slate-200 bg-slate-50 text-slate-500", bar: "bg
 
 export const gradeStyle = (grade) => GRADE_STYLES[grade?.key] || NO_SCORE;
 
+// Requirements 16 Oct 2026, section 03: target 40, tasks 20, attendance 20, punctuality 20.
 export const PART_LABELS = {
-  attendance: "Attendance",
+  target: "Target",
   tasks: "Tasks",
-  sales: "Sales",
+  attendance: "Attendance",
+  punctuality: "Punctuality",
 };
 
 /** "₹1,50,000" */
@@ -36,6 +40,20 @@ export const describePart = (key, part) => {
       ["Late check-ins", String(m.lateDays)],
       ["Leave / week off", `${m.leaveDays} / ${m.weekOffDays}`],
       ["Hours worked", `${m.workedHours} h`],
+    ];
+  }
+  if (key === "target") {
+    const targets = Array.isArray(m.targets) ? m.targets : [];
+    return targets.map((t) => {
+      const fmt = t.key === "revenue" ? formatRupees : String;
+      return [t.label, `${fmt(t.achieved)} / ${fmt(t.goal)} (${t.percent}%)${t.remaining ? ` · ${fmt(t.remaining)} to go` : ""}`];
+    }).concat(m.capPercent ? [["Each target counts up to", `${m.capPercent}%`]] : []);
+  }
+  if (key === "punctuality") {
+    return [
+      ["On time", `${m.onTimeDays} of ${m.daysCounted} days`],
+      ["Late arrivals", String(m.lateDays)],
+      ["Half days", String(m.halfDays)],
     ];
   }
   if (key === "tasks") {

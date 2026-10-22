@@ -180,6 +180,9 @@ const toTargetView = (row, achievements = {}) => {
     leadsTarget,
     revenueTarget,
     siteVisitTarget,
+    dealsTarget: Number(row.dealsTarget || 0),
+    productionTarget: Number(row.productionTarget || 0),
+    history: Array.isArray(row.history) ? row.history.slice(-10).reverse() : [],
     notes: row.notes || "",
     assignedBy: toUserRef(row.assignedBy),
     assignedTo: toUserRef(row.assignedTo),
@@ -402,18 +405,22 @@ exports.assignTarget = async (req, res) => {
     const leadsTarget = parseTargetNumber(req.body?.leadsTarget);
     const revenueTarget = parseTargetNumber(req.body?.revenueTarget);
     const siteVisitTarget = parseTargetNumber(req.body?.siteVisitTarget);
+    const dealsTarget = parseTargetNumber(req.body?.dealsTarget ?? 0);
+    const productionTarget = parseTargetNumber(req.body?.productionTarget ?? 0);
 
     if (
       leadsTarget === null
       || revenueTarget === null
       || siteVisitTarget === null
+      || dealsTarget === null
+      || productionTarget === null
     ) {
       return res.status(400).json({
         message: "Targets must be valid non-negative numbers",
       });
     }
 
-    if (leadsTarget <= 0 && revenueTarget <= 0 && siteVisitTarget <= 0) {
+    if (leadsTarget <= 0 && revenueTarget <= 0 && siteVisitTarget <= 0 && dealsTarget <= 0 && productionTarget <= 0) {
       return res.status(400).json({
         message: "At least one target value must be greater than zero",
       });
@@ -440,6 +447,17 @@ exports.assignTarget = async (req, res) => {
       });
     }
 
+    // Keep who changed it, when and the earlier value (requirements 16 Oct 2026, 3.1).
+    const previousTarget = await TargetAssignment.findOne({ companyId: req.user.companyId, assignedTo: assignee._id, month })
+      .select("leadsTarget revenueTarget siteVisitTarget dealsTarget productionTarget").lean();
+    const nextValues = { leadsTarget, revenueTarget, siteVisitTarget, dealsTarget, productionTarget };
+    const previousValues = previousTarget ? {
+      leadsTarget: previousTarget.leadsTarget || 0,
+      revenueTarget: previousTarget.revenueTarget || 0,
+      siteVisitTarget: previousTarget.siteVisitTarget || 0,
+      dealsTarget: previousTarget.dealsTarget || 0,
+      productionTarget: previousTarget.productionTarget || 0,
+    } : null;
     const updated = await TargetAssignment.findOneAndUpdate(
       {
         companyId: req.user.companyId,
@@ -454,8 +472,11 @@ exports.assignTarget = async (req, res) => {
           leadsTarget,
           revenueTarget,
           siteVisitTarget,
+          dealsTarget,
+          productionTarget,
           notes,
         },
+        $push: { history: { $each: [{ at: new Date(), by: req.user._id, byName: req.user.name || "", previous: previousValues, next: nextValues }], $slice: -50 } },
       },
       {
         upsert: true,
@@ -477,6 +498,12 @@ exports.assignTarget = async (req, res) => {
       userDoc: assignee,
       companyUserIds: companyUserRows.map((row) => row._id),
       monthKey: month,
+    });
+
+    await require("../services/auditLog.service").writeAuditLog({
+      companyId: req.user.companyId, actor: req.user, action: previousValues ? "TARGET_CHANGED" : "TARGET_ASSIGNED",
+      entityType: "TargetAssignment", entityId: updated._id,
+      metadata: { assignedTo: String(assignee._id), month, previous: previousValues, next: nextValues }, req,
     });
 
     return res.status(201).json({

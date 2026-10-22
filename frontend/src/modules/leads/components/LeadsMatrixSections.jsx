@@ -45,6 +45,7 @@ import {
   getPropertySubtypeConfig,
   getPropertySubtypeOptions,
 } from "../../../config/propertyRequirementConfig";
+import ContactPicker from "../../inventory/components/ContactPicker";
 
 const INR_CURRENCY_FORMATTER = new Intl.NumberFormat("en-IN", {
   style: "currency",
@@ -88,6 +89,11 @@ const BULK_LEAD_SHEET_FORMATS = {
     label: "Residantial",
     columns:
       "NAME, CONTACT/NUMBER, COMMENT, BUDGET, LOCATION, VISIT, HANDLE, SOURCE, BHK, FLOOR, AMENITIES, LIFT, SECURITY, GYM, SWIMMING POOL, CLUBHOUSE, POWER BACKUP, PARKING",
+  },
+  COWORKING: {
+    label: "Coworking",
+    columns:
+      "DATE, NAME, CONTACT, COMMENT, COMPANY, REQUIREMENT (e.g. 4 seater cabin / 6 seats), BUDGET (e.g. 12000 or 15k to 20k), LOCATION, VISIT, HANDLE, LEAD SOURCE, PHOTO VIDEO, FOLLOWUP-1, FOLLOWUP-2, FOLLOWUP-3",
   },
   COMMERCIAL: {
     label: "Commercial",
@@ -1418,7 +1424,9 @@ export const AddLeadModal = ({
   const requirementPropertySubtype = String(formData.requirementsPropertySubtype || "").trim().toUpperCase();
   const propertySubtypeOptions = getPropertySubtypeOptions(requirementInventoryType);
   const propertySubtypeConfig = getPropertySubtypeConfig(requirementInventoryType, requirementPropertySubtype);
-  const showFurnishing = !propertySubtypeConfig || propertySubtypeConfig.showFurnishing !== false;
+  // Coworking always comes furnished, so there is nothing to choose.
+  const showFurnishing = requirementInventoryType !== "COWORKING"
+    && (!propertySubtypeConfig || propertySubtypeConfig.showFurnishing !== false);
   const isPlotRequirement = requirementPropertySubtype === "PLOT";
   const isCoworkingRequirement = requirementInventoryType === "COWORKING";
   // Homes (not plots) are rented; shops and offices are leased; coworking is never bought.
@@ -1527,7 +1535,7 @@ export const AddLeadModal = ({
         requirementsInventoryType: value,
         requirementsPropertySubtype: "",
         requirementsSubtypeData: {},
-        requirementsFurnishingStatus: nextFurnishingStatus,
+        requirementsFurnishingStatus: String(value || "").toUpperCase() === "COWORKING" ? "" : nextFurnishingStatus,
       };
     });
   };
@@ -1741,6 +1749,11 @@ export const AddLeadModal = ({
                 ))}
               </AddLeadSelectControl>
             </AddLeadFieldShell>
+            {formData.sourceChannel === "BROKER" ? (
+              <AddLeadFieldShell fieldTitleClass={fieldTitleClass} title="Referred by broker">
+                <ContactPicker kind="BROKER" value={formData.referredBroker || null} onPick={(broker) => updateField("referredBroker", broker)} placeholder="Search the Broker Database" />
+              </AddLeadFieldShell>
+            ) : null}
             <AddLeadFieldShell fieldTitleClass={fieldTitleClass} title="Location" className="md:col-span-2">
               <PlaceAutocompleteInput
                 multiValue

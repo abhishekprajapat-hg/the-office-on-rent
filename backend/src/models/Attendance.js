@@ -11,6 +11,9 @@ const ATTENDANCE_STATUS = Object.freeze({
   // A day off set by hand - for somebody whose weekly off is not the company's
   // (works Sunday, off Tuesday). Not a working day, so never absent.
   WEEK_OFF: "WEEK_OFF",
+  // A holiday set by hand for one person on one day (company-wide holidays
+  // live in the attendance policy). A paid day off, never absent.
+  HOLIDAY: "HOLIDAY",
   MISSED_CHECK_OUT: "MISSED_CHECK_OUT",
   ABSENT: "ABSENT",
 });

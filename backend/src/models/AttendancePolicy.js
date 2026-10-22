@@ -68,6 +68,15 @@ const attendancePolicySchema = new mongoose.Schema(
         message: "weeklyOffDays must contain weekday numbers between 0 and 6",
       },
     },
+    // Requirements 16 Oct 2026, 4.2: checking in at or after this minute of the
+    // day makes the day a half day - and only a half day, never also "late".
+    // 840 = 2:00 PM. null switches the cutoff off.
+    halfDayCheckInCutoffMinutes: { type: Number, min: 0, max: 1439, default: 840 },
+    // Company holidays (4.4): paid days off for everybody.
+    holidays: {
+      type: [{ date: { type: String, match: /^\d{4}-\d{2}-\d{2}$/ }, name: { type: String, trim: true, maxlength: 80 }, _id: false }],
+      default: [],
+    },
     allowCheckoutDuringBreak: {
       type: Boolean,
       default: true,

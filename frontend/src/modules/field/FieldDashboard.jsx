@@ -4,6 +4,7 @@ import { getAllLeads } from "../../services/leadService";
 import { getTasks, updateTask } from "../../services/taskService";
 import { toErrorMessage } from "../../utils/errorMessage";
 import FieldOverview from "./components/FieldOverview";
+import HomeStatusStrip from "../../components/dashboard/HomeStatusStrip";
 
 const DASHBOARD_LEAD_FIELDS = [
   "_id", "name", "city", "preferredLocations", "projectInterested", "status",
@@ -80,6 +81,7 @@ const FieldDashboard = () => {
 
   return (
     <div className="field-dashboard-page flex h-full w-full min-h-0 flex-col overflow-hidden">
+      <div className="shrink-0 px-3 pt-3"><HomeStatusStrip /></div>
       <FieldOverview
         userId={userId}
         leads={leads}

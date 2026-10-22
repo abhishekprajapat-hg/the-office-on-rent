@@ -28,6 +28,7 @@ router.use("/roles", require("./customRole.routes"));
 router.use("/delete-requests", require("./deleteRequest.routes"));
 router.use("/push", require("./push.routes"));
 router.use("/tasks", require("./task.routes"));
+router.use("/daily-reports", require("./dailyReport.routes"));
 router.use("/coworking", require("./coworkingAccess.routes"));
 router.use("/access", require("./accessControl.routes"));
 router.use('/billing', require('./billstack.routes'));

@@ -3,6 +3,8 @@ import { AlertTriangle, Check, Eye, Paperclip, Upload, X } from "lucide-react";
 import { readDocumentBirthDate } from "../../../../utils/documentBirthDate";
 import { uploadFile } from "../../../../services/uploadService";
 import { cn } from "../../../../components/ui";
+import { usePermissions } from "../../../../context/usePermissions";
+import { isRestrictedClientFile, RESTRICTED_DOCUMENT_NOTE } from "../../../../utils/clientDocumentAccess";
 import {
   ACCEPTED_TYPES,
   MAX_FILE_BYTES,
@@ -32,6 +34,8 @@ const DocumentRow = ({ doc, uploaded, onUpload, onRemove, readOnly }) => {
   // A server copy (url) is what every desk can open; the browser copy is only a
   // fallback for documents attached before uploads went to the server.
   const [url, setUrl] = useState(() => (uploaded ? uploaded.url || fileUrl(uploaded.id) : null));
+  const { canDownloadClientDocuments } = usePermissions();
+  const locked = !canDownloadClientDocuments && isRestrictedClientFile(uploaded?.url);
   const isImage = Boolean(uploaded && (
     String(uploaded.type || "").startsWith("image/")
     || /\.(png|jpe?g)$/i.test(String(uploaded.fileName || ""))
@@ -103,7 +107,9 @@ const DocumentRow = ({ doc, uploaded, onUpload, onRemove, readOnly }) => {
               <p className="mt-1 flex flex-wrap items-center gap-x-2 text-[11px] text-slate-600 dark:text-slate-300">
                 <span className="truncate font-medium">{uploaded.fileName}</span>
                 <span className="text-slate-400 dark:text-slate-500">{formatBytes(uploaded.size)}</span>
-                {url ? (
+                {locked ? (
+                  <span className="text-slate-500 dark:text-slate-400">{RESTRICTED_DOCUMENT_NOTE}</span>
+                ) : url ? (
                   <a
                     href={url}
                     target="_blank"
@@ -122,7 +128,7 @@ const DocumentRow = ({ doc, uploaded, onUpload, onRemove, readOnly }) => {
                   </span>
                 ) : null}
               </p>
-              {url ? (
+              {url && !locked ? (
                 <a
                   href={url}
                   target="_blank"
@@ -217,7 +223,7 @@ const DocumentChecklist = ({ kind, documents = [], onChange, onDateOfBirth, read
     }
     try {
       const date = await readDocumentBirthDate(file);
-      if (date) { attached.extractedDateOfBirth = date; onDateOfBirth?.(date); }
+      if (date) { attached.extractedDateOfBirth = date; onDateOfBirth?.(date, doc.label); }
       const stored = attached.url ? "" : " Could not reach the server, so this file is saved on this device only - upload it again later.";
       setExtractionMessage((date ? `Date of birth found: ${date}. Please verify it against the document.` : "No unambiguous date of birth found. You can enter it manually.") + stored);
     } catch { setExtractionMessage("Document attached; automatic date extraction was unavailable. Enter the date of birth manually."); }

@@ -6,6 +6,7 @@ import {
 } from "../../services/saasService";
 import { toErrorMessage } from "../../utils/errorMessage";
 import ToastNotice from "../../components/ui/ToastNotice";
+import MetaLeadFailures from "./components/MetaLeadFailures";
 
 const AdminMetaAdsPanel = ({ theme = "light" }) => {
   const isDark = theme === "dark";
@@ -146,6 +147,7 @@ const AdminMetaAdsPanel = ({ theme = "light" }) => {
     <div className={`ui-page-shell custom-scrollbar flex flex-col gap-4 ${
       isDark ? "bg-slate-950/40" : "bg-slate-50/70"
     }`}>
+      <MetaLeadFailures isDark={isDark} />
       <div className="flex justify-end">
         <button
           type="button"

@@ -46,6 +46,11 @@ const sanitizeClientPayload = (payload = {}, { mode }) => {
       const date = payload.dateOfBirth ? new Date(payload.dateOfBirth) : null;
       if (date && (!Number.isFinite(date.getTime()) || date > new Date() || date.getUTCFullYear() < 1900)) throw createHttpError(400, "Enter a valid date of birth");
       safe.dateOfBirth = date;
+    } else if (field === "dobSource") {
+      const src = String(payload.dobSource || "").toUpperCase();
+      safe.dobSource = ["ENTERED", "EXTRACTED"].includes(src) ? src : "";
+    } else if (field === "dobVerified") {
+      safe.dobVerified = Boolean(payload.dobVerified);
     } else if (field === "companyName") {
       const companyName = String(payload.companyName || "").trim();
       if (!companyName) throw createHttpError(400, "companyName is required");

@@ -7,6 +7,9 @@ const UPLOAD_CATEGORIES = Object.freeze([
   "inventory-images",
   "inventory-floorplans",
   "inventory-documents",
+  // Project photos from the project form (it always asked for this category,
+  // which used to fall back to "chat").
+  "project-images",
   "chat",
   "lead-documents",
   "profile-images",

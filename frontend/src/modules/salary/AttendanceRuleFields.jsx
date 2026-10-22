@@ -7,7 +7,7 @@ const DAY_RULES = [
   { key: "unapprovedLeave", label: "Unapproved leave", hint: "Absent on a day whose leave request is pending or was rejected" },
   { key: "halfDay", label: "Half day", hint: "Worked less than a full day, or marked Half Day" },
   { key: "unpaidLeave", label: "Unpaid leave", hint: "Approved leave of the Unpaid type" },
-  { key: "paidLeave", label: "Paid leave", hint: "Approved casual, sick, emergency or other leave, and days marked Leave by an admin" },
+  { key: "paidLeave", label: "Paid leave", hint: "Approved casual, sick, emergency or other leave applied for in the CRM, up to the paid days below" },
 ];
 
 const countInputClass = `${fieldClass} w-20 text-right font-mono`;
@@ -37,6 +37,23 @@ export default function AttendanceRuleFields({ form, onFieldChange, onRuleChange
           ))}
         </div>
       </fieldset>
+
+      {form.paidLeavePerMonth !== undefined ? (
+        <fieldset>
+          <legend className="text-[13.5px] font-semibold text-slate-900">Paid leave</legend>
+          <p className="mt-0.5 text-[12.5px] text-slate-500">Only leave applied for in the CRM and approved counts. Approved days beyond this cost what unpaid leave costs; pending leave is never paid.</p>
+          <div className="mt-2.5 flex flex-wrap items-center gap-2 rounded-lg border border-slate-200 px-3.5 py-3 text-[13px] text-slate-700">
+            <span>Paid leave days per month</span>
+            <input type="number" min="0" max="31" step="1" value={form.paidLeavePerMonth} onChange={(event) => onFieldChange("paidLeavePerMonth", event.target.value)} disabled={disabled} className={countInputClass} aria-label="Paid leave days per month" />
+            {form.manualLeaveIsPaid !== undefined ? (
+              <label className="ml-4 flex items-center gap-2">
+                <input type="checkbox" checked={Boolean(form.manualLeaveIsPaid)} onChange={(event) => onFieldChange("manualLeaveIsPaid", event.target.checked)} disabled={disabled} />
+                <span>Days an admin marks "Leave" by hand also count as paid leave</span>
+              </label>
+            ) : null}
+          </div>
+        </fieldset>
+      ) : null}
 
       <fieldset>
         <legend className="text-[13.5px] font-semibold text-slate-900">Late check-ins</legend>

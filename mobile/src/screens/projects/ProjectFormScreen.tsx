@@ -10,7 +10,6 @@ import {
   BHK_TYPES,
   COMMERCIAL_AMENITIES,
   HOUSING_CATEGORIES,
-  PLOT_SIZES,
   PROJECT_STATUSES,
   PROJECT_TYPES,
   RESIDENTIAL_AMENITIES,
@@ -22,6 +21,14 @@ import { useTheme } from "../../theme/ThemeProvider";
 import { Body, Button, ErrorState, Field, GroupLabel, Icon, InlineError, Loading, MultiSelect, Segmented, Select, Text } from "../../ui";
 
 const str = (value?: number | string | null) => (value === null || value === undefined ? "" : String(value));
+// A project saved with the older single plot size opens as a range of one.
+const plotRangeOf = (p: { plotSize?: string; customPlotSize?: number | string | null; plotSizeMin?: number | null; plotSizeMax?: number | null }) => {
+  if (p.plotSizeMin != null || p.plotSizeMax != null) {
+    return { plotSizeMin: p.plotSizeMin != null ? String(p.plotSizeMin) : "", plotSizeMax: p.plotSizeMax != null ? String(p.plotSizeMax) : "" };
+  }
+  const single = Number.parseFloat(String(p.plotSize === "CUSTOM" ? p.customPlotSize ?? "" : p.plotSize ?? "").replace(/,/g, ""));
+  return Number.isFinite(single) ? { plotSizeMin: String(single), plotSizeMax: String(single) } : { plotSizeMin: "", plotSizeMax: "" };
+};
 const intOrNull = (value: string) => (value.trim() && Number.isFinite(Number(value)) ? Number(value) : null);
 const digits = (value: string) => value.replace(/[^\d]/g, "");
 const bhkLabel = (key: string) => key.replace(/_/g, " ").replace(" 5 ", ".5 ");
@@ -39,6 +46,8 @@ const EMPTY = {
   plotsAvailable: "",
   plotSize: "",
   customPlotSize: "",
+  plotSizeMin: "",
+  plotSizeMax: "",
   numberOfFlats: "",
   numberOfFloors: "",
   flatsPerFloor: "",
@@ -48,7 +57,19 @@ const EMPTY = {
   totalShops: "",
   totalShowrooms: "",
   plc: "",
+  plcWideRoad: "",
+  plcGardenFacing: "",
+  plcCorner: "",
+  plcGardenCorner: "",
   otherCharges: "",
+  developmentCharges: "",
+  maintenanceCharges: "",
+  amenityCharges: "",
+  utilityCharges: "",
+  parkingCharges: "",
+  taxes: "",
+  registrationStampDuty: "",
+  otherFacilities: "",
   location: "",
   landmark: "",
   city: "",
@@ -74,6 +95,7 @@ const fromProject = (p: Project): Form => ({
   plotsAvailable: str(p.plotsAvailable),
   plotSize: p.plotSize || "",
   customPlotSize: str(p.customPlotSize),
+  ...plotRangeOf(p),
   numberOfFlats: str(p.numberOfFlats),
   numberOfFloors: str(p.numberOfFloors),
   flatsPerFloor: str(p.flatsPerFloor),
@@ -83,7 +105,19 @@ const fromProject = (p: Project): Form => ({
   totalShops: str(p.totalShops),
   totalShowrooms: str(p.totalShowrooms),
   plc: str(p.plc),
+  plcWideRoad: str(p.plcWideRoad),
+  plcGardenFacing: str(p.plcGardenFacing),
+  plcCorner: str(p.plcCorner),
+  plcGardenCorner: str(p.plcGardenCorner),
   otherCharges: str(p.otherCharges),
+  developmentCharges: str(p.developmentCharges),
+  maintenanceCharges: str(p.maintenanceCharges),
+  amenityCharges: str(p.amenityCharges),
+  utilityCharges: str(p.utilityCharges),
+  parkingCharges: str(p.parkingCharges),
+  taxes: str(p.taxes),
+  registrationStampDuty: str(p.registrationStampDuty),
+  otherFacilities: str(p.otherFacilities),
   location: p.location || "",
   landmark: p.landmark || "",
   city: p.city || "",
@@ -171,7 +205,19 @@ export const ProjectFormScreen = ({ route, navigation }: RootScreenProps<"Projec
       currentRate: currentRate!,
       housingCategory: residential ? form.housingCategory : "",
       plc: form.plc.trim(),
+      plcWideRoad: form.plcWideRoad.trim(),
+      plcGardenFacing: form.plcGardenFacing.trim(),
+      plcCorner: form.plcCorner.trim(),
+      plcGardenCorner: form.plcGardenCorner.trim(),
       otherCharges: form.otherCharges.trim(),
+      developmentCharges: form.developmentCharges.trim(),
+      maintenanceCharges: form.maintenanceCharges.trim(),
+      amenityCharges: form.amenityCharges.trim(),
+      utilityCharges: form.utilityCharges.trim(),
+      parkingCharges: form.parkingCharges.trim(),
+      taxes: form.taxes.trim(),
+      registrationStampDuty: form.registrationStampDuty.trim(),
+      otherFacilities: form.otherFacilities.trim(),
       amenities: amenities.filter((key) => (amenityChoices as readonly string[]).includes(key)),
       location: form.location.trim(),
       landmark: form.landmark.trim(),
@@ -183,7 +229,15 @@ export const ProjectFormScreen = ({ route, navigation }: RootScreenProps<"Projec
       brokerManagerName: form.brokerManagerName.trim(),
       brokerManagerMobile: form.brokerManagerMobile.trim(),
       ...(plots
-        ? { totalPlots: intOrNull(form.totalPlots), plotsAvailable: intOrNull(form.plotsAvailable), plotSize: form.plotSize, customPlotSize: form.plotSize === "CUSTOM" ? form.customPlotSize.trim() : "" }
+        ? {
+            totalPlots: intOrNull(form.totalPlots),
+            plotsAvailable: intOrNull(form.plotsAvailable),
+            plotSizeMin: intOrNull(form.plotSizeMin),
+            plotSizeMax: intOrNull(form.plotSizeMax),
+            // The range replaces the older single plot size.
+            plotSize: "",
+            customPlotSize: "",
+          }
         : {}),
       ...(building
         ? {
@@ -261,6 +315,17 @@ export const ProjectFormScreen = ({ route, navigation }: RootScreenProps<"Projec
         <Field label="Current rate" value={form.currentRate} onChangeText={set("currentRate")} suffix="₹" hint={currentRate ? formatPrice(currentRate) : undefined} />
       </Pair>
       <Field label="PLC (optional)" value={form.plc} onChangeText={set("plc")} maxLength={60} />
+      <Field label="Wide Road PLC (optional)" value={form.plcWideRoad} onChangeText={set("plcWideRoad")} maxLength={60} placeholder="e.g. 5% or ₹50,000" />
+      <Field label="Garden Facing PLC (optional)" value={form.plcGardenFacing} onChangeText={set("plcGardenFacing")} maxLength={60} placeholder="e.g. 5% or ₹50,000" />
+      <Field label="Corner Plot PLC (optional)" value={form.plcCorner} onChangeText={set("plcCorner")} maxLength={60} placeholder="e.g. 5% or ₹50,000" />
+      <Field label="Garden Facing + Corner PLC (optional)" value={form.plcGardenCorner} onChangeText={set("plcGardenCorner")} maxLength={60} placeholder="e.g. 5% or ₹50,000" />
+      <Field label="Development charges (optional)" value={form.developmentCharges} onChangeText={set("developmentCharges")} maxLength={120} />
+      <Field label="Maintenance charges (optional)" value={form.maintenanceCharges} onChangeText={set("maintenanceCharges")} maxLength={120} />
+      <Field label="Amenity charges (optional)" value={form.amenityCharges} onChangeText={set("amenityCharges")} maxLength={120} />
+      <Field label="Utilities (water / electricity connection) (optional)" value={form.utilityCharges} onChangeText={set("utilityCharges")} maxLength={120} />
+      <Field label="Parking charges (optional)" value={form.parkingCharges} onChangeText={set("parkingCharges")} maxLength={120} />
+      <Field label="Taxes (GST etc.) (optional)" value={form.taxes} onChangeText={set("taxes")} maxLength={120} />
+      <Field label="Registration / stamp duty (optional)" value={form.registrationStampDuty} onChangeText={set("registrationStampDuty")} maxLength={120} />
       <Field label="Other charges (optional)" value={form.otherCharges} onChangeText={set("otherCharges")} multiline maxLength={2000} />
 
       {plots ? (
@@ -270,8 +335,10 @@ export const ProjectFormScreen = ({ route, navigation }: RootScreenProps<"Projec
             <Field label="Total plots" value={form.totalPlots} onChangeText={setNum("totalPlots")} keyboardType="number-pad" />
             <Field label="Available" value={form.plotsAvailable} onChangeText={setNum("plotsAvailable")} keyboardType="number-pad" />
           </Pair>
-          <Select label="Plot size (sq yd)" placeholder="Not set" allowClear clearLabel="Not set" options={PLOT_SIZES.map((key) => ({ key, label: key === "CUSTOM" ? "Custom" : key }))} value={form.plotSize} onChange={set("plotSize")} />
-          {form.plotSize === "CUSTOM" ? <Field label="Custom plot size" value={form.customPlotSize} onChangeText={set("customPlotSize")} maxLength={60} /> : null}
+          <Pair>
+            <Field label="Plot size from (sq ft)" value={form.plotSizeMin} onChangeText={setNum("plotSizeMin")} keyboardType="number-pad" />
+            <Field label="to (sq ft)" value={form.plotSizeMax} onChangeText={setNum("plotSizeMax")} keyboardType="number-pad" />
+          </Pair>
         </>
       ) : null}
 
@@ -360,7 +427,8 @@ export const ProjectFormScreen = ({ route, navigation }: RootScreenProps<"Projec
       ) : null}
 
       <GroupLabel>Amenities</GroupLabel>
-      <MultiSelect title="Amenities" placeholder="None picked" icon="sparkles-outline" options={amenityChoices.map((key) => ({ key, label: humanize(key) }))} value={amenities} onChange={setAmenities} />
+      <MultiSelect title="Amenities & infrastructure" placeholder="None picked" icon="sparkles-outline" options={amenityChoices.map((key) => ({ key, label: humanize(key) }))} value={amenities} onChange={setAmenities} />
+      <Field label="Other facilities (optional)" value={form.otherFacilities} onChangeText={set("otherFacilities")} multiline maxLength={500} />
 
       <GroupLabel>Location</GroupLabel>
       <Field label="Address" value={form.location} onChangeText={set("location")} maxLength={500} />

@@ -62,7 +62,7 @@ test('every status the backend accepts is offered', () => {
   // returns belongs to that context's realm - so compare structure, not identity.
   assert.equal(
     JSON.stringify(MANUAL_ATTENDANCE_STATUS_OPTIONS.map((option) => option.value).sort()),
-    JSON.stringify(['ABSENT', 'HALF_DAY', 'LEAVE', 'PRESENT', 'WEEK_OFF']),
+    JSON.stringify(['ABSENT', 'HALF_DAY', 'HOLIDAY', 'LEAVE', 'PRESENT', 'WEEK_OFF']),
   );
   MANUAL_ATTENDANCE_STATUS_OPTIONS.forEach((option) => {
     assert.ok(option.label, `${option.value} needs a label`);

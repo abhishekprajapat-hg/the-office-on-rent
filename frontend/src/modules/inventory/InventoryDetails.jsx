@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useState } from "react";
-import { useNavigate, useParams } from "react-router-dom";
+import { Link, useNavigate, useParams } from "react-router-dom";
 import {
   ArrowLeft,
   Building2,
@@ -22,6 +22,7 @@ import FittedImage from "../../components/ui/FittedImage";
 import { StatusBadge } from "../../components/crm";
 import { Badge, Button, Card, CardContent } from "../../components/ui";
 import InventorySpecTabs from "./components/InventorySpecTabs";
+import InventorySourcesPanel from "./components/InventorySourcesPanel";
 
 const formatPrice = (value) => {
   const parsed = Number(value);
@@ -148,6 +149,13 @@ const InventoryDetails = () => {
       setLoading(false);
     }
   }, [canViewActivity, id]);
+
+  // Re-reads the unit without the full-page loader (source panel edits).
+  const refreshQuietly = useCallback(async () => {
+    const detail = await getInventoryAssetById(id);
+    setAsset(detail?.asset || null);
+    setInventory(detail?.inventory || null);
+  }, [id]);
 
   useEffect(() => {
     if (!id) {
@@ -591,6 +599,20 @@ const InventoryDetails = () => {
         </div>
 
         <div className="flex flex-col gap-4">
+          {asset?.projectId ? (
+            <Card className="border-slate-100 shadow-[0_6px_20px_rgba(15,23,42,0.06)]">
+              <CardContent className="flex flex-col gap-1 p-4">
+                <span className="text-[11px] font-bold uppercase tracking-[0.12em] text-slate-500">Project</span>
+                <Link to={`/projects/${asset.projectId?._id || asset.projectId}`} className="text-[14px] font-semibold text-blue-700 hover:underline">
+                  {asset.project?.projectName || asset.projectId?.projectName || "Open project"}
+                </Link>
+                {asset.project?.projectId || asset.projectId?.projectId ? <span className="text-[12px] text-slate-500">{asset.project?.projectId || asset.projectId?.projectId}</span> : null}
+              </CardContent>
+            </Card>
+          ) : null}
+          {role !== "CHANNEL_PARTNER" && asset ? (
+            <InventorySourcesPanel inventoryId={id} asset={asset} role={role} onChanged={refreshQuietly} />
+          ) : null}
           <Card className="border-slate-100 shadow-[0_6px_20px_rgba(15,23,42,0.06)]">
             <CardContent className="flex flex-col gap-2.5 p-4">
               <Button leftIcon={Send} className="h-11 justify-center rounded-lg" onClick={handleShareWithClient} disabled={shareLoading}>

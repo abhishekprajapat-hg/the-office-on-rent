@@ -1,6 +1,7 @@
 export const PROJECT_CATEGORY_OPTIONS = [
   { value: "RESIDENTIAL", label: "Residential" },
   { value: "COMMERCIAL", label: "Commercial" },
+  { value: "COWORKING", label: "Coworking" },
 ];
 
 export const PROJECT_TYPE_OPTIONS = [
@@ -52,6 +53,15 @@ export const PROJECT_AMENITY_OPTIONS = [
   { value: "SWIMMING_POOL", label: "Swimming Pool" },
   { value: "WALKING_TRACK", label: "Walking Track" },
   { value: "CLUB_HOUSE", label: "Club House" },
+  // Infrastructure (21 Oct 2026)
+  { value: "GATED_ENTRY", label: "Gated Entry" },
+  { value: "CCTV_SURVEILLANCE", label: "CCTV Surveillance" },
+  { value: "INTERNAL_ROADS", label: "Internal Roads" },
+  { value: "STREET_LIGHTING", label: "Street Lighting" },
+  { value: "WATER_SUPPLY", label: "Water Supply" },
+  { value: "ELECTRICITY", label: "Electricity Connection" },
+  { value: "DRAINAGE", label: "Drainage / Sewerage" },
+  { value: "PARKING", label: "Parking" },
 ];
 
 export const PROJECT_HOUSING_CATEGORY_OPTIONS = [
@@ -119,3 +129,36 @@ export const PROJECT_COMMERCIAL_AMENITY_OPTIONS = [
 
 export const getProjectOptionLabel = (options, value) =>
   options.find((option) => option.value === value)?.label || value || "";
+
+/*
+ * Plot size range (21 Oct 2026): plots in a project differ in size, so a
+ * project records its smallest and largest plot in sq.ft. Projects saved
+ * before still have the single plotSize / customPlotSize, shown as is.
+ */
+const sqft = (value) => `${Number(value).toLocaleString("en-IN")} Sq.ft`;
+const hasNumber = (value) => value !== null && value !== undefined && value !== "" && Number.isFinite(Number(value));
+
+export const formatPlotSizeRange = (project = {}) => {
+  const min = hasNumber(project.plotSizeMin) ? Number(project.plotSizeMin) : null;
+  const max = hasNumber(project.plotSizeMax) ? Number(project.plotSizeMax) : null;
+  if (min !== null && max !== null) return min === max ? sqft(min) : `${sqft(min).replace(" Sq.ft", "")} – ${sqft(max)}`;
+  if (min !== null) return `From ${sqft(min)}`;
+  if (max !== null) return `Up to ${sqft(max)}`;
+  if (project.plotSize === "CUSTOM") return project.customPlotSize || "";
+  if (project.plotSize) return PROJECT_PLOT_SIZE_OPTIONS.find((o) => o.value === project.plotSize)?.label || project.plotSize;
+  return "";
+};
+
+/* For the edit form: an older single size becomes a range of one. */
+export const plotSizeRangeFromProject = (project = {}) => {
+  if (hasNumber(project.plotSizeMin) || hasNumber(project.plotSizeMax)) {
+    return {
+      plotSizeMin: hasNumber(project.plotSizeMin) ? String(project.plotSizeMin) : "",
+      plotSizeMax: hasNumber(project.plotSizeMax) ? String(project.plotSizeMax) : "",
+    };
+  }
+  const single = project.plotSize === "CUSTOM"
+    ? Number.parseFloat(String(project.customPlotSize || "").replace(/,/g, ""))
+    : Number.parseFloat(project.plotSize);
+  return Number.isFinite(single) ? { plotSizeMin: String(single), plotSizeMax: String(single) } : { plotSizeMin: "", plotSizeMax: "" };
+};

@@ -17,6 +17,7 @@ import {
   getLeadDiary,
   addLeadDiaryEntry,
   deleteLead,
+  logLeadTouch,
 } from "../../services/leadService";
 import { deleteOutcomeMessage, isDeleteApprovalPending } from "../../services/deleteRequestService";
 import {
@@ -132,6 +133,8 @@ const LEAD_LIST_FIELDS = [
   "assignmentHistory",
   "hotClient",
   "brokerContactId",
+  "firstTouchAt",
+  "touchMinutes",
   "createdAt",
   "updatedAt",
 ].join(",");
@@ -205,6 +208,7 @@ const defaultFormData = {
   siteLng: "",
   company: "",
   sourceChannel: "",
+  referredBroker: null,
   requirementsInventoryType: "",
   requirementsCoworking: {},
   requirementsPropertySubtype: "",
@@ -423,6 +427,14 @@ const sanitizeRequirementSubtypeData = (subtypeData = {}) => {
   );
 };
 
+// Coworking has no furnishing choice (it always comes furnished), so a value
+// left over from another inventory type is never saved for it.
+const requirementFurnishing = (inventoryType, furnishingStatus) => (
+  String(inventoryType || "").trim().toUpperCase() === "COWORKING"
+    ? ""
+    : String(furnishingStatus || "").trim().toUpperCase()
+);
+
 const buildLeadRequirementsPayloadFromDraft = (draft = {}) => {
   const propertySubtype = String(draft?.propertySubtype || "").trim().toUpperCase();
   const payload = {
@@ -430,7 +442,7 @@ const buildLeadRequirementsPayloadFromDraft = (draft = {}) => {
     propertySubtype,
     subtypeData: sanitizeRequirementSubtypeData(draft?.subtypeData),
     transactionType: toLeadDealType(draft?.transactionType, draft?.inventoryType, propertySubtype),
-    furnishingStatus: String(draft?.furnishingStatus || "").trim().toUpperCase(),
+    furnishingStatus: requirementFurnishing(draft?.inventoryType, draft?.furnishingStatus),
     budgetMin: toAmountNumber(draft?.budgetMin),
     budgetMax: toAmountNumber(draft?.budgetMax),
     areaMin: null,
@@ -719,6 +731,9 @@ const mapLeadToFormData = (lead = {}) => {
     clientProfession: String(lead?.clientProfession || ""),
     company: String(lead?.company || ""),
     sourceChannel: String(lead?.sourceChannel || ""),
+    referredBroker: lead?.referredByBrokerId?._id
+      ? { _id: lead.referredByBrokerId._id, name: lead.referredByBrokerId.name || "Broker", phone: "" }
+      : null,
     requirementsCoworking: toCoworkingDraft(lead?.requirements?.coworking),
     siteLat: siteLat === null ? "" : String(siteLat),
     siteLng: siteLng === null ? "" : String(siteLng),
@@ -903,6 +918,8 @@ const toAmountNumber = (value) => {
 const applyCoworkingLeadFields = (payload, formData = {}) => {
   payload.company = String(formData.company || "").trim();
   payload.sourceChannel = String(formData.sourceChannel || "").trim().toUpperCase();
+  // Requirements 16 Oct 2026 (6.4): a broker referral names the broker.
+  payload.referredByBrokerId = payload.sourceChannel === "BROKER" ? formData.referredBroker?._id || null : null;
 
   if (!payload.requirements || payload.requirements.inventoryType !== "COWORKING") return payload;
 
@@ -944,7 +961,7 @@ const buildLeadFormPayload = (formData = {}) => {
       propertySubtype,
       subtypeData: sanitizeRequirementSubtypeData(formData.requirementsSubtypeData),
       transactionType: toLeadDealType(formData.requirementsTransactionType, formData.requirementsInventoryType, propertySubtype),
-      furnishingStatus: String(formData.requirementsFurnishingStatus || "").trim().toUpperCase(),
+      furnishingStatus: requirementFurnishing(formData.requirementsInventoryType, formData.requirementsFurnishingStatus),
       budgetMin: toAmountNumber(formData.requirementsBudgetMin),
       budgetMax: toAmountNumber(formData.requirementsBudgetMax),
       areaMin: null,
@@ -1054,6 +1071,7 @@ const normalizeCsvHeader = (value) =>
 const BULK_LEAD_SHEET_TYPES = {
   COMMERCIAL: "COMMERCIAL",
   RESIDENTIAL: "RESIDENTIAL",
+  COWORKING: "COWORKING",
 };
 
 const DEFAULT_BULK_LEAD_SHEET_TYPE = BULK_LEAD_SHEET_TYPES.COMMERCIAL;
@@ -1106,7 +1124,7 @@ const normalizeBulkDate = (value) => {
   const raw = normalizeBulkCellText(value);
   if (!raw) return "";
 
-  const dateMatch = raw.match(/(\d{1,2})[/-](\d{1,2})[/-](\d{2,4})/);
+  const dateMatch = raw.replace(/\s+/g, "").match(/(\d{1,2})[/.-](\d{1,2})[/.-](\d{2,4})/);
   if (dateMatch) {
     const day = Number.parseInt(dateMatch[1], 10);
     const month = Number.parseInt(dateMatch[2], 10) - 1;
@@ -1153,7 +1171,11 @@ const resolveLeadCsvHeaderKey = (rawHeader) => {
   if (["company", "companyname", "working", "business"].includes(normalized)) return "company";
   if (["status", "leadstatus", "leadstutas", "leadstutus"].includes(normalized)) return "status";
   if (["date", "leaddate"].includes(normalized)) return "date";
-  if (["followup", "followup2", "followupdate", "followupdate2"].includes(normalized)) return "followUp";
+  if (["followup", "followupdate", "nextfollowup"].includes(normalized)) return "followUp";
+  if (["followup1", "followupdate1", "1stfollowup", "firstfollowup"].includes(normalized)) return "followUp1";
+  if (["followup2", "followupdate2", "2ndfollowup", "secondfollowup"].includes(normalized)) return "followUp2";
+  if (["followup3", "followupdate3", "3rdfollowup", "thirdfollowup"].includes(normalized)) return "followUp3";
+  if (["photovideo", "photosvideos", "photo", "photos", "video", "videos", "photovideoshared"].includes(normalized)) return "photoVideo";
   if (["callupdate", "callstatus"].includes(normalized)) return "callUpdate";
   if (["propertytype", "type"].includes(normalized)) return "propertyType";
   if (["bhk", "bhktype", "bedroom", "bedrooms", "configuration"].includes(normalized)) return "bhkType";
@@ -1203,8 +1225,78 @@ const resolveLeadCsvHeaderKey = (rawHeader) => {
   return "";
 };
 
+/*
+ * Budget cells are free text in real sheets: "12000", "15k to 20k", "1.2 lakh",
+ * "no budget". Returns { min, max } in rupees, or null when there is no number.
+ * A suffix on the last number carries to an earlier bare one ("15 to 20k").
+ */
+const BULK_BUDGET_MULTIPLIERS = { k: 1000, thousand: 1000, l: 100000, lac: 100000, lakh: 100000, lakhs: 100000, cr: 10000000, crore: 10000000 };
+const normalizeBulkBudgetRange = (value) => {
+  const raw = normalizeBulkCellText(value).toLowerCase().replace(/,/g, "");
+  if (!raw) return null;
+  const parts = [...raw.matchAll(/(\d+(?:\.\d+)?)\s*(k|thousand|lakhs?|lac|l|crore|cr)?\b/g)];
+  if (!parts.length) return null;
+  const lastSuffix = parts[parts.length - 1][2] || "";
+  const amounts = parts.map(([, num, suffix]) => {
+    const multiplier = BULK_BUDGET_MULTIPLIERS[suffix || lastSuffix] || 1;
+    return Math.round(Number.parseFloat(num) * multiplier);
+  }).filter((amount) => Number.isFinite(amount) && amount > 0);
+  if (!amounts.length) return null;
+  return { min: Math.min(...amounts), max: Math.max(...amounts) };
+};
+
+/*
+ * Some sheets use the NAME column as a call log - "29/7/2025\ninterested",
+ * "0" - rather than a person's name. Dates and bare status words are lifted
+ * out (the words still count towards the lead's status) and whatever real
+ * name text is left is kept.
+ */
+const BULK_STATUS_WORDS = /\b(interested|intersted|interseted|notint|not\s*interested|occupied|oocupied|npc|call\s*cut|busy|switch(?:ed)?\s*off|visited|visit|closed|lost|invalid|follow\s*up|callback|call\s*back)\b/gi;
+const splitBulkNameCell = (value) => {
+  const raw = normalizeBulkCellText(value);
+  if (!raw) return { name: "", note: "" };
+  const withoutDates = raw.replace(/\d{1,2}\s*[/.-]\s*\d{1,2}\s*[/.-]\s*\d{2,4}/g, " ");
+  const note = (withoutDates.match(BULK_STATUS_WORDS) || []).join(" ");
+  const name = withoutDates.replace(BULK_STATUS_WORDS, " ").replace(/\s+/g, " ").trim();
+  // "0", "-", "na" and similar placeholders are not names.
+  if (!name || /^[\d\s.\-/]*$/.test(name) || /^(na|n\/a|nil|none|-)$/i.test(name)) return { name: "", note };
+  return { name, note };
+};
+
+/*
+ * Coworking requirement text -> the Lead model's coworking block:
+ *   "4 seater cabin"          one cabin of 4
+ *   "6 seat 1 cabin"          one cabin of 6
+ *   "2 cabins 4 seater each"  two cabins of 4
+ *   "5 seats" / "8 SEATS"     5 / 8 workstations (open desks)
+ */
+const buildBulkCoworkingRequirement = (row) => {
+  const text = [row.requirement, row.projectInterested].map(normalizeBulkCellText).filter(Boolean).join(" ").toLowerCase();
+  const coworking = {};
+  const seatsMatch = text.match(/(\d+)\s*(?:-\s*)?(?:seater|seats?|people|persons|pax|desks?|workstations?)\b/);
+  const cabinCountMatch = text.match(/(\d+)\s*(?:private\s*)?cabins?\b/);
+  const seats = seatsMatch ? Number.parseInt(seatsMatch[1], 10) : null;
+  const explicitSeats = normalizeBulkNumber(row.seats);
+  const explicitCabins = normalizeBulkNumber(row.cabins);
+
+  if (/\bcabins?\b/.test(text) || explicitCabins) {
+    const count = Math.min(Math.max(Math.round(explicitCabins || (cabinCountMatch ? Number.parseInt(cabinCountMatch[1], 10) : 1)), 1), 20);
+    const perCabin = seats || (explicitSeats ? Math.round(explicitSeats) : null);
+    if (perCabin && perCabin >= 1 && perCabin <= 100) {
+      coworking.cabins = Array.from({ length: count }, () => ({ seats: perCabin }));
+    }
+  } else if (seats || explicitSeats) {
+    coworking.workstations = Math.round(seats || explicitSeats);
+  }
+  return coworking;
+};
+
 const resolveBulkLeadStatus = ({ sheetName = "", row = {} }) => {
-  const haystack = [
+  // An explicit status (the STATUS column, or a status written into the NAME
+  // column) outranks words that merely appear in comments.
+  const explicit = resolveBulkLeadStatusFromText([row.status, row.nameNote].map((value) => normalizeBulkCellText(value).toLowerCase()).join(" "));
+  if (explicit !== "NEW") return explicit;
+  return resolveBulkLeadStatusFromText([
     sheetName,
     row.status,
     row.visit,
@@ -1214,19 +1306,24 @@ const resolveBulkLeadStatus = ({ sheetName = "", row = {} }) => {
     row.projectInterested,
   ]
     .map((value) => normalizeBulkCellText(value).toLowerCase())
-    .join(" ");
+    .join(" "));
+};
 
+const resolveBulkLeadStatusFromText = (haystack = "") => {
+  if (!haystack.trim()) return "NEW";
   if (/\b(close|closed|token)\b/.test(haystack)) return "CLOSED";
   if (/\b(site\s*visit\s*(scheduled|schedule)|visit\s*(scheduled|schedule))\b/.test(haystack)) return "SITE_VISIT_SCHEDULED";
   if (/\b(site\s*visit\s*(overdue|over\s*due|over\s*deu)|visit\s*(overdue|over\s*due|over\s*deu))\b/.test(haystack)) return "SITE_VISIT_OVERDUE";
   if (/\b(missing\s*in\s*action|mia)\b/.test(haystack)) return "MISSING_IN_ACTION";
   const npcCount = haystack.match(/\bnpc\s*-?\s*([123])\b/);
   if (npcCount) return `NPC_${npcCount[1]}`;
-  if (/\b(npc|not\s*picking|not\s*pick|call\s*not\s*picked|no\s*answer)\b/.test(haystack)) return "NPC_1";
+  if (/\b(npc|not\s*picking|not\s*pick|call\s*not\s*picked|no\s*answer|call\s*cut|switch(?:ed)?\s*off|not\s*reachable)\b/.test(haystack)) return "NPC_1";
   if (/\b(invalid|invaild|wrong\s*number)\b/.test(haystack)) return "INVALID";
   if (/\b(owner)\b/.test(haystack)) return "OWNER";
   if (/\b(broker)\b/.test(haystack)) return "BROKER";
-  if (/\bvisit|visited|revisit\b/.test(haystack)) return "SITE_VISIT";
+  if (/\b(not\s*interested|notint|not\s*int|cna|lost|le\s*liya|already\s*taken|occupied|oocupied)\b/.test(haystack)) return "LOST";
+  // Only a visit that happened - "wants a visit" / "visit plan" is still interest.
+  if (/\b(visited|revisit(?:ed)?|visit\s*done|site\s*visit(?!\s*(?:plan|planned)))\b/.test(haystack)) return "SITE_VISIT";
   if (/\binterested|interest\b/.test(haystack)) return "INTERESTED";
   if (/\btransfer|contacted|follow\s*up|callback|call back\b/.test(haystack)) return "CONTACTED";
   if (/\blost|not\s*interested|notint|cna\b/.test(haystack)) return "LOST";
@@ -1245,6 +1342,8 @@ const buildBulkLeadProjectSummary = (row) => {
     row.city ? `Location: ${row.city}` : "",
     row.budget ? `Budget: ${row.budget}` : "",
     row.company ? `Company: ${row.company}` : "",
+    row.photoVideo ? `Photo/Video: ${row.photoVideo}` : "",
+    ...["followUp1", "followUp2", "followUp3"].map((key, index) => (row[key] && !normalizeBulkDate(row[key]) ? `Follow-up ${index + 1}: ${row[key]}` : "")),
     row.callUpdate ? `Call Update: ${row.callUpdate}` : "",
     row.comment ? `Comment: ${row.comment}` : "",
     row.visit ? `Visit: ${row.visit}` : "",
@@ -1259,7 +1358,8 @@ const buildBulkLeadProjectSummary = (row) => {
 };
 
 const buildBulkLeadRequirements = (row, sheetType = DEFAULT_BULK_LEAD_SHEET_TYPE) => {
-  const budget = normalizeBulkAmount(row.budget);
+  const budgetRange = normalizeBulkBudgetRange(row.budget);
+  const budget = budgetRange ? null : normalizeBulkAmount(row.budget);
   const requirementText = [
     row.projectInterested,
     row.requirement,
@@ -1268,7 +1368,10 @@ const buildBulkLeadRequirements = (row, sheetType = DEFAULT_BULK_LEAD_SHEET_TYPE
   const transactionType = normalizeBulkTransactionType(row.projectName || row.projectInterested);
   const requirements = {};
 
-  if (budget !== null) {
+  if (budgetRange) {
+    requirements.budgetMin = budgetRange.min;
+    requirements.budgetMax = budgetRange.max;
+  } else if (budget !== null) {
     requirements.budgetMin = budget;
     requirements.budgetMax = budget;
   }
@@ -1276,6 +1379,20 @@ const buildBulkLeadRequirements = (row, sheetType = DEFAULT_BULK_LEAD_SHEET_TYPE
   const selectedSheetType = Object.values(BULK_LEAD_SHEET_TYPES).includes(sheetType)
     ? sheetType
     : DEFAULT_BULK_LEAD_SHEET_TYPE;
+
+  if (selectedSheetType === BULK_LEAD_SHEET_TYPES.COWORKING) {
+    requirements.inventoryType = "COWORKING";
+    requirements.transactionType = "RENT";
+    const coworking = buildBulkCoworkingRequirement(row);
+    if (Object.keys(coworking).length) requirements.coworking = coworking;
+    const coworkingArea = requirementText.match(/(\d+(?:\.\d+)?)\s*(?:sq\s*\.?\s*ft|sqft|sqfit|sft)\b/i);
+    if (coworkingArea) {
+      requirements.areaMin = Number.parseFloat(coworkingArea[1]);
+      requirements.areaMax = requirements.areaMin;
+      requirements.areaUnit = "SQ_FT";
+    }
+    return requirements;
+  }
 
   if (["COMMERCIAL", "RESIDENTIAL"].includes(propertyType)) {
     requirements.inventoryType = propertyType;
@@ -1390,12 +1507,16 @@ const normalizeBulkLeadRow = ({ rawRow, mappedHeaders, sheetName = "", sheetType
     || "";
   if (!phone) return null;
 
-  const name = normalizeBulkCellText(row.name);
+  const { name, note: nameNote } = splitBulkNameCell(row.name);
+  if (nameNote) row.nameNote = nameNote;
   const safeName = name && !normalizeBulkPhone(name) ? name : `Lead ${phone}`;
   const sourceText = normalizeBulkCellText(row.source).toUpperCase();
   const projectInterested = buildBulkLeadProjectSummary(row);
   const requirements = buildBulkLeadRequirements(row, sheetType);
-  const nextFollowUp = normalizeBulkDate(row.followUp);
+  // The latest dated follow-up column is the next one due.
+  const nextFollowUp = ["followUp3", "followUp2", "followUp1", "followUp"]
+    .map((key) => normalizeBulkDate(row[key]))
+    .find(Boolean) || "";
   const lastContactedAt = normalizeBulkDate(row.date);
 
   return {
@@ -1405,6 +1526,7 @@ const normalizeBulkLeadRow = ({ rawRow, mappedHeaders, sheetName = "", sheetType
     city: row.city || "",
     projectInterested,
     clientProfession: normalizeBulkCellText(row.workProfile).slice(0, 120),
+    company: normalizeBulkCellText(row.company).slice(0, 200),
     requirements,
     source: sourceText.includes("META") ? "META" : "MANUAL",
     status: resolveBulkLeadStatus({ sheetName, row }),
@@ -1585,7 +1707,7 @@ const LeadsMatrix = () => {
 
   const [searchParams, setSearchParams] = useSearchParams();
   const [advancedFilters, setAdvancedFilters] = useState(() => Object.fromEntries(
-    ["source", "assignedTo", "inventoryType", "subtype", "transactionType", "city", "project", "budgetMin", "budgetMax", "budgetRange", "createdFrom", "createdTo", "createdDate", "followUpDateFrom", "followUpDateTo", "followUpDate"]
+    ["source", "assignedTo", "inventoryType", "subtype", "transactionType", "city", "project", "budgetMin", "budgetMax", "budgetRange", "createdFrom", "createdTo", "createdDate", "followUpDateFrom", "followUpDateTo", "followUpDate", "touchState", "touchMinutesMax"]
       .map((key) => [key, searchParams.get(key) || ""]),
   ));
   const [quickFilter, setQuickFilter] = useState(() => searchParams.get("quickFilter") || "");
@@ -1771,15 +1893,19 @@ const LeadsMatrix = () => {
     || userRole === "CHANNEL_PARTNER";
   const canBulkUploadLeads =
     userRole === "ADMIN" || MANAGEMENT_ROLES.includes(userRole) || isExecutiveUser;
-  const canEditLead = canPageAction(currentPageKey, "edit");
+  // My Leads is the only leads page for non-management roles, so it carries
+  // whatever their Pipeline grant allowed as well (export, assign...).
+  const canLeadAction = (action) => canPageAction(currentPageKey, action)
+    || (currentPageKey === "my_leads" && canPageAction("leads", action));
+  const canEditLead = canLeadAction("edit");
   // Same gate as the API: Admin deletes, Manager requests Admin approval, and
   // anyone else only with an explicit Delete grant from an Admin.
-  const canDeleteLead = canPageAction(currentPageKey, "delete")
+  const canDeleteLead = canLeadAction("delete")
     && (["ADMIN", "MANAGER"].includes(userRole) || enforcePageAccess);
-  const canExportLeads = canPageAction(currentPageKey, "export");
-  const canFollowUpLead = canPageAction(currentPageKey, "follow_up");
-  const canAddLeadByPage = canPageAction(currentPageKey, "create");
-  const canBulkUploadByPage = canPageAction(currentPageKey, "create");
+  const canExportLeads = canLeadAction("export");
+  const canFollowUpLead = canLeadAction("follow_up");
+  const canAddLeadByPage = canLeadAction("create");
+  const canBulkUploadByPage = canLeadAction("create");
   // Pipeline users may manually reassign any company lead to any active teammate.
   // The API still enforces company tenancy for both the lead and target user.
   const canAssignLead = true;
@@ -2538,6 +2664,8 @@ const LeadsMatrix = () => {
     onOpenLead: handleOpenLeadDetailsPage,
     onCall: (lead) => {
       const href = getDialerHref(lead?.phone);
+      // A call from the CRM is a touch (requirements 16 Oct 2026, section 08).
+      if (href && lead?._id) logLeadTouch(lead._id, { channel: "CALL", source: "CRM_ACTION" }).catch(() => {});
       if (href) window.location.href = href;
     },
     onEmail: (lead) => {
@@ -2547,6 +2675,7 @@ const LeadsMatrix = () => {
     onCalendar: handleOpenLeadDetailsPage,
     onWhatsApp: (lead) => {
       const href = getWhatsAppHref(lead?.phone);
+      if (href && lead?._id) logLeadTouch(lead._id, { channel: "WHATSAPP", source: "CRM_ACTION" }).catch(() => {});
       if (href) window.open(href, "_blank", "noopener");
     },
     // TODO(phase 7): swap for QuickLogPopover once it exists; until then Log
@@ -2914,7 +3043,7 @@ const LeadsMatrix = () => {
           propertySubtype,
           subtypeData: sanitizeRequirementSubtypeData(formData.requirementsSubtypeData),
           transactionType: toLeadDealType(formData.requirementsTransactionType, formData.requirementsInventoryType, propertySubtype),
-          furnishingStatus: String(formData.requirementsFurnishingStatus || "").trim().toUpperCase(),
+          furnishingStatus: requirementFurnishing(formData.requirementsInventoryType, formData.requirementsFurnishingStatus),
           budgetMin: toAmountNumber(formData.requirementsBudgetMin),
           budgetMax: toAmountNumber(formData.requirementsBudgetMax),
           areaMin: null,
@@ -3062,6 +3191,9 @@ const LeadsMatrix = () => {
     }
     if (String(followUpDraft || "").trim()) {
       payload.nextFollowUp = String(followUpDraft || "").trim();
+    } else if (selectedLead?.nextFollowUp) {
+      // Follow-up was marked complete (date cleared): tell the server to clear it.
+      payload.nextFollowUp = "";
     }
 
     try {
@@ -3351,6 +3483,9 @@ const LeadsMatrix = () => {
 
       if (hasFollowUpDraft) {
         payload.nextFollowUp = normalizedFollowUpDraft;
+      } else if (selectedLead?.nextFollowUp) {
+        // Follow-up was marked complete (date cleared): tell the server to clear it.
+        payload.nextFollowUp = "";
       }
 
       if (canConfigureSiteLocation && hasAnySiteCoordinate) {

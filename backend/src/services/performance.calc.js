@@ -22,20 +22,37 @@
  * Pure: the controller gathers the records, this does the arithmetic.
  */
 
-const PERFORMANCE_WEIGHTS = Object.freeze({ attendance: 30, tasks: 30, sales: 40 });
+/*
+ * Requirements 16 Oct 2026, section 03: four parts with agreed weights.
+ *   target       40%  progress against the person's own targets
+ *   tasks        20%  tasks due: on time full, late half, overdue nothing
+ *   attendance   20%  attendance % of working days (leave, week offs, holidays excluded)
+ *   punctuality  20%  on-time arrivals among days attended; late arrivals and
+ *                     half days count against it, short breaks do not
+ * A part with nothing to measure is left out and the others carry its weight.
+ * Each target counts at most 100% (TARGET_CAP_PERCENT) until management
+ * confirms the formula.
+ */
+const PERFORMANCE_WEIGHTS = Object.freeze({ target: 40, tasks: 20, attendance: 20, punctuality: 20 });
+const TARGET_CAP_PERCENT = 100;
 
 // Closing this share of the month's leads scores full marks on conversion.
 const CONVERSION_BENCHMARK_PERCENT = 20;
 
+// Grade bands (management, 21 Oct 2026). The overall score keeps two
+// decimals, so 94.99 is Great and 95 is Excellent.
 const GRADES = Object.freeze([
-  { min: 85, key: "EXCELLENT", label: "Excellent" },
-  { min: 70, key: "GOOD", label: "Good" },
-  { min: 50, key: "AVERAGE", label: "Average" },
+  { min: 95, key: "EXCELLENT", label: "Excellent" },
+  { min: 90, key: "GREAT", label: "Great" },
+  { min: 85, key: "GOOD", label: "Good" },
+  { min: 80, key: "AVERAGE", label: "Average" },
+  { min: 75, key: "BELOW_AVERAGE", label: "Below average" },
   { min: 0, key: "NEEDS_IMPROVEMENT", label: "Needs improvement" },
 ]);
 
 const clamp = (value) => Math.max(0, Math.min(100, Number(value) || 0));
 const round = (value) => Math.round(clamp(value));
+const round2 = (value) => Math.round(clamp(value) * 100) / 100;
 const percentOf = (part, whole) => (whole > 0 ? (Number(part || 0) / whole) * 100 : 0);
 
 const gradeFor = (score) => (score === null || score === undefined
@@ -51,11 +68,8 @@ const scoreAttendance = (summary) => {
 
   const attendancePercent = clamp(summary.attendancePercent);
   const checkedInDays = Number(summary.onTimeDays || 0) + Number(summary.lateDays || 0);
-  // Punctuality only means something on days somebody turned up.
   const punctuality = checkedInDays ? clamp(summary.punctualityPercent) : null;
-  const score = punctuality === null
-    ? attendancePercent
-    : attendancePercent * 0.7 + punctuality * 0.3;
+  const score = attendancePercent;
 
   return {
     score: round(score),
@@ -171,14 +185,70 @@ const scoreSales = ({ leads = {}, target = null, openLeads = {}, revenuePerClose
   };
 };
 
+/* -------------------------------------------------------- punctuality -- */
+
+/**
+ * On-time arrivals out of the days the person came in. A late arrival and a
+ * half day each count against it; an approved exception doesn't (it is not in
+ * the summary's late or half-day counts). Null when they came in on no day.
+ */
+const scorePunctuality = (summary) => {
+  const onTime = Number(summary?.onTimeDays || 0);
+  const late = Number(summary?.lateDays || 0);
+  const halfDays = Number(summary?.halfDays || 0);
+  const early = Number(summary?.earlyCheckoutDays || 0);
+  // A half day is usually also a late arrival; never count the same day twice.
+  const halfNotLate = Math.max(0, halfDays - Math.min(halfDays, Number(summary?.lateHalfDays ?? 0)));
+  const counted = onTime + late + halfNotLate;
+  if (!counted) return null;
+  const misses = late + halfNotLate + early * 0.5;
+  return {
+    score: round(((counted - Math.min(counted, misses)) / counted) * 100),
+    metrics: { daysCounted: counted, onTimeDays: onTime, lateDays: late, halfDays, earlyCheckouts: early },
+  };
+};
+
+/* ------------------------------------------------------------- target -- */
+
+/**
+ * Progress against the person's own targets for the month (3.1). Each target
+ * is capped at TARGET_CAP_PERCENT; the part is their average. Null when no
+ * target was set - then the other parts carry the weight.
+ * @param target   TargetAssignment row or null
+ * @param actuals  { leads, siteVisits, revenue, deals, production }
+ */
+const scoreTarget = ({ target = null, actuals = {} }) => {
+  const rows = [
+    ["leads", "Leads", Number(target?.leadsTarget || 0), Number(actuals.leads || 0)],
+    ["siteVisits", "Site visits", Number(target?.siteVisitTarget || 0), Number(actuals.siteVisits || 0)],
+    ["revenue", "Revenue", Number(target?.revenueTarget || 0), Number(actuals.revenue || 0)],
+    ["deals", "Deals closed", Number(target?.dealsTarget || 0), Number(actuals.deals || 0)],
+    ["production", "Production output", Number(target?.productionTarget || 0), Number(actuals.production || 0)],
+  ].filter(([, , goal]) => goal > 0);
+  if (!rows.length) return null;
+  const items = rows.map(([key, label, goal, achieved]) => ({
+    key,
+    label,
+    goal,
+    achieved,
+    remaining: Math.max(0, goal - achieved),
+    percent: Math.round(percentOf(achieved, goal)),
+    countedPercent: Math.min(TARGET_CAP_PERCENT, percentOf(achieved, goal)),
+  }));
+  return {
+    score: round(items.reduce((sum, item) => sum + item.countedPercent, 0) / items.length),
+    metrics: { targets: items.map(({ countedPercent, ...rest }) => rest), capPercent: TARGET_CAP_PERCENT },
+  };
+};
+
 /* ------------------------------------------------------------ overall -- */
 
-const calculatePerformance = ({ attendance, tasks, sales }) => {
-  const parts = { attendance, tasks, sales };
+const calculatePerformance = ({ target = null, tasks = null, attendance = null, punctuality = null, sales = null }) => {
+  const parts = { target, tasks, attendance, punctuality };
   const applicable = Object.entries(parts).filter(([, part]) => part);
   const weightTotal = applicable.reduce((sum, [key]) => sum + PERFORMANCE_WEIGHTS[key], 0);
   const score = weightTotal
-    ? round(applicable.reduce((sum, [key, part]) => sum + part.score * PERFORMANCE_WEIGHTS[key], 0) / weightTotal)
+    ? round2(applicable.reduce((sum, [key, part]) => sum + part.score * PERFORMANCE_WEIGHTS[key], 0) / weightTotal)
     : null;
 
   return {
@@ -193,6 +263,8 @@ const calculatePerformance = ({ attendance, tasks, sales }) => {
         effectiveWeight: Math.round((PERFORMANCE_WEIGHTS[key] / weightTotal) * 100),
       }
       : null])),
+    // Sales activity is shown for context; it is not a scored part any more.
+    activity: sales ? sales.metrics : null,
   };
 };
 
@@ -204,5 +276,8 @@ module.exports = {
   scoreAttendance,
   scoreTasks,
   scoreSales,
+  scorePunctuality,
+  scoreTarget,
+  TARGET_CAP_PERCENT,
   calculatePerformance,
 };

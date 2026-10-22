@@ -8,6 +8,7 @@ import {
   Handshake,
   Calendar,
   CheckSquare,
+  ClipboardCheck,
   ClipboardList,
   Home,
   Layers,
@@ -39,7 +40,7 @@ export const ACTIVITY_SECTIONS = [
     id: "dashboard",
     label: "Dashboard",
     icon: Home,
-    match: ["/", "/dashboard", "/tasks", "/attendance", "/salary", "/performance"],
+    match: ["/", "/dashboard", "/tasks", "/attendance", "/salary", "/performance", "/daily-reports"],
   },
   {
     id: "leads",
@@ -120,6 +121,7 @@ export const WORKBENCH_MENU = {
         // Pay comes out of attendance, so whoever keeps attendance has a salary.
         { label: "Salary", path: "/salary", icon: Wallet, page: "salary", roles: [...SALES_ROLES, ...PRODUCTION_ROLES, ...PARTNER_ROLES] },
         { label: "Performance", path: "/performance", icon: Gauge, page: "performance", roles: [...SALES_ROLES, ...PRODUCTION_ROLES, ...PARTNER_ROLES] },
+        { label: "Daily Reports", path: "/daily-reports", icon: ClipboardCheck, page: "daily_reports", roles: [...SALES_ROLES, "INSIDE_EXECUTIVE", ...PRODUCTION_ROLES, "COWORKING_ADMIN"], hiddenForRoles: ["CHANNEL_PARTNER"] },
       ],
     },
   ],
@@ -127,8 +129,8 @@ export const WORKBENCH_MENU = {
     {
       group: "Pipeline",
       items: [
-        { label: "Pipeline", path: "/leads", icon: Users, page: "leads", roles: ["ADMIN", "MANAGER", "CHANNEL_PARTNER"] },
-        { label: "My Leads", path: "/my-leads", icon: Briefcase, page: "my_leads", roles: ["EXECUTIVE", "FIELD_EXECUTIVE"] },
+        { label: "Pipeline", path: "/leads", icon: Users, page: "leads", roles: ["ADMIN", "MANAGER"], onlyForRoles: ["ADMIN", "MANAGER"] },
+        { label: "My Leads", path: "/my-leads", icon: Briefcase, page: "my_leads", pages: ["my_leads", "leads"], roles: ["EXECUTIVE", "INSIDE_EXECUTIVE", "FIELD_EXECUTIVE", "CHANNEL_PARTNER"], hiddenForRoles: ["ADMIN", "MANAGER"] },
       ],
     },
   ],
@@ -139,8 +141,8 @@ export const WORKBENCH_MENU = {
         { label: "Inventory", path: "/inventory", icon: Building2, page: "inventory", roles: [...SALES_ROLES, ...PARTNER_ROLES], requiresInventoryAccessForPartner: true },
         // Both contact directories are internal, so channel partners are left
         // out here exactly as the API leaves them out.
-        { label: "Owner Database", path: "/inventory/owners", icon: BookUser, page: "inventory", roles: SALES_ROLES },
-        { label: "Broker Database", path: "/inventory/brokers", icon: Handshake, page: "inventory", roles: SALES_ROLES },
+        { label: "Owner Database", path: "/inventory/owners", icon: BookUser, page: "inventory", roles: SALES_ROLES, hiddenForRoles: ["CHANNEL_PARTNER"] },
+        { label: "Broker Database", path: "/inventory/brokers", icon: Handshake, page: "inventory", roles: SALES_ROLES, hiddenForRoles: ["CHANNEL_PARTNER"] },
         { label: "Projects", path: "/projects", icon: Briefcase, page: "projects", roles: [...SALES_ROLES, ...PARTNER_ROLES], requiresInventoryAccessForPartner: true },
         { label: "Field Ops", path: "/map", icon: Map, page: "field_ops", roles: ["ADMIN", "MANAGER", "FIELD_EXECUTIVE"] },
       ],
@@ -250,6 +252,7 @@ export const SIDEBAR_GROUPS = [
       navItem("/attendance", { label: "Attendance" }),
       navItem("/salary", { label: "Salary" }),
       navItem("/performance", { label: "Performance" }),
+      navItem("/daily-reports", { label: "Daily Reports" }),
     ],
   },
   {
@@ -308,8 +311,15 @@ const ROLE_ONLY_PAGES = new Set([
 export const roleCanSeeItem = (item, userRole, user = {}) => {
   const permissions = Array.isArray(user?.permissions) ? user.permissions : null;
 
-  // Use the effective grants returned by /access/me for every role.
-  if (userRole !== "ADMIN" && item.page && !permissions?.includes(`page.${item.page}.view`)) return false;
+  // Leads: Admin and Manager get the Pipeline (every lead); everyone else
+  // gets My Leads only. Channel Partners also skip pages the server refuses them.
+  if (item.hiddenForRoles?.includes(userRole)) return false;
+  if (item.onlyForRoles && !item.onlyForRoles.includes(userRole)) return false;
+
+  // Use the effective grants returned by /access/me for every role. An item
+  // with `pages` shows when any one of them is granted.
+  const itemPages = item.pages || (item.page ? [item.page] : []);
+  if (userRole !== "ADMIN" && itemPages.length && !itemPages.some((key) => permissions?.includes(`page.${key}.view`))) return false;
   if (ROLE_ONLY_PAGES.has(item.page) && !item?.roles?.includes(userRole)) return false;
 
   if (

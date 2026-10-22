@@ -29,6 +29,8 @@ export default function LeadAdvancedFilters({ filters, status, subtype, statuses
           {select("inventoryType", "Business category", categories)}
           {select("subtype", "Property type", subtypes)}
           {select("transactionType", "Transaction", ["SALE", "RENT", "LEASE"].map((value) => ({ value, label: value })))}
+          {select("touchState", "First touch", [{ value: "UNTOUCHED", label: "Untouched" }, { value: "TOUCHED", label: "Touched" }])}
+          {input("touchMinutesMax", "Touched within (minutes)", "number")}
           {input("city", "City contains")}{input("project", "Project contains")}
           {input("budgetMin", "Budget from (₹)", "number")}{input("budgetMax", "Budget to (₹)", "number")}
           {input("createdFrom", "Created from", "date")}{input("createdTo", "Created to", "date")}

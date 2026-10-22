@@ -12,6 +12,7 @@ const OPTION_TONES = {
   ABSENT: "border-rose-500 bg-rose-50 text-rose-800 dark:bg-rose-500/15 dark:text-rose-200",
   LEAVE: "border-teal-500 bg-teal-50 text-teal-800 dark:bg-teal-500/15 dark:text-teal-200",
   WEEK_OFF: "border-slate-500 bg-slate-100 text-slate-800 dark:bg-slate-500/20 dark:text-slate-100",
+  HOLIDAY: "border-fuchsia-500 bg-fuchsia-50 text-fuchsia-800 dark:bg-fuchsia-500/15 dark:text-fuchsia-200",
 };
 
 const DOT_TONES = {
@@ -20,6 +21,7 @@ const DOT_TONES = {
   ABSENT: "bg-rose-500",
   LEAVE: "bg-teal-500",
   WEEK_OFF: "bg-slate-400",
+  HOLIDAY: "bg-fuchsia-500",
 };
 
 const formatLongDate = (dateKey) => {

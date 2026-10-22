@@ -5,6 +5,8 @@ import React from "react";
 import { motion as Motion } from "framer-motion";
 import { createInventoryShareLink } from "../../../services/inventoryService";
 import { uploadFile } from "../../../services/uploadService";
+import { logLeadTouch } from "../../../services/leadService";
+import LeadTouchStatus from "./LeadTouchStatus";
 import {
   AlertCircle,
   ArrowLeft,
@@ -673,6 +675,16 @@ const LeadDetailsRebuiltContent = ({
     statusDraft === "CLOSED" || String(selectedLead?.status || "").toUpperCase() === "CLOSED";
   const normalizedActiveInventoryId = String(selectedLeadActiveInventoryId || "").trim();
   const proposalShareBaseWhatsappHref = String(selectedLeadWhatsAppHref || "").trim();
+  // Requirements 16 Oct 2026 (section 08): the call / WhatsApp buttons count as
+  // a touch from the CRM. Opening the lead never does.
+  const [touchOverride, setTouchOverride] = React.useState(null);
+  const leadWithTouch = touchOverride && touchOverride.leadId === selectedLead?._id ? { ...selectedLead, ...touchOverride } : selectedLead;
+  const logCrmTouch = (channel) => {
+    if (!selectedLead?._id) return;
+    logLeadTouch(selectedLead._id, { channel, source: "CRM_ACTION" })
+      .then((out) => out?.touch && setTouchOverride({ leadId: selectedLead._id, ...out.touch, firstTouchAt: out.touch.firstTouchAt }))
+      .catch(() => {});
+  };
   const normalizedClosureDocuments = React.useMemo(
     () => sanitizeClosureDocumentList(closureDocumentsDraft),
     [closureDocumentsDraft],
@@ -859,7 +871,9 @@ const LeadDetailsRebuiltContent = ({
     normalizedRequirementInventoryType,
     normalizedRequirementPropertySubtype,
   );
-  const showFurnishing = !propertySubtypeConfig || propertySubtypeConfig.showFurnishing !== false;
+  // Coworking always comes furnished, so there is nothing to choose.
+  const showFurnishing = normalizedRequirementInventoryType !== "COWORKING"
+    && (!propertySubtypeConfig || propertySubtypeConfig.showFurnishing !== false);
   const furnishingOptions = showFurnishing ? FURNISHING_OPTIONS : [];
   const furnishingValue = furnishingOptions.some((option) => option.value === requirementsDraft?.furnishingStatus)
     ? requirementsDraft?.furnishingStatus
@@ -945,7 +959,8 @@ const LeadDetailsRebuiltContent = ({
           inventoryType: value,
           propertySubtype: "",
           subtypeData: {},
-          furnishingStatus: FURNISHING_OPTIONS.some((option) => option.value === prev?.furnishingStatus)
+          furnishingStatus: String(value || "").toUpperCase() !== "COWORKING"
+            && FURNISHING_OPTIONS.some((option) => option.value === prev?.furnishingStatus)
             ? prev?.furnishingStatus
             : "",
         };
@@ -2708,7 +2723,7 @@ const LeadDetailsRebuiltContent = ({
           <button type="button" onClick={handleCopyLeadId} title="Copy lead ID" aria-label="Copy lead ID"><Copy size={18} /></button>
           <i aria-hidden="true" />
           <span>{leadPhoneLabel || "Not provided"}</span>
-          {selectedLeadDialerHref ? <a href={selectedLeadDialerHref} aria-label="Call lead"><Phone size={20} /></a> : null}
+          {selectedLeadDialerHref ? <a href={selectedLeadDialerHref} aria-label="Call lead" onClick={() => logCrmTouch("CALL")}><Phone size={20} /></a> : null}
         </div>
 
         <div className="lead-details-mobile-selects">
@@ -2744,8 +2759,8 @@ const LeadDetailsRebuiltContent = ({
         </button>
 
         <div className="lead-details-mobile-actions">
-          {selectedLeadDialerHref ? <a href={selectedLeadDialerHref}><Phone size={26} />Call</a> : <button type="button" disabled><Phone size={26} />Call</button>}
-          {selectedLeadWhatsAppHref ? <a href={selectedLeadWhatsAppHref} target="_blank" rel="noreferrer">{WhatsAppIcon ? <WhatsAppIcon size={26} /> : <MessageCircle size={26} />}WhatsApp</a> : <button type="button" disabled>WhatsApp</button>}
+          {selectedLeadDialerHref ? <a href={selectedLeadDialerHref} onClick={() => logCrmTouch("CALL")}><Phone size={26} />Call</a> : <button type="button" disabled><Phone size={26} />Call</button>}
+          {selectedLeadWhatsAppHref ? <a href={selectedLeadWhatsAppHref} target="_blank" rel="noreferrer" onClick={() => logCrmTouch("WHATSAPP")}>{WhatsAppIcon ? <WhatsAppIcon size={26} /> : <MessageCircle size={26} />}WhatsApp</a> : <button type="button" disabled>WhatsApp</button>}
           <button type="button" disabled={!canEditLead} onClick={onOpenEditLeadForm}><PencilLine size={26} />Edit</button>
           <button type="button" onClick={() => setHeaderMenuOpen((open) => !open)}><MoreHorizontal size={26} />More</button>
         </div>
@@ -2865,7 +2880,7 @@ const LeadDetailsRebuiltContent = ({
               </div>
 
               {selectedLeadDialerHref ? (
-                <a href={selectedLeadDialerHref} className={ghostBtn}>
+                <a href={selectedLeadDialerHref} className={ghostBtn} onClick={() => logCrmTouch("CALL")}>
                   <Phone size={15} className="text-blue-600" />
                   Call
                 </a>
@@ -2876,7 +2891,7 @@ const LeadDetailsRebuiltContent = ({
                 </button>
               )}
               {selectedLeadWhatsAppHref ? (
-                <a href={selectedLeadWhatsAppHref} target="_blank" rel="noreferrer" className={ghostBtn}>
+                <a href={selectedLeadWhatsAppHref} target="_blank" rel="noreferrer" className={ghostBtn} onClick={() => logCrmTouch("WHATSAPP")}>
                   {WhatsAppIcon ? <WhatsAppIcon size={15} className="text-emerald-600" /> : null}
                   WhatsApp
                 </a>
@@ -5304,6 +5319,7 @@ const LeadDetailsRebuiltContent = ({
                 </div>
               </div>
 
+              <LeadTouchStatus lead={leadWithTouch} isDark={isDark} onLogged={(touch) => setTouchOverride({ leadId: selectedLead?._id, ...touch })} />
               {canAssignLead && transferPanelOpen ? (
                 <div
                   id="lead-transfer-panel"

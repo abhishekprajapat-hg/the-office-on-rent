@@ -19,6 +19,7 @@ import Performance from "../reports/Performance";
 import LeadPerformancePanel from "../../components/dashboard/LeadPerformancePanel";
 import { getAllLeads, getLeadSummary } from "../../services/leadService";
 import { toErrorMessage } from "../../utils/errorMessage";
+import HomeStatusStrip from "../../components/dashboard/HomeStatusStrip";
 
 const getStoredUserId = () => {
   try {
@@ -122,6 +123,7 @@ const ExecutiveDashboard = () => {
 
   return (
     <div className="ui-page-shell flex h-full w-full flex-col overflow-hidden">
+      <div className="mb-3 shrink-0"><HomeStatusStrip /></div>
       <div className="min-h-0 flex-1 overflow-hidden">
         {renderContent()}
       </div>

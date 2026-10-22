@@ -58,6 +58,23 @@ const InventoryRevenueFields = ({ formData, setFormData, inputClass, sectionClas
         </select>
       </div>
       <div>
+        <label className={labelClass} htmlFor="inv-source-type">Source</label>
+        <select
+          id="inv-source-type"
+          value={formData.sourceType || ""}
+          onChange={(e) => setFormData((prev) => ({ ...prev, sourceType: e.target.value }))}
+          className={`${inputClass} mt-1`}
+        >
+          <option value="">Where did this come from?</option>
+          <option value="COMPANY">Company-owned / managed</option>
+          <option value="OWNER">Owner-provided</option>
+          <option value="BROKER">Broker-provided</option>
+          <option value="PARTNER">Partner / operator</option>
+          <option value="OTHER">Other</option>
+        </select>
+        <p className="mt-1 text-[11px] text-slate-400">Link the broker or owner from the property page after saving.</p>
+      </div>
+      <div>
         <label className={labelClass} htmlFor="inv-business-model">Business Model</label>
         <select
           id="inv-business-model"

@@ -15,6 +15,7 @@ import { useChatNotifications } from "../../context/useChatNotifications";
 import { getTaskStats, getTasks } from "../../services/taskService";
 import { usePermissions } from "../../context/usePermissions";
 import { toErrorMessage } from "../../utils/errorMessage";
+import HomeStatusStrip from "../../components/dashboard/HomeStatusStrip";
 
 const pct = (completed, total) => {
   const safeTotal = Number(total || 0);
@@ -208,6 +209,7 @@ const ProductionExecutiveDashboard = ({ mode = "home" }) => {
   return (
     <div className="dashboard-doc-screen min-h-full overflow-y-auto bg-slate-50 px-4 py-5 text-slate-950 sm:px-6 lg:px-8">
       <div className="mx-auto max-w-7xl space-y-5">
+        <HomeStatusStrip />
         <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
           <div className="flex flex-col gap-4 md:flex-row md:items-end md:justify-between">
             <div>

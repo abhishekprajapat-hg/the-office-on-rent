@@ -1,6 +1,6 @@
 import { memo, useEffect, useRef, useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
-import { Bell, CalendarDays, LogOut, Menu, MessageCircle, Moon, MoreVertical, Search, Sun, User } from "lucide-react";
+import { Bell, CalendarDays, LogOut, Menu, MessageCircle, Moon, MoreVertical, Search, Settings, Sun, User } from "lucide-react";
 import { PROFILE_ITEM, getAllVisibleMenuGroups, roleCanSeeItem } from "./workbenchNavigation";
 import AvatarFace from "../ui/AvatarFace";
 import { getMyProfile } from "../../services/userService";
@@ -23,6 +23,7 @@ const AppTopCommandBar = ({ pageHeader, theme, onToggleTheme, onMenuOpen, onLogo
   const canNotify = items.some((item) => item.path === "/admin/notifications");
   const canChat = items.some((item) => item.path === "/chat");
   const canProfile = roleCanSeeItem(PROFILE_ITEM, role, user);
+  const canSettings = items.some((item) => item.path === "/settings");
   const currentItem = items.filter((item) => location.pathname === item.path || location.pathname.startsWith(item.path + "/")).sort((a, b) => b.path.length - a.path.length)[0];
   const firstName = String(user?.name || user?.fullName || "there").trim().split(/\s+/)[0];
   const title = isFieldHome
@@ -106,11 +107,12 @@ const AppTopCommandBar = ({ pageHeader, theme, onToggleTheme, onMenuOpen, onLogo
       </div>
       <div className="app-header-controls">
         {actions}
+        {canSettings && <button type="button" className={`app-header-icon app-header-quick ${location.pathname.startsWith("/settings") ? "is-active" : ""} ${isPipeline || isLeadDetails ? "pipeline-mobile-optional lead-details-mobile-hidden" : ""}`} aria-label="Settings" title="Settings" onClick={() => navigate("/settings")}><Settings size={19} /></button>}
         {canNotify && <button type="button" className="app-header-icon" aria-label="Open notifications" title="Notifications" onClick={() => navigate("/admin/notifications")}><Bell size={21} />{unreadAlerts > 0 && <span className="app-header-unread">{unreadAlerts > 99 ? "99+" : unreadAlerts}</span>}</button>}
         {canChat && <button type="button" className={`app-header-icon ${isPipeline ? "pipeline-mobile-optional" : ""} ${isLeadDetails ? "lead-details-mobile-hidden" : ""}`} aria-label="Open team chat" title="Chat" onClick={openChat}><MessageCircle size={21} />{unreadChats > 0 && <span className="app-header-unread">{unreadChats > 99 ? "99+" : unreadChats}</span>}</button>}
         <div className="app-header-date"><CalendarDays size={17} />{today}</div>
-        {canProfile && <button type="button" className="app-header-avatar" aria-label="Open profile" title={user?.name || "Profile"} onClick={() => navigate("/profile")}><AvatarFace src={profilePhoto} initials={initials} fallback={<User size={18} />} /></button>}
         <button type="button" className={`app-header-icon ${isPipeline ? "pipeline-mobile-optional" : ""} ${isLeadDetails ? "lead-details-mobile-hidden" : ""}`} aria-label={theme === "dark" ? "Switch to light mode" : "Switch to dark mode"} onClick={onToggleTheme}>{theme === "dark" ? <Sun size={18} /> : <Moon size={18} />}</button>
+        {canProfile && <button type="button" className="app-header-avatar" aria-label="Open profile" title={user?.name || "Profile"} onClick={() => navigate("/profile")}><AvatarFace src={profilePhoto} initials={initials} fallback={<User size={18} />} /></button>}
         <button type="button" className={`app-header-logout ${isPipeline ? "pipeline-mobile-optional" : ""} ${isLeadDetails ? "lead-details-mobile-hidden" : ""}`} onClick={onLogout} aria-label="Logout" title="Logout"><LogOut size={18} /><span>Logout</span></button>
         {isLeadDetails && <div className="lead-details-header-menu"><button type="button" className="app-header-icon lead-details-header-more" aria-label="More workspace actions" onClick={() => setDetailsMenuOpen((open) => !open)}><MoreVertical size={20} /></button>{detailsMenuOpen && <div className="lead-details-header-popover"><button type="button" onClick={() => { setDetailsMenuOpen(false); onToggleTheme(); }}>{theme === "dark" ? <Sun size={15} /> : <Moon size={15} />} {theme === "dark" ? "Light mode" : "Dark mode"}</button><button type="button" onClick={onLogout}><LogOut size={15} /> Logout</button></div>}</div>}
       </div>

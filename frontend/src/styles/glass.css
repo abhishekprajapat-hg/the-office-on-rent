@@ -1,0 +1,831 @@
+/*
+ * Glass UI - the "CRM Web Glass" design (Claude Design, Oct 2026) applied to the
+ * whole CRM.
+ *
+ * Loaded after index.css (see main.jsx). Three layers:
+ *   1. Tokens (--g-*) per theme, plus the older --clay-* / --crm-* variables
+ *      remapped onto them, so every screen that already reads those variables
+ *      turns glass without being edited.
+ *   2. The shell: wallpaper, floating sidebar, floating header, floating chat.
+ *   3. A surface pass over the Tailwind classes the modules use (bg-white,
+ *      bg-slate-50, dark:bg-slate-900, borders, inputs, tables...) so module
+ *      pages pick up the glass cards too.
+ *
+ * Backdrop blur is only put on things that float over content (sidebar,
+ * header, dialogs, popovers). Cards sit on the smooth wallpaper, where a blur
+ * would look the same and cost a lot - and a backdrop-filter on a card would
+ * also turn it into the containing block for any `fixed` dialog inside it.
+ *
+ * Undo: remove the import in main.jsx (originals are in frontend/.glass-backup).
+ */
+
+/* ------------------------------------------------------------------ tokens */
+html.theme-light,
+html:not(.theme-dark) {
+  --g-wall:
+    radial-gradient(at 8% 12%, rgb(var(--blue-200)) 0, transparent 42%),
+    radial-gradient(at 88% 6%, rgb(var(--blue-100)) 0, transparent 38%),
+    radial-gradient(at 72% 92%, rgb(var(--blue-200) / 0.75) 0, transparent 42%),
+    radial-gradient(at 18% 95%, rgb(var(--blue-100)) 0, transparent 38%),
+    radial-gradient(at 50% 45%, rgb(var(--blue-50)) 0, transparent 60%),
+    color-mix(in srgb, rgb(var(--blue-100)) 55%, #f4f6fb);
+  --g-glass: rgba(255, 255, 255, 0.52);
+  --g-glass2: rgba(255, 255, 255, 0.38);
+  --g-glassHi: rgba(255, 255, 255, 0.78);
+  --g-modal: rgba(255, 255, 255, 0.92);
+  --g-line: rgba(255, 255, 255, 0.75);
+  --g-div: rgba(14, 22, 48, 0.08);
+  --g-shadow: 0 1px 0 rgba(255, 255, 255, 0.9) inset, 0 10px 30px rgba(30, 45, 110, 0.10);
+  --g-ink: #0e1630;
+  --g-mut: #55607e;
+  --g-fnt: #8c95b0;
+  --g-b: rgb(var(--blue-600));
+  --g-bs: rgb(var(--blue-600) / 0.12);
+  --g-bglow: rgb(var(--blue-600) / 0.30);
+  --g-bfill: rgb(var(--blue-600));
+  --g-ok: #0f8a59;
+  --g-oks: rgba(18, 146, 95, 0.13);
+  --g-warn: #a96400;
+  --g-warns: rgba(220, 140, 20, 0.16);
+  --g-bad: #c9352a;
+  --g-bads: rgba(208, 57, 43, 0.12);
+  --g-vio: #7044d6;
+  --g-vios: rgba(122, 79, 216, 0.13);
+  --g-track: rgba(14, 22, 48, 0.07);
+  --g-grid: rgba(14, 22, 48, 0.07);
+  --g-blur: 32px;
+}
+
+html.theme-dark {
+  --g-wall:
+    radial-gradient(at 8% 12%, rgb(var(--blue-800)) 0, transparent 42%),
+    radial-gradient(at 88% 6%, rgb(var(--blue-900)) 0, transparent 38%),
+    radial-gradient(at 72% 92%, rgb(var(--blue-900) / 0.85) 0, transparent 42%),
+    radial-gradient(at 18% 95%, rgb(var(--blue-950)) 0, transparent 36%),
+    color-mix(in srgb, rgb(var(--blue-950)) 35%, #05070e);
+  --g-glass: rgba(22, 28, 48, 0.50);
+  --g-glass2: rgba(22, 28, 48, 0.34);
+  --g-glassHi: rgba(60, 72, 110, 0.55);
+  --g-modal: rgba(18, 23, 40, 0.94);
+  --g-line: rgba(255, 255, 255, 0.10);
+  --g-div: rgba(255, 255, 255, 0.08);
+  --g-shadow: 0 1px 0 rgba(255, 255, 255, 0.07) inset, 0 14px 40px rgba(0, 0, 0, 0.40);
+  --g-ink: #eef1fa;
+  --g-mut: #a3acc8;
+  --g-fnt: #6c7593;
+  --g-b: rgb(var(--blue-400));
+  --g-bs: rgb(var(--blue-400) / 0.18);
+  --g-bglow: rgb(var(--blue-500) / 0.35);
+  --g-bfill: rgb(var(--blue-600));
+  --g-ok: #3ccf91;
+  --g-oks: rgba(60, 207, 145, 0.15);
+  --g-warn: #f5b543;
+  --g-warns: rgba(245, 181, 67, 0.15);
+  --g-bad: #ff7a6e;
+  --g-bads: rgba(255, 107, 94, 0.15);
+  --g-vio: #b39bff;
+  --g-vios: rgba(169, 139, 240, 0.17);
+  --g-track: rgba(255, 255, 255, 0.08);
+  --g-grid: rgba(255, 255, 255, 0.07);
+  --g-blur: 32px;
+}
+
+html[data-glass="soft"] { --g-blur: 14px; }
+
+/* Older variables, remapped so existing screens follow the glass tokens. */
+html.theme-light,
+html.theme-dark {
+  --font-body: "Plus Jakarta Sans", -apple-system, system-ui, "Segoe UI", sans-serif;
+  --font-display: "Plus Jakarta Sans", -apple-system, system-ui, "Segoe UI", sans-serif;
+  --bg-body: transparent;
+  --bg-root: transparent;
+  --clay-bg: transparent;
+  --clay-surface: var(--g-glass);
+  --clay-surface-strong: var(--g-glassHi);
+  --clay-surface-muted: var(--g-glass2);
+  --clay-border: var(--g-div);
+  --clay-border-strong: var(--g-line);
+  --clay-text: var(--g-ink);
+  --clay-muted: var(--g-mut);
+  --clay-accent: var(--g-b);
+  --clay-shadow: var(--g-shadow);
+  --clay-shadow-sm: var(--g-shadow);
+  --glass-surface: var(--g-glass);
+  --glass-border: var(--g-line);
+  --flat-shadow: var(--g-shadow);
+  --crm-bg: transparent;
+  --crm-surface: var(--g-glass);
+  --crm-surface-muted: var(--g-glass2);
+  --crm-border: var(--g-div);
+  --crm-border-strong: var(--g-line);
+  --crm-text: var(--g-ink);
+  --crm-text-muted: var(--g-mut);
+  --crm-accent: var(--g-b);
+  --crm-radius-md: 12px;
+  --crm-radius-lg: 18px;
+  --crm-shadow-card: var(--g-shadow);
+  --workspace-surface-light-solid: var(--g-glass);
+  --workspace-surface-dark-solid: var(--g-glass);
+  --scroll-thumb: rgba(120, 130, 160, 0.30);
+  --scroll-thumb-hover: rgba(120, 130, 160, 0.50);
+  --scroll-track: transparent;
+}
+
+/* ------------------------------------------------------------------- base */
+html.theme-light body,
+html.theme-dark body {
+  font-family: var(--font-body);
+  background: var(--g-wall);
+  background-attachment: fixed;
+  color: var(--g-ink);
+}
+
+html #root { background: transparent; }
+
+/* The wallpaper also paints the canvas, so the reserved scrollbar gutter
+   does not show as a pale strip at the right edge. */
+html.theme-light,
+html.theme-dark { background: var(--g-wall); background-attachment: fixed; }
+html:has(.gl-shell) { scrollbar-gutter: auto; }
+
+/* --------------------------------------------------------------- the shell */
+html:root .gl-shell.gl-shell {
+  background: var(--g-wall);
+  background-attachment: fixed;
+  color: var(--g-ink);
+  font-family: var(--font-body);
+  gap: 14px;
+  padding: 14px;
+  box-sizing: border-box;
+}
+
+html:root .gl-shell .workspace-main,
+html:root .gl-shell .app-page-bg {
+  background: transparent !important;
+  gap: 14px;
+  overflow: visible;
+}
+
+.gl-shell .workspace-main-content {
+  border-radius: 22px;
+  overflow: hidden;
+}
+
+/* Page enter: fade, rise and un-blur, the way the design swaps pages. */
+@keyframes gl-page-enter {
+  from { opacity: 0; transform: translateY(14px) scale(0.99); filter: blur(8px); }
+  to { opacity: 1; transform: none; filter: blur(0); }
+}
+.gl-page-enter {
+  animation: gl-page-enter 0.55s cubic-bezier(0.2, 0.9, 0.25, 1);
+}
+@media (prefers-reduced-motion: reduce) {
+  .gl-page-enter { animation: none; }
+}
+
+/* Sidebar - a floating glass pane. */
+.gl-sidebar {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  width: 236px;
+  height: 100%;
+  flex-shrink: 0;
+  border-radius: 26px;
+  background: linear-gradient(180deg, rgb(var(--blue-500) / 0.07), transparent 55%), var(--g-glass);
+  -webkit-backdrop-filter: blur(var(--g-blur)) saturate(180%);
+  backdrop-filter: blur(var(--g-blur)) saturate(180%);
+  border: 1px solid var(--g-line);
+  box-shadow: var(--g-shadow);
+  overflow: hidden;
+  color: var(--g-ink);
+}
+.gl-sidebar-lights { display: flex; align-items: center; gap: 7px; padding: 16px 18px 6px; }
+.gl-sidebar-lights i { width: 12px; height: 12px; border-radius: 50%; box-shadow: inset 0 0 0 0.5px rgba(0, 0, 0, 0.15); }
+.gl-sidebar-brand { display: flex; flex-direction: column; gap: 10px; padding: 14px 14px 12px; }
+/* The full logo has black lettering, so it always sits on a white tile -
+   in dark mode too. */
+html:root .gl-shell .gl-sidebar-logo { display: flex; align-items: center; justify-content: center; height: 76px; padding: 10px 14px; border-radius: 18px; background: #fff !important; box-shadow: 0 4px 14px rgba(30, 45, 110, 0.14); }
+html:root .gl-shell .gl-sidebar-logo img { display: block; max-width: 100%; max-height: 100%; object-fit: contain; background: transparent !important; }
+.gl-sidebar-brand-row { display: flex; align-items: center; justify-content: space-between; min-height: 22px; padding: 0 4px; }
+.gl-sidebar-brand-row .gl-sidebar-role { display: inline-flex; align-items: center; height: 22px; padding: 0 10px; border-radius: 999px; background: var(--g-bs); color: var(--g-b); font-size: 11px; font-weight: 800; letter-spacing: 0.04em; }
+.gl-sidebar-name { font-size: 14px; font-weight: 800; line-height: 1.2; }
+.gl-sidebar-role { font-size: 11.5px; font-weight: 600; color: var(--g-mut); line-height: 1.2; }
+.gl-nav { position: relative; flex: 1; min-height: 0; overflow-y: auto; padding: 4px 10px 14px; scrollbar-width: thin; }
+.gl-nav::-webkit-scrollbar { width: 8px; }
+.gl-nav::-webkit-scrollbar-thumb { background: rgba(120, 130, 160, 0.25); border-radius: 4px; }
+.gl-nav-ind {
+  position: absolute; left: 10px; right: 10px; border-radius: 12px; pointer-events: none;
+  background: var(--g-glassHi); border: 1px solid var(--g-line);
+  box-shadow: 0 6px 18px rgb(var(--blue-600) / 0.16), 0 1px 0 rgba(255, 255, 255, 0.6) inset;
+  transition: top 0.5s cubic-bezier(0.34, 1.36, 0.5, 1), height 0.3s ease, opacity 0.2s;
+}
+.gl-nav-bar {
+  position: absolute; left: 10px; width: 3px; height: 18px; border-radius: 2px; background: var(--g-b); pointer-events: none;
+  transition: top 0.5s cubic-bezier(0.34, 1.36, 0.5, 1), opacity 0.2s;
+}
+.gl-nav-group { display: flex; flex-direction: column; gap: 1px; margin-bottom: 6px; }
+.gl-nav-head {
+  display: flex; align-items: center; width: 100%; height: 32px; padding: 0 10px; border: 0; background: none; cursor: pointer;
+  font: inherit; font-size: 11px; font-weight: 800; letter-spacing: 0.08em; color: var(--g-fnt); text-transform: uppercase; text-align: left;
+}
+.gl-nav-head span { flex: 1; }
+.gl-nav-head svg { transition: transform 0.3s cubic-bezier(0.3, 1.2, 0.5, 1); }
+.gl-nav-head[aria-expanded="true"] svg { transform: rotate(90deg); }
+.gl-nav-item {
+  position: relative; display: flex; align-items: center; gap: 11px; height: 38px; padding: 0 12px; border-radius: 12px;
+  color: var(--g-mut); font-size: 13.5px; font-weight: 600; text-decoration: none; transition: color 0.25s, background-color 0.2s;
+}
+.gl-nav-item:hover { background: var(--g-glass2); color: var(--g-ink); }
+.gl-nav-item[data-active="1"] { color: var(--g-b); font-weight: 800; background: transparent; }
+.gl-nav-item svg { flex: none; transition: transform 0.35s cubic-bezier(0.34, 1.56, 0.64, 1); }
+.gl-nav-item[data-active="1"] svg { transform: scale(1.12); }
+.gl-nav-item > span { flex: 1; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.gl-nav-item:focus-visible, .gl-nav-head:focus-visible { outline: 2px solid var(--g-b); outline-offset: -2px; }
+.gl-nav-badge { min-width: 20px; height: 20px; padding: 0 6px; box-sizing: border-box; border-radius: 10px; background: var(--g-bads); color: var(--g-bad); font-size: 10.5px; font-weight: 800; display: flex; align-items: center; justify-content: center; }
+
+/* Header - a floating glass bar. AppTopCommandBar keeps its own classes. */
+html:root .gl-shell .app-context-header {
+  flex-wrap: wrap;
+  gap: 10px;
+  min-height: 0;
+  padding: 12px 14px 12px 22px;
+  border-radius: 24px;
+  background: var(--g-glass);
+  -webkit-backdrop-filter: blur(var(--g-blur)) saturate(180%);
+  backdrop-filter: blur(var(--g-blur)) saturate(180%);
+  border: 1px solid var(--g-line);
+  box-shadow: var(--g-shadow);
+  color: var(--g-ink);
+  z-index: 40;
+}
+html:root .gl-shell .app-header-heading { flex: 1; min-width: 200px; }
+html:root .gl-shell .app-header-heading h1 { font-size: 22px; font-weight: 800; letter-spacing: -0.02em; line-height: 1.25; }
+html:root .gl-shell .app-header-heading p { margin-top: 1px; font-size: 12.5px; color: var(--g-mut); }
+html:root .gl-shell .app-header-search { flex: 1; max-width: 420px; min-width: 200px; width: auto; color: var(--g-fnt); }
+html:root .gl-shell .app-header-search input {
+  height: 42px; padding: 0 74px 0 40px; border-radius: 14px !important; font-size: 13.5px;
+  background: var(--g-glass2) !important; border: 1px solid var(--g-line) !important; color: var(--g-ink); box-shadow: none;
+}
+html:root .gl-shell .app-header-search input::placeholder { color: var(--g-fnt); }
+html:root .gl-shell .app-header-search kbd {
+  font: 500 11px "JetBrains Mono", monospace; color: var(--g-fnt); padding: 2px 6px; border-radius: 6px;
+  background: var(--g-glass2); border: 1px solid var(--g-line);
+}
+html:root .gl-shell .app-header-search-results {
+  border-radius: 16px; padding: 6px; background: var(--g-modal); border: 1px solid var(--g-line); box-shadow: var(--g-shadow);
+  -webkit-backdrop-filter: blur(var(--g-blur)) saturate(180%); backdrop-filter: blur(var(--g-blur)) saturate(180%);
+}
+html:root .gl-shell .app-header-search-results button { border-radius: 10px; color: var(--g-ink); font-weight: 600; }
+html:root .gl-shell .app-header-search-results button:hover { background: var(--g-bs); }
+html:root .gl-shell .app-header-controls { gap: 10px; }
+html:root .gl-shell .app-header-icon,
+html:root .gl-shell .app-header-logout {
+  width: 42px; min-width: 42px; height: 42px; padding: 0; border-radius: 14px;
+  background: var(--g-glass2); border: 1px solid var(--g-line); color: var(--g-ink);
+  transition: transform 0.15s ease, background-color 0.2s;
+}
+html:root .gl-shell .app-header-icon svg,
+html:root .gl-shell .app-header-logout svg { width: 18px; height: 18px; }
+html:root .gl-shell .app-header-logout span { display: none; }
+html:root .gl-shell .app-header-icon:hover,
+html:root .gl-shell .app-header-logout:hover { background: var(--g-glassHi); }
+html:root .gl-shell .app-header-icon:active,
+html:root .gl-shell .app-header-logout:active { transform: scale(0.92); }
+html:root .gl-shell .app-header-unread {
+  top: 6px; right: 6px; min-width: 15px; height: 15px; padding: 0 3px; line-height: 15px; font-size: 9px; font-weight: 800;
+  background: var(--g-bad); box-shadow: 0 0 0 2px var(--g-glassHi);
+}
+html:root .gl-shell .app-header-date {
+  height: 42px; padding: 0 14px; gap: 8px; border-radius: 14px; font-size: 13px; font-weight: 700;
+  background: var(--g-glass2); border: 1px solid var(--g-line); color: var(--g-ink);
+}
+html:root .gl-shell .app-header-date svg { width: 16px; height: 16px; }
+html:root .gl-shell .app-header-avatar {
+  width: 42px; height: 42px; border-radius: 14px; font-size: 13.5px; font-weight: 800; color: #fff;
+  background: linear-gradient(145deg, rgb(var(--blue-500)), rgb(var(--blue-700))); box-shadow: 0 6px 16px var(--g-bglow);
+}
+html:root .gl-shell .lead-details-header-popover {
+  border-radius: 14px; background: var(--g-modal); border: 1px solid var(--g-line); box-shadow: var(--g-shadow);
+  -webkit-backdrop-filter: blur(var(--g-blur)); backdrop-filter: blur(var(--g-blur));
+}
+html:root .gl-shell .pipeline-mobile-title,
+html:root .gl-shell .lead-details-header-title { font-weight: 800; }
+
+/* Floating chat launcher - the round glass button bottom right. */
+.gl-fab {
+  width: 56px !important; height: 56px !important; border-radius: 50% !important;
+  background: var(--g-glass) !important; color: var(--g-b) !important;
+  -webkit-backdrop-filter: blur(var(--g-blur)) saturate(180%); backdrop-filter: blur(var(--g-blur)) saturate(180%);
+  border: 1px solid var(--g-line);
+  box-shadow: var(--g-shadow), 0 10px 30px var(--g-bglow) !important;
+  transition: transform 0.2s ease;
+}
+.gl-fab:hover { transform: scale(1.06); }
+.gl-fab svg { width: 24px; height: 24px; }
+.gl-messenger {
+  background: var(--g-modal) !important; border: 1px solid var(--g-line) !important; border-radius: 24px !important;
+  -webkit-backdrop-filter: blur(var(--g-blur)) saturate(180%); backdrop-filter: blur(var(--g-blur)) saturate(180%);
+  box-shadow: var(--g-shadow), 0 24px 60px rgba(14, 22, 48, 0.25) !important;
+}
+.gl-messenger > header { background: transparent !important; color: var(--g-ink) !important; border-bottom: 1px solid var(--g-div); padding: 12px 18px !important; font-weight: 800; }
+
+/* -------------------------------------------------- module surface pass */
+/* Page canvases go transparent so the wallpaper shows through. */
+html:root .gl-shell.gl-shell .workspace-main-content > .ui-page-shell.ui-page-shell[class],
+html:root .gl-shell.gl-shell .workspace-main-content > .admin-chat-page.admin-chat-page[class] {
+  background: transparent !important;
+  padding: 0 2px 14px !important;
+}
+html:root .gl-shell .workspace-main-content > .ui-page-shell.route-details-page { padding-top: 0 !important; }
+
+html:root .gl-shell .bg-\[var\(--clay-bg\)\],
+html:root .gl-shell .bg-\[var\(--crm-bg\)\],
+html:root .gl-shell .bg-void,
+html:root .gl-shell .app-page-bg { background: transparent !important; }
+
+/* Cards and panels. */
+html:root .gl-shell .bg-white,
+html:root .gl-shell [class^="bg-white/"],
+html:root .gl-shell [class*=" bg-white/"],
+html:root .gl-shell .ui-hero-card,
+html:root .gl-shell .ui-soft-panel,
+html.theme-dark .gl-shell .dark\:bg-slate-900,
+html.theme-dark .gl-shell .dark\:bg-slate-950,
+html.theme-dark .gl-shell [class*="dark:bg-slate-900/"],
+html.theme-dark .gl-shell [class*="dark:bg-slate-950/"],
+html.theme-dark .gl-shell .dark\:bg-\[\#0f172a\],
+html.theme-dark .gl-shell .dark\:bg-gray-900 {
+  background-color: var(--g-glass) !important;
+  -webkit-backdrop-filter: none;
+  backdrop-filter: none;
+}
+
+/* Inner tiles, wells and table heads. */
+html:root .gl-shell .bg-slate-50,
+html:root .gl-shell .bg-slate-100,
+html:root .gl-shell .bg-gray-50,
+html:root .gl-shell .bg-gray-100,
+html:root .gl-shell [class^="bg-slate-50/"],
+html:root .gl-shell [class*=" bg-slate-50/"],
+html:root .gl-shell [class^="bg-slate-100/"],
+html:root .gl-shell [class*=" bg-slate-100/"],
+html:root .gl-shell [class*="bg-[#f"],
+html:root .gl-shell [class*="bg-[#F"],
+html.theme-dark .gl-shell .dark\:bg-slate-800,
+html.theme-dark .gl-shell [class*="dark:bg-slate-800/"],
+html.theme-dark .gl-shell .dark\:bg-slate-850 {
+  background-color: var(--g-glass2) !important;
+  -webkit-backdrop-filter: none;
+  backdrop-filter: none;
+}
+
+/* Card geometry: anything that is a bordered, filled rounded box is a card. */
+html:root .gl-shell .rounded-2xl,
+html:root .gl-shell .rounded-3xl { border-radius: 22px; }
+html:root .gl-shell [class*="rounded-xl"][class*="border"][class*="bg-"] { border-radius: 18px; }
+html:root .gl-shell .rounded-2xl[class*="border"],
+html:root .gl-shell .rounded-3xl[class*="border"],
+html:root .gl-shell [class*="rounded-xl"][class*="border"][class*="bg-white"],
+html:root .gl-shell [class*="rounded-xl"][class*="border"][class*="clay-surface"],
+html:root .gl-shell .ui-hero-card,
+html:root .gl-shell .ui-soft-panel {
+  border-color: var(--g-line) !important;
+  box-shadow: var(--g-shadow) !important;
+}
+
+html:root .gl-shell .shadow-sm,
+html:root .gl-shell .shadow,
+html:root .gl-shell .shadow-md,
+html:root .gl-shell .shadow-lg,
+html:root .gl-shell .shadow-crm-card,
+html:root .gl-shell .shadow-crm-soft,
+html:root .gl-shell .shadow-flat-card,
+html:root .gl-shell .shadow-glass-light { box-shadow: var(--g-shadow) !important; }
+
+/* Lines. */
+html:root .gl-shell .border-slate-100,
+html:root .gl-shell .border-slate-200,
+html:root .gl-shell .border-slate-300,
+html:root .gl-shell .border-gray-200,
+html:root .gl-shell [class*="border-slate-200/"],
+html:root .gl-shell [class*="border-slate-100/"],
+html.theme-dark .gl-shell .dark\:border-slate-700,
+html.theme-dark .gl-shell .dark\:border-slate-800,
+html.theme-dark .gl-shell [class*="dark:border-slate-700/"],
+html.theme-dark .gl-shell [class*="dark:border-slate-800/"] { border-color: var(--g-div) !important; }
+html:root .gl-shell .divide-slate-100 > :not([hidden]) ~ :not([hidden]),
+html:root .gl-shell .divide-slate-200 > :not([hidden]) ~ :not([hidden]),
+html.theme-dark .gl-shell .dark\:divide-slate-800 > :not([hidden]) ~ :not([hidden]),
+html.theme-dark .gl-shell .dark\:divide-slate-700 > :not([hidden]) ~ :not([hidden]) { border-color: var(--g-div) !important; }
+
+/* Text. */
+html.theme-light .gl-shell .text-slate-950,
+html.theme-light .gl-shell .text-slate-900,
+html.theme-light .gl-shell .text-slate-800,
+html.theme-light .gl-shell .text-gray-900,
+html.theme-light .gl-shell .text-text-primary,
+html.theme-dark .gl-shell .dark\:text-white,
+html.theme-dark .gl-shell .dark\:text-slate-50,
+html.theme-dark .gl-shell .dark\:text-slate-100,
+html.theme-dark .gl-shell .dark\:text-slate-200 { color: var(--g-ink); }
+html.theme-light .gl-shell .text-slate-700,
+html.theme-light .gl-shell .text-slate-600,
+html.theme-light .gl-shell .text-slate-500,
+html.theme-light .gl-shell .text-gray-500,
+html.theme-light .gl-shell .text-text-secondary,
+html.theme-dark .gl-shell .dark\:text-slate-300,
+html.theme-dark .gl-shell .dark\:text-slate-400 { color: var(--g-mut); }
+html.theme-light .gl-shell .text-slate-400,
+html.theme-light .gl-shell .text-text-tertiary,
+html.theme-dark .gl-shell .dark\:text-slate-500 { color: var(--g-fnt); }
+
+.gl-shell h1, .gl-shell h2 { font-weight: 800; letter-spacing: -0.02em; }
+.gl-shell h3 { font-weight: 750; }
+html:root .gl-shell .font-display { font-family: var(--font-display); }
+
+/* Fields. */
+html:root .gl-shell input:not([type="checkbox"]):not([type="radio"]):not([type="range"]):not([type="color"]),
+html:root .gl-shell select,
+html:root .gl-shell textarea {
+  background-color: var(--g-glass2) !important;
+  border-color: var(--g-line) !important;
+  border-radius: 12px !important;
+  color: var(--g-ink);
+}
+html:root .gl-shell input::placeholder,
+html:root .gl-shell textarea::placeholder { color: var(--g-fnt); }
+html:root .gl-shell input:not([type="checkbox"]):not([type="radio"]):focus,
+html:root .gl-shell select:focus,
+html:root .gl-shell textarea:focus {
+  border-color: var(--g-b) !important;
+  box-shadow: 0 0 0 3px var(--g-bs) !important;
+  outline: none;
+}
+html.theme-dark .gl-shell select option { background: #121828; color: var(--g-ink); }
+
+/* Buttons. */
+html:root .gl-shell .bg-blue-600,
+html:root .gl-shell .bg-\[var\(--clay-accent\)\] {
+  background-color: var(--g-bfill) !important;
+  color: #fff;
+  box-shadow: 0 6px 16px var(--g-bglow);
+}
+html:root .gl-shell button.bg-blue-600:hover,
+html:root .gl-shell a.bg-blue-600:hover { filter: brightness(1.06); }
+html:root .gl-shell button[class*="rounded-lg"][class*="border"],
+html:root .gl-shell a[class*="rounded-lg"][class*="border"] { border-radius: 11px; }
+
+/* Tables. */
+html:root .gl-shell table thead,
+html:root .gl-shell table thead tr,
+html:root .gl-shell table thead th { background-color: transparent !important; }
+html:root .gl-shell table thead th {
+  color: var(--g-fnt) !important;
+  font-size: 11px; font-weight: 800; letter-spacing: 0.06em; text-transform: uppercase;
+  border-color: var(--g-div) !important;
+}
+html:root .gl-shell table tbody td { border-color: var(--g-div) !important; }
+html:root .gl-shell table tbody tr:hover > td { background-color: var(--g-glass2); }
+
+/* Tabs / segmented controls built from a slate-100 track. */
+html:root .gl-shell [role="tablist"] { background-color: var(--g-track); border-radius: 12px; }
+html:root .gl-shell [role="tab"][aria-selected="true"] {
+  background: var(--g-glassHi) !important; border: 1px solid var(--g-line); box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08); color: var(--g-ink) !important;
+}
+
+/* Scrollbars. */
+.gl-shell ::-webkit-scrollbar { width: 8px; height: 8px; }
+.gl-shell ::-webkit-scrollbar-track { background: transparent; }
+.gl-shell ::-webkit-scrollbar-thumb { background: rgba(120, 130, 160, 0.25); border-radius: 4px; }
+.gl-shell ::-webkit-scrollbar-thumb:hover { background: rgba(120, 130, 160, 0.45); }
+
+/* -------------------------------------------- dialogs, popovers, overlays */
+/* Inline dialogs (fixed overlays inside the shell) and portaled ones. The
+   panel is denser than a card so text stays readable over the page. */
+html:root .gl-shell .fixed.inset-0 .bg-white,
+html:root .gl-shell .fixed.inset-0 [class*="clay-surface"],
+html.theme-dark .gl-shell .fixed.inset-0 .dark\:bg-slate-900,
+html.theme-dark .gl-shell .fixed.inset-0 .dark\:bg-slate-950,
+html:root body > [role="dialog"] .bg-white,
+html:root body > div > [role="dialog"],
+html:root [role="dialog"][aria-modal="true"] > .bg-white,
+html:root .gl-shell [role="menu"],
+html:root .gl-shell [role="listbox"] {
+  background-color: var(--g-modal) !important;
+  -webkit-backdrop-filter: blur(var(--g-blur)) saturate(180%);
+  backdrop-filter: blur(var(--g-blur)) saturate(180%);
+  border-color: var(--g-line) !important;
+}
+html:root .gl-shell .fixed.inset-0 .fixed.inset-0 .bg-white { -webkit-backdrop-filter: none; backdrop-filter: none; }
+html:root .gl-shell .fixed.inset-0[class*="bg-slate-9"],
+html:root .gl-shell .fixed.inset-0[class*="bg-black"] {
+  -webkit-backdrop-filter: blur(6px);
+  backdrop-filter: blur(6px);
+}
+
+/* Portaled ui/Modal (rendered on <body>, outside the shell). */
+html:root body > div > .fixed.inset-0 .bg-white,
+html.theme-dark body > div > .fixed.inset-0 .dark\:bg-slate-900 {
+  background-color: var(--g-modal) !important;
+  -webkit-backdrop-filter: blur(var(--g-blur)) saturate(180%);
+  backdrop-filter: blur(var(--g-blur)) saturate(180%);
+  border-color: var(--g-line) !important;
+  border-radius: 22px;
+  color: var(--g-ink);
+}
+
+/* ------------------------------------------------------------------ small */
+@media (max-width: 767px) {
+  html:root .gl-shell.gl-shell { padding: 10px; gap: 10px; }
+  html:root .gl-shell .workspace-main { gap: 10px; }
+  html:root .gl-shell .app-context-header { padding: 10px 10px 10px 12px; border-radius: 20px; gap: 8px; }
+  html:root .gl-shell .app-header-heading { min-width: 0; }
+  html:root .gl-shell .app-header-heading h1 { font-size: 18px; }
+  html:root .gl-shell .app-header-controls { gap: 6px; }
+  html:root .gl-shell .app-header-icon,
+  html:root .gl-shell .app-header-logout,
+  html:root .gl-shell .app-header-avatar { width: 36px; min-width: 36px; height: 36px; border-radius: 12px; }
+  .gl-shell .workspace-main-content { border-radius: 18px; }
+  .gl-sidebar.gl-sidebar-mobile { position: absolute; top: 10px; bottom: 10px; left: 10px; height: auto; width: 264px; background: var(--g-modal); }
+}
+
+/* ------------------------------------------ responsive surface variants */
+@media (min-width: 640px) {
+  html:root .gl-shell .sm\:bg-white { background-color: var(--g-glass) !important; }
+  html.theme-dark .gl-shell .sm\:dark\:bg-slate-900 { background-color: var(--g-glass) !important; }
+}
+@media (min-width: 768px) {
+  html:root .gl-shell .md\:bg-white { background-color: var(--g-glass) !important; }
+  html.theme-dark .gl-shell .md\:dark\:bg-slate-900 { background-color: var(--g-glass) !important; }
+}
+@media (min-width: 1024px) {
+  html:root .gl-shell .lg\:bg-white { background-color: var(--g-glass) !important; }
+  html.theme-dark .gl-shell .lg\:dark\:bg-slate-900 { background-color: var(--g-glass) !important; }
+  html:root .gl-shell .lg\:rounded-xl.lg\:border { border-radius: 22px; border-color: var(--g-line) !important; box-shadow: var(--g-shadow); }
+}
+
+/* --------------------------------------------- module stylesheets */
+/* Tasks workspace: it has its own --tw-* palette; point it at glass. */
+html:root .gl-shell .task-workspace-page {
+  --tw-ink: var(--g-ink);
+  --tw-copy: var(--g-mut);
+  --tw-muted: var(--g-fnt);
+  --tw-border: var(--g-div);
+  --tw-border-strong: var(--g-line);
+  --tw-surface: var(--g-glass);
+  --tw-canvas: transparent;
+  --tw-shadow: var(--g-shadow);
+  background: transparent !important;
+  color: var(--g-ink);
+}
+html:root .gl-shell .task-workspace-page :is(.tw-list-panel, .tw-detail-panel, .tw-team-directory, .tw-board > section, .tw-member-card, .tw-team-member-bar) {
+  background-color: var(--g-glass) !important;
+  border-color: var(--g-line) !important;
+  border-radius: 22px;
+  box-shadow: var(--g-shadow);
+}
+html:root .gl-shell .task-workspace-page :is(.tw-tabs button, .tw-member-filter, .tw-search, .tw-secondary-button, .tw-icon-button, .tw-readonly-field, .tw-date-field, .tw-select-wrap, .task-user-picker-trigger, .tw-detail-subtask, .tw-detail-tags button, .tw-detail-tags label, .tw-form-subtask, .tw-tag-editor, .tw-tag-suggestions button, .tw-check) {
+  background-color: var(--g-glass2) !important;
+  border-color: var(--g-line) !important;
+  color: var(--g-ink);
+}
+html:root .gl-shell .task-workspace-page .tw-tabs button { border-radius: 14px; }
+html:root .gl-shell .task-workspace-page :is(.tw-secondary-button, .tw-icon-button, .tw-search) { border-radius: 12px; }
+html:root .gl-shell .task-workspace-page .tw-tabs button span,
+html:root .gl-shell .task-workspace-page .tw-view-toggle { background: var(--g-track) !important; }
+html:root .gl-shell .task-workspace-page .tw-view-toggle button.is-active { background: var(--g-glassHi) !important; }
+html:root .gl-shell .task-workspace-page .tw-task-row { background-color: transparent !important; border-bottom-color: var(--g-div) !important; }
+html:root .gl-shell .task-workspace-page .tw-task-row:hover { background-color: var(--g-glass2) !important; }
+html:root .gl-shell .task-workspace-page .tw-task-group > header { background-color: transparent !important; }
+html:root .gl-shell .task-workspace-page :is(.tw-filters-popover, .tw-menu-popover, .task-user-picker-popover, .tw-task-modal) {
+  background-color: var(--g-modal) !important;
+  border-color: var(--g-line) !important;
+  -webkit-backdrop-filter: blur(var(--g-blur)) saturate(180%);
+  backdrop-filter: blur(var(--g-blur)) saturate(180%);
+}
+html:root .gl-shell .task-workspace-page .tw-task-modal { border-radius: 22px; }
+html:root .gl-shell .task-workspace-page .tw-modal-footer { background: transparent !important; border-top-color: var(--g-div) !important; }
+html:root .gl-shell .tasks-reference-page :is(.tasks-task-card, .tasks-scope-tabs) { background-color: var(--g-glass) !important; border-color: var(--g-line) !important; }
+
+/* Field executive home. */
+html:root .gl-shell :is(.field-home-panel, .field-home-stat) {
+  background: var(--g-glass) !important;
+  border-color: var(--g-line) !important;
+  border-radius: 22px;
+  box-shadow: var(--g-shadow) !important;
+}
+html:root .gl-shell .field-home-select { background: var(--g-glass2) !important; border-color: var(--g-line) !important; }
+html:root .gl-shell .field-home-donut > div { background: var(--g-glassHi) !important; }
+
+/* Calendar, attendance and other "doc screen" pages. */
+html:root .gl-shell :is(.calendar-doc-screen, .attendance-doc-screen, .team-doc-screen) { background: transparent !important; }
+html:root .gl-shell :is(.calendar-card, .calendar-stat) {
+  background: var(--g-glass) !important; border-color: var(--g-line) !important; border-radius: 22px; box-shadow: var(--g-shadow) !important;
+}
+html:root .gl-shell .calendar-day { background: var(--g-glassHi); }
+html:root .gl-shell .calendar-day.is-muted { background: var(--g-glass); }
+html:root .gl-shell .calendar-day.is-selected { background: color-mix(in srgb, var(--g-b) 8%, var(--g-glassHi)); }
+
+/* Chat. */
+html:root .gl-shell .chat-doc-screen {
+  --surface: var(--g-glass);
+  --surface-2: var(--g-glass2);
+  --line: var(--g-div);
+  --accent: var(--g-b);
+}
+html:root .gl-shell .chat-doc-screen .chatwrap { border-color: var(--g-line); border-radius: 22px; box-shadow: var(--g-shadow); background: var(--g-glass); }
+
+/* Theme switches (light/dark and colour theme) repaint the wallpaper and the
+   glass panes together. */
+.gl-shell, .gl-sidebar, .gl-shell .app-context-header { transition: background-color .35s ease, color .35s ease, border-color .35s ease; }
+
+/* ===================================================================
+   Contrast pass. Glass edges are white, which is right for a card's rim
+   but leaves controls (checkboxes, fields, outline buttons) invisible on
+   a white-ish card. Controls get a real ink edge instead, and anything
+   that floats (dropdowns, pickers, menus) gets the dense, blurred pane so
+   the page underneath doesn't show through it.
+   =================================================================== */
+html.theme-light,
+html:not(.theme-dark) {
+  --g-edge: rgba(14, 22, 48, 0.14);
+  --g-edge-strong: rgba(14, 22, 48, 0.28);
+  --g-div: rgba(14, 22, 48, 0.09);
+}
+html.theme-dark {
+  --g-edge: rgba(255, 255, 255, 0.16);
+  --g-edge-strong: rgba(255, 255, 255, 0.32);
+}
+
+/* Native checkboxes, radios, ranges. */
+.gl-shell.gl-shell input[type="checkbox"],
+.gl-shell.gl-shell input[type="radio"],
+.gl-shell.gl-shell input[type="range"],
+.gl-shell progress { accent-color: var(--g-b); }
+html:root .gl-shell.gl-shell.gl-shell input[type="checkbox"]:not([class*="appearance-none"]):not(.sr-only),
+html:root .gl-shell.gl-shell.gl-shell input[type="radio"]:not([class*="appearance-none"]):not(.sr-only) {
+  width: 16px; height: 16px; cursor: pointer;
+}
+/* Custom checkbox look-alikes built with appearance-none. */
+html:root .gl-shell.gl-shell.gl-shell input[type="checkbox"][class*="appearance-none"],
+html:root .gl-shell.gl-shell.gl-shell input[type="radio"][class*="appearance-none"] {
+  border: 1.5px solid var(--g-edge-strong) !important;
+  background-color: var(--g-glassHi) !important;
+}
+html:root .gl-shell.gl-shell.gl-shell input[type="checkbox"][class*="appearance-none"]:checked,
+html:root .gl-shell.gl-shell.gl-shell input[type="radio"][class*="appearance-none"]:checked {
+  background-color: var(--g-b) !important;
+  border-color: var(--g-b) !important;
+}
+
+/* Task tick circles. */
+html:root .gl-shell.gl-shell.gl-shell .task-workspace-page .tw-check {
+  border: 1.5px solid var(--g-edge-strong) !important;
+  background-color: var(--g-glassHi) !important;
+}
+html:root .gl-shell.gl-shell.gl-shell .task-workspace-page .tw-check:hover { border-color: var(--g-b) !important; }
+html:root .gl-shell.gl-shell.gl-shell .task-workspace-page :is(.tw-task-row.is-completed, .is-completed, .is-done) .tw-check,
+html:root .gl-shell.gl-shell.gl-shell .task-workspace-page .tw-check[aria-checked="true"],
+html:root .gl-shell.gl-shell.gl-shell .task-workspace-page .tw-check[aria-pressed="true"],
+html:root .gl-shell.gl-shell.gl-shell .task-workspace-page .tw-check.is-checked {
+  background-color: var(--g-ok) !important;
+  border-color: var(--g-ok) !important;
+  color: #fff;
+}
+
+/* Fields and outline controls. */
+html:root .gl-shell.gl-shell.gl-shell input:not([type="checkbox"]):not([type="radio"]):not([type="range"]):not([type="color"]),
+html:root .gl-shell.gl-shell.gl-shell select,
+html:root .gl-shell.gl-shell.gl-shell textarea,
+html:root .gl-shell.gl-shell.gl-shell .task-workspace-page :is(.tw-date-field, .tw-select-wrap, .task-user-picker-trigger, .tw-readonly-field, .tw-search, .tw-tag-editor, .tw-member-filter) {
+  border-color: var(--g-edge) !important;
+}
+html:root .gl-shell.gl-shell.gl-shell .app-header-search input { border-color: var(--g-edge) !important; }
+html:root .gl-shell.gl-shell.gl-shell .task-workspace-page :is(.tw-tabs button, .tw-secondary-button, .tw-icon-button, .tw-detail-tags button, .tw-detail-tags label, .tw-tag-suggestions button, .tw-detail-subtask, .tw-form-subtask) {
+  border-color: var(--g-edge) !important;
+}
+html:root .gl-shell.gl-shell.gl-shell :is(button, a, label, [role="button"]):is(.border-slate-100, .border-slate-200, .border-slate-300, .border-gray-200, .border-gray-300, [class*="border-[var(--clay-border"], [class*="border-[var(--crm-border"]),
+html.theme-dark .gl-shell.gl-shell.gl-shell :is(button, a, label, [role="button"]):is(.dark\:border-slate-700, .dark\:border-slate-600, .dark\:border-slate-800) {
+  border-color: var(--g-edge) !important;
+}
+/* A primary-coloured select/button stays filled with readable text. */
+html:root .gl-shell.gl-shell.gl-shell select.bg-blue-600,
+html:root .gl-shell.gl-shell.gl-shell select[class*="bg-blue-6"],
+html:root .gl-shell.gl-shell.gl-shell select[class*="bg-slate-9"] {
+  background-color: var(--g-bfill) !important;
+  border-color: var(--g-bfill) !important;
+  color: #fff !important;
+}
+html:root .gl-shell.gl-shell.gl-shell select option { background: #fff; color: #0e1630; }
+html.theme-dark .gl-shell.gl-shell.gl-shell select option { background: #121828; color: var(--g-ink); }
+
+/* Header bits that sat on white rims. */
+html:root .gl-shell.gl-shell.gl-shell .app-header-icon,
+html:root .gl-shell.gl-shell.gl-shell .app-header-logout,
+html:root .gl-shell.gl-shell.gl-shell .app-header-date { border-color: var(--g-edge); }
+
+/* Anything that floats: dense pane + blur so the page doesn't bleed through. */
+html:root .gl-shell.gl-shell.gl-shell .fixed:not(.inset-0)[class*="bg-white"],
+html:root .gl-shell.gl-shell.gl-shell .absolute[class*="bg-white"][class*="shadow"],
+html:root .gl-shell.gl-shell.gl-shell [class*="z-"][class*="bg-white"][class*="shadow-xl"],
+html:root .gl-shell.gl-shell.gl-shell [class*="z-"][class*="bg-white"][class*="shadow-2xl"],
+html:root .gl-shell.gl-shell.gl-shell [class*="z-"][class*="bg-white"][class*="shadow-lg"],
+html.theme-dark .gl-shell.gl-shell.gl-shell .fixed:not(.inset-0)[class*="dark:bg-slate-9"],
+html.theme-dark .gl-shell.gl-shell.gl-shell .absolute[class*="dark:bg-slate-9"][class*="shadow"],
+html:root .gl-shell.gl-shell.gl-shell [role="menu"],
+html:root .gl-shell.gl-shell.gl-shell [role="listbox"],
+html:root .gl-shell.gl-shell.gl-shell .app-header-search-results,
+html:root body > div > [class*="fixed"][class*="bg-white"]:not(.inset-0) {
+  background-color: var(--g-modal) !important;
+  -webkit-backdrop-filter: blur(var(--g-blur)) saturate(180%) !important;
+  backdrop-filter: blur(var(--g-blur)) saturate(180%) !important;
+  border-color: var(--g-edge) !important;
+  box-shadow: 0 18px 50px rgba(14, 22, 48, 0.22), var(--g-shadow) !important;
+}
+html:root .gl-shell.gl-shell.gl-shell .fixed:not(.inset-0)[class*="bg-white"] .bg-white,
+html:root .gl-shell.gl-shell.gl-shell .absolute[class*="bg-white"][class*="shadow"] .bg-white { background-color: transparent !important; }
+
+/* Filled accent surfaces always use the deep shade so white text stays
+   readable - in dark mode --g-b is the light shade meant for text. */
+html.theme-dark .gl-shell.gl-shell.gl-shell :is(.bg-blue-500, .bg-blue-600, .bg-blue-700, .dark\:bg-blue-500, .dark\:bg-blue-600, .tw-primary-button, .calendar-date-number.is-today) {
+  background-color: var(--g-bfill) !important;
+  color: #fff !important;
+}
+html.theme-dark .gl-shell.gl-shell.gl-shell :is(.text-blue-600, .text-blue-700, .dark\:text-blue-300, .dark\:text-blue-400) { color: var(--g-b); }
+
+/* Header Settings shortcut - lit while Settings is open. */
+html:root .gl-shell.gl-shell.gl-shell .app-header-quick.is-active {
+  background: var(--g-bs);
+  border-color: color-mix(in srgb, var(--g-b) 35%, transparent);
+  color: var(--g-b);
+}
+
+/* Phone header: one row - menu, title, then the icons. The title gives way
+   (ellipsis) rather than pushing the icons onto a second line. */
+@media (max-width: 767px) {
+  html:root .gl-shell.gl-shell.gl-shell .app-context-header { flex-wrap: nowrap; align-items: center; gap: 8px; padding: 8px 8px 8px 10px; }
+  html:root .gl-shell.gl-shell.gl-shell .app-context-header .app-header-heading { flex: 1 1 auto; min-width: 0; }
+  html:root .gl-shell.gl-shell.gl-shell .app-context-header .app-header-heading h1 { font-size: 17px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  html:root .gl-shell.gl-shell.gl-shell .app-header-controls { flex: none; gap: 4px; }
+  html:root .gl-shell.gl-shell.gl-shell :is(.app-header-icon, .app-header-logout, .app-header-avatar) { width: 34px; min-width: 34px; height: 34px; border-radius: 11px; }
+  html:root .gl-shell.gl-shell.gl-shell :is(.app-header-icon, .app-header-logout) svg { width: 17px; height: 17px; }
+}
+/* Narrow phones: Settings and the theme switch live in the sidebar /
+   Settings page, so the header drops them to keep one row. */
+@media (max-width: 479px) {
+  html:root .gl-shell.gl-shell.gl-shell .app-header-quick,
+  html:root .gl-shell.gl-shell.gl-shell .app-header-controls > .app-header-icon[aria-label^="Switch to"] { display: none; }
+}
+
+/* Tabs, chips and toggles ease between states (the slide itself is done by
+   utils/glassMotion.js). */
+.gl-shell :is(button, [role="tab"], a[class*="rounded"]) {
+  transition-property: background-color, color, border-color, box-shadow, transform, opacity;
+  transition-duration: .25s;
+  transition-timing-function: ease;
+}
+
+/* ------------------------------------------------------------- loading */
+/* Wallpaper for loading screens shown before the shell exists. */
+.gl-loading-wall {
+  background: var(--g-wall);
+  background-attachment: fixed;
+  color: var(--g-ink);
+  font-family: var(--font-body);
+}
+/* Shimmer placeholder: a soft accent-tinted sweep over a glass track. */
+.gl-skeleton {
+  position: relative;
+  overflow: hidden;
+  background-color: var(--g-track) !important;
+  isolation: isolate;
+}
+.gl-skeleton::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  transform: translateX(-100%);
+  background: linear-gradient(90deg,
+    transparent 0%,
+    rgb(var(--blue-400) / 0.14) 35%,
+    rgba(255, 255, 255, 0.55) 50%,
+    rgb(var(--blue-400) / 0.14) 65%,
+    transparent 100%);
+  animation: gl-shimmer 1.5s cubic-bezier(.4, 0, .2, 1) infinite;
+}
+html.theme-dark .gl-skeleton::after {
+  background: linear-gradient(90deg,
+    transparent 0%,
+    rgb(var(--blue-400) / 0.12) 35%,
+    rgba(255, 255, 255, 0.10) 50%,
+    rgb(var(--blue-400) / 0.12) 65%,
+    transparent 100%);
+}
+@keyframes gl-shimmer { to { transform: translateX(100%); } }
+@media (prefers-reduced-motion: reduce) { .gl-skeleton::after { animation: none; } }
+/* Logo tile on the loading screen matches the sidebar's. */
+.gl-loading-wall .gl-sidebar-logo { display: flex; align-items: center; justify-content: center; height: 76px; padding: 10px 14px; border-radius: 18px; background: #fff !important; box-shadow: 0 4px 14px rgba(30, 45, 110, 0.14); }
+.gl-loading-wall .gl-sidebar-logo img { max-width: 100%; max-height: 100%; object-fit: contain; }
+/* Old spinner, wherever it is still referenced, is retired. */
+.app-loader-spinner { display: none !important; }

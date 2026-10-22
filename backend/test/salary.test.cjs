@@ -58,7 +58,11 @@ test("an absence costs a day and every three lates cost half a day, by default",
 });
 
 test("half days, unpaid leave and paid leave each follow their own rule", () => {
+  // Requirements 16 Oct 2026 (4.1): hand-marked leave is paid only when the
+  // company switches it on, and paid leave has a monthly entitlement. Both
+  // are switched on here to keep checking the per-rule amounts.
   const result = calc({
+    policy: { manualLeaveIsPaid: true, paidLeavePerMonth: 2 },
     days: [
       day("2026-10-01", "HALF_DAY", { checkInAt: "2026-10-01T05:00:00.000Z" }),
       day("2026-10-02", "LEAVE", { source: "UNPAID" }),
@@ -68,7 +72,7 @@ test("half days, unpaid leave and paid leave each follow their own rule", () => 
   });
   assert.equal(line(result, "halfDay").amount, 500);
   assert.equal(line(result, "unpaidLeave").amount, 1000);
-  assert.equal(line(result, "paidLeave").count, 2, "approved leave and leave an admin marked are both paid");
+  assert.equal(line(result, "paidLeave").count, 2, "approved leave and (when allowed) leave an admin marked are both paid");
   assert.equal(line(result, "paidLeave").amount, 0);
   assert.equal(result.totalDeduction, 1500);
 });

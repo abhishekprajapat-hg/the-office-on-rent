@@ -30,6 +30,16 @@ const { REGULARIZATION_STATUS } = AttendanceRegularizationModel;
 const ATTENDANCE_DATE_PATTERN = /^\d{4}-(0[1-9]|1[0-2])-(0[1-9]|[12]\d|3[01])$/;
 const MONTH_KEY_PATTERN = /^\d{4}-(0[1-9]|1[0-2])$/;
 const DEFAULT_TIMEZONE = String(process.env.ATTENDANCE_TIMEZONE || "Asia/Kolkata").trim() || "Asia/Kolkata";
+
+// Daily report gate for checkout (requirements 16 Oct 2026, 1.1). Roles with
+// no report form (Admin, Channel Partner) are never held back.
+const isDailyReportMissing = async ({ user, attendanceDate }) => {
+  const { resolveDailyReportFormKey } = require("../constants/dailyReport.constants");
+  if (!resolveDailyReportFormKey(user)) return false;
+  const DailyReport = require("../models/DailyReport");
+  const found = await DailyReport.exists({ companyId: user.companyId, userId: user._id, reportDate: attendanceDate });
+  return !found;
+};
 const BREAK_NOTE_MAX_LENGTH = 240;
 const REASON_MAX_LENGTH = 500;
 const MAX_HISTORY_WINDOW_DAYS = Number.parseInt(
@@ -70,6 +80,8 @@ const DEFAULT_POLICY = Object.freeze({
   halfDayMinutes: 240,
   fullDayMinutes: 450,
   weeklyOffDays: [0],
+  halfDayCheckInCutoffMinutes: 840,
+  holidays: [],
   allowCheckoutDuringBreak: true,
   geofenceEnabled: DEFAULT_GEOFENCE_ENABLED,
   officeLatitude: Number.parseFloat(process.env.ATTENDANCE_OFFICE_LATITUDE || ""),
@@ -290,9 +302,13 @@ const PRESENT_LIKE_STATUSES = [
   LIVE_ATTENDANCE_STATUS.BREAK,
 ];
 
-const isWeeklyOffDateKey = (dateKey, policy) =>
-  (policy?.weeklyOffDays || DEFAULT_POLICY.weeklyOffDays)
-    .includes(new Date(toUtcMsFromDateKey(dateKey)).getUTCDay());
+// A person's own weekly off (if they have one) or the company's, plus company
+// holidays (requirements 16 Oct 2026, 4.3/4.4).
+const isWeeklyOffDateKey = (dateKey, policy, weeklyOffSchedule = null) =>
+  require("../services/workCalendar").isOffDate(dateKey, {
+    schedule: weeklyOffSchedule,
+    policy: { ...policy, weeklyOffDays: policy?.weeklyOffDays || DEFAULT_POLICY.weeklyOffDays },
+  });
 
 const buildAttendanceSummary = ({
   attendanceMap,
@@ -301,6 +317,7 @@ const buildAttendanceSummary = ({
   joinedOn = null,
   now = new Date(),
   idPrefix = "absent",
+  weeklyOffSchedule = null,
 }) => {
   const timezone = policy?.timezone || DEFAULT_TIMEZONE;
   const todayKey = toDateKeyInTimezone(now, timezone);
@@ -316,10 +333,10 @@ const buildAttendanceSummary = ({
   let workingDaysElapsed = 0;
   if (firstKey <= lastKey) {
     buildDateKeysInRange(firstKey, lastKey).forEach((dateKey) => {
-      if (isWeeklyOffDateKey(dateKey, policy)) return;
+      if (isWeeklyOffDateKey(dateKey, policy, weeklyOffSchedule)) return;
       // A week off set by hand is a day off like the company's own weekly off:
       // not a working day, so neither absent nor in the attendance percentage.
-      if (attendanceMap.get(dateKey)?.status === ATTENDANCE_STATUS.WEEK_OFF) return;
+      if ([ATTENDANCE_STATUS.WEEK_OFF, ATTENDANCE_STATUS.HOLIDAY].includes(attendanceMap.get(dateKey)?.status)) return;
       if (dateKey === todayKey) {
         // Today is not over: it counts as a working day only once there is a record.
         if (attendanceMap.has(dateKey)) workingDaysElapsed += 1;
@@ -361,8 +378,11 @@ const buildAttendanceSummary = ({
   const unrecordedAbsentDays = countWhere((row) => row.source === "NO_RECORD");
   const leaveDays = countWhere((row) => row.status === ATTENDANCE_STATUS.LEAVE);
   const weekOffDays = countWhere((row) => row.status === ATTENDANCE_STATUS.WEEK_OFF);
+  const holidayDays = countWhere((row) => row.status === ATTENDANCE_STATUS.HOLIDAY);
   const pendingDays = countWhere((row) => row.status === ATTENDANCE_STATUS.PENDING);
   const lateDays = countWhere(isLate);
+  // Half days that also started late, so punctuality never counts one day twice.
+  const lateHalfDays = countWhere((row) => row.status === ATTENDANCE_STATUS.HALF_DAY && isLate(row));
   const checkedInDays = countWhere((row) => Boolean(row.checkInAt));
   const onTimeDays = countWhere((row) => Boolean(row.checkInAt) && !isLate(row));
   const totalWorkedMinutes = attendance.reduce((sum, row) => sum + Number(row.workedMinutes || 0), 0);
@@ -376,12 +396,14 @@ const buildAttendanceSummary = ({
       workingDays: workingDaysElapsed,
       presentDays,
       lateDays,
+      lateHalfDays,
       onTimeDays,
       halfDays,
       absentDays,
       unrecordedAbsentDays,
       leaveDays,
       weekOffDays,
+      holidayDays,
       pendingDays,
       attendancePercent: workingDaysElapsed
         ? Math.min(100, Math.round((attendedDays / workingDaysElapsed) * 100))
@@ -608,6 +630,10 @@ const toPolicyView = (policy = null) => {
     halfDayMinutes,
     fullDayMinutes,
     weeklyOffDays: weeklyOffDays.length ? weeklyOffDays : [...DEFAULT_POLICY.weeklyOffDays],
+    halfDayCheckInCutoffMinutes: source.halfDayCheckInCutoffMinutes === null
+      ? null
+      : clampInteger(toInteger(source.halfDayCheckInCutoffMinutes, DEFAULT_POLICY.halfDayCheckInCutoffMinutes), 0, 1439),
+    holidays: require("../services/workCalendar").normalizeHolidays(source.holidays),
     allowCheckoutDuringBreak:
       Object.prototype.hasOwnProperty.call(source || {}, "allowCheckoutDuringBreak")
         ? Boolean(source.allowCheckoutDuringBreak)
@@ -676,8 +702,21 @@ const resolveAttendanceStatus = ({
     return ATTENDANCE_STATUS.HALF_DAY;
   }
 
+  // Requirements 16 Oct 2026, 4.2: arriving at or after the half-day cutoff
+  // (2:00 PM by default, inclusive) is a half day however long the person then
+  // stays - and payroll never also charges it as a late arrival.
+  if (isAfterHalfDayCutoff(checkInAt, safePolicy)) {
+    return ATTENDANCE_STATUS.HALF_DAY;
+  }
+
   return ATTENDANCE_STATUS.PRESENT;
 };
+
+function isAfterHalfDayCutoff(checkInAt, policy) {
+  const cutoff = policy?.halfDayCheckInCutoffMinutes;
+  if (cutoff === null || cutoff === undefined || !checkInAt) return false;
+  return toMinutesOfDayInTimezone(checkInAt, policy.timezone || DEFAULT_TIMEZONE) >= cutoff;
+}
 
 const getMonthSpanInclusive = (fromMonthKey, toMonthKey) => {
   if (!MONTH_KEY_PATTERN.test(fromMonthKey) || !MONTH_KEY_PATTERN.test(toMonthKey)) return 0;
@@ -1185,6 +1224,11 @@ exports.upsertAttendancePolicy = async (req, res) => {
         1000,
       ),
       weeklyOffDays: normalizeWeeklyOffDays(req.body?.weeklyOffDays),
+      // Requirements 16 Oct 2026, 4.2 / 4.4.
+      halfDayCheckInCutoffMinutes: req.body?.halfDayCheckInCutoffMinutes === null
+        ? null
+        : clampInteger(toInteger(req.body?.halfDayCheckInCutoffMinutes, DEFAULT_POLICY.halfDayCheckInCutoffMinutes), 0, 1439),
+      holidays: require("../services/workCalendar").normalizeHolidays(req.body?.holidays).slice(0, 60),
       allowCheckoutDuringBreak: Object.prototype.hasOwnProperty.call(req.body || {}, "allowCheckoutDuringBreak")
         ? Boolean(req.body.allowCheckoutDuringBreak)
         : DEFAULT_POLICY.allowCheckoutDuringBreak,
@@ -1645,6 +1689,15 @@ exports.checkOut = async (req, res) => {
       });
     }
 
+    // Requirements 16 Oct 2026, 1.1: no checkout until today's daily report is in.
+    if (await isDailyReportMissing({ user: req.user, attendanceDate })) {
+      return res.status(428).json({
+        code: "DAILY_REPORT_REQUIRED",
+        message: "You haven't submitted your daily report. Please submit it before checking out.",
+        reportDate: attendanceDate,
+      });
+    }
+
     const normalizedBreaks = normalizeBreakSessions(attendance.breakSessions, {
       includeOpenTill: now,
     });
@@ -1740,13 +1793,22 @@ exports.getMyLeaveBalance = async (req, res) => {
       .select("_id fromDate toDate totalDays leaveType status")
       .lean();
 
-    const used = leaveRows
+    const approvedDays = leaveRows
       .filter((row) => row.status === "APPROVED")
       .reduce((sum, row) => sum + Number(row.totalDays || 0), 0);
-    const pending = leaveRows
+    const pendingDays = leaveRows
       .filter((row) => row.status === "PENDING")
       .reduce((sum, row) => sum + Number(row.totalDays || 0), 0);
-    const available = Math.max(0, accrued - used);
+    // Every two half days use one leave (21 Oct 2026), counted over the same
+    // period as the balance: joining month to the requested month, up to today.
+    const todayKey = toDateKeyInTimezone(new Date(), policy.timezone);
+    const halfDayThrough = requestedMonthRange.to < todayKey ? requestedMonthRange.to : todayKey;
+    const halfDays = await Attendance.countDocuments({
+      companyId: req.user.companyId,
+      userId: user._id,
+      status: ATTENDANCE_STATUS.HALF_DAY,
+      attendanceDate: { $gte: `${startMonth}-01`, $lte: halfDayThrough },
+    });
 
     return res.json({
       month: requestedMonth,
@@ -1754,11 +1816,8 @@ exports.getMyLeaveBalance = async (req, res) => {
       monthlyAccrual: 1,
       accrualStartMonth: startMonth,
       monthsAccrued,
-      accrued,
-      used,
-      pending,
-      available,
-      carryForward: available,
+      halfDaysPerLeave: require("../services/leaveBalance").HALF_DAYS_PER_LEAVE,
+      ...require("../services/leaveBalance").computeLeaveBalance({ accrued, approvedDays, pendingDays, halfDays }),
     });
   } catch (error) {
     logger.error({
@@ -1825,13 +1884,22 @@ exports.getLeaveBalanceForAdmin = async (req, res) => {
       .select("_id fromDate toDate totalDays leaveType status")
       .lean();
 
-    const used = leaveRows
+    const approvedDays = leaveRows
       .filter((row) => row.status === "APPROVED")
       .reduce((sum, row) => sum + Number(row.totalDays || 0), 0);
-    const pending = leaveRows
+    const pendingDays = leaveRows
       .filter((row) => row.status === "PENDING")
       .reduce((sum, row) => sum + Number(row.totalDays || 0), 0);
-    const available = Math.max(0, accrued - used);
+    // Every two half days use one leave (21 Oct 2026), counted over the same
+    // period as the balance: joining month to the requested month, up to today.
+    const todayKey = toDateKeyInTimezone(new Date(), policy.timezone);
+    const halfDayThrough = requestedMonthRange.to < todayKey ? requestedMonthRange.to : todayKey;
+    const halfDays = await Attendance.countDocuments({
+      companyId: req.user.companyId,
+      userId: user._id,
+      status: ATTENDANCE_STATUS.HALF_DAY,
+      attendanceDate: { $gte: `${startMonth}-01`, $lte: halfDayThrough },
+    });
 
     return res.json({
       month: requestedMonth,
@@ -1839,11 +1907,8 @@ exports.getLeaveBalanceForAdmin = async (req, res) => {
       monthlyAccrual: 1,
       accrualStartMonth: startMonth,
       monthsAccrued,
-      accrued,
-      used,
-      pending,
-      available,
-      carryForward: available,
+      halfDaysPerLeave: require("../services/leaveBalance").HALF_DAYS_PER_LEAVE,
+      ...require("../services/leaveBalance").computeLeaveBalance({ accrued, approvedDays, pendingDays, halfDays }),
     });
   } catch (error) {
     logger.error({
@@ -2370,7 +2435,7 @@ exports.getMyAttendance = async (req, res) => {
         userId: req.user._id,
         attendanceDate: toDateKeyInTimezone(new Date(), policy.timezone),
       }).lean(),
-      User.findById(req.user._id).select("joiningDate createdAt").lean(),
+      User.findById(req.user._id).select("joiningDate createdAt weeklyOffSchedule").lean(),
       getApprovedLeavesMap({
         companyId: req.user.companyId,
         userIds: [req.user._id],
@@ -2411,6 +2476,7 @@ exports.getMyAttendance = async (req, res) => {
       range,
       policy,
       joinedOn: joinedUser?.joiningDate || joinedUser?.createdAt || null,
+      weeklyOffSchedule: joinedUser?.weeklyOffSchedule || null,
     });
     const totalCount = allAttendance.length;
     const attendance = pagination.enabled
@@ -2472,7 +2538,7 @@ exports.getUserAttendanceForAdmin = async (req, res) => {
       _id: targetUserId,
       companyId: req.user.companyId,
     })
-      .select("_id name email role joiningDate createdAt profileImageUrl")
+      .select("_id name email role joiningDate createdAt profileImageUrl weeklyOffSchedule")
       .lean();
     if (!targetUser) {
       return res.status(404).json({ message: "User not found" });
@@ -2544,6 +2610,7 @@ exports.getUserAttendanceForAdmin = async (req, res) => {
       policy,
       joinedOn: targetUser.joiningDate || targetUser.createdAt || null,
       idPrefix: `absent:${targetUser._id}`,
+      weeklyOffSchedule: targetUser.weeklyOffSchedule || null,
     });
 
     return res.json({
@@ -2740,6 +2807,10 @@ exports.manageUserBreak = async (req, res) => {
  * WEEK_OFF (WO) is a weekly off on a day that is not the company's: somebody
  * who works Sunday and is off on Tuesday. Like the company's own weekly off it
  * is not a working day - never absent, never deducted from pay.
+ *
+ * HOLIDAY marks a holiday for this person on this day (a festival they get off,
+ * a local holiday). Treated like a company holiday: a paid day off, not a
+ * working day, never absent.
  */
 const MANUAL_ATTENDANCE_STATUSES = Object.freeze([
   ATTENDANCE_STATUS.PRESENT,
@@ -2747,6 +2818,7 @@ const MANUAL_ATTENDANCE_STATUSES = Object.freeze([
   ATTENDANCE_STATUS.ABSENT,
   ATTENDANCE_STATUS.LEAVE,
   ATTENDANCE_STATUS.WEEK_OFF,
+  ATTENDANCE_STATUS.HOLIDAY,
 ]);
 
 // Not a day worked: any check-in, check-out or breaks on the row go with it.
@@ -2754,6 +2826,7 @@ const NOT_WORKED_MANUAL_STATUSES = new Set([
   ATTENDANCE_STATUS.ABSENT,
   ATTENDANCE_STATUS.LEAVE,
   ATTENDANCE_STATUS.WEEK_OFF,
+  ATTENDANCE_STATUS.HOLIDAY,
 ]);
 
 const MANUAL_STATUS_DEFAULT_NOTES = Object.freeze({
@@ -2762,6 +2835,7 @@ const MANUAL_STATUS_DEFAULT_NOTES = Object.freeze({
   [ATTENDANCE_STATUS.ABSENT]: "Marked absent manually",
   [ATTENDANCE_STATUS.LEAVE]: "Marked on leave manually",
   [ATTENDANCE_STATUS.WEEK_OFF]: "Marked week off manually",
+  [ATTENDANCE_STATUS.HOLIDAY]: "Marked holiday manually",
 });
 
 const applyManualAttendanceStatus = (attendance, {
@@ -2821,7 +2895,7 @@ exports.updateUserAttendanceStatus = async (req, res) => {
       return res.status(400).json({ message: "date must be in YYYY-MM-DD format" });
     }
     if (!MANUAL_ATTENDANCE_STATUSES.includes(nextStatus)) {
-      return res.status(400).json({ message: "status must be PRESENT, HALF_DAY, ABSENT, LEAVE, or WEEK_OFF" });
+      return res.status(400).json({ message: "status must be PRESENT, HALF_DAY, ABSENT, LEAVE, WEEK_OFF or HOLIDAY" });
     }
 
     const canAccessTarget = await ensureUserInScope({
@@ -2954,6 +3028,7 @@ exports.getDailyAttendanceForAdmin = async (req, res) => {
       ATTENDANCE_STATUS.ABSENT,
       ATTENDANCE_STATUS.LEAVE,
       ATTENDANCE_STATUS.WEEK_OFF,
+      ATTENDANCE_STATUS.HOLIDAY,
       LIVE_ATTENDANCE_STATUS.WORKING,
       LIVE_ATTENDANCE_STATUS.BREAK,
       "ON_BREAK",
@@ -3041,6 +3116,7 @@ exports.getDailyAttendanceForAdmin = async (req, res) => {
     const onBreak = rows.filter((row) => Boolean(row.attendance.isOnBreak)).length;
     const leave = rows.filter((row) => row.attendance.status === ATTENDANCE_STATUS.LEAVE).length;
     const weekOff = rows.filter((row) => row.attendance.status === ATTENDANCE_STATUS.WEEK_OFF).length;
+    const holiday = rows.filter((row) => row.attendance.status === ATTENDANCE_STATUS.HOLIDAY).length;
     const absent = rows.filter((row) => row.attendance.status === ATTENDANCE_STATUS.ABSENT).length;
 
     return res.json({
@@ -3055,6 +3131,7 @@ exports.getDailyAttendanceForAdmin = async (req, res) => {
         onBreak,
         leave,
         weekOff,
+        holiday,
         absent,
       },
       attendance: rows,
@@ -3118,14 +3195,16 @@ const loadAttendanceDaysForUsers = async ({ companyId, users = [], range, policy
     policy,
   });
 
-  const [rows, leaveMap] = await Promise.all([
+  const [rows, leaveMap, schedules] = await Promise.all([
     Attendance.find({
       companyId,
       userId: { $in: userIds },
       attendanceDate: { $gte: range.from, $lte: range.to },
     }).lean(),
     getApprovedLeavesMap({ companyId, userIds, fromDate: range.from, toDate: range.to }),
+    User.find({ _id: { $in: userIds }, companyId }).select("_id weeklyOffSchedule").lean(),
   ]);
+  const scheduleByUser = new Map((schedules || []).map((u) => [String(u._id), u.weeklyOffSchedule || []]));
 
   const rowsByUser = new Map();
   rows.forEach((row) => {
@@ -3159,6 +3238,7 @@ const loadAttendanceDaysForUsers = async ({ companyId, users = [], range, policy
       policy,
       joinedOn: user.joiningDate || user.createdAt || null,
       idPrefix: `absent:${key}`,
+      weeklyOffSchedule: scheduleByUser.get(key) || user.weeklyOffSchedule || null,
     }));
   });
 
@@ -3168,8 +3248,12 @@ const loadAttendanceDaysForUsers = async ({ companyId, users = [], range, policy
 module.exports.buildAttendanceSummary = buildAttendanceSummary;
 module.exports.loadAttendanceDaysForUsers = loadAttendanceDaysForUsers;
 module.exports.resolvePolicyForCompany = resolvePolicyForCompany;
+module.exports.toDateKeyInTimezone = toDateKeyInTimezone;
+module.exports.isDailyReportMissing = isDailyReportMissing;
 module.exports.ensureUserInScope = ensureUserInScope;
 module.exports.getScopedUsersForAttendanceViewer = getScopedUsersForAttendanceViewer;
 module.exports.resolveAttendanceStatus = resolveAttendanceStatus;
+module.exports.isAfterHalfDayCutoff = isAfterHalfDayCutoff;
+module.exports.isWeeklyOffDateKey = isWeeklyOffDateKey;
 module.exports.applyManualAttendanceStatus = applyManualAttendanceStatus;
 module.exports.MANUAL_ATTENDANCE_STATUSES = MANUAL_ATTENDANCE_STATUSES;

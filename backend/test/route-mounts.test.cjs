@@ -53,6 +53,7 @@ const ROUTES = [
   "/chat/rooms",
   "/coworking/permissions/me",
   "/delete-requests",
+  "/daily-reports/me/today",
 ];
 
 test("every API router is mounted under both /api and /api/client", async () => {

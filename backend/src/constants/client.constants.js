@@ -28,6 +28,8 @@ const CLIENT_ALLOWED_FIELDS = Object.freeze([
   "companyName",
   "contactPerson",
   "dateOfBirth",
+  "dobSource",
+  "dobVerified",
   "phone",
   "email",
   "alternatePhone",

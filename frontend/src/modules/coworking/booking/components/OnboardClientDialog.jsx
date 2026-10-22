@@ -5,6 +5,8 @@ import { formatCurrency, formatDate } from "../../../../utils/format";
 import { CLIENT_KINDS, ENTITY_TYPES, kycStatusOf } from "../kycDocuments";
 import DocumentChecklist from "./DocumentChecklist";
 import { uploadFile } from "../../../../services/uploadService";
+import { usePermissions } from "../../../../context/usePermissions";
+import { isRestrictedClientFile, RESTRICTED_DOCUMENT_NOTE } from "../../../../utils/clientDocumentAccess";
 
 /*
  * Checkout for the cabins in the cart: who is taking them, on what terms, then
@@ -133,6 +135,8 @@ const WorkProfileField = ({ label, form, setForm }) => (
  * on the client's record for every desk, not just the browser that took it.
  */
 const ChequeUpload = ({ file, onChange }) => {
+  const { canDownloadClientDocuments } = usePermissions();
+  const canOpenFile = (url) => canDownloadClientDocuments || !isRestrictedClientFile(url);
   const inputRef = useRef(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
@@ -171,9 +175,11 @@ const ChequeUpload = ({ file, onChange }) => {
         {file?.url ? (
           <>
             <span className="min-w-0 flex-1 truncate text-[12px] font-medium text-slate-800 dark:text-slate-100">{file.fileName}</span>
-            <a href={file.url} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1 text-[12px] font-semibold text-blue-700 hover:underline dark:text-blue-400">
-              <Eye aria-hidden="true" size={12} /> View
-            </a>
+            {canOpenFile(file.url) ? (
+              <a href={file.url} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1 text-[12px] font-semibold text-blue-700 hover:underline dark:text-blue-400">
+                <Eye aria-hidden="true" size={12} /> View
+              </a>
+            ) : <span className="text-[11.5px] text-slate-500">{RESTRICTED_DOCUMENT_NOTE}</span>}
             <button type="button" aria-label="Remove cheque copy" onClick={() => onChange(null)} className="rounded p-1 text-slate-400 hover:text-rose-600">
               <X aria-hidden="true" size={13} />
             </button>
@@ -250,6 +256,9 @@ const OnboardClientDialog = ({ open, cabins = [], onClose, onConfirm, initialCli
     companyName: initialClient?.name || initialClient?.companyName || "",
     contactPerson: initialClient?.contactPerson || "",
     dateOfBirth: initialClient?.dateOfBirth?.slice(0, 10) || "",
+    // Where the date came from and whether a person checked it (requirements 16 Oct 2026, 18.2).
+    dobSource: initialClient?.dobSource || (initialClient?.dateOfBirth ? "ENTERED" : ""),
+    dobVerified: Boolean(initialClient?.dobVerified ?? (initialClient?.dateOfBirth && initialClient?.dobSource !== "EXTRACTED")),
     phone: initialClient?.phone || "",
     email: initialClient?.email || "",
     ...splitIndustry(initialClient?.industry),
@@ -526,9 +535,18 @@ const OnboardClientDialog = ({ open, cabins = [], onClose, onConfirm, initialCli
                   ? "A company signs through someone, so there are two identities to establish - the entity and the person authorised to bind it - plus the authorisation joining them."
                   : "An individual signs for themselves, so their identity is the whole of it."}
               </p>
-              <Field label="Contact date of birth" hint="Extracted dates must be checked against the document"><Input type="date" value={form.dateOfBirth} max={today()} onChange={set("dateOfBirth")} /></Field>
+              <Field label="Contact date of birth" hint={form.dobSource === "EXTRACTED" ? `Read from ${form.dobSourceDocument || "the document"} - check it before relying on it` : "Extracted dates must be checked against the document"}>
+                <Input type="date" value={form.dateOfBirth} max={today()} onChange={(event) => setForm((value) => ({ ...value, dateOfBirth: event.target.value, dobSource: "ENTERED", dobVerified: true }))} />
+                {form.dateOfBirth && form.dobSource === "EXTRACTED" ? (
+                  <label className="mt-1.5 flex items-center gap-1.5 text-[11.5px] text-slate-600">
+                    <input type="checkbox" checked={Boolean(form.dobVerified)} onChange={(event) => setForm((value) => ({ ...value, dobVerified: event.target.checked }))} />
+                    I checked this date against the document
+                  </label>
+                ) : null}
+              </Field>
               <DocumentChecklist
-                onDateOfBirth={date => setForm(old => ({ ...old, dateOfBirth: old.dateOfBirth || date }))}
+                // Never silently replaces a date already entered (18.2).
+                onDateOfBirth={(date, docLabel) => setForm(old => (old.dateOfBirth ? old : { ...old, dateOfBirth: date, dobSource: "EXTRACTED", dobSourceDocument: docLabel || "the uploaded document", dobVerified: false }))}
                 kind={form.kind}
                 documents={form.documents}
                 onChange={(documents) => setForm((value) => ({ ...value, documents }))}

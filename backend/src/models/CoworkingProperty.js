@@ -69,6 +69,9 @@ const coworkingPropertySchema = new mongoose.Schema(
       type: contactSchema,
       default: () => ({}),
     },
+    // Requirements 16 Oct 2026 (section 10): the workspace's project record.
+    // Cabin availability stays in cabin mapping; the project links to it.
+    projectId: { type: mongoose.Schema.Types.ObjectId, ref: "Project", default: null, index: true },
     description: {
       type: String,
       trim: true,

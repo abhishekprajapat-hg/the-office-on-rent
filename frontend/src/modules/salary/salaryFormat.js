@@ -96,12 +96,18 @@ export const deductionUnit = (unit) =>
   DEDUCTION_UNITS.find((entry) => entry.value === unit) || DEDUCTION_UNITS[0];
 
 const COUNT_FIELDS = ["fixedDaysPerMonth", "lateGraceCount", "lateEveryCount"];
+// Paid-leave rules (requirements 16 Oct 2026, 4.1) - carried only when the
+// server sends them, so older saved rules round-trip unchanged.
+const OPTIONAL_COUNT_FIELDS = ["paidLeavePerMonth"];
+const OPTIONAL_FLAGS = ["manualLeaveIsPaid"];
+const countFieldsOf = (source) => [...COUNT_FIELDS, ...OPTIONAL_COUNT_FIELDS.filter((f) => source?.[f] !== undefined)];
 
 /** The saved rules as form state: every number a string, so a field can be empty. */
 export const toRulesForm = (policy) => {
   if (!policy) return null;
   const form = { perDayBasis: policy.perDayBasis };
-  COUNT_FIELDS.forEach((field) => { form[field] = String(policy[field] ?? ""); });
+  OPTIONAL_FLAGS.forEach((flag) => { if (policy[flag] !== undefined) form[flag] = Boolean(policy[flag]); });
+  countFieldsOf(policy).forEach((field) => { form[field] = String(policy[field] ?? ""); });
   DEDUCTION_RULE_KEYS.forEach((key) => {
     form[key] = { unit: policy[key]?.unit || "DAYS", value: String(policy[key]?.value ?? "") };
   });
@@ -112,15 +118,16 @@ const isBlank = (value) => String(value ?? "").trim() === "";
 
 /** Form state back to what the API takes, or the reason it cannot be sent yet. */
 export const rulesFormToPayload = (form) => {
-  if (COUNT_FIELDS.some((field) => isBlank(form[field]))
+  if (countFieldsOf(form).some((field) => isBlank(form[field]))
     || DEDUCTION_RULE_KEYS.some((key) => isBlank(form[key]?.value))) {
     return { error: "Fill in every rule - use 0 for no deduction" };
   }
   const payload = { perDayBasis: form.perDayBasis };
-  COUNT_FIELDS.forEach((field) => { payload[field] = Number(form[field]); });
+  countFieldsOf(form).forEach((field) => { payload[field] = Number(form[field]); });
   DEDUCTION_RULE_KEYS.forEach((key) => {
     payload[key] = { unit: form[key].unit, value: Number(form[key].value) };
   });
+  OPTIONAL_FLAGS.forEach((flag) => { if (form[flag] !== undefined) payload[flag] = Boolean(form[flag]); });
   return { payload };
 };
 
@@ -128,7 +135,8 @@ export const rulesFormToPayload = (form) => {
 export const isRulesFormChanged = (form, policy) => {
   if (!form || !policy) return false;
   if (form.perDayBasis !== policy.perDayBasis) return true;
-  if (COUNT_FIELDS.some((field) => isBlank(form[field]) || Number(form[field]) !== policy[field])) return true;
+  if (OPTIONAL_FLAGS.some((flag) => form[flag] !== undefined && Boolean(form[flag]) !== Boolean(policy[flag]))) return true;
+  if (countFieldsOf(form).some((field) => isBlank(form[field]) || Number(form[field]) !== policy[field])) return true;
   return DEDUCTION_RULE_KEYS.some((key) => form[key].unit !== policy[key].unit
     || isBlank(form[key].value)
     || Number(form[key].value) !== policy[key].value);

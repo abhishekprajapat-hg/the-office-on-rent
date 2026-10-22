@@ -16,7 +16,7 @@ const reconcileMonth = async ({ companyId, userIds, month, policy }) => {
  const timezone = policy.timezone || "Asia/Kolkata";
  const today = dateKey(new Date(), timezone), from = `${month}-01`, to = `${month}-31`;
  const [users, attendance, leaves, existing] = await Promise.all([
-  User.find({ companyId, _id: { $in: userIds }, isActive: true }).select("_id name createdAt").lean(),
+  User.find({ companyId, _id: { $in: userIds }, isActive: true }).select("_id name createdAt weeklyOffSchedule").lean(),
   Attendance.find({ companyId, userId: { $in: userIds }, attendanceDate: { $gte: from, $lte: to } }).lean(),
   Leave.find({ companyId, userId: { $in: userIds }, fromDate: { $lte: to }, toDate: { $gte: from } }).lean(),
   Violation.find({ companyId, userId: { $in: userIds }, month }).lean(),
@@ -33,7 +33,9 @@ const reconcileMonth = async ({ companyId, userIds, month, policy }) => {
    const calendar = new Date(`${day}T12:00:00Z`);
    if (calendar.toISOString().slice(0, 7) !== month) break;
    const key = `${user._id}:${day}`, previous = byKey.get(key);
-   const kind = classifyAbsence({ day, today, joined, weekday: calendar.getUTCDay(), weeklyOffDays: policy.weeklyOffDays || [0], attendance: attendanceMap.get(key), leaves: userLeaves, timezone });
+   // Their own weekly off and company holidays count as days off (requirements 16 Oct 2026, 4.3/4.4).
+   const offToday = require("./workCalendar").isOffDate(day, { schedule: user.weeklyOffSchedule, policy });
+   const kind = offToday ? null : classifyAbsence({ day, today, joined, weekday: calendar.getUTCDay(), weeklyOffDays: [], attendance: attendanceMap.get(key), leaves: userLeaves, timezone });
    const active = Boolean(kind && !previous?.excused);
    if (!active && !previous) continue;
    const ordinal = active ? ++counts[kind] : 0;

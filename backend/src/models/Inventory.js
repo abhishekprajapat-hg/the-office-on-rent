@@ -187,6 +187,27 @@ const residentialDetailsSchema = new mongoose.Schema(
   { _id: false },
 );
 
+const { INVENTORY_SOURCE_TYPES, SOURCE_AVAILABILITY } = require("../constants/relationship.constants");
+
+// A broker or firm that offers this unit, with their own quote (6.3, 7.1).
+const sourceLinkSchema = new mongoose.Schema(
+  {
+    contactId: { type: mongoose.Schema.Types.ObjectId, ref: "CrmContact", default: null },
+    firmId: { type: mongoose.Schema.Types.ObjectId, ref: "BrokerFirm", default: null },
+    askingPrice: { type: Number, min: 0, default: null },
+    askingRent: { type: Number, min: 0, default: null },
+    /* Confidential; Admin/Manager only. */
+    netRate: { type: Number, min: 0, default: null },
+    marketRateNote: { type: String, trim: true, maxlength: 300, default: "" },
+    availability: { type: String, enum: SOURCE_AVAILABILITY, default: "UNVERIFIED" },
+    confirmedAt: { type: Date, default: null },
+    notes: { type: String, trim: true, maxlength: 1000, default: "" },
+    addedBy: { type: mongoose.Schema.Types.ObjectId, ref: "User", default: null },
+    addedAt: { type: Date, default: Date.now },
+  },
+  { _id: true },
+);
+
 const inventorySchema = new mongoose.Schema(
   {
     companyId: {
@@ -265,6 +286,16 @@ const inventorySchema = new mongoose.Schema(
       maxlength: 40,
     },
     ownerContactId: { type: mongoose.Schema.Types.ObjectId, ref: "CrmContact", default: null },
+    /*
+     * Where this record came from and who offers it (requirements 16 Oct 2026,
+     * 7.1/17.2). One canonical unit can have several broker sources; the
+     * owner stays a separate link.
+     */
+    sourceType: { type: String, enum: INVENTORY_SOURCE_TYPES, default: "" },
+    sourceLinks: { type: [sourceLinkSchema], default: [] },
+    lastConfirmedAt: { type: Date, default: null },
+    projectId: { type: mongoose.Schema.Types.ObjectId, ref: "Project", default: null },
+    originLeadId: { type: mongoose.Schema.Types.ObjectId, ref: "Lead", default: null },
     ownerName: {
       type: String,
       trim: true,
@@ -557,6 +588,9 @@ inventorySchema.index(
   { unique: true, partialFilterExpression: { propertyId: { $type: "string", $ne: "" } } },
 );
 inventorySchema.index({ companyId: 1, status: 1, updatedAt: -1 });
+inventorySchema.index({ companyId: 1, "sourceLinks.contactId": 1 });
+inventorySchema.index({ companyId: 1, ownerContactId: 1 });
+inventorySchema.index({ companyId: 1, projectId: 1 });
 inventorySchema.index({ companyId: 1, teamId: 1, updatedAt: -1 });
 // Inventory workbench filters commonly combine tenant, inventory type/status, and newest-first sorting.
 inventorySchema.index({ companyId: 1, inventoryType: 1, status: 1, updatedAt: -1 });

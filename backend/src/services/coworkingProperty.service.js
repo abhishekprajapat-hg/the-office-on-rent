@@ -62,6 +62,10 @@ const sanitizePropertyPayload = (payload = {}, { mode }) => {
       safe.address = sanitizeAddress(payload.address);
     } else if (field === "contact") {
       safe.contact = sanitizeContact(payload.contact);
+    } else if (field === "projectId") {
+      const projectId = payload.projectId ? String(payload.projectId).trim() : "";
+      if (projectId && !isValidObjectId(projectId)) throw createHttpError(400, "Invalid projectId");
+      safe.projectId = projectId || null;
     } else if (field === "description") {
       safe.description = String(payload.description || "").trim().slice(0, 2000);
     }

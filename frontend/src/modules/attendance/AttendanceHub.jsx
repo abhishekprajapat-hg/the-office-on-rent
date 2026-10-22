@@ -1,5 +1,6 @@
 import AttendanceViolations from "./AttendanceViolations";
 import AttendanceOfficesPanel from "./AttendanceOfficesPanel";
+import WorkCalendarPanel from "./WorkCalendarPanel";
 import { MANUAL_ATTENDANCE_STATUS_OPTIONS, manualStatusSelectValue } from "./attendanceStatus";
 import React, { useCallback, useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
@@ -50,6 +51,7 @@ import {
 } from "../../services/attendanceService";
 import { toErrorMessage } from "../../utils/errorMessage";
 import ToastNotice from "../../components/ui/ToastNotice";
+import { getMyDailyReportToday } from "../../services/dailyReportService";
 import BreakCorrectionDialog from "./BreakCorrectionDialog";
 import AvatarFace from "../../components/ui/AvatarFace";
 
@@ -66,6 +68,7 @@ const STATUS_STYLES = {
   HALF_DAY: "bg-blue-100 text-blue-700 border-blue-200",
   LEAVE: "bg-teal-100 text-teal-700 border-teal-200",
   WEEK_OFF: "bg-slate-100 text-slate-600 border-slate-300",
+  HOLIDAY: "bg-fuchsia-100 text-fuchsia-700 border-fuchsia-200",
   PENDING: "bg-amber-100 text-amber-700 border-amber-200",
   ABSENT: "bg-rose-100 text-rose-700 border-rose-200",
   MISSED_CHECK_OUT: "bg-orange-100 text-orange-700 border-orange-200",
@@ -234,6 +237,7 @@ const formatAttendanceStatus = (status) => {
   if (normalized === "BREAK") return "Break";
   if (normalized === "LATE") return "Working";
   if (normalized === "WEEK_OFF") return "Week Off";
+  if (normalized === "HOLIDAY") return "Holiday";
   return normalized.replaceAll("_", " ");
 };
 
@@ -595,8 +599,21 @@ const AttendanceHub = () => {
     }
   };
 
+  // Requirements 16 Oct 2026, 1.1: today's daily report comes before checkout.
+  const sendToDailyReport = () => navigate("/daily-reports?from=checkout");
+
   const handleCheckOut = async () => {
     if (!canUsePersonalAttendance) return;
+
+    try {
+      const reportState = await getMyDailyReportToday();
+      if (reportState?.required && !reportState?.submitted) {
+        sendToDailyReport();
+        return;
+      }
+    } catch {
+      // The server checks again on checkout, so carry on.
+    }
 
     if (typeof window !== "undefined") {
       const warningLines = [
@@ -626,6 +643,10 @@ const AttendanceHub = () => {
         await loadAdminAttendance({ quiet: true });
       }
     } catch (error) {
+      if (error?.response?.data?.code === "DAILY_REPORT_REQUIRED") {
+        sendToDailyReport();
+        return;
+      }
       setMyError(toErrorMessage(error, "Check-out failed"));
     } finally {
       setAttendanceAction("");
@@ -1311,6 +1332,7 @@ const AttendanceHub = () => {
                       <option value="PENDING">Pending</option>
                       <option value="LEAVE">Leave</option>
                       <option value="WEEK_OFF">Week Off (WO)</option>
+                      <option value="HOLIDAY">Holiday</option>
                       <option value="ABSENT">Absent</option>
                     </select>
                   </div>
@@ -1732,6 +1754,18 @@ const AttendanceHub = () => {
 
             {isAdminViewer ? (
               <AttendanceOfficesPanel requestLocation={() => requestAttendanceLocation({ required: true })} />
+            ) : null}
+
+            {isAdminViewer && attendancePolicy ? (
+              <WorkCalendarPanel
+                key={`work-calendar-${attendancePolicy.halfDayCheckInCutoffMinutes}-${(attendancePolicy.holidays || []).length}`}
+                policy={attendancePolicy}
+                onSaved={(next) => next && setAttendancePolicy(next)}
+                cardClass={cardClass}
+                cardHeaderClass={cardHeaderClass}
+                fieldClass={fieldClass}
+                primaryButtonClass={primaryButtonClass}
+              />
             ) : null}
 
             {isAdminViewer ? (

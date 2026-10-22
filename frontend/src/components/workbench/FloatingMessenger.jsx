@@ -42,7 +42,7 @@ const FloatingMessenger = ({ theme, unreadTotal = 0 }) => {
           aria-label="Team messenger"
           className={
             isOpen
-              ? "flex h-[min(680px,80dvh)] w-[min(900px,calc(100vw-2.5rem))] flex-col overflow-hidden rounded-2xl border border-slate-300 bg-white shadow-2xl dark:border-slate-700 dark:bg-slate-950"
+              ? "gl-messenger flex h-[min(680px,80dvh)] w-[min(900px,calc(100vw-2.5rem))] flex-col overflow-hidden rounded-2xl border border-slate-300 bg-white shadow-2xl dark:border-slate-700 dark:bg-slate-950"
               : "hidden"
           }
         >
@@ -71,7 +71,7 @@ const FloatingMessenger = ({ theme, unreadTotal = 0 }) => {
           onClick={() => setMode("open")}
           title={unreadTotal > 0 ? `Messenger — ${unreadTotal} unread` : "Messenger"}
           aria-label={unreadTotal > 0 ? `Open messenger, ${unreadTotal} unread` : "Open messenger"}
-          className="relative grid h-[50px] w-[50px] place-items-center rounded-full bg-slate-900 text-white shadow-xl transition hover:bg-slate-800"
+          className="gl-fab relative grid h-[50px] w-[50px] place-items-center rounded-full bg-slate-900 text-white shadow-xl transition hover:bg-slate-800"
         >
           <MessageCircle size={21} />
           {unreadTotal > 0 ? (

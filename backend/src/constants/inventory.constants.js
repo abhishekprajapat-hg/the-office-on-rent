@@ -69,6 +69,11 @@ const INVENTORY_ALLOWED_FIELDS = [
   "dealType",
   "propertyDate",
   "gstApplicable",
+  // Requirements 16 Oct 2026 (7.1): where it came from and when it was last checked.
+  "sourceType",
+  "lastConfirmedAt",
+  "projectId",
+  "originLeadId",
 ];
 
 const INVENTORY_REQUIRED_CREATE_FIELDS = [

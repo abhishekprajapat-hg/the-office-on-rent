@@ -367,7 +367,7 @@ const sanitizeProjectPayload = ({ payload, mode, currentTotalPlots, currentProje
       safePayload[field] = cleanValue;
       return;
     }
-    if (["totalPlots", "startingRate", "currentRate", "plotsAvailable"].includes(field)) {
+    if (["totalPlots", "startingRate", "currentRate", "plotsAvailable", "plotSizeMin", "plotSizeMax"].includes(field)) {
       safePayload[field] = sanitizeNonNegativeNumber(value, field);
       return;
     }
@@ -417,13 +417,14 @@ const sanitizeProjectPayload = ({ payload, mode, currentTotalPlots, currentProje
   const effectiveProjectType = safePayload.projectType || currentProjectType;
   const isResidential = effectiveProjectCategory === "RESIDENTIAL";
   const isCommercial = effectiveProjectCategory === "COMMERCIAL";
+  const isCoworking = effectiveProjectCategory === "COWORKING";
   const isPlotBased = isResidential && PLOT_BASED_PROJECT_TYPES.includes(effectiveProjectType);
   const isBuilding = isResidential && effectiveProjectType === "BUILDING";
 
   if (mode === "create") {
     const requiredFields = [
       ...PROJECT_COMMON_REQUIRED_CREATE_FIELDS,
-      ...(isCommercial
+      ...(isCoworking ? [] : isCommercial
         ? PROJECT_COMMERCIAL_REQUIRED_CREATE_FIELDS
         : [
           ...PROJECT_RESIDENTIAL_REQUIRED_CREATE_FIELDS,
@@ -452,6 +453,12 @@ const sanitizeProjectPayload = ({ payload, mode, currentTotalPlots, currentProje
       && safePayload.plotsAvailable > totalPlots
     ) {
       throw createHttpError(400, "plotsAvailable cannot exceed totalPlots");
+    }
+
+    const plotMin = safePayload.plotSizeMin;
+    const plotMax = safePayload.plotSizeMax;
+    if (plotMin !== undefined && plotMin !== null && plotMax !== undefined && plotMax !== null && plotMin > plotMax) {
+      throw createHttpError(400, "The smallest plot size can't be bigger than the largest");
     }
 
     if (safePayload.plotSize === "CUSTOM" && Object.prototype.hasOwnProperty.call(safePayload, "customPlotSize")) {
@@ -593,6 +600,48 @@ const getProjectList = async ({ user, filters = {}, pagination }) => {
     ];
   }
 
+  // Knowledge search (requirements 16 Oct 2026, 5.1): developer, location,
+  // amenities and price range.
+  const esc = (v) => v.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  const and = [];
+  const developer = sanitizeString(filters.developer);
+  if (developer) and.push({ "details.overview.developer": { $regex: esc(developer), $options: "i" } });
+  const city = sanitizeString(filters.city);
+  if (city) and.push({ $or: [{ city: { $regex: esc(city), $options: "i" } }, { location: { $regex: esc(city), $options: "i" } }, { "details.overview.locality": { $regex: esc(city), $options: "i" } }] });
+  const amenity = sanitizeString(filters.amenity);
+  if (amenity) and.push({ $or: [{ amenities: amenity.toUpperCase() }, { "amenityStatuses.name": { $regex: esc(amenity), $options: "i" } }] });
+  const priceMin = Number(filters.priceMin);
+  const priceMax = Number(filters.priceMax);
+  if (Number.isFinite(priceMin) && filters.priceMin !== undefined && filters.priceMin !== "") and.push({ currentRate: { $gte: priceMin } });
+  if (Number.isFinite(priceMax) && filters.priceMax !== undefined && filters.priceMax !== "") and.push({ startingRate: { $lte: priceMax } });
+  // Size (5.1): a project matches when any of its sizes falls in the range -
+  // the plot size range, a BHK size, or an office / shop / showroom area.
+  const sizeMin = filters.sizeMin !== undefined && filters.sizeMin !== "" ? Number(filters.sizeMin) : null;
+  const sizeMax = filters.sizeMax !== undefined && filters.sizeMax !== "" ? Number(filters.sizeMax) : null;
+  if ((sizeMin !== null && Number.isFinite(sizeMin)) || (sizeMax !== null && Number.isFinite(sizeMax))) {
+    const lo = Number.isFinite(sizeMin) && sizeMin !== null ? sizeMin : 0;
+    const hi = Number.isFinite(sizeMax) && sizeMax !== null ? sizeMax : Number.MAX_SAFE_INTEGER;
+    const inRange = { $gte: lo, $lte: hi };
+    and.push({ $or: [
+      // Plot range overlaps [lo, hi]; a missing end counts as open.
+      { $and: [
+        { $or: [{ plotSizeMin: { $lte: hi } }, { plotSizeMin: null, plotSizeMax: { $gte: lo } }] },
+        { $or: [{ plotSizeMax: { $gte: lo } }, { plotSizeMax: null, plotSizeMin: { $lte: hi } }] },
+      ] },
+      // Projects saved before the range keep a single size ("1200", or custom text).
+      { plotSizeMin: null, plotSizeMax: null, plotSize: { $in: PROJECT_PLOT_SIZES.filter((size) => Number(size) >= lo && Number(size) <= hi) } },
+      { "bhkConfigurations.size": inRange },
+      { "offices.superBuiltUpArea": inRange },
+      { "offices.carpetArea": inRange },
+      { "offices.builtUpArea": inRange },
+      { "shops.builtUpArea": inRange },
+      { "shops.carpetArea": inRange },
+      { "showrooms.builtUpArea": inRange },
+      { "showrooms.carpetArea": inRange },
+    ] });
+  }
+  if (and.length) query.$and = and;
+
   const createdBy = sanitizeString(filters.createdBy);
   if (createdBy && mongoose.Types.ObjectId.isValid(createdBy)) {
     query.createdBy = createdBy;
@@ -613,6 +662,7 @@ const getProjectList = async ({ user, filters = {}, pagination }) => {
 };
 
 module.exports = {
+  _test: { sanitizeProjectPayload },
   createProject,
   getProjectById,
   updateProject,

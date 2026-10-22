@@ -23,6 +23,8 @@ import { Button, cn } from "../../../../components/ui";
 import { formatCurrency, formatDate } from "../../../../utils/format";
 import { STATUS_META } from "../cabinData";
 import DocumentChecklist from "./DocumentChecklist";
+import { usePermissions } from "../../../../context/usePermissions";
+import { isRestrictedClientFile, RESTRICTED_DOCUMENT_NOTE } from "../../../../utils/clientDocumentAccess";
 
 /*
  * Everything known about one cabin, in the order a manager asks for it:
@@ -95,6 +97,7 @@ const CabinFacts = ({ cabin }) => (
 );
 
 const CabinDetailPanel = ({ cabin, onClose, onAction, onOnboard, onHold, onTransfer, onOpenClient, onEditClient, propertyLabel }) => {
+  const { canDownloadClientDocuments } = usePermissions();
   const meta = STATUS_META[cabin.status];
   const contract = cabin.contract;
   const isLet = cabin.status === "BOOKED" || cabin.status === "RESERVED";
@@ -224,7 +227,7 @@ const CabinDetailPanel = ({ cabin, onClose, onAction, onOnboard, onHold, onTrans
               <Row label="Token paid" value={formatCurrency(contract.tokenAmount || 0)} />
               <Row label="Notice period" value={`${contract.noticePeriodDays ?? 30} days`} />
               <Row label="Date of birth" value={formatDate(clientDateOfBirth) || "-"} />
-              <div className="mt-3 border-t pt-2"><h4 className="text-xs font-semibold">Security Cheque</h4><Row label="Cheque number" value={contract.securityCheque?.number} /><Row label="Bank" value={contract.securityCheque?.bank} /><Row label="Amount" value={formatCurrency(contract.securityCheque?.amount || 0)} /><Row label="Cheque date" value={contract.securityCheque?.date} />{contract.securityCheque?.file?.url ? <Row label="Cheque copy" value={<a href={contract.securityCheque.file.url} target="_blank" rel="noreferrer" className="font-semibold text-blue-700 hover:underline dark:text-blue-400">View {contract.securityCheque.file.fileName || "cheque"}</a>} /> : <Row label="Cheque copy" value="Not uploaded" />}</div>
+              <div className="mt-3 border-t pt-2"><h4 className="text-xs font-semibold">Security Cheque</h4><Row label="Cheque number" value={contract.securityCheque?.number} /><Row label="Bank" value={contract.securityCheque?.bank} /><Row label="Amount" value={formatCurrency(contract.securityCheque?.amount || 0)} /><Row label="Cheque date" value={contract.securityCheque?.date} />{contract.securityCheque?.file?.url && !canDownloadClientDocuments && isRestrictedClientFile(contract.securityCheque.file.url) ? <Row label="Cheque copy" value={RESTRICTED_DOCUMENT_NOTE} /> : contract.securityCheque?.file?.url ? <Row label="Cheque copy" value={<a href={contract.securityCheque.file.url} target="_blank" rel="noreferrer" className="font-semibold text-blue-700 hover:underline dark:text-blue-400">View {contract.securityCheque.file.fileName || "cheque"}</a>} /> : <Row label="Cheque copy" value="Not uploaded" />}</div>
               <Row
                 label="Payment status"
                 value={

@@ -61,7 +61,16 @@ const DEFAULT_PAYROLL_POLICY = Object.freeze({
   lateEveryCount: 3,
   // Charged for every lateEveryCount late check-ins after the first lateGraceCount.
   late: rule(DEDUCTION_UNIT.DAYS, 0.5),
+  // Requirements 16 Oct 2026, 4.1: approved CRM leave is paid only up to this
+  // many days a month; days beyond it cost what unpaid leave costs.
+  paidLeavePerMonth: 1,
+  // A day an admin marked "Leave" by hand, without a CRM leave request, is not
+  // eligible for paid leave unless this is switched on.
+  manualLeaveIsPaid: false,
 });
+
+// Leave types a person applies for in the CRM (LeaveRequest.leaveType).
+const CRM_PAID_LEAVE_SOURCES = Object.freeze(["CASUAL", "SICK", "EMERGENCY", "OTHER", "LEAVE"]);
 
 const MAX_MONTHLY_SALARY = 100000000;
 
@@ -148,6 +157,8 @@ const toPayrollPolicyView = (source = {}) => {
     fixedDaysPerMonth: clampInteger(value.fixedDaysPerMonth, 1, 31, base.fixedDaysPerMonth),
     lateGraceCount: clampInteger(value.lateGraceCount, 0, 31, base.lateGraceCount),
     lateEveryCount: clampInteger(value.lateEveryCount, 1, 31, base.lateEveryCount),
+    paidLeavePerMonth: clampInteger(value.paidLeavePerMonth, 0, 31, base.paidLeavePerMonth),
+    manualLeaveIsPaid: typeof value.manualLeaveIsPaid === "boolean" ? value.manualLeaveIsPaid : base.manualLeaveIsPaid,
   };
   DEDUCTION_RULE_KEYS.forEach((key) => {
     view[key] = toDeductionRule(readStoredRule(value, key), base[key]);
@@ -159,7 +170,7 @@ const toPayrollPolicyView = (source = {}) => {
  * What one person's own deduction amounts may replace. The per-day basis stays
  * the company's: it is how a day's pay is worked out, not what an absence costs.
  */
-const EMPLOYEE_RULE_FIELDS = Object.freeze([...DEDUCTION_RULE_KEYS, "lateGraceCount", "lateEveryCount"]);
+const EMPLOYEE_RULE_FIELDS = Object.freeze([...DEDUCTION_RULE_KEYS, "lateGraceCount", "lateEveryCount", "paidLeavePerMonth"]);
 
 /**
  * The rules that apply to one person: their own amounts where a manager set
@@ -265,7 +276,7 @@ const DAY_KIND = Object.freeze({
  * An absence on a day the person did ask leave for, but which is still pending
  * or was rejected, is "unapproved leave" rather than a plain absence.
  */
-const classifyDay = (row, unapprovedLeaveDates) => {
+const classifyDay = (row, unapprovedLeaveDates, manualLeaveIsPaid = false) => {
   const status = String(row?.status || "").toUpperCase();
   if (status === "ABSENT") {
     return unapprovedLeaveDates.has(row.attendanceDate) ? DAY_KIND.UNAPPROVED_LEAVE : DAY_KIND.ABSENT;
@@ -273,8 +284,16 @@ const classifyDay = (row, unapprovedLeaveDates) => {
   if (status === "HALF_DAY") return DAY_KIND.HALF_DAY;
   // A week off is a paid day off: there is no rule for it and nothing to take.
   if (status === "WEEK_OFF") return DAY_KIND.WEEK_OFF;
+  // A holiday marked for this person is paid like a company holiday.
+  if (status === "HOLIDAY") return DAY_KIND.WEEK_OFF;
   if (status === "LEAVE") {
-    return String(row?.source || "").toUpperCase() === "UNPAID" ? DAY_KIND.UNPAID_LEAVE : DAY_KIND.PAID_LEAVE;
+    const source = String(row?.source || "").toUpperCase();
+    if (source === "UNPAID") return DAY_KIND.UNPAID_LEAVE;
+    // Requirements 16 Oct 2026, 4.1: only leave applied for in the CRM and
+    // approved is eligible for paid leave. A day marked Leave by hand is not,
+    // unless the company has said otherwise.
+    if (CRM_PAID_LEAVE_SOURCES.includes(source) || manualLeaveIsPaid) return DAY_KIND.PAID_LEAVE;
+    return DAY_KIND.UNPAID_LEAVE;
   }
   return DAY_KIND.WORKED;
 };
@@ -327,6 +346,11 @@ const calculateMonthlySalary = ({
   unapprovedLeaveDates = [],
   joiningKey = "",
   customDeductions = [],
+  // Per-person weekly offs (4.3): a function telling whether a date is this
+  // person's scheduled day off. Falls back to the company's weeklyOffDays.
+  isWeeklyOff = null,
+  // Company holidays (4.4): paid days off, never an absence.
+  holidayDates = [],
 }) => {
   const range = monthRange(monthKey);
   if (!range) throw new Error("monthKey must be YYYY-MM");
@@ -334,8 +358,11 @@ const calculateMonthlySalary = ({
   const salary = roundMoney(clampNumber(monthlySalary, 0, MAX_MONTHLY_SALARY, 0));
   const offDays = new Set((Array.isArray(weeklyOffDays) ? weeklyOffDays : []).map(Number));
 
+  const holidays = new Set(Array.isArray(holidayDates) ? holidayDates : []);
+  const isOffDay = (key) => holidays.has(key)
+    || (typeof isWeeklyOff === "function" ? Boolean(isWeeklyOff(key)) : offDays.has(weekdayOf(key)));
   const allDates = dateKeysBetween(range.from, range.to);
-  const workingDaysInMonth = allDates.filter((key) => !offDays.has(weekdayOf(key))).length;
+  const workingDaysInMonth = allDates.filter((key) => !isOffDay(key)).length;
   const divisor = policy.perDayBasis === PER_DAY_BASIS.WORKING_DAYS
     ? Math.max(1, workingDaysInMonth)
     : policy.perDayBasis === PER_DAY_BASIS.FIXED_DAYS
@@ -353,7 +380,7 @@ const calculateMonthlySalary = ({
     const lastBefore = joined > range.to ? range.to : previousDateKey(joined);
     beforeJoiningDates = dateKeysBetween(range.from, lastBefore);
     if (policy.perDayBasis === PER_DAY_BASIS.WORKING_DAYS) {
-      beforeJoiningDates = beforeJoiningDates.filter((key) => !offDays.has(weekdayOf(key)));
+      beforeJoiningDates = beforeJoiningDates.filter((key) => !isOffDay(key));
     }
   }
 
@@ -366,6 +393,7 @@ const calculateMonthlySalary = ({
     [DAY_KIND.PAID_LEAVE]: [],
   };
   const lateDates = [];
+  const workedOnOffDays = [];
 
   const seen = new Set();
   (Array.isArray(days) ? days : []).forEach((row) => {
@@ -375,12 +403,27 @@ const calculateMonthlySalary = ({
     if (!throughKey || dateKey > throughKey) return;
     if (joined && dateKey < joined) return;
     seen.add(dateKey);
-    const kind = classifyDay(row, unapproved);
+    const kind = classifyDay(row, unapproved, policy.manualLeaveIsPaid);
+    const offDay = isOffDay(dateKey);
+    // A scheduled day off or a holiday is never an absence (4.3/4.4); work done
+    // on one is recorded, not charged.
+    if (offDay && [DAY_KIND.ABSENT, DAY_KIND.UNAPPROVED_LEAVE].includes(kind)) return;
+    if (offDay && kind === DAY_KIND.WORKED && row?.checkInAt) workedOnOffDays.push(dateKey);
     if (buckets[kind]) buckets[kind].push(dateKey);
-    if (isLateDay(row)) lateDates.push(dateKey);
+    // Late and half day never both charge the same arrival (4.2): a half day
+    // (or an absence) is that day's only deduction.
+    if (isLateDay(row) && ![DAY_KIND.HALF_DAY, DAY_KIND.ABSENT, DAY_KIND.UNAPPROVED_LEAVE].includes(kind)) lateDates.push(dateKey);
   });
   Object.values(buckets).forEach((dates) => dates.sort());
   lateDates.sort();
+  workedOnOffDays.sort();
+
+  // Paid leave entitlement (4.1): the first N approved leave days in the month
+  // are paid; the rest cost what unpaid leave costs. A day is never both.
+  const eligiblePaidLeave = buckets[DAY_KIND.PAID_LEAVE];
+  const paidLeaveDates = eligiblePaidLeave.slice(0, policy.paidLeavePerMonth);
+  const beyondEntitlementDates = eligiblePaidLeave.slice(policy.paidLeavePerMonth);
+  buckets[DAY_KIND.PAID_LEAVE] = paidLeaveDates;
 
   // What one occurrence costs under a rule, in rupees.
   const costOf = ({ unit, value }) => {
@@ -409,6 +452,18 @@ const calculateMonthlySalary = ({
     dayLine("halfDay", "Half day", buckets[DAY_KIND.HALF_DAY]),
     dayLine("unpaidLeave", "Unpaid leave", buckets[DAY_KIND.UNPAID_LEAVE]),
     dayLine("paidLeave", "Paid leave", buckets[DAY_KIND.PAID_LEAVE]),
+    {
+      key: "leaveBeyondEntitlement",
+      label: "Leave beyond paid entitlement",
+      count: beyondEntitlementDates.length,
+      dates: beyondEntitlementDates,
+      unit: policy.unpaidLeave.unit,
+      value: policy.unpaidLeave.value,
+      rule: policy.paidLeavePerMonth
+        ? `Charged like unpaid leave after ${policy.paidLeavePerMonth} paid day${policy.paidLeavePerMonth === 1 ? "" : "s"} a month`
+        : "No paid leave entitlement - charged like unpaid leave",
+      amount: roundMoney(beyondEntitlementDates.length * costOf(policy.unpaidLeave)),
+    },
     {
       key: "late",
       label: "Late check-in",
@@ -482,6 +537,14 @@ const calculateMonthlySalary = ({
     lines,
     totalDeduction,
     netSalary: roundMoney(salary - totalDeduction),
+    paidLeave: {
+      entitlement: policy.paidLeavePerMonth,
+      used: paidLeaveDates.length,
+      remaining: Math.max(0, policy.paidLeavePerMonth - paidLeaveDates.length),
+      beyondEntitlement: beyondEntitlementDates.length,
+    },
+    workedOnOffDays,
+    holidays: [...holidays].filter((key) => key >= range.from && key <= range.to).sort(),
   };
 };
 
@@ -504,4 +567,7 @@ module.exports = {
   dateKeyInTimezone,
   dateKeysBetween,
   monthRange,
+  CRM_PAID_LEAVE_SOURCES,
+  classifyDay,
+  DAY_KIND,
 };

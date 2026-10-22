@@ -121,6 +121,12 @@ router.get(
   leadController.getCompanyPerformanceOverview
 );
 
+// Lead touch time + Meta reconciliation (requirements 16 Oct 2026, section 08).
+router.get("/touch-report", authMiddleware.protect, leadController.getLeadTouchReport);
+router.get("/meta-failures", authMiddleware.protect, leadController.getMetaLeadFailures);
+router.patch("/meta-failures/:failureId", writeLimiter, authMiddleware.protect, leadController.resolveMetaLeadFailure);
+router.post("/:leadId/touch", writeLimiter, authMiddleware.protect, leadController.logLeadTouch);
+
 router.get(
   "/:leadId",
   authMiddleware.protect,

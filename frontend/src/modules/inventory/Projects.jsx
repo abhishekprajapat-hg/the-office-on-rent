@@ -16,6 +16,7 @@ import {
   MapPin,
   Image as ImageIcon,
   Layers3,
+  Loader2,
 } from "lucide-react";
 import {
   getProjectsWithMeta,
@@ -26,6 +27,9 @@ import {
 } from "../../services/projectService";
 import { deleteOutcomeMessage, isDeleteApprovalPending } from "../../services/deleteRequestService";
 import { uploadFile } from "../../services/uploadService";
+import { getProjectDetailsCatalogue, getProjectKnowledge, updateProjectDetails } from "../../services/projectService";
+import { AmenityStatusEditor, ApprovalStatusSelect, ContactsEditor, DocumentUploader, FieldGrid } from "./ProjectKnowledgeFields";
+import { emptyKnowledgeDraft, humanizeKey, knowledgePatchFromDraft } from "./projectKnowledgeFormat";
 import { toErrorMessage } from "../../utils/errorMessage";
 import { useDebouncedValue } from "../../hooks/useDebouncedValue";
 import { usePermissions } from "../../context/usePermissions";
@@ -35,7 +39,7 @@ import {
   PROJECT_CATEGORY_OPTIONS,
   PROJECT_TYPE_OPTIONS,
   PLOT_BASED_PROJECT_TYPES,
-  PROJECT_PLOT_SIZE_OPTIONS,
+  plotSizeRangeFromProject,
   PROJECT_BHK_OPTIONS,
   PROJECT_STATUS_OPTIONS,
   PROJECT_AMENITY_OPTIONS,
@@ -50,6 +54,9 @@ import {
 const isPlotBasedType = (projectType) => PLOT_BASED_PROJECT_TYPES.includes(projectType);
 const isBuildingType = (projectType) => projectType === "BUILDING";
 const isCommercialCategory = (projectCategory) => projectCategory === "COMMERCIAL";
+// Coworking workspaces have no project type or unit grid here; their details
+// go in the project's knowledge record (requirements 16 Oct 2026, 5.4).
+const isCoworkingCategory = (projectCategory) => projectCategory === "COWORKING";
 
 const makeUnitKey = () => `unit_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
 
@@ -185,8 +192,8 @@ const DEFAULT_FORM = {
   projectName: "",
   totalLandArea: "",
   totalPlots: "",
-  plotSize: "",
-  customPlotSize: "",
+  plotSizeMin: "",
+  plotSizeMax: "",
   numberOfFlats: "",
   numberOfFloors: "",
   flatsPerFloor: "",
@@ -200,10 +207,22 @@ const DEFAULT_FORM = {
   shops: [],
   showrooms: [],
   plc: "",
+  plcWideRoad: "",
+  plcGardenFacing: "",
+  plcCorner: "",
+  plcGardenCorner: "",
   group: "",
   startingRate: "",
   currentRate: "",
   otherCharges: "",
+  developmentCharges: "",
+  maintenanceCharges: "",
+  amenityCharges: "",
+  utilityCharges: "",
+  parkingCharges: "",
+  taxes: "",
+  registrationStampDuty: "",
+  otherFacilities: "",
   status: "",
   amenities: [],
   housingCategory: "",
@@ -228,8 +247,7 @@ const toFormFromProject = (project = {}) => ({
   projectName: project.projectName || "",
   totalLandArea: project.totalLandArea || "",
   totalPlots: project.totalPlots ?? "",
-  plotSize: project.plotSize || "",
-  customPlotSize: project.customPlotSize || "",
+  ...plotSizeRangeFromProject(project),
   numberOfFlats: project.numberOfFlats ?? "",
   numberOfFloors: project.numberOfFloors ?? "",
   flatsPerFloor: project.flatsPerFloor ?? "",
@@ -261,10 +279,22 @@ const toFormFromProject = (project = {}) => ({
     ? project.showrooms.map((entry) => ({ ...DEFAULT_SHOWROOM, ...entry, _key: entry._id || makeUnitKey() }))
     : [],
   plc: project.plc || "",
+  plcWideRoad: project.plcWideRoad || "",
+  plcGardenFacing: project.plcGardenFacing || "",
+  plcCorner: project.plcCorner || "",
+  plcGardenCorner: project.plcGardenCorner || "",
   group: project.group || "",
   startingRate: project.startingRate ?? "",
   currentRate: project.currentRate ?? "",
   otherCharges: project.otherCharges || "",
+  developmentCharges: project.developmentCharges || "",
+  maintenanceCharges: project.maintenanceCharges || "",
+  amenityCharges: project.amenityCharges || "",
+  utilityCharges: project.utilityCharges || "",
+  parkingCharges: project.parkingCharges || "",
+  taxes: project.taxes || "",
+  registrationStampDuty: project.registrationStampDuty || "",
+  otherFacilities: project.otherFacilities || "",
   status: project.status || "",
   amenities: Array.isArray(project.amenities) ? project.amenities : [],
   housingCategory: project.housingCategory || "",
@@ -288,22 +318,35 @@ const numOrNull = (value) => (value === "" || value === null || value === undefi
 
 const buildProjectPayload = (formData) => {
   const isCommercial = isCommercialCategory(formData.projectCategory);
-  const isPlotBased = !isCommercial && isPlotBasedType(formData.projectType);
-  const isBuilding = !isCommercial && isBuildingType(formData.projectType);
+  const isCoworking = isCoworkingCategory(formData.projectCategory);
+  const isPlotBased = !isCommercial && !isCoworking && isPlotBasedType(formData.projectType);
+  const isBuilding = !isCommercial && !isCoworking && isBuildingType(formData.projectType);
 
   const payload = {
     projectCategory: formData.projectCategory,
-    projectType: isCommercial ? "" : formData.projectType,
+    projectType: isCommercial || isCoworking ? "" : formData.projectType,
     projectName: formData.projectName.trim(),
     totalLandArea: formData.totalLandArea.trim(),
     plc: formData.plc.trim(),
+    plcWideRoad: (formData.plcWideRoad || "").trim(),
+    plcGardenFacing: (formData.plcGardenFacing || "").trim(),
+    plcCorner: (formData.plcCorner || "").trim(),
+    plcGardenCorner: (formData.plcGardenCorner || "").trim(),
     group: formData.group.trim(),
     startingRate: Number(formData.startingRate),
     currentRate: Number(formData.currentRate),
     otherCharges: formData.otherCharges.trim(),
+    developmentCharges: (formData.developmentCharges || "").trim(),
+    maintenanceCharges: (formData.maintenanceCharges || "").trim(),
+    amenityCharges: (formData.amenityCharges || "").trim(),
+    utilityCharges: (formData.utilityCharges || "").trim(),
+    parkingCharges: (formData.parkingCharges || "").trim(),
+    taxes: (formData.taxes || "").trim(),
+    registrationStampDuty: (formData.registrationStampDuty || "").trim(),
+    otherFacilities: (formData.otherFacilities || "").trim(),
     status: formData.status,
     amenities: formData.amenities,
-    housingCategory: isCommercial ? "" : formData.housingCategory,
+    housingCategory: isCommercial || isCoworking ? "" : formData.housingCategory,
     location: formData.location.trim(),
     ownerManagerName: formData.ownerManagerName.trim(),
     ownerManagerMobile: formData.ownerManagerMobile.trim(),
@@ -314,8 +357,11 @@ const buildProjectPayload = (formData) => {
 
   if (isPlotBased) {
     payload.totalPlots = Number(formData.totalPlots);
-    payload.plotSize = formData.plotSize;
-    payload.customPlotSize = formData.plotSize === "CUSTOM" ? formData.customPlotSize.trim() : "";
+    payload.plotSizeMin = formData.plotSizeMin === "" ? null : Number(formData.plotSizeMin);
+    payload.plotSizeMax = formData.plotSizeMax === "" ? null : Number(formData.plotSizeMax);
+    // The range replaces the older single plot size.
+    payload.plotSize = "";
+    payload.customPlotSize = "";
     payload.plotsAvailable = formData.plotsAvailable === "" ? 0 : Number(formData.plotsAvailable);
   }
 
@@ -406,7 +452,7 @@ const validateForm = (formData) => {
   const isBuilding = !isCommercial && isBuildingType(formData.projectType);
 
   if (!formData.projectCategory) return "Project Category is required";
-  if (!isCommercial && !formData.projectType) return "Project Type is required";
+  if (!isCommercial && !isCoworkingCategory(formData.projectCategory) && !formData.projectType) return "Project Type is required";
   if (!formData.projectName.trim()) return "Project Name is required";
   if (!formData.totalLandArea.trim()) return "Total Land Area is required";
 
@@ -414,8 +460,11 @@ const validateForm = (formData) => {
     if (formData.totalPlots === "" || Number(formData.totalPlots) < 0) {
       return "Number of Plots is required and cannot be negative";
     }
-    if (formData.plotSize === "CUSTOM" && !formData.customPlotSize.trim()) {
-      return "Custom Plot Size is required";
+    if ([formData.plotSizeMin, formData.plotSizeMax].some((v) => v !== "" && (!Number.isFinite(Number(v)) || Number(v) < 0))) {
+      return "Plot sizes must be positive numbers";
+    }
+    if (formData.plotSizeMin !== "" && formData.plotSizeMax !== "" && Number(formData.plotSizeMin) > Number(formData.plotSizeMax)) {
+      return "The smallest plot size can't be bigger than the largest";
     }
     if (
       formData.plotsAvailable !== ""
@@ -546,9 +595,12 @@ const ProjectCard = ({ project, canManage, canDelete, onView, onEdit, onDelete }
   const imageCount = Array.isArray(project?.images) ? project.images.length : 0;
   const commercial = isCommercialCategory(project?.projectCategory);
 
+  // Offices for commercial, flats for a building, plots otherwise.
   const secondaryMeta = commercial
-    ? { label: "Total Offices", value: project.totalOffices ?? project.offices?.length ?? 0 }
-    : { label: "Total Plots", value: project.totalPlots ?? "-" };
+    ? { label: "Total Offices", value: project.totalOffices || project.offices?.length || (project.totalFloors && project.officesPerFloor ? project.totalFloors * project.officesPerFloor : 0) }
+    : String(project?.projectType || "").toUpperCase() === "BUILDING"
+      ? { label: "Total Flats", value: project.numberOfFlats ?? "-" }
+      : { label: "Total Plots", value: project.totalPlots ?? "-" };
 
   return (
     <article className="group flex h-full flex-col overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm transition-all duration-200 hover:-translate-y-0.5 hover:border-emerald-300 hover:shadow-lg">
@@ -668,8 +720,21 @@ const ProjectsPage = () => {
   const [categoryFilter, setCategoryFilter] = useState("all");
   const [typeFilter, setTypeFilter] = useState("all");
   const [statusFilter, setStatusFilter] = useState("all");
+  // Knowledge search (requirements 5.1): developer, location, rate, size, amenity.
+  const [showMoreFilters, setShowMoreFilters] = useState(false);
+  const [moreFilters, setMoreFilters] = useState({ developer: "", city: "", priceMin: "", priceMax: "", sizeMin: "", sizeMax: "", amenity: "" });
+  const debouncedMoreFilters = useDebouncedValue(moreFilters, 300);
+  const activeMoreFilters = Object.values(moreFilters).filter((v) => String(v).trim() !== "").length;
 
   const [isFormModalOpen, setIsFormModalOpen] = useState(false);
+  // Project details (requirements section 05), edited in this form too.
+  const [knowledgeCatalogue, setKnowledgeCatalogue] = useState(null);
+  const [knowledgeDraft, setKnowledgeDraft] = useState(() => emptyKnowledgeDraft());
+  const [knowledgeInitial, setKnowledgeInitial] = useState("");
+  const [knowledgeLoading, setKnowledgeLoading] = useState(false);
+  const [existingDocuments, setExistingDocuments] = useState([]);
+  const [pendingDocuments, setPendingDocuments] = useState([]);
+  const isProjectManagement = ["ADMIN", "MANAGER"].includes(String(role || "").toUpperCase());
   const [editingProjectId, setEditingProjectId] = useState("");
   const [formData, setFormData] = useState({ ...DEFAULT_FORM });
   const [formError, setFormError] = useState("");
@@ -697,6 +762,9 @@ const ProjectsPage = () => {
       if (categoryFilter !== "all") params.projectCategory = categoryFilter;
       if (typeFilter !== "all") params.projectType = typeFilter;
       if (statusFilter !== "all") params.status = statusFilter;
+      Object.entries(debouncedMoreFilters).forEach(([key, value]) => {
+        if (String(value).trim() !== "") params[key] = String(value).trim();
+      });
 
       const result = await getProjectsWithMeta(params);
       setProjects(result.projects);
@@ -706,7 +774,7 @@ const ProjectsPage = () => {
     } finally {
       setLoading(false);
     }
-  }, [page, debouncedSearchTerm, categoryFilter, typeFilter, statusFilter]);
+  }, [page, debouncedSearchTerm, categoryFilter, typeFilter, statusFilter, debouncedMoreFilters]);
 
   useEffect(() => {
     fetchProjects();
@@ -714,7 +782,7 @@ const ProjectsPage = () => {
 
   useEffect(() => {
     setPage(1);
-  }, [debouncedSearchTerm, categoryFilter, typeFilter, statusFilter]);
+  }, [debouncedSearchTerm, categoryFilter, typeFilter, statusFilter, debouncedMoreFilters]);
 
   const resetForm = () => {
     setFormData({ ...DEFAULT_FORM });
@@ -722,8 +790,22 @@ const ProjectsPage = () => {
     setEditingProjectId("");
   };
 
+  const loadKnowledgeCatalogue = () => {
+    if (knowledgeCatalogue) return;
+    getProjectDetailsCatalogue().then(setKnowledgeCatalogue).catch(() => setKnowledgeCatalogue(null));
+  };
+
+  const startKnowledge = (draft, documents = []) => {
+    setKnowledgeDraft(draft);
+    setKnowledgeInitial(JSON.stringify(draft));
+    setExistingDocuments(documents);
+    setPendingDocuments([]);
+  };
+
   const openAddModal = () => {
     resetForm();
+    startKnowledge(emptyKnowledgeDraft());
+    loadKnowledgeCatalogue();
     setIsFormModalOpen(true);
   };
 
@@ -731,8 +813,28 @@ const ProjectsPage = () => {
     setFormError("");
     setEditingProjectId(project._id);
     setFormData(toFormFromProject(project));
+    startKnowledge(emptyKnowledgeDraft());
+    loadKnowledgeCatalogue();
     setIsFormModalOpen(true);
+    setKnowledgeLoading(true);
+    try {
+      const data = await getProjectKnowledge(project._id);
+      const k = data?.knowledge || {};
+      startKnowledge({
+        ...emptyKnowledgeDraft(),
+        overview: k.overview || {}, specs: k.specs || {}, pricing: k.pricing || {}, legal: k.legal || {},
+        contacts: k.contacts || [], amenityStatuses: k.amenityStatuses || [],
+        approvalStatus: k.approvalStatus || "NOT_STARTED", pricingPublished: Boolean(k.pricingPublished),
+        internalNotes: k.internalNotes || "",
+      }, k.documents || []);
+    } catch {
+      // The project form still works; its details can be filled on the project page.
+    } finally {
+      setKnowledgeLoading(false);
+    }
   };
+
+  const setKnowledgeIn = (section) => (key, value) => setKnowledgeDraft((d) => ({ ...d, [section]: { ...(d[section] || {}), [key]: value } }));
 
   const closeFormModal = () => {
     setIsFormModalOpen(false);
@@ -991,13 +1093,33 @@ const ProjectsPage = () => {
     setFormError("");
     try {
       const payload = buildProjectPayload(formData);
+      let savedId = editingProjectId;
       if (editingProjectId) {
         await updateProject(editingProjectId, payload);
-        setSuccess("Project updated successfully");
       } else {
-        await createProject(payload);
-        setSuccess("Project created successfully");
+        const created = await createProject(payload);
+        savedId = created?._id || "";
       }
+
+      // Then the project details, only the parts that changed.
+      const fullPatch = knowledgePatchFromDraft(knowledgeDraft, { isManagement: isProjectManagement, pendingDocuments });
+      const initial = JSON.parse(knowledgeInitial || "{}");
+      const initialPatch = knowledgePatchFromDraft(initial, { isManagement: isProjectManagement });
+      const detailsPatch = Object.fromEntries(Object.entries(fullPatch)
+        .filter(([key, value]) => key === "addDocuments" || JSON.stringify(value) !== JSON.stringify(initialPatch[key])));
+      if (savedId && Object.keys(detailsPatch).length) {
+        try {
+          await updateProjectDetails(savedId, detailsPatch);
+        } catch (detailsError) {
+          // The project itself is saved; keep the form open on it so the details can be retried.
+          setEditingProjectId(savedId);
+          setFormError(`Project saved, but its details weren't: ${toErrorMessage(detailsError, "please try again")}`);
+          await fetchProjects();
+          return;
+        }
+      }
+
+      setSuccess(editingProjectId ? "Project updated successfully" : "Project created successfully");
       closeFormModal();
       await fetchProjects();
     } catch (submitError) {
@@ -1121,7 +1243,60 @@ const ProjectsPage = () => {
             <option key={option.value} value={option.value}>{option.label}</option>
           ))}
         </select>
+        <button
+          type="button"
+          onClick={() => setShowMoreFilters((open) => !open)}
+          aria-expanded={showMoreFilters}
+          className="h-10 whitespace-nowrap rounded-lg border border-slate-200 bg-white px-3 text-sm font-semibold text-slate-700 hover:bg-slate-50"
+        >
+          More filters{activeMoreFilters ? ` (${activeMoreFilters})` : ""}
+        </button>
       </div>
+      {showMoreFilters ? (
+        <div className="mt-2 grid grid-cols-2 gap-2 rounded-xl border border-slate-200 bg-white p-3 sm:grid-cols-4 xl:grid-cols-7">
+          {[
+            ["developer", "Developer / operator", "text"],
+            ["city", "Location / locality", "text"],
+            ["priceMin", "Rate from (₹/sq.ft)", "number"],
+            ["priceMax", "Rate up to (₹/sq.ft)", "number"],
+            ["sizeMin", "Size from (sq.ft)", "number"],
+            ["sizeMax", "Size up to (sq.ft)", "number"],
+          ].map(([key, label, type]) => (
+            <label key={key} className="block">
+              <span className="mb-1 block text-[11px] font-semibold text-slate-500">{label}</span>
+              <input
+                type={type}
+                min={type === "number" ? "0" : undefined}
+                value={moreFilters[key]}
+                onChange={(e) => setMoreFilters((prev) => ({ ...prev, [key]: e.target.value }))}
+                className="h-9 w-full rounded-lg border border-slate-200 bg-slate-50 px-2.5 text-sm text-slate-700 focus:outline-none focus:border-emerald-500"
+              />
+            </label>
+          ))}
+          <label className="block">
+            <span className="mb-1 block text-[11px] font-semibold text-slate-500">Amenity</span>
+            <select
+              value={moreFilters.amenity}
+              onChange={(e) => setMoreFilters((prev) => ({ ...prev, amenity: e.target.value }))}
+              className="h-9 w-full rounded-lg border border-slate-200 bg-white px-2 text-sm text-slate-700 focus:outline-none focus:border-emerald-500"
+            >
+              <option value="">Any</option>
+              {[...new Map([...PROJECT_AMENITY_OPTIONS, ...PROJECT_COMMERCIAL_AMENITY_OPTIONS].map((o) => [o.value, o])).values()].map((option) => (
+                <option key={option.value} value={option.value}>{option.label}</option>
+              ))}
+            </select>
+          </label>
+          {activeMoreFilters ? (
+            <button
+              type="button"
+              onClick={() => setMoreFilters({ developer: "", city: "", priceMin: "", priceMax: "", sizeMin: "", sizeMax: "", amenity: "" })}
+              className="col-span-2 h-9 self-end rounded-lg text-sm font-semibold text-slate-500 hover:text-slate-800 sm:col-span-1"
+            >
+              Clear filters
+            </button>
+          ) : null}
+        </div>
+      ) : null}
 
       {loading && (
         <div className="mt-3 grid grid-cols-1 gap-3 pb-8 sm:gap-5 md:grid-cols-2 2xl:grid-cols-3">
@@ -1218,7 +1393,7 @@ const ProjectsPage = () => {
                       ))}
                     </select>
                   </div>
-                  {!isCommercialCategory(formData.projectCategory) && (
+                  {!isCommercialCategory(formData.projectCategory) && !isCoworkingCategory(formData.projectCategory) && (
                     <div>
                       <label className={FIELD_TITLE_CLASS}>Project Type *</label>
                       <select
@@ -1341,6 +1516,8 @@ const ProjectsPage = () => {
                         />
                       </div>
                     </>
+                  ) : isCoworkingCategory(formData.projectCategory) ? (
+                    <p className="text-[12px] text-slate-500 sm:col-span-2">Cabins, seats, pricing and services for a workspace go in the project&apos;s details after saving.</p>
                   ) : (
                     <>
                       <div>
@@ -1354,30 +1531,29 @@ const ProjectsPage = () => {
                         />
                       </div>
                       <div>
-                        <label className={FIELD_TITLE_CLASS}>Plot Size</label>
-                        <select
-                          value={formData.plotSize}
-                          onChange={(e) => setFormData((prev) => ({ ...prev, plotSize: e.target.value }))}
-                          className={`${INPUT_CLASS} mt-1`}
-                        >
-                          <option value="">Select plot size</option>
-                          {PROJECT_PLOT_SIZE_OPTIONS.map((option) => (
-                            <option key={option.value} value={option.value}>{option.label}</option>
-                          ))}
-                        </select>
-                      </div>
-                      {formData.plotSize === "CUSTOM" && (
-                        <div>
-                          <label className={FIELD_TITLE_CLASS}>Custom Plot Size</label>
+                        <label className={FIELD_TITLE_CLASS}>Plot Size Range (Sq.ft)</label>
+                        <div className="mt-1 flex items-center gap-2">
                           <input
-                            type="text"
-                            value={formData.customPlotSize}
-                            onChange={(e) => setFormData((prev) => ({ ...prev, customPlotSize: e.target.value }))}
-                            placeholder="1350 Sq.ft"
-                            className={`${INPUT_CLASS} mt-1`}
+                            type="number"
+                            min="0"
+                            value={formData.plotSizeMin}
+                            onChange={(e) => setFormData((prev) => ({ ...prev, plotSizeMin: e.target.value }))}
+                            placeholder="From, e.g. 900"
+                            aria-label="Smallest plot size in sq.ft"
+                            className={INPUT_CLASS}
+                          />
+                          <span className="text-sm text-slate-400">to</span>
+                          <input
+                            type="number"
+                            min="0"
+                            value={formData.plotSizeMax}
+                            onChange={(e) => setFormData((prev) => ({ ...prev, plotSizeMax: e.target.value }))}
+                            placeholder="To, e.g. 2400"
+                            aria-label="Largest plot size in sq.ft"
+                            className={INPUT_CLASS}
                           />
                         </div>
-                      )}
+                      </div>
                     </>
                   )}
                 </div>
@@ -1603,6 +1779,50 @@ const ProjectsPage = () => {
                     />
                   </div>
                   <div>
+                    <label className={FIELD_TITLE_CLASS}>Wide Road PLC</label>
+                    <input
+                      type="text"
+                      maxLength={60}
+                      value={formData.plcWideRoad}
+                      onChange={(e) => setFormData((prev) => ({ ...prev, plcWideRoad: e.target.value }))}
+                      placeholder="e.g. 5% or ₹50,000"
+                      className={`${INPUT_CLASS} mt-1`}
+                    />
+                  </div>
+                  <div>
+                    <label className={FIELD_TITLE_CLASS}>Garden Facing PLC</label>
+                    <input
+                      type="text"
+                      maxLength={60}
+                      value={formData.plcGardenFacing}
+                      onChange={(e) => setFormData((prev) => ({ ...prev, plcGardenFacing: e.target.value }))}
+                      placeholder="e.g. 5% or ₹50,000"
+                      className={`${INPUT_CLASS} mt-1`}
+                    />
+                  </div>
+                  <div>
+                    <label className={FIELD_TITLE_CLASS}>Corner Plot PLC</label>
+                    <input
+                      type="text"
+                      maxLength={60}
+                      value={formData.plcCorner}
+                      onChange={(e) => setFormData((prev) => ({ ...prev, plcCorner: e.target.value }))}
+                      placeholder="e.g. 5% or ₹50,000"
+                      className={`${INPUT_CLASS} mt-1`}
+                    />
+                  </div>
+                  <div>
+                    <label className={FIELD_TITLE_CLASS}>Garden Facing + Corner PLC</label>
+                    <input
+                      type="text"
+                      maxLength={60}
+                      value={formData.plcGardenCorner}
+                      onChange={(e) => setFormData((prev) => ({ ...prev, plcGardenCorner: e.target.value }))}
+                      placeholder="e.g. 5% or ₹50,000"
+                      className={`${INPUT_CLASS} mt-1`}
+                    />
+                  </div>
+                  <div>
                     <label className={FIELD_TITLE_CLASS}>Group</label>
                     <input
                       type="text"
@@ -1634,6 +1854,83 @@ const ProjectsPage = () => {
                       className={`${INPUT_CLASS} mt-1`}
                     />
                   </div>
+                  <div>
+                    <label className={FIELD_TITLE_CLASS}>Development Charges</label>
+                    <input
+                      type="text"
+                      maxLength={120}
+                      value={formData.developmentCharges}
+                      onChange={(e) => setFormData((prev) => ({ ...prev, developmentCharges: e.target.value }))}
+                      placeholder="e.g. ₹150/sq.ft"
+                      className={`${INPUT_CLASS} mt-1`}
+                    />
+                  </div>
+                  <div>
+                    <label className={FIELD_TITLE_CLASS}>Maintenance Charges</label>
+                    <input
+                      type="text"
+                      maxLength={120}
+                      value={formData.maintenanceCharges}
+                      onChange={(e) => setFormData((prev) => ({ ...prev, maintenanceCharges: e.target.value }))}
+                      placeholder="e.g. ₹3/sq.ft per month"
+                      className={`${INPUT_CLASS} mt-1`}
+                    />
+                  </div>
+                  <div>
+                    <label className={FIELD_TITLE_CLASS}>Amenity Charges</label>
+                    <input
+                      type="text"
+                      maxLength={120}
+                      value={formData.amenityCharges}
+                      onChange={(e) => setFormData((prev) => ({ ...prev, amenityCharges: e.target.value }))}
+                      placeholder="e.g. ₹1,00,000 one time"
+                      className={`${INPUT_CLASS} mt-1`}
+                    />
+                  </div>
+                  <div>
+                    <label className={FIELD_TITLE_CLASS}>Utilities (Water / Electricity Connection)</label>
+                    <input
+                      type="text"
+                      maxLength={120}
+                      value={formData.utilityCharges}
+                      onChange={(e) => setFormData((prev) => ({ ...prev, utilityCharges: e.target.value }))}
+                      placeholder="e.g. ₹75,000"
+                      className={`${INPUT_CLASS} mt-1`}
+                    />
+                  </div>
+                  <div>
+                    <label className={FIELD_TITLE_CLASS}>Parking Charges</label>
+                    <input
+                      type="text"
+                      maxLength={120}
+                      value={formData.parkingCharges}
+                      onChange={(e) => setFormData((prev) => ({ ...prev, parkingCharges: e.target.value }))}
+                      placeholder="e.g. ₹2,50,000 per slot"
+                      className={`${INPUT_CLASS} mt-1`}
+                    />
+                  </div>
+                  <div>
+                    <label className={FIELD_TITLE_CLASS}>Taxes (GST etc.)</label>
+                    <input
+                      type="text"
+                      maxLength={120}
+                      value={formData.taxes}
+                      onChange={(e) => setFormData((prev) => ({ ...prev, taxes: e.target.value }))}
+                      placeholder="e.g. 5% GST"
+                      className={`${INPUT_CLASS} mt-1`}
+                    />
+                  </div>
+                  <div>
+                    <label className={FIELD_TITLE_CLASS}>Registration / Stamp Duty</label>
+                    <input
+                      type="text"
+                      maxLength={120}
+                      value={formData.registrationStampDuty}
+                      onChange={(e) => setFormData((prev) => ({ ...prev, registrationStampDuty: e.target.value }))}
+                      placeholder="e.g. 7% of agreement value"
+                      className={`${INPUT_CLASS} mt-1`}
+                    />
+                  </div>
                   <div className="sm:col-span-2">
                     <label className={FIELD_TITLE_CLASS}>Other Charges</label>
                     <textarea
@@ -1662,7 +1959,7 @@ const ProjectsPage = () => {
               </div>
 
               <div className={SECTION_CLASS}>
-                <div className={SECTION_HEADING_CLASS}>Amenities</div>
+                <div className={SECTION_HEADING_CLASS}>Amenities &amp; Infrastructure</div>
                 <div className="flex flex-wrap gap-2">
                   {(isCommercialCategory(formData.projectCategory) ? PROJECT_COMMERCIAL_AMENITY_OPTIONS : PROJECT_AMENITY_OPTIONS).map((option) => (
                     <label key={option.value} className={CHECKBOX_CLASS}>
@@ -1676,6 +1973,15 @@ const ProjectsPage = () => {
                     </label>
                   ))}
                 </div>
+                <label className={`${FIELD_TITLE_CLASS} mt-3 block`}>Other Facilities</label>
+                <textarea
+                  rows={2}
+                  maxLength={500}
+                  value={formData.otherFacilities}
+                  onChange={(e) => setFormData((prev) => ({ ...prev, otherFacilities: e.target.value }))}
+                  placeholder="Anything not in the list, e.g. temple, shopping complex, school nearby"
+                  className="mt-1 w-full resize-none rounded-lg border border-slate-300 bg-white p-2.5 text-sm text-slate-700 focus:outline-none focus:border-emerald-500"
+                />
               </div>
 
               {!isCommercialCategory(formData.projectCategory) && (
@@ -1886,6 +2192,100 @@ const ProjectsPage = () => {
                   </label>
                 </div>
               </div>
+
+              {/* Project details (requirements 16 Oct 2026, section 05) - the same
+                  record as the Project knowledge panel on the project page. */}
+              {knowledgeCatalogue ? (
+                <div className={SECTION_CLASS}>
+                  <div className={SECTION_HEADING_CLASS}>
+                    Project Details{knowledgeLoading ? <Loader2 size={12} className="ml-2 inline animate-spin" /> : null}
+                  </div>
+                  <p className="mb-3 text-[12px] text-slate-500">Everything a colleague needs to brief a client. All optional; it feeds the client brochure and internal dossier PDFs.</p>
+                  <div className="space-y-2">
+                    {[
+                      ["overview", "Overview & location", (
+                        <>
+                          <FieldGrid fields={knowledgeCatalogue.overview} values={knowledgeDraft.overview} onChange={setKnowledgeIn("overview")} />
+                          {isProjectManagement ? (
+                            <label className="mt-3 block">
+                              <span className="mb-1 block text-[11.5px] font-semibold text-slate-600">Internal notes <span className="text-amber-600">(Admin/Manager only, never in the brochure)</span></span>
+                              <textarea rows={3} className="w-full rounded-lg border border-slate-300 bg-white px-2.5 py-2 text-[13px]" value={knowledgeDraft.internalNotes || ""} onChange={(e) => setKnowledgeDraft((d) => ({ ...d, internalNotes: e.target.value }))} />
+                            </label>
+                          ) : null}
+                        </>
+                      )],
+                      ["specs", "Specifications", (knowledgeCatalogue.specs?.[formData.projectCategory] || []).length
+                        ? <FieldGrid fields={knowledgeCatalogue.specs[formData.projectCategory]} values={knowledgeDraft.specs} onChange={setKnowledgeIn("specs")} />
+                        : <p className="text-[12.5px] text-slate-500">Pick the project category first.</p>],
+                      ["pricing", "Pricing details", (
+                        <>
+                          <FieldGrid fields={(knowledgeCatalogue.pricing || []).filter((f) => f.source !== "project")} values={knowledgeDraft.pricing} onChange={setKnowledgeIn("pricing")} />
+                          <p className="mt-2 text-[11.5px] text-slate-500">Charges and PLCs are in the Pricing section above.</p>
+                          <label className="mt-2 flex items-center gap-2 text-[13px]">
+                            <input type="checkbox" checked={Boolean(knowledgeDraft.pricingPublished)} disabled={!isProjectManagement} onChange={(e) => setKnowledgeDraft((d) => ({ ...d, pricingPublished: e.target.checked }))} />
+                            Pricing is published (shown in the client brochure){!isProjectManagement ? " - Admin/Manager decide" : ""}
+                          </label>
+                        </>
+                      )],
+                      ["legal", "Approvals & RERA", (
+                        <>
+                          <FieldGrid fields={knowledgeCatalogue.legal} values={knowledgeDraft.legal} onChange={setKnowledgeIn("legal")} />
+                          <div className="mt-3"><ApprovalStatusSelect statuses={knowledgeCatalogue.approvalStatuses} value={knowledgeDraft.approvalStatus} isManagement={isProjectManagement} onChange={(approvalStatus) => setKnowledgeDraft((d) => ({ ...d, approvalStatus }))} /></div>
+                        </>
+                      )],
+                      ["contacts", `Contacts (${(knowledgeDraft.contacts || []).length})`, (
+                        <ContactsEditor contacts={knowledgeDraft.contacts || []} roles={knowledgeCatalogue.contactRoles} onChange={(contacts) => setKnowledgeDraft((d) => ({ ...d, contacts }))} />
+                      )],
+                      ["amenityStatus", `Amenity status (${(knowledgeDraft.amenityStatuses || []).length})`, (
+                        <>
+                          <p className="mb-2 text-[11.5px] text-slate-500">Give amenities a status (available, planned, not available), mark chargeable ones and add notes.</p>
+                          <AmenityStatusEditor
+                            amenities={knowledgeDraft.amenityStatuses || []}
+                            statuses={knowledgeCatalogue.amenityStatuses}
+                            presets={knowledgeCatalogue.amenityPresets?.[formData.projectCategory] || []}
+                            onChange={(amenityStatuses) => setKnowledgeDraft((d) => ({ ...d, amenityStatuses }))}
+                          />
+                        </>
+                      )],
+                      ["documents", `Documents (${existingDocuments.length + pendingDocuments.length})`, (
+                        <>
+                          {existingDocuments.length || pendingDocuments.length ? (
+                            <ul className="mb-2 space-y-1 text-[12.5px]">
+                              {existingDocuments.map((d, i) => (
+                                <li key={d._id || `e${i}`} className={d.superseded ? "text-slate-400" : "text-slate-700"}>
+                                  <a href={d.url} target="_blank" rel="noreferrer" className="font-semibold text-blue-700 hover:underline">{d.name}</a> · {humanizeKey(d.category)} · v{d.version}{d.superseded ? " · superseded" : ""}
+                                </li>
+                              ))}
+                              {pendingDocuments.map((d, i) => (
+                                <li key={`p${i}`} className="flex items-center gap-2 text-slate-700">
+                                  <span className="font-semibold">{d.name}</span> · {humanizeKey(d.category)}{d.clientShareable ? " · client-shareable" : ""}
+                                  <span className="rounded-full bg-amber-50 px-2 text-[11px] text-amber-700">added when you save</span>
+                                  <button type="button" className="text-rose-500" aria-label={`Remove ${d.name}`} onClick={() => setPendingDocuments((list) => list.filter((_, n) => n !== i))}>×</button>
+                                </li>
+                              ))}
+                            </ul>
+                          ) : null}
+                          <DocumentUploader
+                            categories={knowledgeCatalogue.documentCategories}
+                            onUpload={async (file, meta) => {
+                              const saved = await uploadFile(file, "inventory-documents");
+                              const url = saved?.url || saved?.fileUrl || saved?.file?.url;
+                              if (!url) throw new Error("Upload failed");
+                              setPendingDocuments((list) => [...list, { ...meta, url }]);
+                            }}
+                          />
+                          <p className="mt-1 text-[11.5px] text-slate-500">Brochure, layout, price list, plans, approvals, payment plan… Site and progress photos go in Project Media above, or on the project page.</p>
+                        </>
+                      )],
+                    ].map(([id, title, body]) => (
+                      <details key={id} className="rounded-lg border border-slate-200 bg-white">
+                        <summary className="cursor-pointer select-none px-3 py-2 text-[13px] font-semibold text-slate-800">{title}</summary>
+                        <div className="border-t border-slate-100 p-3">{body}</div>
+                      </details>
+                    ))}
+                  </div>
+                </div>
+              ) : null}
             </div>
 
             <div className="mobile-safe-footer flex shrink-0 gap-3 border-t border-slate-100 bg-slate-50/50 px-4 pt-3 sm:p-6">

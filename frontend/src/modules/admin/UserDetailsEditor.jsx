@@ -52,6 +52,9 @@ import ToastNotice from "../../components/ui/ToastNotice";
 import AvatarFace from "../../components/ui/AvatarFace";
 import AttendanceDayStatusDialog from "../attendance/AttendanceDayStatusDialog";
 import { canSetAttendanceOnDate, todayDateKey } from "../attendance/attendanceStatus";
+import ClientDocumentAccessToggle from "./components/ClientDocumentAccessToggle";
+import HandoverPanel from "./components/HandoverPanel";
+import WeeklyOffEditor from "./components/WeeklyOffEditor";
 
 const REPORTING_PARENT_ROLES = {
   MANAGER: ["ADMIN"],
@@ -90,6 +93,7 @@ const ATTENDANCE_STATUS_STYLES = {
   ABSENT: "border-rose-200 bg-rose-50 text-rose-800",
   LEAVE: "border-teal-200 bg-teal-50 text-teal-800",
   WEEK_OFF: "border-slate-300 bg-slate-100 text-slate-700",
+  HOLIDAY: "border-fuchsia-200 bg-fuchsia-50 text-fuchsia-800",
   PENDING: "border-amber-200 bg-amber-50 text-amber-800",
 };
 const TASK_STATUS_LABELS = {
@@ -225,6 +229,7 @@ const formatAttendanceStatus = (status) => {
   if (normalized === "WORKING") return "Working";
   if (normalized === "BREAK") return "Break";
   if (normalized === "WEEK_OFF") return "Week Off";
+  if (normalized === "HOLIDAY") return "Holiday";
   if (!normalized) return "";
   return normalized.replaceAll("_", " ");
 };
@@ -349,6 +354,7 @@ const UserDetailsEditor = ({ theme = "light" }) => {
   const [error, setError] = useState("");
   const [success, setSuccess] = useState("");
   const [profile, setProfile] = useState(null);
+  const [roleJustChanged, setRoleJustChanged] = useState(false);
   const [customRoles, setCustomRoles] = useState([]);
   const [performance, setPerformance] = useState(null);
   const [users, setUsers] = useState([]);
@@ -647,6 +653,7 @@ const UserDetailsEditor = ({ theme = "light" }) => {
       { label: "Absent", value: Number(summary.absentDays || 0), tone: "rose" },
       { label: "Leave", value: Number(summary.leaveDays || 0), tone: "teal" },
       { label: "Week Off", value: Number(summary.weekOffDays || 0), tone: "slate" },
+      { label: "Holiday", value: Number(summary.holidayDays || 0), tone: "violet" },
       { label: "Hours", value: Number(summary.totalWorkedHours || 0), tone: "slate" },
     ];
   }, [attendanceData.summary]);
@@ -961,6 +968,11 @@ const UserDetailsEditor = ({ theme = "light" }) => {
       shiftTiming: String(formData.shiftTiming || "").trim(),
       monthlyTarget,
     };
+    const roleChanging = profile && (formData.role !== profile.role || formData.roleType !== profile.roleType);
+    if (roleChanging) {
+      if (formData.effectiveFrom) payload.effectiveFrom = formData.effectiveFrom;
+      if (formData.changeNote) payload.changeNote = formData.changeNote;
+    }
 
     if (formData.role === "CHANNEL_PARTNER") {
       const brokerageMode = normalizeBrokerageMode(formData.brokerageMode);
@@ -998,6 +1010,7 @@ const UserDetailsEditor = ({ theme = "light" }) => {
       }
 
       setProfile(updated);
+      if (roleChanging) setRoleJustChanged(true);
       setFormData((prev) => ({
         ...prev,
         name: updated.name || "",
@@ -1292,6 +1305,32 @@ const UserDetailsEditor = ({ theme = "light" }) => {
                 className={`w-full rounded-lg border px-2.5 py-1.5 text-xs ${isDarkTheme ? "border-slate-700 bg-slate-950 text-slate-100" : "border-slate-300 bg-white text-slate-800"} disabled:opacity-60`}
               />
             </label>
+
+            {String(localStorage.getItem("role") || "").toUpperCase() === "ADMIN" && profile && profile.role !== "ADMIN" ? (
+              <ClientDocumentAccessToggle key={profile._id || userId} userId={userId} initial={profile.canDownloadClientDocuments} isDark={isDarkTheme} />
+            ) : null}
+
+            {["ADMIN", "MANAGER"].includes(String(localStorage.getItem("role") || "").toUpperCase()) && profile && profile.role !== "ADMIN" ? (
+              <WeeklyOffEditor key={`weekly-off-${(profile.weeklyOffSchedule || []).length}`} userId={userId} schedule={profile.weeklyOffSchedule || []} isDark={isDarkTheme} onSaved={(next) => setProfile((prev) => ({ ...prev, weeklyOffSchedule: next }))} />
+            ) : null}
+
+            {["ADMIN", "MANAGER"].includes(String(localStorage.getItem("role") || "").toUpperCase()) && profile && !isEditingSelf ? (
+              <HandoverPanel key={`handover-${profile.role}-${profile.roleType}-${(profile.roleHistory || []).length}`} userId={userId} users={users} roleHistory={profile.roleHistory || []} isDark={isDarkTheme} highlight={roleJustChanged} />
+            ) : null}
+
+            {profile && (formData.role !== profile.role || formData.roleType !== profile.roleType) ? (
+              <div className={`col-span-2 grid grid-cols-2 gap-2 rounded-xl border p-2.5 ${isDarkTheme ? "border-slate-700 bg-slate-950" : "border-blue-200 bg-blue-50/60"}`}>
+                <label className="space-y-0.5">
+                  <span className="text-[10px] font-semibold text-slate-500">Change takes effect from</span>
+                  <input type="date" value={formData.effectiveFrom || ""} max={new Date().toISOString().slice(0, 10)} onChange={(event) => handleChange("effectiveFrom", event.target.value)} className="w-full rounded-lg border border-slate-300 px-2.5 py-1.5 text-xs" />
+                </label>
+                <label className="space-y-0.5">
+                  <span className="text-[10px] font-semibold text-slate-500">Reason (kept in history)</span>
+                  <input value={formData.changeNote || ""} onChange={(event) => handleChange("changeNote", event.target.value)} maxLength={300} className="w-full rounded-lg border border-slate-300 px-2.5 py-1.5 text-xs" />
+                </label>
+                <p className="col-span-2 text-[11px] text-slate-500">Past records keep their original role and segment. After saving, hand over their open work below.</p>
+              </div>
+            ) : null}
 
             {formData.role === "CHANNEL_PARTNER" ? (
               <div className={`col-span-2 rounded-xl border p-2.5 ${isDarkTheme ? "border-slate-700 bg-slate-950 text-slate-100" : "border-slate-300 bg-white text-slate-800"}`}>
@@ -1756,7 +1795,7 @@ const UserDetailsEditor = ({ theme = "light" }) => {
               </button>
             </div>
 
-            <div className="mt-4 grid grid-cols-2 gap-2 sm:grid-cols-4 xl:grid-cols-8">
+            <div className="mt-4 grid grid-cols-2 gap-2 sm:grid-cols-3 xl:grid-cols-9">
               {attendanceSummaryCards.map((card) => (
                 <StatTile key={card.label} label={card.label} value={card.value} isDarkTheme={isDarkTheme} />
               ))}
@@ -1765,7 +1804,7 @@ const UserDetailsEditor = ({ theme = "light" }) => {
             {canSetDayStatus ? (
               <p className={`mt-3 flex items-center gap-1.5 text-xs ${isDarkTheme ? "text-slate-400" : "text-slate-500"}`}>
                 <Pencil aria-hidden="true" size={12} />
-                Click any day up to today to set it as Present, Half Day, Absent, Leave or Week Off (WO).
+                Click any day up to today to set it as Present, Half Day, Absent, Leave, Week Off (WO) or Holiday.
               </p>
             ) : null}
 

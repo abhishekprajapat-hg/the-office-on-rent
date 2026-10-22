@@ -74,6 +74,9 @@ const payrollPolicySchema = new mongoose.Schema(
     lateGraceCount: { type: Number, min: 0, max: 31, default: DEFAULT_PAYROLL_POLICY.lateGraceCount },
     lateEveryCount: { type: Number, min: 1, max: 31, default: DEFAULT_PAYROLL_POLICY.lateEveryCount },
     late: ruleField("late"),
+    // Requirements 16 Oct 2026, 4.1.
+    paidLeavePerMonth: { type: Number, min: 0, max: 31, default: DEFAULT_PAYROLL_POLICY.paidLeavePerMonth },
+    manualLeaveIsPaid: { type: Boolean, default: DEFAULT_PAYROLL_POLICY.manualLeaveIsPaid },
     // Named deductions everybody with a salary pays.
     customDeductions: { type: [customDeductionSchema], default: [] },
     updatedBy: { type: mongoose.Schema.Types.ObjectId, ref: "User", default: null },

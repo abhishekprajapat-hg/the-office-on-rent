@@ -5,6 +5,7 @@ const User = require("../models/User");
 const logger = require("../config/logger");
 const { USER_ROLES, MANAGEMENT_ROLES } = require("../constants/role.constants");
 const { writeAuditLog } = require("../services/auditLog.service");
+const { makeOffDayChecker } = require("../services/workCalendar");
 const {
   loadAttendanceDaysForUsers,
   resolvePolicyForCompany,
@@ -42,7 +43,7 @@ const {
  * Admins and managers also set the company's deduction rules.
  */
 
-const USER_FIELDS = "_id name email role profileImageUrl joiningDate createdAt department isActive";
+const USER_FIELDS = "_id name email role profileImageUrl joiningDate createdAt department isActive weeklyOffSchedule";
 
 const toTrimmedString = (value) => String(value ?? "").trim();
 
@@ -195,6 +196,9 @@ const buildSalaryRows = async ({ companyId, users, monthKey, rules, companyDeduc
         monthlySalary: inForce.monthlySalary,
         policy: effectiveRules,
         weeklyOffDays: attendancePolicy.weeklyOffDays,
+        // Their own weekly off and the company's holidays (requirements 16 Oct 2026, 4.3/4.4).
+        isWeeklyOff: makeOffDayChecker({ schedule: user.weeklyOffSchedule, policy: { ...attendancePolicy, holidays: [] } }),
+        holidayDates: (attendancePolicy.holidays || []).map((h) => h.date),
         days: daysByUser.get(key)?.attendance || [],
         unapprovedLeaveDates: unapprovedByUser.get(key) || [],
         joiningKey: user.joiningDate ? dateKeyInTimezone(user.joiningDate, timezone) : "",
@@ -494,6 +498,7 @@ const POLICY_NUMBER_FIELDS = {
   fixedDaysPerMonth: { min: 1, max: 31, label: "Fixed days per month" },
   lateGraceCount: { min: 0, max: 31, label: "Free late check-ins" },
   lateEveryCount: { min: 1, max: 31, label: "Late check-ins per deduction" },
+  paidLeavePerMonth: { min: 0, max: 31, label: "Paid leave days per month" },
 };
 
 const DEDUCTION_RULE_LABELS = {
@@ -535,6 +540,11 @@ const validatePolicyUpdate = (body = {}, current) => {
       return { error: `${rule.label} must be a whole number between ${rule.min} and ${rule.max}` };
     }
     next[field] = value;
+  }
+
+  if (body.manualLeaveIsPaid !== undefined) {
+    if (typeof body.manualLeaveIsPaid !== "boolean") return { error: "Choose whether hand-marked leave is paid" };
+    next.manualLeaveIsPaid = body.manualLeaveIsPaid;
   }
 
   for (const key of DEDUCTION_RULE_KEYS) {

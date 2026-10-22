@@ -50,6 +50,8 @@ const CABIN_AMENITIES = Object.freeze([
 ]);
 
 const PROPERTY_ALLOWED_FIELDS = Object.freeze([
+  // The workspace's entry in the Projects module (requirements 16 Oct 2026, section 10).
+  "projectId",
   "name",
   "status",
   "managerId",

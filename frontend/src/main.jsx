@@ -5,10 +5,16 @@ import App from './App.jsx'
 import { registerServiceWorker } from './services/pushService'
 import { applyStoredThemeToDocument } from './utils/themePreferences'
 import './index.css'
+// CRM Web Glass theme - loaded after index.css so it wins.
+import './styles/glass.css'
+import { initGlassMotion } from './utils/glassMotion'
 
 // Before the first render, so a dark or colour-themed user does not get a
 // flash of the default light page while React boots.
 applyStoredThemeToDocument(window.location.pathname)
+
+// Sliding highlight + content fade on every tab/segment switch in the CRM.
+initGlassMotion()
 
 /*
  * Registered up front, not when someone opens the notifications card: the

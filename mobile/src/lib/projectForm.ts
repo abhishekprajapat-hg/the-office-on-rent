@@ -9,7 +9,10 @@ export const PROJECT_STATUSES = ["PRE_LAUNCH", "TNC", "RERA_APPROVED", "UNDER_CO
 export const PLOT_SIZES = ["600", "800", "1000", "1200", "1500", "1800", "2000", "CUSTOM"] as const;
 export const BHK_TYPES = ["1_BHK", "2_BHK", "2_5_BHK", "3_BHK", "4_BHK", "4_5_BHK"] as const;
 export const HOUSING_CATEGORIES = ["EWS", "LIG", "MIG", "HIG"] as const;
-export const RESIDENTIAL_AMENITIES = ["KIDS_PLAY_AREA", "PARTY_LAWN", "SPORTS_AREA", "GARDEN", "YOGA_MEDITATION_AREA", "WATER_TANK", "SECURITY_24X7", "GAZEBO", "SWIMMING_POOL", "WALKING_TRACK", "CLUB_HOUSE"] as const;
+export const RESIDENTIAL_AMENITIES = ["KIDS_PLAY_AREA", "PARTY_LAWN", "SPORTS_AREA", "GARDEN", "YOGA_MEDITATION_AREA", "WATER_TANK", "SECURITY_24X7", "GAZEBO", "SWIMMING_POOL", "WALKING_TRACK", "CLUB_HOUSE",
+  // Infrastructure (21 Oct 2026) - keep in step with backend constants/project.constants.js.
+  "GATED_ENTRY", "CCTV_SURVEILLANCE", "INTERNAL_ROADS", "STREET_LIGHTING", "WATER_SUPPLY", "ELECTRICITY", "DRAINAGE", "PARKING",
+] as const;
 export const COMMERCIAL_AMENITIES = [
   "LIFT", "HIGH_SPEED_ELEVATOR", "VISITOR_PARKING", "RESERVED_PARKING", "CAFETERIA", "FOOD_COURT", "RECEPTION_LOBBY", "WAITING_LOUNGE",
   "CONFERENCE_ROOM", "MEETING_ROOM", "POWER_BACKUP", "DG_BACKUP", "FIRE_SAFETY_SYSTEM", "CCTV_SURVEILLANCE", "SECURITY_24X7", "ACCESS_CONTROL",
@@ -28,6 +31,9 @@ export type ProjectDraft = {
   plotsAvailable: string;
   plotSize: string;
   customPlotSize: string;
+  // Plot size range in sq ft (21 Oct 2026) - replaces the single plot size.
+  plotSizeMin: string;
+  plotSizeMax: string;
   numberOfFlats: string;
   numberOfFloors: string;
   flatsPerFloor: string;
@@ -64,7 +70,9 @@ export const validateProjectDraft = (draft: ProjectDraft) => {
     } else {
       if (!/^\d+$/.test(draft.totalPlots.trim())) return "Enter the total number of plots";
       if (draft.plotsAvailable.trim() && Number(draft.plotsAvailable) > Number(draft.totalPlots)) return "Plots available can't exceed total plots";
-      if (draft.plotSize === "CUSTOM" && !draft.customPlotSize.trim()) return "Enter the custom plot size";
+      if (draft.plotSizeMin.trim() && draft.plotSizeMax.trim() && Number(draft.plotSizeMin) > Number(draft.plotSizeMax)) {
+        return "The smallest plot size can't be bigger than the largest";
+      }
     }
   } else {
     if (!positiveInt(draft.totalFloors)) return "Enter the total floors";

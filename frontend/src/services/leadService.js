@@ -158,3 +158,9 @@ export const updateLeadDiaryEntry = async (leadId, entryId, note) => {
   const res = await api.patch(`/leads/${leadId}/diary/${entryId}`, { note });
   return res.data?.entry || null;
 };
+
+// Lead touch time and Meta reconciliation (requirements 16 Oct 2026, section 08).
+export const logLeadTouch = async (leadId, payload) => (await api.post(`/leads/${leadId}/touch`, payload)).data;
+export const getLeadTouchReport = async (params = {}) => (await api.get("/leads/touch-report", { params })).data;
+export const getMetaLeadFailures = async (params = {}) => (await api.get("/leads/meta-failures", { params })).data;
+export const resolveMetaLeadFailure = async (id, note) => (await api.patch(`/leads/meta-failures/${id}`, { note })).data;

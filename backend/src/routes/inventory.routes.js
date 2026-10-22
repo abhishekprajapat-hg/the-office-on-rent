@@ -35,6 +35,20 @@ router.get(
 );
 router.get("/:id", inventoryController.getInventoryById);
 
+/*
+ * Sources, owner link and "confirmed today" (requirements 16 Oct 2026, 6.3,
+ * 7.1, 17.2). Internal relationships, so never a Channel Partner.
+ */
+const sourceController = require("../controllers/inventorySource.controller");
+const SALES_SOURCE_ROLES = ["ADMIN", "MANAGER", "EXECUTIVE", "INSIDE_EXECUTIVE", "FIELD_EXECUTIVE"];
+const noPartner = (req, res, next) => (req.user.role === "CHANNEL_PARTNER"
+  ? res.status(403).json({ message: "Internal relationships only" }) : next());
+router.post("/:id/sources", writeLimiter, noPartner, checkRoleOrPageAction(SALES_SOURCE_ROLES, "view", "inventory"), sourceController.addSourceLink);
+router.patch("/:id/sources/:linkId", writeLimiter, noPartner, checkRoleOrPageAction(SALES_SOURCE_ROLES, "view", "inventory"), sourceController.updateSourceLink);
+router.delete("/:id/sources/:linkId", writeLimiter, noPartner, checkRoleOrPageAction(["ADMIN", "MANAGER"], "edit", "inventory"), sourceController.removeSourceLink);
+router.post("/:id/confirm", writeLimiter, noPartner, checkRoleOrPageAction(SALES_SOURCE_ROLES, "view", "inventory"), sourceController.confirmInventory);
+router.put("/:id/owner", writeLimiter, noPartner, checkRoleOrPageAction(["ADMIN", "MANAGER"], "edit", "inventory"), sourceController.setOwner);
+
 router.post(
   "/:id/share",
   writeLimiter,

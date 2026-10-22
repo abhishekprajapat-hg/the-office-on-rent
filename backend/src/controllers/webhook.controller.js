@@ -5,6 +5,22 @@ const { autoAssignLead } = require("../services/leadAssignment.service");
 const { findBrokerByPhone, recordBlockedLead } = require("../services/crmContact.service");
 const logger = require("../config/logger");
 
+// Meta lead failures kept for reconciliation (requirements 16 Oct 2026, section 08).
+const recordMetaFailure = async ({ companyId, event, kind, error }) => {
+  try {
+    const MetaLeadFailure = require("../models/MetaLeadFailure");
+    const metaLeadId = String(event?.leadId || "");
+    const message = typeof error === "string" ? error : JSON.stringify(error?.response?.data || error?.message || error || "").slice(0, 2000);
+    await MetaLeadFailure.findOneAndUpdate(
+      { companyId: companyId || null, metaLeadId, resolved: false },
+      { $set: { kind, error: message, pageId: String(event?.pageId || ""), formId: String(event?.formId || ""), lastAttemptAt: new Date() }, $inc: { attempts: 1 } },
+      { upsert: true },
+    );
+  } catch {
+    // Recording a failure must never break the webhook.
+  }
+};
+
 const META_GRAPH_VERSION = String(process.env.META_GRAPH_VERSION || "v24.0").trim();
 const toPositiveInt = (value, fallback) => {
   const parsed = Number.parseInt(value, 10);
@@ -588,6 +604,11 @@ exports.handleWebhook = async (req, res) => {
             requester: assignmentRequester,
           });
           createdCount += 1;
+          // A retry that now succeeds closes any earlier failure for this lead.
+          await require("../models/MetaLeadFailure").updateMany(
+            { companyId: tenantCompanyId, metaLeadId: String(event.leadId || ""), resolved: false },
+            { $set: { resolved: true, resolvedAt: new Date(), resolutionNote: "Created on a later attempt" } },
+          ).catch(() => null);
 
           logger.info({
             companyId: tenantCompanyId,
@@ -628,6 +649,7 @@ exports.handleWebhook = async (req, res) => {
               }
             } catch (fallbackError) {
               failedCount += 1;
+              await recordMetaFailure({ companyId: tenantCompanyId, event, kind: "PERMISSION_FALLBACK_FAILED", error: fallbackError });
               logger.error({
                 companyId: tenantCompanyId,
                 leadId: event.leadId,
@@ -641,6 +663,7 @@ exports.handleWebhook = async (req, res) => {
 
           if (isInvalidMetaLeadError(leadError)) {
             invalidCount += 1;
+            await recordMetaFailure({ companyId: tenantCompanyId, event, kind: "INVALID", error: leadError });
             logger.warn({
               companyId: tenantCompanyId,
               leadId: event.leadId,
@@ -651,6 +674,7 @@ exports.handleWebhook = async (req, res) => {
           }
 
           failedCount += 1;
+          await recordMetaFailure({ companyId: tenantCompanyId, event, kind: "FAILED", error: leadError });
           logger.error({
             companyId: tenantCompanyId,
             leadId: event.leadId,

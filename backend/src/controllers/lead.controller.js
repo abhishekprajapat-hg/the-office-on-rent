@@ -85,6 +85,8 @@ const LEAD_POPULATE_FIELDS = [
   { path: "assignmentHistory.toUser", select: "name role profileImageUrl" },
   { path: "assignmentHistory.createdBy", select: "name role profileImageUrl" },
   { path: "qualifiedBy", select: "name role profileImageUrl" },
+  // Name only: the broker's number stays in the Broker Database.
+  { path: "referredByBrokerId", select: "name" },
   { path: "createdBy", select: "name role partnerCode brokerageConfig profileImageUrl" },
   { path: "dealPayment.approvalRequestedBy", select: "name role profileImageUrl" },
   { path: "dealPayment.approvalReviewedBy", select: "name role profileImageUrl" },
@@ -156,6 +158,14 @@ const LEAD_SELECTABLE_FIELDS = [
   "temperature",
   "followUpPurpose",
   "brokerContactId",
+  "referredByBrokerId",
+  "firstTouchAt",
+  "firstTouchBy",
+  "firstTouchChannel",
+  "firstTouchSource",
+  "touchMinutes",
+  "lastTouchAt",
+  "touchCount",
   "qualifiedBy",
   "qualifiedAt",
   "createdBy",
@@ -246,8 +256,20 @@ const MAX_BULK_LEAD_UPLOAD_ROWS = 5000;
 // Kept in step with the sourceChannel enum on the Lead model.
 const LEAD_SOURCE_CHANNELS = Object.freeze([
   "META", "JUSTDIAL", "OLX", "MYBRICKS", "99ACRES", "WEBSITE",
-  "REFERENCE", "BROKER", "DIRECT_CALL", "DIRECT_VISIT",
+  "REFERENCE", "BROKER", "DIRECT_CALL", "DIRECT_VISIT", "OTHER",
 ]);
+
+// The broker who referred a lead must be a broker in this company's Broker
+// Database (requirements 16 Oct 2026, 6.4). Empty clears it.
+const resolveReferringBrokerId = async (companyId, raw) => {
+  if (raw === undefined) return undefined;
+  if (raw === null || raw === "") return null;
+  const invalid = (message) => Object.assign(new Error(message), { statusCode: 400 });
+  if (!/^[a-f0-9]{24}$/i.test(String(raw))) throw invalid("referredByBrokerId is invalid");
+  const broker = await require("../models/CrmContact").exists({ _id: raw, companyId, kind: "BROKER" });
+  if (!broker) throw invalid("Referring broker not found in the Broker Database");
+  return String(raw);
+};
 // Kept in step with the temperature enum on the Lead model.
 const LEAD_TEMPERATURES = Object.freeze(["COLD", "WARM", "HOT"]);
 const LEAD_REQUIREMENT_INVENTORY_TYPES = Object.freeze(["COMMERCIAL", "RESIDENTIAL", "COWORKING"]);
@@ -1038,6 +1060,8 @@ const parseLeadSort = (rawSortBy) => {
 const applyLeadListFilters = (query, rawQuery = {}) => {
   require("../utils/leadAdvancedFilters").applyLeadAdvancedFilters(query, rawQuery);
   if (rawQuery.status === "TRANSFER") addLeadAndClause(query, { "assignmentHistory.action": "MANUAL_TRANSFER" });
+  // Lead touch time filters (requirements 16 Oct 2026, section 08).
+  require("../services/leadTouch.service").touchFilterClauses(rawQuery).forEach((clause) => addLeadAndClause(query, clause));
 
   /*
    * An unrecognised filter used to be dropped in silence, so ?status=TYPO
@@ -2371,6 +2395,16 @@ exports.createLead = async (req, res) => {
       return res.status(403).json({ message: roleTypeError });
     }
 
+    try {
+      const referredByBrokerId = await resolveReferringBrokerId(companyId, req.body?.referredByBrokerId);
+      if (referredByBrokerId) {
+        createPayload.referredByBrokerId = referredByBrokerId;
+        if (!createPayload.sourceChannel) createPayload.sourceChannel = "BROKER";
+      }
+    } catch (referralError) {
+      return res.status(referralError.statusCode || 400).json({ message: referralError.message });
+    }
+
     if (inventory) {
       createPayload.inventoryId = inventory._id;
       createPayload.relatedInventoryIds = relatedInventories.map((row) => row._id);
@@ -2931,6 +2965,8 @@ exports.bulkUploadLeads = async (req, res) => {
             projectInterested || buildInventoryLeadProjectLabel(inventory),
           // Work Profile column of an imported sheet (free text).
           clientProfession: String(row?.clientProfession || "").trim().slice(0, 120),
+          // Company column (coworking sheets) - optional, kept as written.
+          ...(String(row?.company || "").trim() ? { company: String(row.company).trim().slice(0, 200) } : {}),
           requirements: normalizeLeadRequirements({
             rawRequirements: row?.requirements,
             inventory,
@@ -4144,6 +4180,7 @@ exports.updateLeadStatus = async (req, res) => {
       });
     }
 
+    let followUpCompletedOnSave = false;
     const hasNextFollowUpField =
       Object.prototype.hasOwnProperty.call(req.body || {}, "nextFollowUp");
     const normalizedNextFollowUp = hasNextFollowUpField
@@ -4263,6 +4300,19 @@ exports.updateLeadStatus = async (req, res) => {
       if (nextCompany !== String(lead?.company || "")) {
         lead.company = nextCompany;
         updatedProfileFields.push("company");
+      }
+    }
+
+    if (Object.prototype.hasOwnProperty.call(req.body || {}, "referredByBrokerId")) {
+      let nextBroker;
+      try {
+        nextBroker = await resolveReferringBrokerId(lead.companyId, req.body.referredByBrokerId);
+      } catch (referralError) {
+        return res.status(referralError.statusCode || 400).json({ message: referralError.message });
+      }
+      if (String(nextBroker || "") !== String(lead.referredByBrokerId || "")) {
+        lead.referredByBrokerId = nextBroker;
+        updatedProfileFields.push("referredByBrokerId");
       }
     }
 
@@ -4718,6 +4768,8 @@ exports.updateLeadStatus = async (req, res) => {
     } else if (hasNextFollowUpInput) {
       lead.nextFollowUp = parsedNextFollowUp;
     } else if (clearNextFollowUp) {
+      // "Mark complete" on the lead page clears the date and saves.
+      if (lead.nextFollowUp) followUpCompletedOnSave = true;
       lead.nextFollowUp = null;
     }
 
@@ -4807,6 +4859,9 @@ exports.updateLeadStatus = async (req, res) => {
         ? `Status changed to ${nextLeadStatus} (${Math.round(siteVisitDistanceMeters)}m from site)`
         : `Status changed to ${nextLeadStatus}`,
     ];
+    if (followUpCompletedOnSave) {
+      activityActions.push("Follow-up completed");
+    }
     if (clearTerminalFollowUp && hasExistingFollowUp) {
       activityActions.push("Follow-up cleared after terminal status");
     }
@@ -5768,3 +5823,100 @@ exports.deleteLead = async (req, res) => {
 };
 
 exports.parseBrokeragePayload = parseBrokeragePayload;
+
+
+/* ----------------------------------------------- lead touch time (s. 08) -- */
+
+const leadTouch = require("../services/leadTouch.service");
+
+/*
+ * POST /leads/:leadId/touch { channel, source?, at?, note? } - a logged call
+ * or message sent. Opening the lead never calls this.
+ */
+exports.logLeadTouch = async (req, res) => {
+  try {
+    const { leadId } = req.params;
+    if (!isValidObjectId(leadId)) return res.status(400).json({ message: "Invalid lead id" });
+    const lead = await findAccessibleLeadById({ leadId, user: req.user });
+    if (!lead) return res.status(404).json({ message: "Lead not found" });
+    const source = String(req.body?.source || "MANUAL").toUpperCase();
+    // Only an integration may claim a verified touch.
+    if (source === "SYSTEM") return res.status(403).json({ message: "Verified touches come from an integration, not a person" });
+    const out = await leadTouch.recordTouch({
+      lead, user: req.user, channel: req.body?.channel, source, at: req.body?.at || null, note: req.body?.note || "",
+    });
+    return res.json({ message: out.isFirstTouch ? `First touch recorded: ${out.touchTimeLabel} after the lead arrived` : "Touch logged", touch: out });
+  } catch (error) {
+    if (error instanceof leadTouch.TouchError) return res.status(error.statusCode).json({ message: error.message });
+    logger.error({ requestId: req.requestId || null, error: error.message, message: "logLeadTouch failed" });
+    return res.status(500).json({ message: "Couldn't log the touch" });
+  }
+};
+
+/*
+ * GET /leads/touch-report?from&to - response time per employee for leads that
+ * arrived in the period (Admin/Manager: their lead scope; others: own).
+ */
+exports.getLeadTouchReport = async (req, res) => {
+  try {
+    const companyId = req.user.companyId;
+    const from = /^\d{4}-\d{2}-\d{2}$/.test(String(req.query.from || "")) ? new Date(`${req.query.from}T00:00:00+05:30`) : new Date(Date.now() - 30 * 86400000);
+    const to = /^\d{4}-\d{2}-\d{2}$/.test(String(req.query.to || "")) ? new Date(`${req.query.to}T23:59:59.999+05:30`) : new Date();
+    const filter = { companyId, createdAt: { $gte: from, $lte: to } };
+    if (!["ADMIN", "MANAGER"].includes(req.user.role)) filter.$or = [{ assignedTo: req.user._id }, { firstTouchBy: req.user._id }];
+    const leads = await Lead.find(filter).select("assignedTo firstTouchAt firstTouchBy touchMinutes firstTouchSource").lean();
+    const rows = leadTouch.summarizeTouches(leads);
+    const ids = rows.map((r) => r.userId).filter(Boolean);
+    const users = await User.find({ _id: { $in: ids }, companyId }).select("_id name role").lean();
+    const nameOf = new Map(users.map((u) => [String(u._id), u]));
+    return res.json({
+      from, to,
+      totals: {
+        leads: leads.length,
+        touched: leads.filter((l) => l.firstTouchAt).length,
+        untouched: leads.filter((l) => !l.firstTouchAt).length,
+        manualTouches: leads.filter((l) => l.firstTouchSource === "MANUAL").length,
+        crmActionTouches: leads.filter((l) => l.firstTouchSource === "CRM_ACTION").length,
+        verifiedTouches: leads.filter((l) => l.firstTouchSource === "SYSTEM").length,
+      },
+      rows: rows.map((r) => ({ ...r, user: r.userId ? (nameOf.get(String(r.userId)) || { _id: r.userId, name: "Unknown" }) : null }))
+        .sort((a, b) => (a.averageMinutes ?? 1e9) - (b.averageMinutes ?? 1e9)),
+    });
+  } catch (error) {
+    logger.error({ requestId: req.requestId || null, error: error.message, message: "getLeadTouchReport failed" });
+    return res.status(500).json({ message: "Couldn't load the touch report" });
+  }
+};
+
+/* GET /leads/meta-failures - Meta leads that could not be created (Admin/Manager). */
+exports.getMetaLeadFailures = async (req, res) => {
+  try {
+    if (!["ADMIN", "MANAGER"].includes(req.user.role)) return res.status(403).json({ message: "Admins and managers only" });
+    const MetaLeadFailure = require("../models/MetaLeadFailure");
+    const filter = { companyId: req.user.companyId };
+    if (req.query.resolved !== "all") filter.resolved = req.query.resolved === "true";
+    const rows = await MetaLeadFailure.find(filter).sort({ lastAttemptAt: -1 }).limit(200).lean();
+    return res.json({ failures: rows, openCount: await MetaLeadFailure.countDocuments({ companyId: req.user.companyId, resolved: false }) });
+  } catch (error) {
+    logger.error({ requestId: req.requestId || null, error: error.message, message: "getMetaLeadFailures failed" });
+    return res.status(500).json({ message: "Couldn't load Meta failures" });
+  }
+};
+
+/* PATCH /leads/meta-failures/:failureId { note } - mark reconciled by hand. */
+exports.resolveMetaLeadFailure = async (req, res) => {
+  try {
+    if (!["ADMIN", "MANAGER"].includes(req.user.role)) return res.status(403).json({ message: "Admins and managers only" });
+    if (!isValidObjectId(req.params.failureId)) return res.status(400).json({ message: "Invalid id" });
+    const MetaLeadFailure = require("../models/MetaLeadFailure");
+    const row = await MetaLeadFailure.findOneAndUpdate(
+      { _id: req.params.failureId, companyId: req.user.companyId },
+      { $set: { resolved: true, resolvedAt: new Date(), resolvedBy: req.user._id, resolutionNote: String(req.body?.note || "Reconciled by hand").slice(0, 500) } },
+      { returnDocument: "after" },
+    );
+    if (!row) return res.status(404).json({ message: "Not found" });
+    return res.json({ failure: row });
+  } catch (error) {
+    return res.status(500).json({ message: "Couldn't update" });
+  }
+};

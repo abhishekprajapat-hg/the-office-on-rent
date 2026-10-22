@@ -134,6 +134,8 @@ const project = (patch: Partial<ProjectDraft> = {}): ProjectDraft => ({
   plotsAvailable: "40",
   plotSize: "",
   customPlotSize: "",
+  plotSizeMin: "",
+  plotSizeMax: "",
   numberOfFlats: "",
   numberOfFloors: "",
   flatsPerFloor: "",
@@ -149,7 +151,8 @@ test("project form checks follow the server's per-type rules", () => {
   assert.equal(validateProjectDraft(project()), null);
   assert.equal(validateProjectDraft(project({ currentRate: 3000 })), "The current rate can't be below the starting rate");
   assert.equal(validateProjectDraft(project({ plotsAvailable: "200" })), "Plots available can't exceed total plots");
-  assert.equal(validateProjectDraft(project({ plotSize: "CUSTOM" })), "Enter the custom plot size");
+  assert.equal(validateProjectDraft(project({ plotSizeMin: "900", plotSizeMax: "2400" })), null);
+  assert.equal(validateProjectDraft(project({ plotSizeMin: "2400", plotSizeMax: "900" })), "The smallest plot size can't be bigger than the largest");
   assert.equal(validateProjectDraft(project({ projectType: "" })), "Pick the project type");
   const building = project({ projectType: "BUILDING", numberOfFlats: "80", numberOfFloors: "10", flatsPerFloor: "8", bhk: [{ bhk: "2_BHK", size: "1100" }] });
   assert.equal(validateProjectDraft(building), null);

@@ -220,6 +220,25 @@ const leadSchema = new mongoose.Schema(
       trim: true,
     },
     brokerContactId: { type: mongoose.Schema.Types.ObjectId, ref: "CrmContact", default: null },
+    // The broker who referred this lead (requirements 16 Oct 2026, 6.4). Not
+    // the same as brokerContactId, which marks a lead whose own number is a broker.
+    referredByBrokerId: { type: mongoose.Schema.Types.ObjectId, ref: "CrmContact", default: null, index: true },
+
+    /*
+     * Lead touch time (requirements 16 Oct 2026, section 08). createdAt is when
+     * the lead reached the CRM (Meta included); the first qualifying touch - a
+     * logged call or a message sent, never just opening the lead - is kept
+     * here with who made it. Reassignment never resets either.
+     */
+    firstTouchAt: { type: Date, default: null, index: true },
+    firstTouchBy: { type: mongoose.Schema.Types.ObjectId, ref: "User", default: null },
+    firstTouchChannel: { type: String, enum: ["CALL", "WHATSAPP", "SMS", "EMAIL", "OTHER", ""], default: "" },
+    // MANUAL = logged by hand; CRM_ACTION = the call/WhatsApp button in the
+    // CRM; SYSTEM = a verified telephony/messaging integration.
+    firstTouchSource: { type: String, enum: ["MANUAL", "CRM_ACTION", "SYSTEM", ""], default: "" },
+    touchMinutes: { type: Number, default: null, min: 0 },
+    lastTouchAt: { type: Date, default: null },
+    touchCount: { type: Number, default: 0, min: 0 },
     // Optional: a coworking enquiry is often a single person, not a firm.
     company: { type: String, default: "", trim: true, maxlength: 200 },
 
@@ -241,7 +260,7 @@ const leadSchema = new mongoose.Schema(
       type: String,
       enum: [
         "META", "JUSTDIAL", "OLX", "MYBRICKS", "99ACRES", "WEBSITE",
-        "REFERENCE", "BROKER", "DIRECT_CALL", "DIRECT_VISIT", "",
+        "REFERENCE", "BROKER", "DIRECT_CALL", "DIRECT_VISIT", "OTHER", "",
       ],
       default: "",
       trim: true,

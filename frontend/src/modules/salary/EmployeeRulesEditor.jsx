@@ -6,7 +6,7 @@ import AttendanceRuleFields from "./AttendanceRuleFields";
 import { primaryButtonClass, secondaryButtonClass } from "./salaryUi";
 import { rulesFormToPayload, summarizeRules, toRulesForm } from "./salaryFormat";
 
-const PER_PERSON_FIELDS = ["absent", "unapprovedLeave", "halfDay", "unpaidLeave", "paidLeave", "late", "lateGraceCount", "lateEveryCount"];
+const PER_PERSON_FIELDS = ["absent", "unapprovedLeave", "halfDay", "unpaidLeave", "paidLeave", "late", "lateGraceCount", "lateEveryCount", "paidLeavePerMonth"];
 
 /*
  * How much comes off one person's salary for each absent day, half day, leave
@@ -22,7 +22,12 @@ export default function EmployeeRulesEditor({ userId, firstName, companyRules, d
   const [mode, setMode] = useState(hasOwn ? "own" : "company");
   // Own amounts start from what is saved, or from the company's rules the
   // first time - the per-day basis always being the company's.
-  const [form, setForm] = useState(() => toRulesForm({ ...companyRules, ...(deductionRules || {}) }));
+  // "Hand-marked leave is paid" is a company rule only, so it isn't offered here.
+  const [form, setForm] = useState(() => {
+    const initial = toRulesForm({ ...companyRules, ...(deductionRules || {}) });
+    if (initial) delete initial.manualLeaveIsPaid;
+    return initial;
+  });
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
 

@@ -13,5 +13,7 @@ export const getMyAccess = async () => {
     pages: unwrapList(access.pages),
     dataScope: access.dataScope || "ASSIGNED",
     enforcePageAccess: Boolean(access.enforcePageAccess),
+    // Coworking client documents (requirements 16 Oct 2026, section 09).
+    canDownloadClientDocuments: Boolean(res.data?.canDownloadClientDocuments),
   };
 };

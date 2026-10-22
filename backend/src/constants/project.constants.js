@@ -1,4 +1,5 @@
-const PROJECT_CATEGORIES = ["RESIDENTIAL", "COMMERCIAL"];
+// COWORKING added with the centralised Projects module (requirements 16 Oct 2026, 5.4).
+const PROJECT_CATEGORIES = ["RESIDENTIAL", "COMMERCIAL", "COWORKING"];
 
 // Residential-only sub-types. Commercial projects have no project-type dropdown at all.
 const PROJECT_TYPES = ["PLOTTING", "BUILDING", "VILLAS_FARMHOUSE"];
@@ -47,6 +48,15 @@ const PROJECT_AMENITIES = [
   "SWIMMING_POOL",
   "WALKING_TRACK",
   "CLUB_HOUSE",
+  // Infrastructure (21 Oct 2026)
+  "GATED_ENTRY",
+  "CCTV_SURVEILLANCE",
+  "INTERNAL_ROADS",
+  "STREET_LIGHTING",
+  "WATER_SUPPLY",
+  "ELECTRICITY",
+  "DRAINAGE",
+  "PARKING",
 ];
 
 const PROJECT_COMMERCIAL_AMENITIES = [
@@ -104,6 +114,7 @@ const PROJECT_UNIT_STATUSES = ["AVAILABLE", "BOOKED", "SOLD", "LEASED", "RESERVE
 const PROJECT_ID_PREFIX = Object.freeze({
   RESIDENTIAL: "RES",
   COMMERCIAL: "COM",
+  COWORKING: "CWK",
 });
 
 // id, projectId, createdBy, updatedBy, createdAt, updatedAt, deletedAt, companyId
@@ -117,6 +128,8 @@ const PROJECT_ALLOWED_FIELDS = [
   "totalPlots",
   "plotSize",
   "customPlotSize",
+  "plotSizeMin",
+  "plotSizeMax",
   "plotsAvailable",
   // Building fields
   "numberOfFlats",
@@ -136,6 +149,18 @@ const PROJECT_ALLOWED_FIELDS = [
   "images",
   // Shared pricing / status / meta
   "plc",
+  "plcWideRoad",
+  "plcGardenFacing",
+  "plcCorner",
+  "plcGardenCorner",
+  "developmentCharges",
+  "maintenanceCharges",
+  "amenityCharges",
+  "utilityCharges",
+  "parkingCharges",
+  "taxes",
+  "registrationStampDuty",
+  "otherFacilities",
   "group",
   "startingRate",
   "currentRate",

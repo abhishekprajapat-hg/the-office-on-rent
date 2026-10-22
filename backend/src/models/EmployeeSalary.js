@@ -43,6 +43,8 @@ const employeeRulesSchema = new mongoose.Schema(
     lateGraceCount: { type: Number, min: 0, max: 31, required: true },
     lateEveryCount: { type: Number, min: 1, max: 31, required: true },
     late: { type: deductionRuleSchema, required: true },
+    // Own paid-leave entitlement (requirements 16 Oct 2026, 4.1); optional.
+    paidLeavePerMonth: { type: Number, min: 0, max: 31, default: undefined },
     updatedBy: { type: mongoose.Schema.Types.ObjectId, ref: "User", default: null },
     updatedByName: { type: String, trim: true, default: "" },
     updatedAt: { type: Date, default: null },

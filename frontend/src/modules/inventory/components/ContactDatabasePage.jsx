@@ -1,12 +1,14 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Link } from "react-router-dom";
-import { ArrowLeft, Download, Loader2, Plus, ShieldAlert, Trash2, Upload } from "lucide-react";
+import { AlertTriangle, ArrowLeft, Download, FileUp, Loader2, Plus, ShieldAlert, Trash2, Upload } from "lucide-react";
 import { Button } from "../../../components/ui";
 import api from "../../../services/api";
 import { deleteOutcomeMessage, isDeleteApprovalPending } from "../../../services/deleteRequestService";
 import { usePermissions } from "../../../context/usePermissions";
 import { parseContactFile, downloadContactTemplate, EMPTY_CONTACT } from "../contactBulkImport";
 import ContactFormDialog from "./ContactFormDialog";
+import { importReraBrokers } from "../../../services/relationshipService";
+import { CP_STATUS_OPTIONS, SEGMENT_OPTIONS, TRANSACTION_OPTIONS, labelOf, toneOf } from "../relationshipOptions";
 
 /*
  * One implementation behind both the Owner and the Broker page.
@@ -16,7 +18,10 @@ import ContactFormDialog from "./ContactFormDialog";
  * carries the blocked-lead column, because only brokers gate lead intake.
  */
 const ContactDatabasePage = ({ kind, title, blurb }) => {
-  const { canPageAction } = usePermissions();
+  const { canPageAction, role } = usePermissions();
+  const isManagement = ["ADMIN", "MANAGER"].includes(String(role || localStorage.getItem("role") || "").toUpperCase());
+  const reraRef = useRef(null);
+  const [filters, setFilters] = useState({ segment: "", cpStatus: "", transactionType: "", area: "", source: "", stale: "" });
   const canWrite = canPageAction("inventory", "create");
   const fileRef = useRef(null);
   const label = kind === "BROKER" ? "broker" : "owner";
@@ -42,7 +47,8 @@ const ContactDatabasePage = ({ kind, title, blurb }) => {
     let active = true;
     setLoading(true);
     const timer = setTimeout(() => {
-      api.get("/contacts", { params: { kind, search, page } })
+      const activeFilters = Object.fromEntries(Object.entries(filters).filter(([, v]) => v));
+      api.get("/contacts", { params: { kind, search, page, ...activeFilters } })
         .then(({ data }) => {
           if (!active) return;
           setRows(data.contacts || []);
@@ -55,7 +61,7 @@ const ContactDatabasePage = ({ kind, title, blurb }) => {
         .finally(() => { if (active) setLoading(false); });
     }, 200);
     return () => { active = false; clearTimeout(timer); };
-  }, [kind, search, page, version]);
+  }, [kind, search, page, version, filters]);
 
   const refresh = useCallback(() => setVersion((value) => value + 1), []);
 
@@ -107,6 +113,28 @@ const ContactDatabasePage = ({ kind, title, blurb }) => {
     } finally {
       setImporting(false);
       if (fileRef.current) fileRef.current.value = "";
+    }
+  };
+
+  // RERA broker list (requirements 16 Oct 2026, 6.5): duplicates by phone or
+  // registration number are filled in, not copied; nobody becomes a CP or
+  // "verified" by being imported.
+  const handleReraFile = async (file) => {
+    if (!file) return;
+    setImporting(true); setError(""); setNotice(""); setImportResult(null);
+    try {
+      const XLSX = await import("xlsx");
+      const wb = XLSX.read(await file.arrayBuffer(), { type: "array" });
+      const rows = XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]], { defval: "" });
+      if (!rows.length) throw new Error("No rows found in the file.");
+      const data = await importReraBrokers(rows);
+      setImportResult({ fileName: file.name, createdCount: data.created, updatedCount: data.updated, failedCount: data.skipped, failures: data.errors });
+      refresh();
+    } catch (importError) {
+      setError(importError.response?.data?.message || importError.message || "Unable to import the RERA list");
+    } finally {
+      setImporting(false);
+      if (reraRef.current) reraRef.current.value = "";
     }
   };
 
@@ -163,6 +191,64 @@ const ContactDatabasePage = ({ kind, title, blurb }) => {
           onChange={(event) => { setSearch(event.target.value); setPage(1); }}
           className="h-9 min-w-[220px] flex-1 rounded-lg border border-slate-300 bg-white px-3 text-[13px] outline-none focus:border-blue-600 focus:ring-2 focus:ring-blue-600/20 dark:border-slate-700 dark:bg-slate-950 dark:text-slate-100"
         />
+        {kind === "BROKER" ? (
+          <>
+            <select aria-label="Segment" value={filters.segment} onChange={(e) => { setFilters((f) => ({ ...f, segment: e.target.value })); setPage(1); }} className="h-9 rounded-lg border border-slate-300 bg-white px-2 text-[13px]">
+              <option value="">All segments</option>
+              {SEGMENT_OPTIONS.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
+            </select>
+            <select aria-label="Channel partner status" value={filters.cpStatus} onChange={(e) => { setFilters((f) => ({ ...f, cpStatus: e.target.value })); setPage(1); }} className="h-9 rounded-lg border border-slate-300 bg-white px-2 text-[13px]">
+              <option value="">Any CP status</option>
+              {CP_STATUS_OPTIONS.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
+            </select>
+            <select aria-label="Transaction type" value={filters.transactionType} onChange={(e) => { setFilters((f) => ({ ...f, transactionType: e.target.value })); setPage(1); }} className="h-9 rounded-lg border border-slate-300 bg-white px-2 text-[13px]">
+              <option value="">Any transaction</option>
+              {TRANSACTION_OPTIONS.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
+            </select>
+            <input aria-label="Area" placeholder="Area" value={filters.area} onChange={(e) => { setFilters((f) => ({ ...f, area: e.target.value })); setPage(1); }} className="h-9 w-32 rounded-lg border border-slate-300 bg-white px-2 text-[13px]" />
+            <select aria-label="Source" value={filters.source} onChange={(e) => { setFilters((f) => ({ ...f, source: e.target.value })); setPage(1); }} className="h-9 rounded-lg border border-slate-300 bg-white px-2 text-[13px]">
+              <option value="">Any source</option>
+              <option value="RERA_IMPORT">RERA list</option>
+              <option value="MANUAL">Added manually</option>
+              <option value="LEAD">From leads</option>
+              <option value="BULK">Bulk upload</option>
+            </select>
+          </>
+        ) : (
+          <label className="flex items-center gap-1.5 text-[13px] text-slate-600">
+            <input type="checkbox" checked={filters.stale === "true"} onChange={(e) => { setFilters((f) => ({ ...f, stale: e.target.checked ? "true" : "" })); setPage(1); }} />
+            Not verified recently
+          </label>
+        )}
+        {isManagement ? (
+          <Button variant="secondary" leftIcon={Download} onClick={async () => {
+            try {
+              const { data } = await api.get("/contacts/export", { params: { kind } });
+              const XLSX = await import("xlsx");
+              const rows = (data.contacts || []).map((c) => ({
+                Name: c.name, Phone: c.phone, "Alternate phone": c.alternatePhone || "", WhatsApp: c.whatsapp || "", Email: c.email || "",
+                Firm: c.firmId?.name || c.company || "", City: c.city || "", Segments: (c.segments || []).join(", "), Areas: (c.areas || []).join(", "),
+                Projects: (c.projects || []).join(", "), "CP status": c.cpStatus || "", "RERA no.": c.reraNumber || "", Verified: c.verified ? "Yes" : "No",
+                "Relationship owner": c.relationshipOwnerId?.name || "", "Last contact": c.lastContactAt ? String(c.lastContactAt).slice(0, 10) : "",
+                "Next follow-up": c.nextFollowUpAt ? String(c.nextFollowUpAt).slice(0, 10) : "", Notes: c.notes || "",
+                ...(c.brokerageTerms !== undefined ? { "Brokerage terms": c.brokerageTerms || "", "Net rates": c.netRateNotes || "", "Internal remarks": c.internalRemarks || "" } : {}),
+              }));
+              const wb = XLSX.utils.book_new();
+              XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(rows.length ? rows : [{ Note: "No records" }]), title.slice(0, 30));
+              XLSX.writeFile(wb, `${kind === "BROKER" ? "brokers" : "owners"}-backup-${new Date().toISOString().slice(0, 10)}.xlsx`);
+            } catch (exportError) {
+              setError(exportError.response?.data?.message || "Export failed");
+            }
+          }}>Export all</Button>
+        ) : null}
+        {kind === "BROKER" && isManagement && canWrite ? (
+          <>
+            <input ref={reraRef} type="file" accept=".csv,.xlsx,.xls" className="hidden" onChange={(event) => handleReraFile(event.target.files?.[0])} />
+            <Button variant="secondary" leftIcon={FileUp} disabled={importing} onClick={() => reraRef.current?.click()} title="Columns: Name, Mobile, RERA No, Firm, Email, City">
+              Import RERA list
+            </Button>
+          </>
+        ) : null}
         {canWrite ? (
           <>
             <input
@@ -205,7 +291,7 @@ const ContactDatabasePage = ({ kind, title, blurb }) => {
             <article key={row._id} className="flex flex-col rounded-xl border border-slate-200 p-4 dark:border-slate-700">
               <div className="flex items-start justify-between gap-2">
                 <div className="min-w-0">
-                  <h2 className="truncate font-semibold text-slate-900 dark:text-slate-100">{row.name}</h2>
+                  <Link to={`${kind === "BROKER" ? "/inventory/brokers" : "/inventory/owners"}/${row._id}`} className="block truncate font-semibold text-blue-700 hover:underline dark:text-blue-300">{row.name}</Link>
                   <p className="truncate text-sm text-slate-600 dark:text-slate-300">{row.phone}</p>
                   {row.email ? <p className="truncate text-sm text-slate-500">{row.email}</p> : null}
                   {row.company || row.city ? (
@@ -225,6 +311,16 @@ const ContactDatabasePage = ({ kind, title, blurb }) => {
               </div>
               {row.propertyDetails ? <p className="mt-2 line-clamp-2 text-sm text-slate-600 dark:text-slate-300">{row.propertyDetails}</p> : null}
               {row.notes ? <p className="line-clamp-2 text-sm text-slate-500">{row.notes}</p> : null}
+              {kind === "BROKER" ? (
+                <div className="mt-2 flex flex-wrap gap-1 text-[11px] font-semibold">
+                  <span className={`rounded-full px-2 py-0.5 ${toneOf(CP_STATUS_OPTIONS, row.cpStatus || "NOT_ONBOARDED")}`}>{labelOf(CP_STATUS_OPTIONS, row.cpStatus || "NOT_ONBOARDED")}</span>
+                  {row.firmId?.name ? <span className="rounded-full bg-slate-100 px-2 py-0.5 text-slate-600">{row.firmId.name}</span> : null}
+                  {(row.segments || []).map((s) => <span key={s} className="rounded-full bg-blue-50 px-2 py-0.5 text-blue-700">{labelOf(SEGMENT_OPTIONS, s)}</span>)}
+                  {row.source === "RERA_IMPORT" && !row.verified ? <span className="rounded-full bg-violet-50 px-2 py-0.5 text-violet-700">RERA - unverified</span> : null}
+                </div>
+              ) : row.lastVerifiedAt ? null : (
+                <p className="mt-2 inline-flex items-center gap-1 text-[11.5px] font-semibold text-amber-700"><AlertTriangle size={11} /> Not verified</p>
+              )}
               <p className="mt-auto flex flex-wrap items-center gap-x-2 pt-2 text-xs text-slate-500">
                 <span>{row.inventoryIds?.length || 0} properties · {row.leadIds?.length || 0} leads</span>
                 {kind === "BROKER" && row.blockedLeadCount > 0 ? (

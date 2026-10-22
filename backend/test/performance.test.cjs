@@ -1,4 +1,5 @@
-// Performance score (9 Oct 2026): attendance, tasks and sales, each out of 100.
+// Performance score. Since the requirements of 16 Oct 2026 (section 03):
+// target 40%, tasks 20%, attendance 20%, punctuality 20%.
 const test = require("node:test");
 const assert = require("node:assert/strict");
 const {
@@ -7,12 +8,40 @@ const {
   scoreSales,
   calculatePerformance,
   gradeFor,
+  scorePunctuality,
+  scoreTarget,
+  PERFORMANCE_WEIGHTS,
 } = require("../src/services/performance.calc");
 
-test("attendance is 70% attendance percentage and 30% punctuality", () => {
+test("weights are target 40, tasks 20, attendance 20, punctuality 20", () => {
+  assert.deepEqual({ ...PERFORMANCE_WEIGHTS }, { target: 40, tasks: 20, attendance: 20, punctuality: 20 });
+});
+
+test("attendance part is the attendance percentage; punctuality is its own part", () => {
   const part = scoreAttendance({ workingDays: 20, attendancePercent: 90, punctualityPercent: 50, onTimeDays: 9, lateDays: 9, presentDays: 18 });
-  assert.equal(part.score, 78, "90 x 0.7 + 50 x 0.3");
+  assert.equal(part.score, 90);
   assert.equal(part.metrics.punctualityPercent, 50);
+});
+
+test("punctuality: late arrivals and half days count against it; nothing to judge without check-ins", () => {
+  const part = scorePunctuality({ onTimeDays: 15, lateDays: 3, halfDays: 2, lateHalfDays: 0 });
+  assert.equal(part.score, 75, "15 on time of 20 days");
+  assert.equal(part.metrics.lateDays, 3);
+  assert.equal(scorePunctuality({ onTimeDays: 0, lateDays: 0, halfDays: 0 }), null);
+});
+
+test("target: each target capped at 100%, averaged; remaining shown; none set = not scored", () => {
+  const part = scoreTarget({
+    target: { leadsTarget: 40, dealsTarget: 2, productionTarget: 30 },
+    actuals: { leads: 20, deals: 3, production: 24 },
+  });
+  // leads 50%, deals 150% -> 100, production 80% -> avg 76.67
+  assert.equal(part.score, 77);
+  const deals = part.metrics.targets.find((t) => t.key === "deals");
+  assert.equal(deals.percent, 150, "real achievement shown");
+  assert.equal(deals.remaining, 0);
+  assert.equal(part.metrics.targets.find((t) => t.key === "leads").remaining, 20);
+  assert.equal(scoreTarget({ target: null, actuals: { leads: 5 } }), null);
 });
 
 test("punctuality is left out for somebody who never checked in", () => {
@@ -62,24 +91,40 @@ test("nothing to sell means the sales part does not apply", () => {
 test("the overall score shares out the weight of a part that does not apply", () => {
   const attendance = { score: 80, metrics: {} };
   const tasks = { score: 60, metrics: {} };
-  const both = calculatePerformance({ attendance, tasks, sales: null });
-  assert.equal(both.score, 70, "50/50 when there is no sales part");
+  const both = calculatePerformance({ attendance, tasks });
+  assert.equal(both.score, 70, "50/50 when only tasks and attendance apply");
   assert.equal(both.parts.attendance.effectiveWeight, 50);
-  assert.equal(both.parts.sales, null);
+  assert.equal(both.parts.target, null);
 
-  const all = calculatePerformance({ attendance, tasks, sales: { score: 90, metrics: {} } });
-  assert.equal(all.score, 78, "80x30 + 60x30 + 90x40, over 100");
-  assert.equal(all.grade.label, "Good");
+  const all = calculatePerformance({ target: { score: 90, metrics: {} }, tasks, attendance, punctuality: { score: 100, metrics: {} } });
+  assert.equal(all.score, 84, "90x40 + 60x20 + 80x20 + 100x20, over 100");
+  assert.equal(all.grade.label, "Average", "84 is in the 80-84.99 band");
 
-  assert.equal(calculatePerformance({ attendance: null, tasks: null, sales: null }).score, null);
+  assert.equal(calculatePerformance({}).score, null);
 });
 
 test("grades", () => {
-  assert.equal(gradeFor(85).key, "EXCELLENT");
-  assert.equal(gradeFor(70).key, "GOOD");
-  assert.equal(gradeFor(50).key, "AVERAGE");
-  assert.equal(gradeFor(49).key, "NEEDS_IMPROVEMENT");
+  // Bands set 21 Oct 2026.
+  assert.equal(gradeFor(100).key, "EXCELLENT");
+  assert.equal(gradeFor(95).key, "EXCELLENT");
+  assert.equal(gradeFor(94.99).key, "GREAT");
+  assert.equal(gradeFor(90).key, "GREAT");
+  assert.equal(gradeFor(89.99).key, "GOOD");
+  assert.equal(gradeFor(85).key, "GOOD");
+  assert.equal(gradeFor(84.99).key, "AVERAGE");
+  assert.equal(gradeFor(80).key, "AVERAGE");
+  assert.equal(gradeFor(79.99).key, "BELOW_AVERAGE");
+  assert.equal(gradeFor(75).key, "BELOW_AVERAGE");
+  assert.equal(gradeFor(74.99).key, "NEEDS_IMPROVEMENT");
+  assert.equal(gradeFor(0).key, "NEEDS_IMPROVEMENT");
   assert.equal(gradeFor(null), null);
+});
+
+test("the overall score keeps two decimals, so 94.99 isn't rounded up into Excellent", () => {
+  // 95 x 80% + 94.95 x 20% = 94.99
+  const result = calculatePerformance({ target: { score: 95 }, attendance: { score: 95 }, punctuality: { score: 95 }, tasks: { score: 94.95 } });
+  assert.equal(result.score, 94.99);
+  assert.equal(result.grade.key, "GREAT");
 });
 
 /* ------------------------------------------------------------ access -- */
@@ -108,6 +153,7 @@ const loadController = () => {
     "../models/Task": { find: () => query([]) },
     "../models/Lead": { find: () => query([]) },
     "../models/TargetAssignment": { find: () => query([]) },
+    "../models/DailyReport": { aggregate: async () => [] },
     "../models/User": { findOne: (filter) => query(people[String(filter._id)] || null), find: () => query([]) },
     "../config/logger": { error() {} },
     "./attendance.controller": {

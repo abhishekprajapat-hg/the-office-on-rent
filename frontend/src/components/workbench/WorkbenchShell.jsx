@@ -1,4 +1,5 @@
-import { memo, useCallback, useMemo, useState } from "react";
+import { Suspense, memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useLocation } from "react-router-dom";
 import { useChatNotifications } from "../../context/useChatNotifications";
 import { usePermissions } from "../../context/usePermissions";
 import { cn } from "../ui";
@@ -7,6 +8,7 @@ import FloatingMessenger from "./FloatingMessenger";
 import { useIsMobileViewport } from "../../hooks/useIsMobileViewport";
 import { getAllVisibleMenuGroups } from "./workbenchNavigation";
 import PrimarySidebar from "./PrimarySidebar";
+import RouteLoadingSkeleton from "../layout/RouteLoadingSkeleton";
 
 const WorkbenchShell = ({
   children,
@@ -24,6 +26,8 @@ const WorkbenchShell = ({
   const isMobileViewport = useIsMobileViewport();
   const { adminRequestUnread, unreadTotal } = useChatNotifications();
   const { permissions, enforcePageAccess, loading: permissionsLoading } = usePermissions();
+  const location = useLocation();
+  const contentRef = useRef(null);
   const userForNav = useMemo(
     () => ({
       ...(user || {}),
@@ -34,10 +38,7 @@ const WorkbenchShell = ({
   );
   /*
    * Resolved exactly as the header resolves it, falling back to the user's own
-   * role. The two used to differ: the header fell back, this did not, so a
-   * render where `userRole` had not arrived yet showed the chat icon while the
-   * floating messenger was not mounted at all - and the icon's click went
-   * nowhere.
+   * role, so the chat icon and the floating messenger always agree.
    */
   const canUseChat = useMemo(
     () => getAllVisibleMenuGroups(userRole || user?.role, userForNav)
@@ -45,13 +46,31 @@ const WorkbenchShell = ({
     [userRole, user, userForNav],
   );
 
+  /*
+   * Glass page transition: replay a short fade/rise/un-blur on the content
+   * area whenever the page changes. The class is toggled on the existing node
+   * (no remount, so page state survives), and the animation does not persist
+   * its transform afterwards - a lingering transform would trap `fixed`
+   * dialogs inside the content area.
+   */
+  useEffect(() => {
+    const node = contentRef.current;
+    if (!node) return;
+    node.classList.remove("gl-page-enter");
+    void node.offsetWidth;
+    node.classList.add("gl-page-enter");
+    const done = () => node.classList.remove("gl-page-enter");
+    node.addEventListener("animationend", done, { once: true });
+    return () => node.removeEventListener("animationend", done);
+  }, [location.pathname]);
+
   const handleOpenMobileMenu = useCallback(() => setMobileMenuOpen(true), []);
   const handleCloseMobileMenu = useCallback(() => setMobileMenuOpen(false), []);
 
   return (
     <div
       className={cn(
-        "workspace-shell flex w-full bg-slate-100 text-slate-950 dark:bg-slate-950 dark:text-slate-100",
+        "workspace-shell gl-shell flex w-full",
         shouldLockDocumentScroll ? "h-dvh overflow-hidden" : "min-h-screen",
       )}
     >
@@ -63,7 +82,7 @@ const WorkbenchShell = ({
         onMobileClose={handleCloseMobileMenu}
       />
 
-      <main className="workspace-main app-page-bg relative min-w-0 flex flex-1 flex-col overflow-hidden">
+      <main className="workspace-main relative min-w-0 flex flex-1 flex-col">
           <AppTopCommandBar
             key={pageHeader?.title || (isChatPage ? "chat" : "workspace")}
             user={userForNav}
@@ -77,18 +96,19 @@ const WorkbenchShell = ({
             onMenuOpen={handleOpenMobileMenu}
           />
         <div
+          ref={contentRef}
           className={cn(
             "workspace-main-content min-h-0 flex-1 overflow-hidden",
             isChatPage ? "workspace-main-content-chat" : "workspace-main-content-mobile-nav",
           )}
         >
-          {children}
+          {/* Pages load inside the shell, so sidebar and header stay while a page's code arrives. */}
+          <Suspense fallback={<RouteLoadingSkeleton variant="content" />}>{children}</Suspense>
         </div>
       </main>
       {/*
-        Desktop only. On a phone the messenger panel covers most of the screen
-        and leaves the page under it unusable, so the header's chat icon goes
-        to the full /chat page instead (see AppTopCommandBar).
+        Desktop only. On a phone the messenger panel covers most of the screen,
+        so the header's chat icon goes to the full /chat page instead.
       */}
       {!isMobileViewport && !isChatPage && canUseChat && <FloatingMessenger theme={theme} unreadTotal={unreadTotal} />}
     </div>

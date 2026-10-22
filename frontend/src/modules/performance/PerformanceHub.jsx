@@ -12,6 +12,7 @@ import { cardClass, fieldClass, secondaryButtonClass, SectionHeader, StatCard } 
 import { avatarTone, currentMonthKey, formatMonthLabel, getInitials } from "../salary/salaryFormat";
 import PerformanceBreakdown, { GradeChip, ScoreBar } from "./PerformanceBreakdown";
 import { gradeStyle } from "./performanceFormat";
+import IncrementReviewPanel from "./IncrementReviewPanel";
 
 const readStoredRole = () => {
   try {
@@ -39,18 +40,19 @@ const MonthPicker = ({ value, onChange, onRefresh, refreshing }) => (
 
 /* How the score is worked out, in plain words, from what the API says. */
 const HowItWorks = ({ methodology }) => {
-  const weights = methodology?.weights || { attendance: 30, tasks: 30, sales: 40 };
+  const weights = methodology?.weights || { target: 40, tasks: 20, attendance: 20, punctuality: 20 };
   return (
     <details className={`${cardClass} group px-5 py-3.5`}>
       <summary className="flex cursor-pointer list-none items-center gap-2 text-[13px] font-semibold text-slate-700">
         <Info size={15} className="text-blue-600" /> How the score is calculated
       </summary>
       <ul className="mt-3 list-disc space-y-1.5 pl-5 text-[12.5px] text-slate-600">
-        <li><strong>Attendance ({weights.attendance}%)</strong> - attendance percentage for 70% and on-time check-ins for 30%. Leave and week offs are not held against anybody.</li>
-        <li><strong>Tasks ({weights.tasks}%)</strong> - tasks due this month: done on time counts fully, done late counts half, still open past the due date counts nothing.</li>
-        <li><strong>Sales ({weights.sales}%)</strong> - the average of progress against the month&apos;s targets, leads closed (closing {methodology?.conversionBenchmarkPercent ?? 20}% of the month&apos;s leads scores full marks) and follow-ups kept up to date.</li>
-        <li>A part with nothing to measure - no leads, no task due - is left out and the others carry its weight, so nobody loses marks for work that is not theirs.</li>
-        <li>85 and over is Excellent, 70 Good, 50 Average, below that Needs improvement.</li>
+        <li><strong>Target ({weights.target ?? 40}%)</strong> - progress against your own targets for the month (deals, revenue, leads, visits or production). Each target counts up to {methodology?.targetCapPercent ?? 100}%.</li>
+        <li><strong>Tasks ({weights.tasks ?? 20}%)</strong> - tasks due this month: done on time counts fully, done late counts half, still open past the due date counts nothing. Tasks not yet due are left out.</li>
+        <li><strong>Attendance ({weights.attendance ?? 20}%)</strong> - days present (half days count half) of the working days so far. Approved leave, your weekly offs and holidays are not held against you.</li>
+        <li><strong>Punctuality ({weights.punctuality ?? 20}%)</strong> - on-time arrivals among the days you came in. Late arrivals and half days count against it; short breaks do not.</li>
+        <li>A part with nothing to measure is left out and the others carry its weight. The score feeds increment reviews; it never changes salary by itself.</li>
+        <li>95 and above is Excellent, 90–94.99 Great, 85–89.99 Good, 80–84.99 Average, 75–79.99 Below average, below 75 Needs improvement.</li>
       </ul>
     </details>
   );
@@ -117,7 +119,10 @@ const PersonDialog = ({ user, month, onClose }) => {
       {error ? (
         <p role="alert" className="rounded-lg border border-rose-200 bg-rose-50 p-3 text-[13px] text-rose-700">{error}</p>
       ) : data ? (
-        <PerformanceBreakdown performance={data.performance} />
+        <>
+          <PerformanceBreakdown performance={data.performance} />
+          {["ADMIN", "MANAGER"].includes(readStoredRole()) ? <IncrementReviewPanel user={user} month={month} /> : null}
+        </>
       ) : (
         <div className="flex items-center gap-2 py-10 text-[13px] text-slate-500">
           <Loader2 size={15} className="animate-spin" /> Loading performance…
@@ -182,13 +187,13 @@ const TeamPerformance = ({ month, setMonth, onError }) => {
     <div className="space-y-4">
       <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
         <StatCard icon={Gauge} tone="violet" label="Team average" value={totals.averageScore ?? "–"} hint={`${totals.scored || 0} of ${totals.people || 0} people scored`} />
-        <StatCard icon={Award} tone="green" label="Excellent" value={String(totals.excellent || 0)} hint="Scored 85 or more" />
-        <StatCard icon={TrendingDown} tone="rose" label="Needs improvement" value={String(totals.needsImprovement || 0)} hint="Scored below 50" />
+        <StatCard icon={Award} tone="green" label="Excellent" value={String(totals.excellent || 0)} hint="Scored 95 or more" />
+        <StatCard icon={TrendingDown} tone="rose" label="Needs improvement" value={String(totals.needsImprovement || 0)} hint="Scored below 75" />
         <StatCard icon={Users} tone="blue" label="People" value={String(totals.people || 0)} hint={formatMonthLabel(month)} />
       </div>
 
       <section className={cardClass}>
-        <SectionHeader icon={Users} tone="blue" title="Team performance" subtitle="Each person's score from attendance, tasks and sales">
+        <SectionHeader icon={Users} tone="blue" title="Team performance" subtitle="Target 40% · Tasks 20% · Attendance 20% · Punctuality 20%">
           <label className="relative">
             <Search size={14} aria-hidden="true" className="pointer-events-none absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-400" />
             <input type="search" value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Search people" aria-label="Search people" className={`${fieldClass} w-44 pl-8 font-normal`} />
@@ -207,17 +212,18 @@ const TeamPerformance = ({ month, setMonth, onError }) => {
                 <th className="border-b border-slate-200 px-3 py-2.5">#</th>
                 <th className="border-b border-slate-200 px-3 py-2.5">Employee</th>
                 <th className="border-b border-slate-200 px-3 py-2.5">Score</th>
-                <th className="border-b border-slate-200 px-3 py-2.5">Attendance</th>
+                <th className="border-b border-slate-200 px-3 py-2.5">Target</th>
                 <th className="border-b border-slate-200 px-3 py-2.5">Tasks</th>
-                <th className="border-b border-slate-200 px-3 py-2.5">Sales</th>
+                <th className="border-b border-slate-200 px-3 py-2.5">Attendance</th>
+                <th className="border-b border-slate-200 px-3 py-2.5">Punctuality</th>
                 <th className="border-b border-slate-200 px-3 py-2.5"><span className="sr-only">Actions</span></th>
               </tr>
             </thead>
             <tbody>
               {loading && !data ? (
-                <tr><td colSpan={7} className="px-3 py-10 text-center text-[13px] text-slate-500"><Loader2 size={15} className="mr-2 inline animate-spin" /> Loading performance…</td></tr>
+                <tr><td colSpan={8} className="px-3 py-10 text-center text-[13px] text-slate-500"><Loader2 size={15} className="mr-2 inline animate-spin" /> Loading performance…</td></tr>
               ) : !rows.length ? (
-                <tr><td colSpan={7} className="px-3 py-10 text-center text-[13px] text-slate-500">{search ? "Nobody matches that search." : "There is nobody on your team yet."}</td></tr>
+                <tr><td colSpan={8} className="px-3 py-10 text-center text-[13px] text-slate-500">{search ? "Nobody matches that search." : "There is nobody on your team yet."}</td></tr>
               ) : rows.map((row, index) => {
                 const { performance, user } = row;
                 return (
@@ -237,13 +243,14 @@ const TeamPerformance = ({ month, setMonth, onError }) => {
                     </td>
                     <td className="border-b border-slate-100 px-3 py-2.5">
                       <span className="flex items-center gap-2.5">
-                        <span className={`w-8 text-right font-mono text-[16px] font-bold tabular-nums ${gradeStyle(performance.grade).ink}`}>{performance.score ?? "–"}</span>
+                        <span className={`w-14 text-right font-mono text-[16px] font-bold tabular-nums ${gradeStyle(performance.grade).ink}`}>{performance.score ?? "–"}</span>
                         <GradeChip grade={performance.grade} />
                       </span>
                     </td>
-                    <PartCell part={performance.parts.attendance} />
+                    <PartCell part={performance.parts.target} />
                     <PartCell part={performance.parts.tasks} />
-                    <PartCell part={performance.parts.sales} />
+                    <PartCell part={performance.parts.attendance} />
+                    <PartCell part={performance.parts.punctuality} />
                     <td className="border-b border-slate-100 px-3 py-2.5 text-right">
                       <button type="button" onClick={() => setOpened(user)} className={`${secondaryButtonClass} h-8 py-0`}>Details</button>
                     </td>

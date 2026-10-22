@@ -6,7 +6,7 @@
  * export components alone.
  */
 
-// The backend accepts exactly these five (attendance.controller's
+// The backend accepts exactly these six (attendance.controller's
 // MANUAL_ATTENDANCE_STATUSES rejects anything else), so this list and that one
 // have to stay in step.
 export const MANUAL_ATTENDANCE_STATUS_OPTIONS = [
@@ -16,6 +16,8 @@ export const MANUAL_ATTENDANCE_STATUS_OPTIONS = [
   { label: "Leave", value: "LEAVE" },
   // A weekly off on a day that is not the company's - works Sunday, off Tuesday.
   { label: "Week Off (WO)", value: "WEEK_OFF" },
+  // A holiday for this person on this day - paid, never absent.
+  { label: "Holiday", value: "HOLIDAY" },
 ];
 
 /*
@@ -23,7 +25,7 @@ export const MANUAL_ATTENDANCE_STATUS_OPTIONS = [
  * breaks the day had. Worth saying before somebody clicks Save on a day that
  * has them.
  */
-const STATUSES_CLEARING_CHECK_IN = new Set(["ABSENT", "LEAVE", "WEEK_OFF"]);
+const STATUSES_CLEARING_CHECK_IN = new Set(["ABSENT", "LEAVE", "WEEK_OFF", "HOLIDAY"]);
 
 export const statusClearsCheckIn = (status) =>
   STATUSES_CLEARING_CHECK_IN.has(String(status || "").toUpperCase());

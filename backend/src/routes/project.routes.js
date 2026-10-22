@@ -31,6 +31,13 @@ router.use(requirePageAccess("projects"));
 router.use(requirePageActionForMethod("projects"));
 
 router.get("/", projectController.getProjects);
+// Project knowledge (requirements 16 Oct 2026, section 05).
+router.get("/meta/details-catalogue", projectController.getDetailsCatalogue);
+router.get("/:id/export", projectController.exportProject);
+router.get("/:id/inventory", projectController.getProjectInventory);
+router.patch("/:id/details", writeLimiter, checkRoleOrPageAction(PROJECT_MANAGE_ROLES, "edit", "projects"), projectController.updateProjectDetails);
+router.post("/:id/link-inventory", writeLimiter, checkRoleOrPageAction(PROJECT_MANAGE_ROLES, "edit", "projects"), projectController.linkProjectInventory);
+router.post("/:id/verify", writeLimiter, checkRoleOrPageAction(PROJECT_MANAGE_ROLES, "edit", "projects"), projectController.verifyProject);
 router.get("/:id", projectController.getProject);
 
 router.post(

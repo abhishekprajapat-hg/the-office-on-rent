@@ -1,5 +1,6 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { Link, useNavigate } from "react-router-dom";
+import { Link, useNavigate, useSearchParams } from "react-router-dom";
+import { getProjectsWithMeta } from "../../services/projectService";
 import { motion as Motion, AnimatePresence } from "framer-motion";
 import {
   Check,
@@ -195,6 +196,7 @@ const INVENTORY_ERROR_STEP_RULES = [
 const INVENTORY_LIST_FIELDS = [
   "_id",
   "projectName",
+  "projectId",
   "towerName",
   "unitNumber",
   "propertyId",
@@ -298,6 +300,9 @@ const DEFAULT_FORM = {
   ownerType: "",
   ownershipType: "",
   businessModel: "",
+  sourceType: "",
+  // The project this unit belongs to (21 Oct 2026); "" = not part of one.
+  projectLinkId: "",
   enterpriseDetails: { ...EMPTY_ENTERPRISE_DETAILS },
   keyManagerName: "",
   keyManagerNumber: "",
@@ -858,7 +863,11 @@ const AssetVault = () => {
   const [leadOptions, setLeadOptions] = useState([]);
   const [loadingLeadOptions, setLoadingLeadOptions] = useState(false);
   const [searchTerm, setSearchTerm] = useState("");
-  const [statusFilter, setStatusFilter] = useState("Available");
+  const [searchParams, setSearchParams] = useSearchParams();
+  // Opened from a project's Units tab: show all of its units, whatever their status.
+  const [projectFilter, setProjectFilter] = useState(() => searchParams.get("projectId") || "");
+  const [projectOptions, setProjectOptions] = useState([]);
+  const [statusFilter, setStatusFilter] = useState(() => (searchParams.get("projectId") ? "all" : "Available"));
   const [inventoryTypeFilter, setInventoryTypeFilter] = useState(getDefaultInventoryTypeFilter);
   const [furnishingFilter, setFurnishingFilter] = useState("");
   const [bhkFilter, setBhkFilter] = useState("");
@@ -1437,8 +1446,12 @@ const AssetVault = () => {
 
       const amenitiesMatch = amenityTokens.every((token) => hasAmenity(asset, token));
 
+      const projectMatch = !projectFilter
+        || String(asset.projectId?._id || asset.projectId || "") === projectFilter;
+
       return (
         typeMatch
+        && projectMatch
         && statusMatch
         && inventoryTypeMatch
         && searchMatch
@@ -1467,6 +1480,7 @@ const AssetVault = () => {
     modeType,
     pantryFilter,
     parkingFilter,
+    projectFilter,
     statusFilter,
   ]);
 
@@ -1618,6 +1632,31 @@ const AssetVault = () => {
     resetForm();
   };
 
+  useEffect(() => {
+    let alive = true;
+    getProjectsWithMeta({ page: 1, limit: 200 })
+      .then((result) => { if (alive) setProjectOptions(Array.isArray(result?.projects) ? result.projects : []); })
+      .catch(() => { if (alive) setProjectOptions([]); });
+    return () => { alive = false; };
+  }, []);
+
+  // Choosing a project links the unit and fills what's still empty from it.
+  const applyProjectToForm = useCallback((project, { adding = false } = {}) => {
+    setFormData((prev) => {
+      if (!project) return { ...prev, projectLinkId: "" };
+      const category = String(project.projectCategory || "").toUpperCase();
+      return {
+        ...prev,
+        projectLinkId: String(project._id),
+        title: prev.title || project.projectName || "",
+        location: prev.location || project.location || "",
+        city: prev.city || project.city || "",
+        pincode: prev.pincode || project.pincode || "",
+        ...(adding && ["RESIDENTIAL", "COMMERCIAL"].includes(category) ? { inventoryType: category } : {}),
+      };
+    });
+  }, []);
+
   const openAddModal = () => {
     setError("");
     setFormError("");
@@ -1628,6 +1667,18 @@ const AssetVault = () => {
     setFormStep(INVENTORY_FORM_STEPS[0].id);
     setIsAddModalOpen(true);
   };
+
+  // /inventory?addToProject=<id> opens Add Property already linked to that project.
+  const addToProjectId = searchParams.get("addToProject") || "";
+  useEffect(() => {
+    if (!addToProjectId || !projectOptions.length || !canOpenCreateModal) return;
+    const project = projectOptions.find((p) => String(p._id) === addToProjectId);
+    openAddModal();
+    if (project) applyProjectToForm(project, { adding: true });
+    setSearchParams((prev) => { const next = new URLSearchParams(prev); next.delete("addToProject"); return next; }, { replace: true });
+    // openAddModal is recreated each render; this should run once per request.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [addToProjectId, projectOptions, canOpenCreateModal]);
 
   useEffect(() => {
     if (!formError) return;
@@ -1924,6 +1975,8 @@ const AssetVault = () => {
       ownerType: String(formData.ownerType || "").toUpperCase(),
       ownershipType: String(formData.ownershipType || "").toUpperCase(),
       businessModel: String(formData.businessModel || "").toUpperCase(),
+      sourceType: String(formData.sourceType || "").toUpperCase(),
+      projectId: formData.projectLinkId || null,
       enterpriseDetails: formData.businessModel === "ENTERPRISE"
         ? {
           leaseRent: formData.enterpriseDetails?.leaseRent === "" ? null : Number(formData.enterpriseDetails?.leaseRent),
@@ -2234,6 +2287,8 @@ const AssetVault = () => {
       ownerType: asset.ownerType || "",
       ownershipType: asset.ownershipType || "",
       businessModel: asset.businessModel || "",
+      sourceType: asset.sourceType || "",
+      projectLinkId: String(asset.projectId?._id || asset.projectId || ""),
       enterpriseDetails: {
         leaseRent: asset.enterpriseDetails?.leaseRent ?? "",
         clientRent: asset.enterpriseDetails?.clientRent ?? "",
@@ -2991,6 +3046,28 @@ const AssetVault = () => {
         onOpenAddModal={openAddModal}
       />
 
+      {projectOptions.length ? (
+        <div className="flex flex-wrap items-center gap-2">
+          <label htmlFor="inventory-project-filter" className="text-[12px] font-semibold text-slate-500">Project</label>
+          <select
+            id="inventory-project-filter"
+            value={projectFilter}
+            onChange={(e) => {
+              const value = e.target.value;
+              setProjectFilter(value);
+              setSearchParams((prev) => { const next = new URLSearchParams(prev); if (value) next.set("projectId", value); else next.delete("projectId"); return next; }, { replace: true });
+            }}
+            className="h-9 min-w-[200px] rounded-lg border border-slate-200 bg-white px-2.5 text-[13px] text-slate-700"
+          >
+            <option value="">All projects</option>
+            {projectOptions.map((p) => <option key={p._id} value={p._id}>{p.projectName}</option>)}
+          </select>
+          {projectFilter ? (
+            <Link to={`/projects/${projectFilter}`} className="text-[12.5px] font-semibold text-blue-700 hover:underline">Open project</Link>
+          ) : null}
+        </div>
+      ) : null}
+
       <AssetVaultFilters
         inventoryTypeFilter={inventoryTypeFilter}
         furnishingFilter={furnishingFilter}
@@ -3247,6 +3324,21 @@ const AssetVault = () => {
                       />
                     </div>
                   </div>
+
+                  <label className={INVENTORY_MODAL_FIELD_TITLE_CLASS}>
+                    Project
+                  </label>
+                  <select
+                    value={formData.projectLinkId || ""}
+                    onChange={(e) => applyProjectToForm(projectOptions.find((p) => String(p._id) === e.target.value) || null, { adding: !editingAssetId })}
+                    className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl text-sm font-bold text-slate-900 focus:outline-none focus:border-emerald-500 mt-1 mb-3"
+                  >
+                    <option value="">Not part of a project</option>
+                    {projectOptions
+                      .filter((p) => String(p._id) === String(formData.projectLinkId)
+                        || String(p.projectCategory || "").toUpperCase() === String(formData.inventoryType || "").toUpperCase())
+                      .map((p) => <option key={p._id} value={p._id}>{p.projectName} ({p.projectId})</option>)}
+                  </select>
 
                   <label className={INVENTORY_MODAL_FIELD_TITLE_CLASS}>
                     Property / Project Name
