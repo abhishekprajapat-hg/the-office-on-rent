@@ -17,6 +17,19 @@ import {
   Image as ImageIcon,
   Layers3,
   Loader2,
+  Home,
+  Briefcase,
+  LayoutGrid,
+  Map as MapIcon,
+  Trees,
+  Receipt,
+  User,
+  ShieldHalf,
+  Flag,
+  Landmark,
+  Hash,
+  Sparkles,
+  FileText,
 } from "lucide-react";
 import {
   getProjectsWithMeta,
@@ -30,11 +43,17 @@ import { uploadFile } from "../../services/uploadService";
 import { getProjectDetailsCatalogue, getProjectKnowledge, updateProjectDetails } from "../../services/projectService";
 import { AmenityStatusEditor, ApprovalStatusSelect, ContactsEditor, DocumentUploader, FieldGrid } from "./ProjectKnowledgeFields";
 import { emptyKnowledgeDraft, humanizeKey, knowledgePatchFromDraft } from "./projectKnowledgeFormat";
+import {
+  CoworkingBasicsFields, CoworkingContactsFields, CoworkingPartnerTerms, CoworkingPricingFields, CoworkingServicesEditor,
+} from "./ProjectCoworkingFields";
+import { COWORKING_FORM_KEYS, coworkingReviewRows, withCoworkingDerived } from "./projectCoworkingFormat";
 import { toErrorMessage } from "../../utils/errorMessage";
 import { useDebouncedValue } from "../../hooks/useDebouncedValue";
 import { usePermissions } from "../../context/usePermissions";
 import ToastNotice from "../../components/ui/ToastNotice";
 import FittedImage from "../../components/ui/FittedImage";
+import FormWizard from "../../components/ui/FormWizard";
+import { ChoiceCards, FormCollapsible, FormField, FormGroup, FormInput, PickChips, ReviewGroup } from "../../components/ui/formKit";
 import {
   PROJECT_CATEGORY_OPTIONS,
   PROJECT_TYPE_OPTIONS,
@@ -178,13 +197,47 @@ const PROJECT_DELETE_ROLES = new Set(["ADMIN", "MANAGER"]);
 const MOBILE_PATTERN = /^[0-9]{10}$/;
 const PAGE_LIMIT = 25;
 
-const SECTION_CLASS = "rounded-xl border border-slate-200 bg-slate-50/60 p-3 sm:p-4";
-const SECTION_HEADING_CLASS = "mb-3 text-[11px] font-bold uppercase tracking-[0.14em] text-slate-500";
-const FIELD_TITLE_CLASS = "text-[11px] font-bold uppercase tracking-[0.08em] text-slate-500";
+// Form styling (CRM Web Glass "New Project Form" design) - theme-aware.
+const SECTION_CLASS = "gl-form-section flex flex-col gap-3 rounded-2xl p-4";
+const SECTION_HEADING_CLASS = "text-[14px] font-semibold text-[var(--g-ink)]";
+const FIELD_TITLE_CLASS = "text-[13px] font-medium text-[var(--g-mut)]";
 const INPUT_CLASS =
-  "h-11 w-full rounded-lg border border-slate-300 bg-white px-3 text-sm text-slate-700 focus:outline-none focus:border-emerald-500 md:h-10";
+  "h-[46px] w-full rounded-[13px] border-[1.5px] border-[var(--g-edge)] bg-[var(--g-glassHi)] px-3.5 text-[14px] text-[var(--g-ink)] outline-none transition focus:border-[var(--g-b)] focus:shadow-[0_0_0_4px_var(--g-bs)]";
 const CHECKBOX_CLASS =
-  "inline-flex min-h-10 items-center gap-1.5 rounded border border-slate-300 bg-white px-2.5 py-2 text-[11px] text-slate-700 md:min-h-0 md:px-2 md:py-1";
+  "inline-flex min-h-9 items-center gap-1.5 rounded-full border border-[var(--g-edge)] bg-[var(--g-glassHi)] px-3 py-1.5 text-[12.5px] font-medium text-[var(--g-ink)]";
+
+const CATEGORY_CARD_META = {
+  RESIDENTIAL: { icon: Home, sub: "Plots, flats, villas" },
+  COMMERCIAL: { icon: Briefcase, sub: "Offices, shops, showrooms" },
+  COWORKING: { icon: LayoutGrid, sub: "Desks & cabins" },
+};
+const TYPE_ICON = { PLOTTING: MapIcon, BUILDING: Building2, VILLAS_FARMHOUSE: Trees };
+const STATUS_DOT = {
+  PRE_LAUNCH: "var(--g-info, var(--g-b))", TNC: "var(--g-vio)", RERA_APPROVED: "var(--g-b)",
+  UNDER_CONSTRUCTION: "var(--g-warn)", READY_TO_MOVE: "var(--g-ok)", RESALE: "var(--g-fnt)",
+};
+const PLC_FIELDS = [["plc", "General PLC"], ["plcWideRoad", "Wide road"], ["plcGardenFacing", "Garden facing"], ["plcCorner", "Corner plot"], ["plcGardenCorner", "Garden + corner"], ["group", "Group"]];
+const CHARGE_FIELDS = [
+  ["developmentCharges", "Development", "e.g. ₹150/sq.ft"], ["maintenanceCharges", "Maintenance", "e.g. ₹3/sq.ft per month"],
+  ["amenityCharges", "Amenity", "e.g. ₹1,00,000 one time"], ["utilityCharges", "Utilities (water / electricity)", "e.g. ₹75,000"],
+  ["parkingCharges", "Parking", "e.g. ₹2,50,000 per slot"], ["taxes", "Taxes (GST etc.)", "e.g. 5% GST"],
+  ["registrationStampDuty", "Registration / stamp duty", "e.g. 7% of agreement value"],
+];
+const WIZARD_STEPS = [
+  { key: "basic", label: "Basics", hint: "Category & size" },
+  { key: "pricing", label: "Pricing", hint: "Rates & PLC" },
+  { key: "location", label: "Location", hint: "Address & contacts" },
+  { key: "features", label: "Features", hint: "Status & amenities" },
+  { key: "review", label: "Review", hint: "Check & save" },
+];
+// Which wizard step a validateForm() message belongs to.
+const stepOfError = (message = "") => {
+  if (!message) return -1;
+  if (/^(Starting|Current) Rate/.test(message)) return 1;
+  if (/Mobile/.test(message)) return 2;
+  if (/^Status is required/.test(message)) return 3;
+  return 0;
+};
 
 const DEFAULT_FORM = {
   projectCategory: "",
@@ -382,17 +435,20 @@ const buildProjectPayload = (formData) => {
     }));
   }
 
+  if (isCommercial || isCoworking) {
+    payload.landmark = formData.landmark.trim();
+    payload.city = formData.city.trim();
+    payload.state = formData.state.trim();
+    payload.pincode = formData.pincode.trim();
+    payload.siteLocation = { lat: numOrNull(formData.locationLat), lng: numOrNull(formData.locationLng) };
+  }
+
   if (isCommercial) {
     payload.totalFloors = Number(formData.totalFloors);
     payload.officesPerFloor = Number(formData.officesPerFloor);
     payload.totalOffices = numOrZero(formData.totalOffices);
     payload.totalShops = numOrZero(formData.totalShops);
     payload.totalShowrooms = numOrZero(formData.totalShowrooms);
-    payload.landmark = formData.landmark.trim();
-    payload.city = formData.city.trim();
-    payload.state = formData.state.trim();
-    payload.pincode = formData.pincode.trim();
-    payload.siteLocation = { lat: numOrNull(formData.locationLat), lng: numOrNull(formData.locationLng) };
     payload.offices = formData.offices.map((office) => ({
       officeCode: office.officeCode.trim(),
       officeName: office.officeName.trim(),
@@ -740,6 +796,13 @@ const ProjectsPage = () => {
   const [formError, setFormError] = useState("");
   const [saving, setSaving] = useState(false);
   const [uploadingImages, setUploadingImages] = useState(false);
+  // Step-by-step form (CRM Web Glass "New Project Form" design).
+  const [wizardStep, setWizardStep] = useState(0);
+  const [wizardDir, setWizardDir] = useState(1);
+  const [wizardTried, setWizardTried] = useState({});
+  const [stepError, setStepError] = useState("");
+  const [chargesOpen, setChargesOpen] = useState(false);
+  const resetWizard = () => { setWizardStep(0); setWizardDir(1); setWizardTried({}); setStepError(""); setChargesOpen(false); };
 
   const [deleteTarget, setDeleteTarget] = useState(null);
   const [deleting, setDeleting] = useState(false);
@@ -804,6 +867,7 @@ const ProjectsPage = () => {
 
   const openAddModal = () => {
     resetForm();
+    resetWizard();
     startKnowledge(emptyKnowledgeDraft());
     loadKnowledgeCatalogue();
     setIsFormModalOpen(true);
@@ -811,6 +875,7 @@ const ProjectsPage = () => {
 
   const openEditModal = async (project) => {
     setFormError("");
+    resetWizard();
     setEditingProjectId(project._id);
     setFormData(toFormFromProject(project));
     startKnowledge(emptyKnowledgeDraft());
@@ -839,18 +904,6 @@ const ProjectsPage = () => {
   const closeFormModal = () => {
     setIsFormModalOpen(false);
     resetForm();
-  };
-
-  const handleAmenityToggle = (amenityValue) => {
-    setFormData((prev) => {
-      const has = prev.amenities.includes(amenityValue);
-      return {
-        ...prev,
-        amenities: has
-          ? prev.amenities.filter((item) => item !== amenityValue)
-          : [...prev.amenities, amenityValue],
-      };
-    });
   };
 
   const handleBhkToggle = (bhkValue) => {
@@ -1102,7 +1155,10 @@ const ProjectsPage = () => {
       }
 
       // Then the project details, only the parts that changed.
-      const fullPatch = knowledgePatchFromDraft(knowledgeDraft, { isManagement: isProjectManagement, pendingDocuments });
+      const draftToSave = isCoworkingCategory(formData.projectCategory)
+        ? withCoworkingDerived(knowledgeDraft, formData)
+        : knowledgeDraft;
+      const fullPatch = knowledgePatchFromDraft(draftToSave, { isManagement: isProjectManagement, pendingDocuments });
       const initial = JSON.parse(knowledgeInitial || "{}");
       const initialPatch = knowledgePatchFromDraft(initial, { isManagement: isProjectManagement });
       const detailsPatch = Object.fromEntries(Object.entries(fullPatch)
@@ -1168,6 +1224,45 @@ const ProjectsPage = () => {
       setDeleting(false);
     }
   };
+
+  /* ---------------- step-by-step form ---------------- */
+  const formIssue = isFormModalOpen ? validateForm(formData) : "";
+  const issueStep = stepOfError(formIssue);
+  const lastWizardStep = WIZARD_STEPS.length - 1;
+  const goToStep = (index) => {
+    setWizardDir(index >= wizardStep ? 1 : -1);
+    setWizardStep(index);
+    setStepError("");
+    setFormError("");
+  };
+  const flagStep = (index) => {
+    setWizardTried((tried) => ({ ...tried, [index]: true }));
+    setStepError(formIssue);
+  };
+  const wizardNext = () => {
+    if (wizardStep === lastWizardStep) {
+      if (issueStep !== -1) { goToStep(issueStep); flagStep(issueStep); return; }
+      handleSubmit();
+      return;
+    }
+    if (issueStep !== -1 && issueStep <= wizardStep) { flagStep(issueStep); return; }
+    goToStep(wizardStep + 1);
+  };
+  // A validation message only shows while it is still the problem.
+  const wizardError = (stepError && stepError === formIssue ? stepError : "") || formError;
+  const issueHere = (index) => Boolean(wizardTried[index] && issueStep === index);
+  const isCommercialForm = isCommercialCategory(formData.projectCategory);
+  const isCoworkingForm = isCoworkingCategory(formData.projectCategory);
+  // The workspace sections are drawn from the same catalogue as the details
+  // accordion, so they are there only once it has loaded.
+  const coworkingFields = isCoworkingForm ? (knowledgeCatalogue?.specs?.COWORKING || []) : [];
+  const coworkingServices = knowledgeCatalogue?.amenityPresets?.COWORKING || [];
+  const setSpecField = (key, value) => setKnowledgeIn("specs")(key, value);
+  const typeLabel = getProjectOptionLabel(PROJECT_TYPE_OPTIONS, formData.projectType);
+  const categoryLabel = getProjectOptionLabel(PROJECT_CATEGORY_OPTIONS, formData.projectCategory);
+  const filledCharges = CHARGE_FIELDS.filter(([key]) => String(formData[key] || "").trim()).length + (String(formData.otherCharges || "").trim() ? 1 : 0);
+  const filledPlc = PLC_FIELDS.filter(([key]) => key !== "group" && String(formData[key] || "").trim()).length;
+  const rateIssue = issueHere(1) ? formIssue : "";
 
   const emptyState = !loading && projects.length === 0;
 
@@ -1363,53 +1458,48 @@ const ProjectsPage = () => {
       )}
 
       {isFormModalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-3">
-          <div className="flex max-h-[92vh] w-full max-w-3xl flex-col rounded-2xl bg-white shadow-2xl">
-            <div className="flex items-center justify-between border-b border-slate-100 px-4 py-3 sm:px-6">
-              <h2 className="text-base font-extrabold text-slate-900">
-                {editingProjectId ? "Edit Project" : "New Project"}
-              </h2>
-              <button type="button" onClick={closeFormModal} className="rounded-lg p-1.5 text-slate-400 hover:bg-slate-100">
-                <X size={18} />
-              </button>
-            </div>
-
-            <ToastNotice message={formError} type="error" />
-
-            <div className="custom-scrollbar flex-1 space-y-3 overflow-y-auto px-4 py-3 sm:px-6">
-              <div className={SECTION_CLASS}>
-                <div className={SECTION_HEADING_CLASS}>Basic Information</div>
-                <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-                  <div>
-                    <label className={FIELD_TITLE_CLASS}>Project Category *</label>
-                    <select
-                      value={formData.projectCategory}
-                      onChange={(e) => handleCategoryChange(e.target.value)}
-                      className={`${INPUT_CLASS} mt-1`}
-                    >
-                      <option value="">Select category</option>
-                      {PROJECT_CATEGORY_OPTIONS.map((option) => (
-                        <option key={option.value} value={option.value}>{option.label}</option>
-                      ))}
-                    </select>
+        <FormWizard
+          icon={Layers3}
+          title={editingProjectId ? "Edit project" : "New project"}
+          steps={WIZARD_STEPS}
+          step={wizardStep}
+          dir={wizardDir}
+          stepState={(index) => (issueHere(index) ? "bad" : index < wizardStep && issueStep !== index ? "done" : "todo")}
+          canOpenStep={(index) => index <= wizardStep || Boolean(editingProjectId) || issueStep === -1 || issueStep >= index}
+          onStep={goToStep}
+          onClose={closeFormModal}
+          onBack={() => goToStep(Math.max(0, wizardStep - 1))}
+          onNext={wizardNext}
+          onSkip={wizardStep === 2 ? () => goToStep(3) : undefined}
+          primaryLabel={wizardStep === lastWizardStep ? (saving ? "Saving…" : editingProjectId ? "Save changes" : "Save project") : `Next: ${WIZARD_STEPS[wizardStep + 1].label}`}
+          primaryIcon={wizardStep === lastWizardStep ? "save" : "next"}
+          busy={saving}
+          error={wizardError}
+        >
+              {wizardStep === 0 && (<>
+                <div className="flex flex-col gap-2">
+                  <span className={FIELD_TITLE_CLASS}>Project category *</span>
+                  <ChoiceCards
+                    options={PROJECT_CATEGORY_OPTIONS.map((option) => ({ ...option, icon: CATEGORY_CARD_META[option.value]?.icon, sub: CATEGORY_CARD_META[option.value]?.sub }))}
+                    value={formData.projectCategory}
+                    onChange={handleCategoryChange}
+                    error={issueHere(0) && !formData.projectCategory}
+                  />
+                </div>
+                {!isCommercialForm && !isCoworkingForm && (
+                  <div className="flex flex-col gap-2">
+                    <span className={FIELD_TITLE_CLASS}>Project type *</span>
+                    <PickChips
+                      options={PROJECT_TYPE_OPTIONS.map((option) => ({ ...option, icon: TYPE_ICON[option.value] }))}
+                      value={formData.projectType}
+                      onChange={(value) => setFormData((prev) => ({ ...prev, projectType: value }))}
+                      error={issueHere(0) && !formData.projectType}
+                    />
                   </div>
-                  {!isCommercialCategory(formData.projectCategory) && !isCoworkingCategory(formData.projectCategory) && (
-                    <div>
-                      <label className={FIELD_TITLE_CLASS}>Project Type *</label>
-                      <select
-                        value={formData.projectType}
-                        onChange={(e) => setFormData((prev) => ({ ...prev, projectType: e.target.value }))}
-                        className={`${INPUT_CLASS} mt-1`}
-                      >
-                        <option value="">Select type</option>
-                        {PROJECT_TYPE_OPTIONS.map((option) => (
-                          <option key={option.value} value={option.value}>{option.label}</option>
-                        ))}
-                      </select>
-                    </div>
-                  )}
+                )}
+                <div className="grid grid-cols-1 gap-3.5 sm:grid-cols-2">
                   <div className="sm:col-span-2">
-                    <label className={FIELD_TITLE_CLASS}>Project Name *</label>
+                    <label className={FIELD_TITLE_CLASS}>{isCoworkingCategory(formData.projectCategory) ? "Workspace Name *" : "Project Name *"}</label>
                     <input
                       type="text"
                       value={formData.projectName}
@@ -1419,12 +1509,12 @@ const ProjectsPage = () => {
                     />
                   </div>
                   <div>
-                    <label className={FIELD_TITLE_CLASS}>Total Land Area *</label>
+                    <label className={FIELD_TITLE_CLASS}>{isCoworkingForm ? "Total Area *" : "Total Land Area *"}</label>
                     <input
                       type="text"
                       value={formData.totalLandArea}
                       onChange={(e) => setFormData((prev) => ({ ...prev, totalLandArea: e.target.value }))}
-                      placeholder="Example: 20 Acres"
+                      placeholder={isCoworkingForm ? "Example: 12,000 sq ft" : "Example: 20 Acres"}
                       className={`${INPUT_CLASS} mt-1`}
                     />
                   </div>
@@ -1516,9 +1606,7 @@ const ProjectsPage = () => {
                         />
                       </div>
                     </>
-                  ) : isCoworkingCategory(formData.projectCategory) ? (
-                    <p className="text-[12px] text-slate-500 sm:col-span-2">Cabins, seats, pricing and services for a workspace go in the project&apos;s details after saving.</p>
-                  ) : (
+                  ) : isCoworkingCategory(formData.projectCategory) ? null : (
                     <>
                       <div>
                         <label className={FIELD_TITLE_CLASS}>Number of Plots *</label>
@@ -1557,7 +1645,15 @@ const ProjectsPage = () => {
                     </>
                   )}
                 </div>
-              </div>
+
+                {isCoworkingForm ? (
+                  coworkingFields.length ? (
+                    <CoworkingBasicsFields fields={coworkingFields} specs={knowledgeDraft.specs || {}} setSpec={setSpecField} />
+                  ) : (
+                    <p className="text-[12.5px]" style={{ color: "var(--g-mut)" }}>Loading the workspace fields…</p>
+                  )
+                ) : null}
+                {issueHere(0) ? <p className="rounded-xl px-3.5 py-2.5 text-[12.5px]" style={{ background: "var(--g-bads)", color: "var(--g-bad)" }}>{formIssue}</p> : null}
 
               {isCommercialCategory(formData.projectCategory) && (
                 <div className={SECTION_CLASS}>
@@ -1765,241 +1861,103 @@ const ProjectsPage = () => {
                 </div>
               )}
 
-              <div className={SECTION_CLASS}>
-                <div className={SECTION_HEADING_CLASS}>Pricing</div>
-                <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-                  <div>
-                    <label className={FIELD_TITLE_CLASS}>PLC (Preferential Location Charges)</label>
-                    <input
-                      type="text"
-                      value={formData.plc}
-                      onChange={(e) => setFormData((prev) => ({ ...prev, plc: e.target.value }))}
-                      placeholder="e.g. 5% or ₹50,000"
-                      className={`${INPUT_CLASS} mt-1`}
-                    />
-                  </div>
-                  <div>
-                    <label className={FIELD_TITLE_CLASS}>Wide Road PLC</label>
-                    <input
-                      type="text"
-                      maxLength={60}
-                      value={formData.plcWideRoad}
-                      onChange={(e) => setFormData((prev) => ({ ...prev, plcWideRoad: e.target.value }))}
-                      placeholder="e.g. 5% or ₹50,000"
-                      className={`${INPUT_CLASS} mt-1`}
-                    />
-                  </div>
-                  <div>
-                    <label className={FIELD_TITLE_CLASS}>Garden Facing PLC</label>
-                    <input
-                      type="text"
-                      maxLength={60}
-                      value={formData.plcGardenFacing}
-                      onChange={(e) => setFormData((prev) => ({ ...prev, plcGardenFacing: e.target.value }))}
-                      placeholder="e.g. 5% or ₹50,000"
-                      className={`${INPUT_CLASS} mt-1`}
-                    />
-                  </div>
-                  <div>
-                    <label className={FIELD_TITLE_CLASS}>Corner Plot PLC</label>
-                    <input
-                      type="text"
-                      maxLength={60}
-                      value={formData.plcCorner}
-                      onChange={(e) => setFormData((prev) => ({ ...prev, plcCorner: e.target.value }))}
-                      placeholder="e.g. 5% or ₹50,000"
-                      className={`${INPUT_CLASS} mt-1`}
-                    />
-                  </div>
-                  <div>
-                    <label className={FIELD_TITLE_CLASS}>Garden Facing + Corner PLC</label>
-                    <input
-                      type="text"
-                      maxLength={60}
-                      value={formData.plcGardenCorner}
-                      onChange={(e) => setFormData((prev) => ({ ...prev, plcGardenCorner: e.target.value }))}
-                      placeholder="e.g. 5% or ₹50,000"
-                      className={`${INPUT_CLASS} mt-1`}
-                    />
-                  </div>
-                  <div>
-                    <label className={FIELD_TITLE_CLASS}>Group</label>
-                    <input
-                      type="text"
-                      value={formData.group}
-                      onChange={(e) => setFormData((prev) => ({ ...prev, group: e.target.value }))}
-                      placeholder="e.g. Group A, Premium"
-                      className={`${INPUT_CLASS} mt-1`}
-                    />
-                  </div>
-                  <div>
-                    <label className={FIELD_TITLE_CLASS}>Starting Rate Per Sq.ft *</label>
-                    <input
-                      type="number"
-                      min="0"
-                      value={formData.startingRate}
-                      onChange={(e) => setFormData((prev) => ({ ...prev, startingRate: e.target.value }))}
-                      placeholder="₹1500"
-                      className={`${INPUT_CLASS} mt-1`}
-                    />
-                  </div>
-                  <div>
-                    <label className={FIELD_TITLE_CLASS}>Current Rate Per Sq.ft *</label>
-                    <input
-                      type="number"
-                      min="0"
-                      value={formData.currentRate}
-                      onChange={(e) => setFormData((prev) => ({ ...prev, currentRate: e.target.value }))}
-                      placeholder="₹1800"
-                      className={`${INPUT_CLASS} mt-1`}
-                    />
-                  </div>
-                  <div>
-                    <label className={FIELD_TITLE_CLASS}>Development Charges</label>
-                    <input
-                      type="text"
-                      maxLength={120}
-                      value={formData.developmentCharges}
-                      onChange={(e) => setFormData((prev) => ({ ...prev, developmentCharges: e.target.value }))}
-                      placeholder="e.g. ₹150/sq.ft"
-                      className={`${INPUT_CLASS} mt-1`}
-                    />
-                  </div>
-                  <div>
-                    <label className={FIELD_TITLE_CLASS}>Maintenance Charges</label>
-                    <input
-                      type="text"
-                      maxLength={120}
-                      value={formData.maintenanceCharges}
-                      onChange={(e) => setFormData((prev) => ({ ...prev, maintenanceCharges: e.target.value }))}
-                      placeholder="e.g. ₹3/sq.ft per month"
-                      className={`${INPUT_CLASS} mt-1`}
-                    />
-                  </div>
-                  <div>
-                    <label className={FIELD_TITLE_CLASS}>Amenity Charges</label>
-                    <input
-                      type="text"
-                      maxLength={120}
-                      value={formData.amenityCharges}
-                      onChange={(e) => setFormData((prev) => ({ ...prev, amenityCharges: e.target.value }))}
-                      placeholder="e.g. ₹1,00,000 one time"
-                      className={`${INPUT_CLASS} mt-1`}
-                    />
-                  </div>
-                  <div>
-                    <label className={FIELD_TITLE_CLASS}>Utilities (Water / Electricity Connection)</label>
-                    <input
-                      type="text"
-                      maxLength={120}
-                      value={formData.utilityCharges}
-                      onChange={(e) => setFormData((prev) => ({ ...prev, utilityCharges: e.target.value }))}
-                      placeholder="e.g. ₹75,000"
-                      className={`${INPUT_CLASS} mt-1`}
-                    />
-                  </div>
-                  <div>
-                    <label className={FIELD_TITLE_CLASS}>Parking Charges</label>
-                    <input
-                      type="text"
-                      maxLength={120}
-                      value={formData.parkingCharges}
-                      onChange={(e) => setFormData((prev) => ({ ...prev, parkingCharges: e.target.value }))}
-                      placeholder="e.g. ₹2,50,000 per slot"
-                      className={`${INPUT_CLASS} mt-1`}
-                    />
-                  </div>
-                  <div>
-                    <label className={FIELD_TITLE_CLASS}>Taxes (GST etc.)</label>
-                    <input
-                      type="text"
-                      maxLength={120}
-                      value={formData.taxes}
-                      onChange={(e) => setFormData((prev) => ({ ...prev, taxes: e.target.value }))}
-                      placeholder="e.g. 5% GST"
-                      className={`${INPUT_CLASS} mt-1`}
-                    />
-                  </div>
-                  <div>
-                    <label className={FIELD_TITLE_CLASS}>Registration / Stamp Duty</label>
-                    <input
-                      type="text"
-                      maxLength={120}
-                      value={formData.registrationStampDuty}
-                      onChange={(e) => setFormData((prev) => ({ ...prev, registrationStampDuty: e.target.value }))}
-                      placeholder="e.g. 7% of agreement value"
-                      className={`${INPUT_CLASS} mt-1`}
-                    />
-                  </div>
-                  <div className="sm:col-span-2">
-                    <label className={FIELD_TITLE_CLASS}>Other Charges</label>
-                    <textarea
-                      rows={2}
-                      value={formData.otherCharges}
-                      onChange={(e) => setFormData((prev) => ({ ...prev, otherCharges: e.target.value }))}
-                      placeholder="Maintenance, Electricity, Water Connection, Registry, Club Charges"
-                      className="mt-1 w-full resize-none rounded-lg border border-slate-300 bg-white p-2.5 text-sm text-slate-700 focus:outline-none focus:border-emerald-500"
-                    />
-                  </div>
-                </div>
-              </div>
+              </>)}
 
-              <div className={SECTION_CLASS}>
-                <div className={SECTION_HEADING_CLASS}>Project Status</div>
-                <select
+              {wizardStep === 1 && (<>
+                <div className="grid gap-3.5 [grid-template-columns:repeat(auto-fit,minmax(220px,1fr))]">
+                  <FormField label={isCoworkingForm ? "Starting price" : "Starting rate"} required error={/^Starting/.test(rateIssue) ? rateIssue : ""}>
+                    <FormInput big prefix="₹" suffix={isCoworkingForm ? "/ seat / mo" : "/ sq ft"} type="number" min="0" inputMode="decimal" placeholder="4,500" value={formData.startingRate} error={/^Starting/.test(rateIssue)} onChange={(e) => setFormData((prev) => ({ ...prev, startingRate: e.target.value }))} />
+                  </FormField>
+                  <FormField label={isCoworkingForm ? "Current price" : "Current rate"} required error={/^Current/.test(rateIssue) ? rateIssue : ""}>
+                    <FormInput big prefix="₹" suffix={isCoworkingForm ? "/ seat / mo" : "/ sq ft"} type="number" min="0" inputMode="decimal" placeholder="5,200" value={formData.currentRate} error={/^Current/.test(rateIssue)} onChange={(e) => setFormData((prev) => ({ ...prev, currentRate: e.target.value }))} />
+                  </FormField>
+                </div>
+                {isCoworkingForm && coworkingFields.length ? (
+                  <CoworkingPricingFields fields={coworkingFields} specs={knowledgeDraft.specs || {}} setSpec={setSpecField} />
+                ) : null}
+                {!isCoworkingForm ? (
+                <FormGroup icon={MapPin} title="Preferential location charges" aside="% or ₹ amount">
+                  <div className="grid gap-2.5 [grid-template-columns:repeat(auto-fit,minmax(200px,1fr))]">
+                    {PLC_FIELDS.map(([key, label]) => (
+                      <FormField key={key} label={label}>
+                        <FormInput maxLength={60} placeholder={key === "group" ? "e.g. Group A, Premium" : "5% or ₹50,000"} value={formData[key] || ""} onChange={(e) => setFormData((prev) => ({ ...prev, [key]: e.target.value }))} />
+                      </FormField>
+                    ))}
+                  </div>
+                </FormGroup>
+                ) : null}
+                <FormCollapsible icon={Receipt} title="Other charges" hint={filledCharges ? `${filledCharges} added` : `Optional · ${CHARGE_FIELDS.length + 1} fields`} open={chargesOpen} onToggle={() => setChargesOpen((open) => !open)}>
+                  <div className="grid gap-2.5 [grid-template-columns:repeat(auto-fit,minmax(200px,1fr))]">
+                    {CHARGE_FIELDS.map(([key, label, placeholder]) => (
+                      <FormField key={key} label={label}>
+                        <FormInput maxLength={120} placeholder={placeholder} value={formData[key] || ""} onChange={(e) => setFormData((prev) => ({ ...prev, [key]: e.target.value }))} />
+                      </FormField>
+                    ))}
+                    <FormField label="Other charges" wide>
+                      <textarea rows={2} value={formData.otherCharges} onChange={(e) => setFormData((prev) => ({ ...prev, otherCharges: e.target.value }))} placeholder="Maintenance, Electricity, Water Connection, Registry, Club Charges" className="gl-field w-full resize-none px-3.5 py-2.5 text-[14px] outline-none" />
+                    </FormField>
+                  </div>
+                </FormCollapsible>
+              </>)}
+
+              {wizardStep === 3 && (<>
+              <div className="flex flex-col gap-2">
+                <span className={FIELD_TITLE_CLASS}>Status *</span>
+                <ChoiceCards
+                  options={PROJECT_STATUS_OPTIONS.map((option) => ({ ...option, dot: STATUS_DOT[option.value] }))}
                   value={formData.status}
-                  onChange={(e) => setFormData((prev) => ({ ...prev, status: e.target.value }))}
-                  className={`${INPUT_CLASS} sm:max-w-xs`}
-                >
-                  <option value="">Select status</option>
-                  {PROJECT_STATUS_OPTIONS.map((option) => (
-                    <option key={option.value} value={option.value}>{option.label}</option>
-                  ))}
-                </select>
+                  onChange={(value) => setFormData((prev) => ({ ...prev, status: value }))}
+                  error={issueHere(3) && !formData.status}
+                />
+                {issueHere(3) && !formData.status ? <span className="text-[11.5px]" style={{ color: "var(--g-bad)" }}>Pick a status</span> : null}
               </div>
 
               <div className={SECTION_CLASS}>
                 <div className={SECTION_HEADING_CLASS}>Amenities &amp; Infrastructure</div>
-                <div className="flex flex-wrap gap-2">
-                  {(isCommercialCategory(formData.projectCategory) ? PROJECT_COMMERCIAL_AMENITY_OPTIONS : PROJECT_AMENITY_OPTIONS).map((option) => (
-                    <label key={option.value} className={CHECKBOX_CLASS}>
-                      <input
-                        type="checkbox"
-                        checked={formData.amenities.includes(option.value)}
-                        onChange={() => handleAmenityToggle(option.value)}
-                        className="h-3.5 w-3.5 rounded border-slate-300 text-emerald-600 focus:ring-emerald-500"
-                      />
-                      {option.label}
-                    </label>
-                  ))}
-                </div>
-                <label className={`${FIELD_TITLE_CLASS} mt-3 block`}>Other Facilities</label>
-                <textarea
-                  rows={2}
-                  maxLength={500}
-                  value={formData.otherFacilities}
-                  onChange={(e) => setFormData((prev) => ({ ...prev, otherFacilities: e.target.value }))}
-                  placeholder="Anything not in the list, e.g. temple, shopping complex, school nearby"
-                  className="mt-1 w-full resize-none rounded-lg border border-slate-300 bg-white p-2.5 text-sm text-slate-700 focus:outline-none focus:border-emerald-500"
-                />
+                {isCoworkingCategory(formData.projectCategory) ? (
+                  <CoworkingServicesEditor
+                    presets={coworkingServices}
+                    amenities={knowledgeDraft.amenityStatuses || []}
+                    onChange={(amenityStatuses) => setKnowledgeDraft((d) => ({ ...d, amenityStatuses }))}
+                  />
+                ) : (
+                  <>
+                    <PickChips
+                      multi
+                      round
+                      options={isCommercialCategory(formData.projectCategory) ? PROJECT_COMMERCIAL_AMENITY_OPTIONS : PROJECT_AMENITY_OPTIONS}
+                      value={formData.amenities}
+                      onChange={(amenities) => setFormData((prev) => ({ ...prev, amenities }))}
+                    />
+                    {formData.amenities.length ? <span className="text-[12px] font-medium" style={{ color: "var(--g-b)" }}>{formData.amenities.length} selected</span> : null}
+                    <label className={`${FIELD_TITLE_CLASS} mt-3 block`}>Other Facilities</label>
+                    <textarea
+                      rows={2}
+                      maxLength={500}
+                      value={formData.otherFacilities}
+                      onChange={(e) => setFormData((prev) => ({ ...prev, otherFacilities: e.target.value }))}
+                      placeholder="Anything not in the list, e.g. temple, shopping complex, school nearby"
+                      className="mt-1 w-full resize-none rounded-lg border border-slate-300 bg-white p-2.5 text-sm text-slate-700 focus:outline-none focus:border-emerald-500"
+                    />
+                  </>
+                )}
               </div>
 
-              {!isCommercialCategory(formData.projectCategory) && (
+              {!isCommercialForm && !isCoworkingForm && (
                 <div className={SECTION_CLASS}>
                   <div className={SECTION_HEADING_CLASS}>Housing Category</div>
-                  <select
+                  <PickChips
+                    allowClear
+                    options={PROJECT_HOUSING_CATEGORY_OPTIONS}
                     value={formData.housingCategory}
-                    onChange={(e) => setFormData((prev) => ({ ...prev, housingCategory: e.target.value }))}
-                    className={`${INPUT_CLASS} sm:max-w-xs`}
-                  >
-                    <option value="">Select housing category</option>
-                    {PROJECT_HOUSING_CATEGORY_OPTIONS.map((option) => (
-                      <option key={option.value} value={option.value}>{option.label}</option>
-                    ))}
-                  </select>
+                    onChange={(value) => setFormData((prev) => ({ ...prev, housingCategory: value }))}
+                  />
                 </div>
               )}
 
+              </>)}
+
+              {wizardStep === 2 && (<>
               <div className={SECTION_CLASS}>
                 <div className={SECTION_HEADING_CLASS}>Location</div>
                 <div>
@@ -2012,7 +1970,7 @@ const ProjectsPage = () => {
                     className="mt-1 w-full resize-none rounded-lg border border-slate-300 bg-white p-2.5 text-sm text-slate-700 focus:outline-none focus:border-emerald-500"
                   />
                 </div>
-                {isCommercialCategory(formData.projectCategory) && (
+                {(isCommercialForm || isCoworkingForm) && (
                   <div className="mt-3 grid grid-cols-1 gap-3 sm:grid-cols-2">
                     <div>
                       <label className={FIELD_TITLE_CLASS}>Landmark</label>
@@ -2074,57 +2032,31 @@ const ProjectsPage = () => {
                 )}
               </div>
 
-              <div className={SECTION_CLASS}>
-                <div className={SECTION_HEADING_CLASS}>Owner / Manager</div>
-                <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-                  <div>
-                    <label className={FIELD_TITLE_CLASS}>Owner / Manager Name</label>
-                    <input
-                      type="text"
-                      value={formData.ownerManagerName}
-                      onChange={(e) => setFormData((prev) => ({ ...prev, ownerManagerName: e.target.value }))}
-                      className={`${INPUT_CLASS} mt-1`}
-                    />
-                  </div>
-                  <div>
-                    <label className={FIELD_TITLE_CLASS}>Owner / Manager Mobile</label>
-                    <input
-                      type="tel"
-                      value={formData.ownerManagerMobile}
-                      onChange={(e) => setFormData((prev) => ({ ...prev, ownerManagerMobile: e.target.value }))}
-                      placeholder="e.g. 9876543210"
-                      className={`${INPUT_CLASS} mt-1`}
-                    />
-                  </div>
-                </div>
+              <div className="grid gap-3 [grid-template-columns:repeat(auto-fit,minmax(260px,1fr))]">
+                {[["ownerManager", "Owner / manager", User, "Owner"], ["brokerManager", "Broker manager", ShieldHalf, "Broker"]].map(([prefix, title, Icon, errorStart]) => {
+                  const bad = issueHere(2) && formIssue.startsWith(errorStart);
+                  return (
+                    <FormGroup key={prefix} icon={Icon} title={title}>
+                      <FormInput placeholder="Name" value={formData[`${prefix}Name`] || ""} onChange={(e) => setFormData((prev) => ({ ...prev, [`${prefix}Name`]: e.target.value }))} />
+                      <FormInput prefix="+91" type="tel" inputMode="numeric" maxLength={10} placeholder="10-digit mobile" error={bad} value={formData[`${prefix}Mobile`] || ""} onChange={(e) => setFormData((prev) => ({ ...prev, [`${prefix}Mobile`]: e.target.value.replace(/\D/g, "") }))} />
+                      {bad ? <span className="text-[11.5px]" style={{ color: "var(--g-bad)" }}>Enter a valid 10-digit number</span> : null}
+                    </FormGroup>
+                  );
+                })}
               </div>
 
-              <div className={SECTION_CLASS}>
-                <div className={SECTION_HEADING_CLASS}>Broker Manager</div>
-                <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-                  <div>
-                    <label className={FIELD_TITLE_CLASS}>Broker Manager Name</label>
-                    <input
-                      type="text"
-                      value={formData.brokerManagerName}
-                      onChange={(e) => setFormData((prev) => ({ ...prev, brokerManagerName: e.target.value }))}
-                      className={`${INPUT_CLASS} mt-1`}
-                    />
-                  </div>
-                  <div>
-                    <label className={FIELD_TITLE_CLASS}>Broker Manager Mobile</label>
-                    <input
-                      type="tel"
-                      value={formData.brokerManagerMobile}
-                      onChange={(e) => setFormData((prev) => ({ ...prev, brokerManagerMobile: e.target.value }))}
-                      placeholder="e.g. 9876543210"
-                      className={`${INPUT_CLASS} mt-1`}
-                    />
-                  </div>
-                </div>
-              </div>
+              {isCoworkingForm ? (
+                <>
+                  <CoworkingContactsFields
+                    contacts={knowledgeDraft.contacts || []}
+                    onChange={(contacts) => setKnowledgeDraft((d) => ({ ...d, contacts }))}
+                  />
+                  <CoworkingPartnerTerms fields={coworkingFields} specs={knowledgeDraft.specs || {}} setSpec={setSpecField} />
+                </>
+              ) : null}
+              </>)}
 
-              {isPlotBasedType(formData.projectType) && (
+              {wizardStep === 0 && isPlotBasedType(formData.projectType) && (
                 <div className={SECTION_CLASS}>
                   <div className={SECTION_HEADING_CLASS}>Inventory</div>
                   <div className="sm:max-w-xs">
@@ -2140,6 +2072,7 @@ const ProjectsPage = () => {
                 </div>
               )}
 
+              {wizardStep === 3 && (<>
               <div className={SECTION_CLASS}>
                 <div className={SECTION_HEADING_CLASS}>Project Media</div>
                 <label className={`${FIELD_TITLE_CLASS} mb-2 block`}>Project Photos</label>
@@ -2214,9 +2147,18 @@ const ProjectsPage = () => {
                           ) : null}
                         </>
                       )],
-                      ["specs", "Specifications", (knowledgeCatalogue.specs?.[formData.projectCategory] || []).length
-                        ? <FieldGrid fields={knowledgeCatalogue.specs[formData.projectCategory]} values={knowledgeDraft.specs} onChange={setKnowledgeIn("specs")} />
-                        : <p className="text-[12.5px] text-slate-500">Pick the project category first.</p>],
+                      ["specs", "Specifications", (() => {
+                        const specFields = knowledgeCatalogue.specs?.[formData.projectCategory] || [];
+                        // A workspace fills most of these in the steps above.
+                        const rest = isCoworkingForm ? specFields.filter((f) => !COWORKING_FORM_KEYS.has(f.key)) : specFields;
+                        if (!specFields.length) return <p className="text-[12.5px] text-slate-500">Pick the project category first.</p>;
+                        return (
+                          <>
+                            {isCoworkingForm ? <p className="mb-2 text-[11.5px] text-slate-500">The workspace, pricing, services and contacts are in the steps above. The address and area here are filled from the form when you save.</p> : null}
+                            {rest.length ? <FieldGrid fields={rest} values={knowledgeDraft.specs} onChange={setKnowledgeIn("specs")} /> : null}
+                          </>
+                        );
+                      })()],
                       ["pricing", "Pricing details", (
                         <>
                           <FieldGrid fields={(knowledgeCatalogue.pricing || []).filter((f) => f.source !== "project")} values={knowledgeDraft.pricing} onChange={setKnowledgeIn("pricing")} />
@@ -2286,29 +2228,50 @@ const ProjectsPage = () => {
                   </div>
                 </div>
               ) : null}
-            </div>
+              </>)}
 
-            <div className="mobile-safe-footer flex shrink-0 gap-3 border-t border-slate-100 bg-slate-50/50 px-4 pt-3 sm:p-6">
-              <button
-                type="button"
-                onClick={closeFormModal}
-                className="flex-1 rounded-xl py-3 text-xs font-bold uppercase text-slate-500 hover:bg-slate-100"
-              >
-                Cancel
-              </button>
-              <button
-                type="button"
-                onClick={handleSubmit}
-                disabled={saving}
-                className={`flex-1 rounded-xl py-3 text-xs font-bold uppercase tracking-widest text-white shadow-lg transition-all ${
-                  saving ? "cursor-not-allowed bg-slate-400" : "bg-emerald-600 hover:bg-emerald-700"
-                }`}
-              >
-                {saving ? "Saving..." : "Save Project"}
-              </button>
-            </div>
-          </div>
-        </div>
+              {wizardStep === 4 && (<>
+                <div className="flex items-center gap-3.5 rounded-[18px] p-4" style={{ background: "var(--g-bs)" }}>
+                  <span className="grid h-[52px] w-[52px] shrink-0 place-items-center rounded-2xl text-white" style={{ background: "var(--g-bfill, var(--g-b))" }}>
+                    {React.createElement(CATEGORY_CARD_META[formData.projectCategory]?.icon || Layers3, { size: 24 })}
+                  </span>
+                  <div className="flex min-w-0 flex-col gap-0.5">
+                    <span className="truncate text-[18px] font-semibold">{formData.projectName || "Untitled project"}</span>
+                    <span className="truncate text-[13px]" style={{ color: "var(--g-mut)" }}>{[categoryLabel, typeLabel, formData.city].filter(Boolean).join(" · ")}</span>
+                  </div>
+                </div>
+                <ReviewGroup title="Basics" onEdit={() => goToStep(0)} rows={[
+                  ["Category", categoryLabel],
+                  ...(!isCommercialForm && !isCoworkingForm ? [["Type", typeLabel]] : []),
+                  [isCoworkingForm ? "Total area" : "Land area", formData.totalLandArea],
+                  ...(isPlotBasedType(formData.projectType) && !isCommercialForm ? [["Plots", formData.totalPlots], ["Plot size", formData.plotSizeMin || formData.plotSizeMax ? `${formData.plotSizeMin || "?"}–${formData.plotSizeMax || "?"} sq ft` : ""], ["Plots available with us", formData.plotsAvailable]] : []),
+                  ...(isBuildingType(formData.projectType) && !isCommercialForm ? [["Flats", formData.numberOfFlats], ["Floors", formData.numberOfFloors], ["BHK", formData.bhkConfigurations.map((c) => getProjectOptionLabel(PROJECT_BHK_OPTIONS, c.bhk)).join(", ")]] : []),
+                  ...(isCommercialForm ? [["Floors", formData.totalFloors], ["Units", `${formData.offices.length} offices · ${formData.shops.length} shops · ${formData.showrooms.length} showrooms`]] : []),
+                ]} />
+                {isCoworkingForm ? (
+                  <ReviewGroup title="Workspace" onEdit={() => goToStep(0)} rows={coworkingReviewRows(knowledgeDraft.specs || {}, knowledgeDraft.amenityStatuses || [])} />
+                ) : null}
+                <ReviewGroup title="Pricing" onEdit={() => goToStep(1)} rows={[
+                  [isCoworkingForm ? "Starting price" : "Starting rate", formData.startingRate !== "" ? `₹${Number(formData.startingRate).toLocaleString("en-IN")} ${isCoworkingForm ? "/ seat / mo" : "/ sq ft"}` : ""],
+                  [isCoworkingForm ? "Current price" : "Current rate", formData.currentRate !== "" ? `₹${Number(formData.currentRate).toLocaleString("en-IN")} ${isCoworkingForm ? "/ seat / mo" : "/ sq ft"}` : ""],
+                  ...(isCoworkingForm ? [] : [["PLC", `${filledPlc} of ${PLC_FIELDS.length - 1} filled`]]),
+                  ["Other charges", `${filledCharges} of ${CHARGE_FIELDS.length + 1} filled`],
+                ]} />
+                <ReviewGroup title="Location & contacts" onEdit={() => goToStep(2)} rows={[
+                  ["Address", [formData.location, formData.city, formData.pincode].filter(Boolean).join(", ")],
+                  ["Owner / manager", formData.ownerManagerName ? `${formData.ownerManagerName} · ${formData.ownerManagerMobile || "no mobile"}` : ""],
+                  ["Broker manager", formData.brokerManagerName ? `${formData.brokerManagerName} · ${formData.brokerManagerMobile || "no mobile"}` : ""],
+                ]} />
+                <ReviewGroup title="Features" onEdit={() => goToStep(3)} rows={[
+                  ["Status", getProjectOptionLabel(PROJECT_STATUS_OPTIONS, formData.status)],
+                  ...(isCoworkingForm ? [] : [["Amenities", formData.amenities.length ? `${formData.amenities.length} selected` : ""]]),
+                  ...(!isCommercialForm && !isCoworkingForm ? [["Housing category", getProjectOptionLabel(PROJECT_HOUSING_CATEGORY_OPTIONS, formData.housingCategory)]] : []),
+                  ["Photos", formData.images.length ? `${formData.images.length} uploaded` : ""],
+                  ["Documents", pendingDocuments.length ? `${pendingDocuments.length} to add on save` : existingDocuments.length ? `${existingDocuments.length} on file` : ""],
+                ]} />
+                {issueStep !== -1 ? <p className="rounded-xl px-3.5 py-2.5 text-[12.5px]" style={{ background: "var(--g-warns)", color: "var(--g-warn)" }}>{WIZARD_STEPS[issueStep].label} still needs attention - {formIssue}</p> : null}
+              </>)}
+        </FormWizard>
       )}
 
       {deleteTarget && (

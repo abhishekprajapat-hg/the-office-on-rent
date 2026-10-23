@@ -1,6 +1,8 @@
 import React, { useMemo, useRef, useState } from "react";
-import { ArrowLeft, ArrowRight, Building2, Check, Eye, Paperclip, Search, Upload, UserPlus, X } from "lucide-react";
-import { Button, Input, Modal, Select, cn } from "../../../../components/ui";
+import { Briefcase, Building2, Check, Eye, Paperclip, Search, Upload, User, UserPlus, X } from "lucide-react";
+import { Button, Input, Select, cn } from "../../../../components/ui";
+import FormWizard from "../../../../components/ui/FormWizard";
+import { ChoiceCards, PickChips } from "../../../../components/ui/formKit";
 import { formatCurrency, formatDate } from "../../../../utils/format";
 import { CLIENT_KINDS, ENTITY_TYPES, kycStatusOf } from "../kycDocuments";
 import DocumentChecklist from "./DocumentChecklist";
@@ -22,11 +24,12 @@ import { isRestrictedClientFile, RESTRICTED_DOCUMENT_NOTE } from "../../../../ut
  */
 
 const STEPS = [
-  { id: "client", label: "Client" },
-  { id: "documents", label: "Documents" },
-  { id: "terms", label: "Agreement" },
-  { id: "review", label: "Review" },
+  { id: "client", label: "Client", hint: "Who takes the cabins" },
+  { id: "documents", label: "Documents", hint: "KYC on file" },
+  { id: "terms", label: "Agreement", hint: "Rent, deposit, term" },
+  { id: "review", label: "Review", hint: "Check & confirm" },
 ];
+const KIND_ICON = { company: Building2, proprietorship: Briefcase, individual: User };
 
 const TERM_OPTIONS = [3, 6, 12, 24];
 const INDUSTRIES = [
@@ -58,46 +61,10 @@ const addMonths = (iso, months) => {
 
 const Field = ({ label, children, hint, className }) => (
   <label className={cn("block", className)}>
-    <span className="mb-1 block text-[11.5px] font-medium text-slate-600 dark:text-slate-300">{label}</span>
+    <span className="mb-1.5 block text-[13px] font-medium" style={{ color: "var(--g-mut)" }}>{label}</span>
     {children}
-    {hint ? <span className="mt-1 block text-[11px] text-slate-400 dark:text-slate-500">{hint}</span> : null}
+    {hint ? <span className="mt-1 block text-[11.5px]" style={{ color: "var(--g-fnt)" }}>{hint}</span> : null}
   </label>
-);
-
-const Stepper = ({ index }) => (
-  <ol className="mb-4 flex items-center gap-2">
-    {STEPS.map((step, stepIndex) => {
-      const done = stepIndex < index;
-      const active = stepIndex === index;
-      return (
-        <li key={step.id} className="flex items-center gap-2">
-          <span
-            className={cn(
-              "flex h-5 w-5 items-center justify-center rounded-full text-[10px] font-semibold transition",
-              done && "bg-emerald-600 text-white",
-              active && "bg-blue-600 text-white",
-              !done && !active && "bg-slate-200 text-slate-500 dark:bg-slate-800 dark:text-slate-400",
-            )}
-          >
-            {done ? <Check aria-hidden="true" size={11} strokeWidth={3} /> : stepIndex + 1}
-          </span>
-          <span
-            className={cn(
-              "text-[12px]",
-              active
-                ? "font-semibold text-slate-950 dark:text-slate-50"
-                : "text-slate-500 dark:text-slate-400",
-            )}
-          >
-            {step.label}
-          </span>
-          {stepIndex < STEPS.length - 1 ? (
-            <span aria-hidden="true" className="mx-1 h-px w-6 bg-slate-200 dark:bg-slate-700" />
-          ) : null}
-        </li>
-      );
-    })}
-  </ol>
 );
 
 const WorkProfileField = ({ label, form, setForm }) => (
@@ -200,44 +167,38 @@ const ChequeUpload = ({ file, onChange }) => {
 };
 
 const OrderSummary = ({ cabins, rent, deposit, term, startDate }) => (
-  <aside className="rounded-lg border border-slate-200 bg-slate-50 p-3 dark:border-slate-700 dark:bg-slate-900">
-    <h3 className="text-[11px] font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
-      Cabins selected
-    </h3>
-    <ul className="mt-2 space-y-1">
+  <aside className="self-start rounded-2xl p-4" style={{ background: "var(--g-glass2)", border: "1px solid var(--g-edge, var(--g-line))" }}>
+    <h3 className="text-[13px] font-semibold" style={{ color: "var(--g-ink)" }}>Cabins selected</h3>
+    <ul className="mt-2 space-y-1.5">
       {cabins.map((cabin) => (
-        <li key={cabin.code} className="flex items-baseline gap-2 text-[12px]">
-          <span className="font-mono font-semibold text-slate-900 dark:text-slate-100">{cabin.label}</span>
-          <span className="text-slate-500 dark:text-slate-400">{cabin.seats} seater</span>
-          <span className="ml-auto tabular-nums text-slate-700 dark:text-slate-300">
-            {formatCurrency(cabin.monthlyRent)}
-          </span>
+        <li key={cabin.code} className="flex items-baseline gap-2 text-[12.5px]">
+          <span className="font-mono font-semibold" style={{ color: "var(--g-ink)" }}>{cabin.label}</span>
+          <span style={{ color: "var(--g-mut)" }}>{cabin.seats} seater</span>
+          <span className="ml-auto tabular-nums" style={{ color: "var(--g-ink)" }}>{formatCurrency(cabin.monthlyRent)}</span>
         </li>
       ))}
     </ul>
 
-    <dl className="mt-3 space-y-1 border-t border-slate-200 pt-2 text-[12px] dark:border-slate-700">
+    <dl className="mt-3 space-y-1.5 pt-2.5 text-[12.5px]" style={{ borderTop: "1px solid var(--g-div)" }}>
       <div className="flex justify-between">
-        <dt className="text-slate-500 dark:text-slate-400">Monthly rent</dt>
-        <dd className="font-semibold tabular-nums text-slate-950 dark:text-slate-50">{formatCurrency(rent)}</dd>
+        <dt style={{ color: "var(--g-mut)" }}>Monthly rent</dt>
+        <dd className="font-semibold tabular-nums">{formatCurrency(rent)}</dd>
       </div>
       <div className="flex justify-between">
-        <dt className="text-slate-500 dark:text-slate-400">Security deposit</dt>
-        <dd className="tabular-nums text-slate-700 dark:text-slate-300">{formatCurrency(deposit)}</dd>
+        <dt style={{ color: "var(--g-mut)" }}>Security deposit</dt>
+        <dd className="tabular-nums">{formatCurrency(deposit)}</dd>
       </div>
       <div className="flex justify-between">
-        <dt className="text-slate-500 dark:text-slate-400">Term</dt>
-        <dd className="tabular-nums text-slate-700 dark:text-slate-300">{term} months</dd>
+        <dt style={{ color: "var(--g-mut)" }}>Term</dt>
+        <dd className="tabular-nums">{term} months</dd>
       </div>
-      <div className="flex justify-between border-t border-slate-200 pt-1.5 dark:border-slate-700">
-        <dt className="text-slate-500 dark:text-slate-400">Due on signing</dt>
-        <dd className="font-semibold tabular-nums text-slate-950 dark:text-slate-50">
-          {formatCurrency(rent + deposit)}
-        </dd>
+      <div className="flex justify-between pt-2" style={{ borderTop: "1px solid var(--g-div)" }}>
+        <dt style={{ color: "var(--g-mut)" }}>Due on signing</dt>
+        <dd className="text-[14px] font-semibold tabular-nums" style={{ color: "var(--g-b)" }}>{formatCurrency(rent + deposit)}</dd>
       </div>
     </dl>
 
-    <p className="mt-2 text-[11px] text-slate-400 dark:text-slate-500">
+    <p className="mt-2.5 text-[11.5px]" style={{ color: "var(--g-fnt)" }}>
       Starts {formatDate(startDate)}, ends {formatDate(addMonths(startDate, term))}
     </p>
   </aside>
@@ -245,6 +206,8 @@ const OrderSummary = ({ cabins, rent, deposit, term, startDate }) => (
 
 const OnboardClientDialog = ({ open, cabins = [], onClose, onConfirm, initialClient = null, initialTerms = null, editMode = false }) => {
   const [step, setStep] = useState(0);
+  const [stepDir, setStepDir] = useState(1);
+  const [triedStep, setTriedStep] = useState(-1);
   const [mode, setMode] = useState("new");
   const [clientQuery, setClientQuery] = useState("");
   const [existingClientId, setExistingClientId] = useState("");
@@ -306,100 +269,92 @@ const OnboardClientDialog = ({ open, cabins = [], onClose, onConfirm, initialCli
   const validTerms = validDeposit && [terms.noticePeriodDays, terms.tokenAmount, terms.securityCheque.amount].every(value => Number.isFinite(Number(value)) && Number(value) >= 0);
   const validBirthDate = !form.dateOfBirth || (form.dateOfBirth >= "1900-01-01" && form.dateOfBirth <= today());
   const validWorkProfile = form.industryChoice !== "Other" || Boolean(String(form.industryCustom || "").trim());
-  const canAdvance = step === 0 ? Boolean(clientName) && validWorkProfile : validTerms && validBirthDate;
 
   const set = (key) => (event) => setForm((value) => ({ ...value, [key]: event.target.value }));
   const setTerm = (key) => (event) => setTerms((value) => ({ ...value, [key]: event.target.value }));
 
   const discount = listRent - rent;
 
-  return (
-    <Modal
-      open={open}
-      onClose={onClose}
-      size="xl"
-      title={editMode ? "Edit onboarded client" : "Onboard client"}
-      description={`${cabins.length} ${cabins.length === 1 ? "cabin" : "cabins"} · seats ${capacity} · ${cabins
-        .map((cabin) => cabin.label)
-        .join(", ")}`}
-      footer={
-        <>
-          <Button
-            variant="ghost"
-            leftIcon={ArrowLeft}
-            disabled={step === 0}
-            onClick={() => setStep((value) => Math.max(0, value - 1))}
-          >
-            Back
-          </Button>
-          <Button variant="secondary" onClick={onClose}>
-            Cancel
-          </Button>
-          {step < STEPS.length - 1 ? (
-            <Button rightIcon={ArrowRight} disabled={!canAdvance} onClick={() => setStep((value) => value + 1)}>
-              Continue
-            </Button>
-          ) : (
-            <Button
-              leftIcon={UserPlus}
-              disabled={!validTerms || !validBirthDate}
-              onClick={() =>
-                onConfirm({
-                  clientName,
-                  // An existing client keeps their record; a new one is built
-                  // from the form. Either way the board gets one client shape.
-                  client:
-                    mode === "existing" && selectedClient
-                      ? selectedClient
-                      : (({ industryChoice, industryCustom, ...rest }) => ({
-                        ...rest,
-                        industry: resolveIndustry({ industryChoice, industryCustom }),
-                        name: clientName,
-                      }))(form),
-                  cabins,
-                  terms: {
-                    ...terms,
-                    rent,
-                    deposit,
-                    depositAmount: isCustomDeposit ? customDeposit : null,
-                  },
-                })
-              }
-            >
-              {editMode ? "Save client and agreement" : "Confirm and allot"}
-            </Button>
-          )}
-        </>
-      }
-    >
-      <Stepper index={step} />
+  const stepIssue = (index) => {
+    if (index === 0) {
+      if (!clientName) return mode === "new" ? `Enter the ${isCompany ? "company" : "client"} name to continue` : "Pick a client to continue";
+      if (!validWorkProfile) return "Type the client's work profile";
+      return "";
+    }
+    if (!validBirthDate) return "Enter a valid date of birth";
+    if (!validTerms) return "Check the deposit, notice period, token and cheque amounts";
+    return "";
+  };
+  const goToStep = (index) => {
+    setStepDir(index >= step ? 1 : -1);
+    setStep(index);
+    setTriedStep(-1);
+  };
+  const confirm = () => {
+    onConfirm({
+      clientName,
+      // An existing client keeps their record; a new one is built
+      // from the form. Either way the board gets one client shape.
+      client:
+        mode === "existing" && selectedClient
+          ? selectedClient
+          : (({ industryChoice, industryCustom, ...rest }) => ({
+            ...rest,
+            industry: resolveIndustry({ industryChoice, industryCustom }),
+            name: clientName,
+          }))(form),
+      cabins,
+      terms: {
+        ...terms,
+        rent,
+        deposit,
+        depositAmount: isCustomDeposit ? customDeposit : null,
+      },
+    });
+  };
+  const next = () => {
+    const issue = step === STEPS.length - 1 ? (stepIssue(0) || stepIssue(1)) : stepIssue(step);
+    if (issue) { setTriedStep(step); return; }
+    if (step === STEPS.length - 1) confirm();
+    else goToStep(step + 1);
+  };
+  const wizardError = triedStep === step ? (step === STEPS.length - 1 ? (stepIssue(0) || stepIssue(1)) : stepIssue(step)) : "";
 
-      <div className="grid gap-4 md:grid-cols-[minmax(0,1fr)_224px]">
+  if (!open) return null;
+
+  return (
+    <FormWizard
+      icon={UserPlus}
+      title={editMode ? "Edit onboarded client" : "Onboard client"}
+      steps={STEPS.map((item) => ({ key: item.id, label: item.label, hint: item.hint }))}
+      step={step}
+      dir={stepDir}
+      stepState={(index) => (index < step ? "done" : "todo")}
+      canOpenStep={(index) => index < step || !stepIssue(0)}
+      onStep={goToStep}
+      onClose={onClose}
+      onBack={() => goToStep(Math.max(0, step - 1))}
+      onNext={next}
+      primaryLabel={step === STEPS.length - 1 ? (editMode ? "Save client and agreement" : "Confirm and allot") : "Continue"}
+      primaryIcon={step === STEPS.length - 1 ? "save" : "next"}
+      error={wizardError}
+      width={1000}
+    >
+      <p className="-mt-1 text-[12.5px]" style={{ color: "var(--g-mut)" }}>
+        {`${cabins.length} ${cabins.length === 1 ? "cabin" : "cabins"} · seats ${capacity} · ${cabins.map((cabin) => cabin.label).join(", ")}`}
+      </p>
+
+      <div className="grid gap-5 md:grid-cols-[minmax(0,1fr)_250px]">
         <div className="min-w-0">
           {step === 0 ? (
             <div className="space-y-3">
-              {!editMode ? <div className="flex gap-0.5 rounded-lg border border-slate-200 bg-slate-50 p-0.5 dark:border-slate-700 dark:bg-slate-950">
-                {[
-                  { value: "new", label: "New client" },
-                  { value: "existing", label: "Existing client" },
-                ].map((option) => (
-                  <button
-                    key={option.value}
-                    type="button"
-                    aria-pressed={mode === option.value}
-                    onClick={() => setMode(option.value)}
-                    className={cn(
-                      "flex-1 rounded-md px-3 py-1.5 text-[12.5px] font-medium outline-none transition",
-                      "focus-visible:ring-2 focus-visible:ring-blue-500/40",
-                      mode === option.value
-                        ? "bg-white font-semibold text-slate-900 shadow-crm-soft dark:bg-slate-800 dark:text-slate-50"
-                        : "text-slate-500 hover:text-slate-900 dark:text-slate-400",
-                    )}
-                  >
-                    {option.label}
-                  </button>
-                ))}
-              </div> : null}
+              {!editMode ? (
+                <PickChips
+                  options={[{ value: "new", label: "New client" }, { value: "existing", label: "Existing client" }]}
+                  value={mode}
+                  onChange={setMode}
+                />
+              ) : null}
 
               {mode === "new" ? (
                 <div className="grid gap-3 sm:grid-cols-2">
@@ -408,25 +363,12 @@ const OnboardClientDialog = ({ open, cabins = [], onClose, onConfirm, initialCli
                     hint="This decides which documents are asked for"
                     className="sm:col-span-2"
                   >
-                    <div className="flex gap-0.5 rounded-lg border border-slate-200 bg-slate-50 p-0.5 dark:border-slate-700 dark:bg-slate-950">
-                      {CLIENT_KINDS.map((option) => (
-                        <button
-                          key={option.id}
-                          type="button"
-                          aria-pressed={form.kind === option.id}
-                          onClick={() => setForm((value) => ({ ...value, kind: option.id }))}
-                          className={cn(
-                            "flex-1 rounded-md px-3 py-1.5 text-[12.5px] outline-none transition",
-                            "focus-visible:ring-2 focus-visible:ring-blue-500/40",
-                            form.kind === option.id
-                              ? "bg-white font-semibold text-slate-900 shadow-crm-soft dark:bg-slate-800 dark:text-slate-50"
-                              : "font-medium text-slate-500 hover:text-slate-900 dark:text-slate-400",
-                          )}
-                        >
-                          {option.label}
-                        </button>
-                      ))}
-                    </div>
+                    <ChoiceCards
+                      options={CLIENT_KINDS.map((option) => ({ value: option.id, label: option.label, sub: option.hint, icon: KIND_ICON[option.id] }))}
+                      value={form.kind}
+                      onChange={(kind) => setForm((value) => ({ ...value, kind }))}
+                      columns="minmax(170px,1fr)"
+                    />
                   </Field>
 
                   {isCompany ? (
@@ -564,25 +506,11 @@ const OnboardClientDialog = ({ open, cabins = [], onClose, onConfirm, initialCli
                 <Input type="date" value={terms.startDate} onChange={setTerm("startDate")} />
               </Field>
               <Field label="Term">
-                <div className="flex gap-0.5 rounded-lg border border-slate-200 bg-slate-50 p-0.5 dark:border-slate-700 dark:bg-slate-950">
-                  {TERM_OPTIONS.map((months) => (
-                    <button
-                      key={months}
-                      type="button"
-                      aria-pressed={terms.termMonths === months}
-                      onClick={() => setTerms((value) => ({ ...value, termMonths: months }))}
-                      className={cn(
-                        "flex-1 rounded-md py-1.5 text-[12px] font-medium tabular-nums outline-none transition",
-                        "focus-visible:ring-2 focus-visible:ring-blue-500/40",
-                        terms.termMonths === months
-                          ? "bg-white font-semibold text-slate-900 shadow-crm-soft dark:bg-slate-800 dark:text-slate-50"
-                          : "text-slate-500 hover:text-slate-900 dark:text-slate-400",
-                      )}
-                    >
-                      {months}m
-                    </button>
-                  ))}
-                </div>
+                <PickChips
+                  options={TERM_OPTIONS.map((months) => ({ value: months, label: `${months} months` }))}
+                  value={terms.termMonths}
+                  onChange={(months) => setTerms((value) => ({ ...value, termMonths: months }))}
+                />
               </Field>
 
               <Field
@@ -649,7 +577,7 @@ const OnboardClientDialog = ({ open, cabins = [], onClose, onConfirm, initialCli
               </Field>
               <Field label="Notice period (days)"><Input type="number" min="0" value={terms.noticePeriodDays} onChange={setTerm("noticePeriodDays")} /></Field>
               <Field label="Token amount paid" hint="Recorded separately from rent and deposit"><Input type="number" min="0" value={terms.tokenAmount} onChange={setTerm("tokenAmount")} /></Field>
-              <fieldset className="rounded-lg border p-3 sm:col-span-2"><legend className="px-2 text-sm font-semibold">Security / Deposit Cheque</legend><div className="grid gap-3 sm:grid-cols-2">{["number", "bank", "amount", "date", "notes"].map(key => <Field key={key} label={key === "number" ? "Cheque number" : key.charAt(0).toUpperCase() + key.slice(1)}><Input type={key === "amount" ? "number" : key === "date" ? "date" : "text"} min={key === "amount" ? "0" : undefined} value={terms.securityCheque[key]} onChange={e => setTerms(old => ({ ...old, securityCheque: { ...old.securityCheque, [key]: e.target.value } }))}/></Field>)}<ChequeUpload
+              <fieldset className="gl-form-section rounded-2xl p-4 sm:col-span-2"><legend className="px-2 text-[14px] font-semibold">Security / Deposit Cheque</legend><div className="grid gap-3 sm:grid-cols-2">{["number", "bank", "amount", "date", "notes"].map(key => <Field key={key} label={key === "number" ? "Cheque number" : key.charAt(0).toUpperCase() + key.slice(1)}><Input type={key === "amount" ? "number" : key === "date" ? "date" : "text"} min={key === "amount" ? "0" : undefined} value={terms.securityCheque[key]} onChange={e => setTerms(old => ({ ...old, securityCheque: { ...old.securityCheque, [key]: e.target.value } }))}/></Field>)}<ChequeUpload
                     file={terms.securityCheque.file || null}
                     onChange={(file) => setTerms((old) => ({ ...old, securityCheque: { ...old.securityCheque, file } }))}
                   /></div></fieldset>
@@ -669,14 +597,14 @@ const OnboardClientDialog = ({ open, cabins = [], onClose, onConfirm, initialCli
 
           {step === 3 ? (
             <div className="space-y-3">
-              <div className="rounded-lg border border-slate-200 p-3 dark:border-slate-700">
-                <h3 className="text-[11px] font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
+              <div className="rounded-2xl p-4" style={{ background: "var(--g-glassHi)", border: "1px solid var(--g-edge, var(--g-line))" }}>
+                <h3 className="text-[13px] font-semibold" style={{ color: "var(--g-mut)" }}>
                   Client
                 </h3>
-                <p className="mt-1 text-[14px] font-semibold text-slate-950 dark:text-slate-50">
+                <p className="mt-1 text-[15px] font-semibold" style={{ color: "var(--g-ink)" }}>
                   {clientName || "Not named yet"}
                 </p>
-                <p className="text-[12px] text-slate-500 dark:text-slate-400">
+                <p className="text-[12.5px]" style={{ color: "var(--g-mut)" }}>
                   {mode === "new"
                     ? [form.contactPerson, form.signingAuthority2 || form.secondPersonName, form.phone, resolveIndustry(form)].filter(Boolean).join(" · ") || "New client record"
                     : `${selectedClient?.contactPerson} · ${selectedClient?.phone} · existing client`}
@@ -685,37 +613,35 @@ const OnboardClientDialog = ({ open, cabins = [], onClose, onConfirm, initialCli
 
               <div
                 className={cn(
-                  "rounded-lg border p-3",
-                  kyc.complete
-                    ? "border-emerald-200 bg-emerald-50 dark:border-emerald-500/30 dark:bg-emerald-500/10"
-                    : "border-amber-200 bg-amber-50 dark:border-amber-500/30 dark:bg-amber-500/10",
+                  "rounded-2xl p-4",
                 )}
+                style={{ background: kyc.complete ? "var(--g-oks)" : "var(--g-warns)" }}
               >
-                <h3 className="text-[11px] font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
+                <h3 className="text-[13px] font-semibold" style={{ color: "var(--g-mut)" }}>
                   Documents
                 </h3>
                 <p
                   className={cn(
-                    "mt-1 text-[12.5px] font-semibold",
-                    kyc.complete ? "text-emerald-800 dark:text-emerald-300" : "text-amber-800 dark:text-amber-300",
+                    "mt-1 text-[13px] font-semibold",
                   )}
+                  style={{ color: kyc.complete ? "var(--g-ok)" : "var(--g-warn)" }}
                 >
                   {kyc.complete
                     ? `KYC complete - all ${kyc.required} required documents on file`
                     : `${kyc.uploaded} of ${kyc.required} required documents on file`}
                 </p>
                 {!kyc.complete ? (
-                  <p className="mt-0.5 text-[11.5px] text-amber-700 dark:text-amber-300/80">
+                  <p className="mt-0.5 text-[12px]" style={{ color: "var(--g-warn)" }}>
                     Outstanding: {kyc.missing.map((doc) => doc.label).join(", ")}.
                   </p>
                 ) : null}
               </div>
 
-              <div className="rounded-lg border border-slate-200 p-3 dark:border-slate-700">
-                <h3 className="text-[11px] font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
+              <div className="rounded-2xl p-4" style={{ background: "var(--g-glassHi)", border: "1px solid var(--g-edge, var(--g-line))" }}>
+                <h3 className="text-[13px] font-semibold" style={{ color: "var(--g-mut)" }}>
                   What changes on confirm
                 </h3>
-                <ul className="mt-2 space-y-1 text-[12.5px] text-slate-700 dark:text-slate-300">
+                <ul className="mt-2 space-y-1.5 text-[13px]" style={{ color: "var(--g-ink)" }}>
                   {[
                     `${cabins.length} ${cabins.length === 1 ? "cabin flips" : "cabins flip"} to Booked on the board`,
                     `Seating for ${capacity} goes to ${clientName || "the client"}`,
@@ -723,7 +649,7 @@ const OnboardClientDialog = ({ open, cabins = [], onClose, onConfirm, initialCli
                     `First invoice of ${formatCurrency(rent + deposit)} is scheduled, rent plus deposit`,
                   ].map((line) => (
                     <li key={line} className="flex items-start gap-2">
-                      <Check aria-hidden="true" size={13} className="mt-0.5 shrink-0 text-emerald-600" />
+                      <Check aria-hidden="true" size={14} className="mt-0.5 shrink-0" style={{ color: "var(--g-ok)" }} />
                       {line}
                     </li>
                   ))}
@@ -731,7 +657,7 @@ const OnboardClientDialog = ({ open, cabins = [], onClose, onConfirm, initialCli
               </div>
 
               {terms.notes ? (
-                <p className="rounded-lg border border-slate-200 p-3 text-[12.5px] text-slate-600 dark:border-slate-700 dark:text-slate-300">
+                <p className="rounded-2xl p-4 text-[13px]" style={{ background: "var(--g-glassHi)", border: "1px solid var(--g-edge, var(--g-line))", color: "var(--g-mut)" }}>
                   {terms.notes}
                 </p>
               ) : null}
@@ -747,7 +673,7 @@ const OnboardClientDialog = ({ open, cabins = [], onClose, onConfirm, initialCli
           startDate={terms.startDate}
         />
       </div>
-    </Modal>
+    </FormWizard>
   );
 };
 

@@ -52,8 +52,12 @@ export const downloadProjectPdf = async (data, catalogue) => {
     const entries = Object.entries(values || {});
     if (!entries.length) return;
     heading(title);
-    const labels = LABELS(fields);
-    entries.forEach(([key, value]) => row(labels.get(key) || human(key), key.toLowerCase().includes("price") || key === "baseRate" || key === "bookingAmount" ? money(value) || value : value));
+    const fieldRows = new Map((fields || []).map((field) => [field.key, field]));
+    entries.forEach(([key, value]) => {
+      const field = fieldRows.get(key);
+      const shown = field?.kind === "money" ? money(value) : field?.kind === "select" ? human(value) : value;
+      row(field?.label || human(key), shown);
+    });
   };
 
   // Cover band

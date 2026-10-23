@@ -30,7 +30,7 @@ const PageAccessGate = ({ page, allowedRoles, children }) => {
   }
 
   // These API families stay role-only even with an explicit page grant.
-  if (["admin_team", "admin_notifications", "admin_console", "admin_meta_ads", "settings"].includes(page)
+  if (["admin_team", "admin_notifications", "admin_console", "admin_meta_ads"].includes(page)
     && allowedRoles && !isAdmin && !allowedRoles.includes(role)) {
     return <Navigate to="/" replace />;
   }

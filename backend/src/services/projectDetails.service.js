@@ -13,7 +13,7 @@ class ProjectDetailsError extends Error {
 const isManagement = (user) => C.RESTRICTED_ROLES.includes(String(user?.role || "").toUpperCase());
 const text = (v, max = 2000) => String(v ?? "").trim().slice(0, max);
 
-const cleanValue = (field, raw) => {
+const cleanValue = (field, raw, currentValue) => {
   if (raw === null || raw === undefined || raw === "") return field.kind === "list" ? [] : "";
   switch (field.kind) {
     case "number":
@@ -33,6 +33,15 @@ const cleanValue = (field, raw) => {
       return s;
     }
     case "yesno": return raw === true || raw === "true" || raw === "YES";
+    case "select": {
+      const value = text(raw, 120);
+      const option = (field.options || []).find((candidate) => String(candidate).toUpperCase() === value.toUpperCase());
+      if (option !== undefined) return option;
+      // Older project records used free text for these fields. Preserve an
+      // unchanged legacy value so saving another field does not erase it.
+      if (currentValue !== undefined && String(raw) === String(currentValue)) return text(raw, 120);
+      throw new ProjectDetailsError(400, `${field.label} has an invalid option`);
+    }
     case "list": return (Array.isArray(raw) ? raw : String(raw).split(",")).map((x) => text(x, 160)).filter(Boolean).slice(0, 30);
     case "longtext": return text(raw, 4000);
     default: return text(raw, 400);
@@ -44,7 +53,7 @@ const cleanSection = (fields, incoming = {}, current = {}, user) => {
   for (const field of fields) {
     if (!Object.prototype.hasOwnProperty.call(incoming || {}, field.key)) continue;
     if (field.restricted && !isManagement(user)) throw new ProjectDetailsError(403, `Only Admin or Manager can edit ${field.label}`);
-    out[field.key] = cleanValue(field, incoming[field.key]);
+    out[field.key] = cleanValue(field, incoming[field.key], current?.[field.key]);
   }
   return out;
 };
@@ -142,7 +151,7 @@ const pricingValues = (project) => {
 const completeness = (project) => {
   const category = project.projectCategory;
   // Optional PLCs aren't held against a project's completeness.
-  const fields = C.allFields(category).filter((f) => !f.restricted && !/^plc/.test(f.key));
+  const fields = C.allFields(category).filter((f) => !f.restricted && f.completeness !== false && !/^plc/.test(f.key));
   const d = project.details || {};
   const value = (f) => {
     const section = C.OVERVIEW_FIELDS.includes(f) ? d.overview : C.PRICING_FIELDS.includes(f) ? pricingValues(project) : C.LEGAL_FIELDS.includes(f) ? d.legal : d.specs;

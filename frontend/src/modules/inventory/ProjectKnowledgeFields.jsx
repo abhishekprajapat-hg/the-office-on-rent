@@ -13,10 +13,19 @@ const area = "w-full rounded-lg border border-slate-300 bg-white px-2.5 py-2 tex
 const FieldInput = ({ field, value, onChange, disabled }) => {
   if (field.kind === "longtext") return <textarea rows={3} className={area} value={value ?? ""} onChange={(e) => onChange(e.target.value)} disabled={disabled} />;
   if (field.kind === "yesno") return <select className={input} value={value === true ? "true" : value === false ? "false" : ""} onChange={(e) => onChange(e.target.value === "" ? "" : e.target.value === "true")} disabled={disabled}><option value="">Not set</option><option value="true">Yes</option><option value="false">No</option></select>;
+  if (field.kind === "select") {
+    const options = field.options || [];
+    const hasLegacyValue = value !== undefined && value !== "" && !options.some((option) => String(option) === String(value));
+    return <select className={input} value={value ?? ""} onChange={(e) => onChange(e.target.value)} disabled={disabled}>
+      <option value="">Select</option>
+      {hasLegacyValue ? <option value={value}>{human(value)} (legacy)</option> : null}
+      {options.map((option) => <option key={option} value={option}>{human(option)}</option>)}
+    </select>;
+  }
   if (field.kind === "list") return <input className={input} value={Array.isArray(value) ? value.join(", ") : value ?? ""} onChange={(e) => onChange(e.target.value)} placeholder="Comma separated" disabled={disabled} />;
-  const type = field.kind === "date" ? "date" : field.kind === "url" ? "url" : "text";
+  const type = field.kind === "date" ? "date" : field.kind === "url" ? "url" : ["number", "money"].includes(field.kind) ? "number" : "text";
   const shown = field.kind === "date" && value ? String(value).slice(0, 10) : value ?? "";
-  return <input type={type} inputMode={field.kind === "money" || field.kind === "number" ? "decimal" : undefined} className={input} value={shown} onChange={(e) => onChange(e.target.value)} disabled={disabled} />;
+  return <input type={type} min={type === "number" ? "0" : undefined} step={type === "number" ? "any" : undefined} inputMode={field.kind === "money" || field.kind === "number" ? "decimal" : undefined} className={input} value={shown} onChange={(e) => onChange(e.target.value)} disabled={disabled} />;
 };
 
 export const FieldGrid = ({ fields = [], values = {}, onChange, disabled }) => (

@@ -1,6 +1,6 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { AnimatePresence } from "framer-motion";
-import { Search as SearchIcon } from "lucide-react";
+import { ArrowRightLeft, Search as SearchIcon, Trash2 } from "lucide-react";
 import { EmptyState } from "../../components/ui";
 import { useLocation, useNavigate, useParams, useSearchParams } from "react-router-dom";
 import {
@@ -1730,6 +1730,10 @@ const LeadsMatrix = () => {
     return PIPELINE_VIEWS[fromUrl] || PIPELINE_VIEWS.ALL;
   });
   const [selectedLeadKeys, setSelectedLeadKeys] = useState([]);
+  const [isBulkTransferOpen, setIsBulkTransferOpen] = useState(false);
+  const [bulkTransferAssignee, setBulkTransferAssignee] = useState("");
+  const [bulkTransferReason, setBulkTransferReason] = useState("");
+  const [bulkActionBusy, setBulkActionBusy] = useState(false);
   const [nowMs, setNowMs] = useState(0);
   const debouncedQuery = useDebouncedValue(query, 180);
   const { canPageAction, enforcePageAccess } = usePermissions();
@@ -2651,6 +2655,82 @@ const LeadsMatrix = () => {
       setError(message);
       return false;
     }
+  };
+
+  const selectedLeads = leads.filter((lead) => selectedLeadKeys.includes(String(lead?._id || "")));
+
+  const handleBulkTransferLeads = async (event) => {
+    event.preventDefault();
+    if (!canAssignLead || !bulkTransferAssignee || !bulkTransferReason.trim() || !selectedLeads.length) return;
+
+    setBulkActionBusy(true);
+    setError("");
+    const updatedById = new Map();
+    const failures = [];
+    for (const lead of selectedLeads) {
+      try {
+        const updated = await assignLead(lead._id, {
+          assignedTo: bulkTransferAssignee,
+          reason: bulkTransferReason.trim(),
+        });
+        if (updated) updatedById.set(String(updated._id), updated);
+      } catch (transferError) {
+        failures.push(`${lead.name || "Lead"}: ${toErrorMessage(transferError, "Transfer failed")}`);
+      }
+    }
+    if (updatedById.size) {
+      setLeads((previous) => previous.map((lead) => updatedById.get(String(lead?._id || "")) || lead));
+      setSelectedLeadKeys((previous) => previous.filter((id) => !updatedById.has(String(id))));
+      setSuccess(`${updatedById.size} lead${updatedById.size === 1 ? "" : "s"} transferred`);
+    }
+    if (failures.length) setError(`Could not transfer ${failures.length} lead${failures.length === 1 ? "" : "s"}. ${failures.slice(0, 3).join("; ")}`);
+    setBulkTransferAssignee("");
+    setBulkTransferReason("");
+    setIsBulkTransferOpen(false);
+    setBulkActionBusy(false);
+  };
+
+  const handleBulkDeleteLeads = async () => {
+    if (!canDeleteLead || !selectedLeads.length) return;
+    const count = selectedLeads.length;
+    const needsApproval = userRole === "MANAGER";
+    const confirmed = window.confirm(
+      needsApproval
+        ? `Ask an Admin to delete ${count} selected lead${count === 1 ? "" : "s"}? They will stay until approved.`
+        : `Delete ${count} selected lead${count === 1 ? "" : "s"} permanently? This cannot be undone.`,
+    );
+    if (!confirmed) return;
+
+    setBulkActionBusy(true);
+    setError("");
+    let deleted = 0;
+    let approvals = 0;
+    const processedIds = new Set();
+    const deletedIds = new Set();
+    const failures = [];
+    for (const lead of selectedLeads) {
+      try {
+        const result = await deleteLead(lead._id);
+        processedIds.add(String(lead._id));
+        if (isDeleteApprovalPending(result)) approvals += 1;
+        else {
+          deleted += 1;
+          deletedIds.add(String(lead._id));
+        }
+      } catch (deleteError) {
+        failures.push(`${lead.name || "Lead"}: ${toErrorMessage(deleteError, "Delete failed")}`);
+      }
+    }
+    if (deleted) setLeads((previous) => previous.filter((lead) => !deletedIds.has(String(lead?._id || ""))));
+    setSelectedLeadKeys((previous) => previous.filter((id) => !processedIds.has(String(id))));
+    if (deleted || approvals) {
+      const parts = [];
+      if (deleted) parts.push(`${deleted} deleted`);
+      if (approvals) parts.push(`${approvals} sent for Admin approval`);
+      setSuccess(parts.join("; "));
+    }
+    if (failures.length) setError(`Could not process ${failures.length} lead${failures.length === 1 ? "" : "s"}. ${failures.slice(0, 3).join("; ")}`);
+    setBulkActionBusy(false);
   };
 
   const pipelineListProps = {
@@ -3932,7 +4012,10 @@ const LeadsMatrix = () => {
                 count={selectedLeadKeys.length}
                 onClear={() => setSelectedLeadKeys([])}
                 onExport={canExportLeads ? handleExportSelectedLeads : undefined}
-              />
+              >
+                {canAssignLead ? <Button size="sm" variant="secondary" leftIcon={ArrowRightLeft} onClick={() => setIsBulkTransferOpen(true)} disabled={bulkActionBusy}>Transfer</Button> : null}
+                {canDeleteLead ? <Button size="sm" variant="danger" leftIcon={Trash2} onClick={handleBulkDeleteLeads} disabled={bulkActionBusy}>Delete</Button> : null}
+              </PipelineSelectionBar>
             </div> : null}
 
             {view !== PIPELINE_VIEWS.TEAM && leadPagination?.hasNextPage ? (
@@ -3984,6 +4067,7 @@ const LeadsMatrix = () => {
             onClose={() => setIsAddModalOpen(false)}
             onSave={handleSaveLead}
             savingLead={savingLead}
+            saveError={error}
           />
         )}
       </AnimatePresence>
@@ -4007,6 +4091,7 @@ const LeadsMatrix = () => {
             }}
             onSave={handleSaveEditedLead}
             savingLead={savingUpdates}
+            saveError={error}
           />
         )}
       </AnimatePresence>
@@ -4037,6 +4122,28 @@ const LeadsMatrix = () => {
             uploading={bulkUploading}
           />
         )}
+      </AnimatePresence>
+
+      <AnimatePresence>
+        {isBulkTransferOpen ? (
+          <div className="fixed inset-0 z-[120] flex items-center justify-center bg-slate-950/50 p-4" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget && !bulkActionBusy) setIsBulkTransferOpen(false); }}>
+            <form onSubmit={handleBulkTransferLeads} className="w-full max-w-md rounded-2xl border border-slate-200 bg-white p-5 shadow-2xl dark:border-slate-700 dark:bg-slate-900">
+              <h2 className="text-lg font-bold text-slate-900 dark:text-slate-100">Transfer {selectedLeads.length} selected lead{selectedLeads.length === 1 ? "" : "s"}</h2>
+              <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">Choose an active teammate and add a reason. Each transfer is recorded in the lead history.</p>
+              <label className="mt-5 block text-sm font-semibold text-slate-700 dark:text-slate-200" htmlFor="bulk-lead-assignee">Assign to</label>
+              <select id="bulk-lead-assignee" required value={bulkTransferAssignee} onChange={(event) => setBulkTransferAssignee(event.target.value)} className="mt-1.5 w-full rounded-lg border border-slate-300 bg-white px-3 py-2.5 text-sm text-slate-900 outline-none focus:border-blue-500 dark:border-slate-700 dark:bg-slate-950 dark:text-slate-100">
+                <option value="">Select a teammate</option>
+                {executives.map((user) => <option key={user._id} value={user._id}>{user.name}{user.role ? ` · ${String(user.role).replaceAll("_", " ")}` : ""}</option>)}
+              </select>
+              <label className="mt-4 block text-sm font-semibold text-slate-700 dark:text-slate-200" htmlFor="bulk-lead-transfer-reason">Transfer reason</label>
+              <textarea id="bulk-lead-transfer-reason" required maxLength={500} rows={3} value={bulkTransferReason} onChange={(event) => setBulkTransferReason(event.target.value)} placeholder="Why are these leads being transferred?" className="mt-1.5 w-full resize-y rounded-lg border border-slate-300 bg-white px-3 py-2.5 text-sm text-slate-900 outline-none focus:border-blue-500 dark:border-slate-700 dark:bg-slate-950 dark:text-slate-100" />
+              <div className="mt-5 flex justify-end gap-2">
+                <Button type="button" variant="secondary" onClick={() => setIsBulkTransferOpen(false)} disabled={bulkActionBusy}>Cancel</Button>
+                <Button type="submit" variant="primary" leftIcon={ArrowRightLeft} disabled={bulkActionBusy || !selectedLeads.length}>{bulkActionBusy ? "Transferring..." : "Transfer selected"}</Button>
+              </div>
+            </form>
+          </div>
+        ) : null}
       </AnimatePresence>
 
       <AnimatePresence>

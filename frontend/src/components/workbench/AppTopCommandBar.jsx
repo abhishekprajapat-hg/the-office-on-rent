@@ -23,7 +23,6 @@ const AppTopCommandBar = ({ pageHeader, theme, onToggleTheme, onMenuOpen, onLogo
   const canNotify = items.some((item) => item.path === "/admin/notifications");
   const canChat = items.some((item) => item.path === "/chat");
   const canProfile = roleCanSeeItem(PROFILE_ITEM, role, user);
-  const canSettings = items.some((item) => item.path === "/settings");
   const currentItem = items.filter((item) => location.pathname === item.path || location.pathname.startsWith(item.path + "/")).sort((a, b) => b.path.length - a.path.length)[0];
   const firstName = String(user?.name || user?.fullName || "there").trim().split(/\s+/)[0];
   const title = isFieldHome
@@ -107,7 +106,7 @@ const AppTopCommandBar = ({ pageHeader, theme, onToggleTheme, onMenuOpen, onLogo
       </div>
       <div className="app-header-controls">
         {actions}
-        {canSettings && <button type="button" className={`app-header-icon app-header-quick ${location.pathname.startsWith("/settings") ? "is-active" : ""} ${isPipeline || isLeadDetails ? "pipeline-mobile-optional lead-details-mobile-hidden" : ""}`} aria-label="Settings" title="Settings" onClick={() => navigate("/settings")}><Settings size={19} /></button>}
+        <button type="button" className={`app-header-icon app-header-quick ${location.pathname.startsWith("/settings") ? "is-active" : ""}`} aria-label="Settings" title="Settings" onClick={() => navigate("/settings")}><Settings size={19} /></button>
         {canNotify && <button type="button" className="app-header-icon" aria-label="Open notifications" title="Notifications" onClick={() => navigate("/admin/notifications")}><Bell size={21} />{unreadAlerts > 0 && <span className="app-header-unread">{unreadAlerts > 99 ? "99+" : unreadAlerts}</span>}</button>}
         {canChat && <button type="button" className={`app-header-icon ${isPipeline ? "pipeline-mobile-optional" : ""} ${isLeadDetails ? "lead-details-mobile-hidden" : ""}`} aria-label="Open team chat" title="Chat" onClick={openChat}><MessageCircle size={21} />{unreadChats > 0 && <span className="app-header-unread">{unreadChats > 99 ? "99+" : unreadChats}</span>}</button>}
         <div className="app-header-date"><CalendarDays size={17} />{today}</div>

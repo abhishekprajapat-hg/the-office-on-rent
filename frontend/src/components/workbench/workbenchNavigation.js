@@ -207,7 +207,8 @@ export const WORKBENCH_MENU = {
     {
       group: "Account",
       items: [
-        { label: "Settings", path: "/settings", icon: Settings, page: "settings", roles: MANAGEMENT_ROLES },
+        // Settings contains device-local appearance, accessibility and session preferences.
+        { label: "Settings", path: "/settings", icon: Settings },
         { label: "Profile", path: "/profile", icon: UserCircle2, page: "profile", roles: [...SALES_ROLES, ...PRODUCTION_ROLES, ...PARTNER_ROLES] },
       ],
     },
@@ -305,7 +306,6 @@ const ROLE_ONLY_PAGES = new Set([
   "admin_notifications",
   "admin_console",
   "admin_meta_ads",
-  "settings",
 ]);
 
 export const roleCanSeeItem = (item, userRole, user = {}) => {

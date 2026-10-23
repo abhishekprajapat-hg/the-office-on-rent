@@ -829,3 +829,125 @@ html.theme-dark .gl-skeleton::after {
 .gl-loading-wall .gl-sidebar-logo img { max-width: 100%; max-height: 100%; object-fit: contain; }
 /* Old spinner, wherever it is still referenced, is retired. */
 .app-loader-spinner { display: none !important; }
+
+/* ---------------------------------------------------------- attendance */
+html.theme-light, html:not(.theme-dark) {
+  --g-info: #2f6fd6;
+  --g-infos: rgba(47, 111, 214, 0.12);
+  --g-ink-inverse: #ffffff;
+}
+html.theme-dark {
+  --g-info: #7aa5ff;
+  --g-infos: rgba(122, 165, 255, 0.16);
+  --g-ink-inverse: #0b1020;
+}
+/* Controls sitting on the accent "today" card: frosted white, not glass fields. */
+html:root .gl-shell.gl-shell.gl-shell.gl-shell .gl-att-hero-select {
+  background: rgba(255, 255, 255, 0.16) !important;
+  border: 1px solid rgba(255, 255, 255, 0.28) !important;
+  color: #fff !important;
+  box-shadow: none !important;
+}
+html:root .gl-shell.gl-shell.gl-shell.gl-shell .gl-att-hero-select::placeholder { color: rgba(255, 255, 255, 0.7); }
+html:root .gl-shell .gl-att-hero-select option { color: #0e1630; background: #fff; }
+/* Inputs that live inside a drawn field (search pills) stay bare. */
+html:root .gl-shell.gl-shell.gl-shell.gl-shell input[data-bare-input] {
+  background: transparent !important;
+  border: 0 !important;
+  box-shadow: none !important;
+  border-radius: 0 !important;
+}
+.gl-shell .gl-att-row:hover { background-color: var(--g-glass2); }
+
+/* =====================================================================
+   Forms - CRM Web Glass "New Project Form" style, for every form.
+   ===================================================================== */
+@keyframes gl-step-in { from { opacity: 0; transform: translateX(14px); } to { opacity: 1; transform: none; } }
+@keyframes gl-step-back { from { opacity: 0; transform: translateX(-14px); } to { opacity: 1; transform: none; } }
+.gl-step-in { animation: gl-step-in .32s cubic-bezier(.2, .9, .3, 1); }
+.gl-step-back { animation: gl-step-back .32s cubic-bezier(.2, .9, .3, 1); }
+@media (prefers-reduced-motion: reduce) { .gl-step-in, .gl-step-back { animation: none; } }
+
+/* Wizard frame */
+.gl-wizard-backdrop {
+  background: rgba(13, 22, 40, 0.38);
+  -webkit-backdrop-filter: blur(4px);
+  backdrop-filter: blur(4px);
+}
+.gl-wizard {
+  background: var(--g-modal);
+  color: var(--g-ink);
+  font-family: var(--font-body);
+  border: 1px solid var(--g-line);
+  box-shadow: 0 30px 80px rgba(13, 22, 40, 0.28);
+  -webkit-backdrop-filter: blur(var(--g-blur)) saturate(180%);
+  backdrop-filter: blur(var(--g-blur)) saturate(180%);
+}
+.gl-wizard-ghost { border: 1px solid var(--g-edge, var(--g-line)); background: var(--g-glassHi); color: var(--g-ink); transition: background-color .2s; }
+.gl-wizard-ghost:hover { background: var(--g-glass2); }
+
+/* The field box: 1.5px edge, soft focus ring, red when in error. */
+.gl-field {
+  border-radius: 13px;
+  background: var(--g-glassHi);
+  border: 1.5px solid var(--g-edge, var(--g-line));
+  color: var(--g-ink);
+  transition: border-color .2s, box-shadow .2s;
+}
+.gl-field:focus-within { border-color: var(--g-b); box-shadow: 0 0 0 4px var(--g-bs); }
+.gl-field.is-error { border-color: var(--g-bad); box-shadow: 0 0 0 4px var(--g-bads); }
+
+/* ---- Every form in the CRM: dialogs, drawers, sheets and <form>s ---- */
+:is(.gl-wizard, [role="dialog"], .fixed.inset-0, form, .gl-drawer) :is(input:not([type="checkbox"]):not([type="radio"]):not([type="range"]):not([type="color"]):not([type="file"]):not([data-bare-input]), select, textarea):not([data-bare-input]) {
+  border-width: 1.5px !important;
+  border-style: solid !important;
+  border-color: var(--g-edge, var(--g-line)) !important;
+  border-radius: 12px !important;
+  background-color: var(--g-glassHi) !important;
+  color: var(--g-ink) !important;
+  font-size: 14px;
+  transition: border-color .2s, box-shadow .2s;
+}
+:is(.gl-wizard, [role="dialog"], .fixed.inset-0, .gl-drawer) :is(input[type="text"], input[type="number"], input[type="tel"], input[type="email"], input[type="date"], input[type="time"], input[type="datetime-local"], input[type="month"], input[type="search"], input[type="password"], input[type="url"], input:not([type]), select):not([data-bare-input]) {
+  min-height: 42px;
+}
+:is(.gl-wizard, [role="dialog"], .fixed.inset-0, form, .gl-drawer) :is(input, select, textarea):not([data-bare-input]):focus {
+  border-color: var(--g-b) !important;
+  box-shadow: 0 0 0 4px var(--g-bs) !important;
+  outline: none !important;
+}
+:is(.gl-wizard, [role="dialog"], .fixed.inset-0, form, .gl-drawer) :is(input, textarea)::placeholder { color: var(--g-fnt); }
+
+/* Tiny uppercase field titles become calm 13px labels, like the design. */
+:is(.gl-wizard, [role="dialog"], .fixed.inset-0, form, .gl-drawer) :is(label, span, p, div)[class*="uppercase"][class*="text-[1"]:not(button *):not([class*="rounded-full"]) {
+  text-transform: none !important;
+  letter-spacing: 0 !important;
+  font-size: 13px !important;
+  font-weight: 500 !important;
+  color: var(--g-mut) !important;
+}
+
+/* Dialog panels: 24px corners, the dense glass pane and a deep shadow. */
+html:root .gl-shell .fixed.inset-0 > :is(div, section, form)[class*="max-w"],
+html:root body > div > .fixed.inset-0 > :is(div, section, form)[class*="max-w"],
+[role="dialog"][aria-modal="true"][class*="max-w"] {
+  border-radius: 24px !important;
+  box-shadow: 0 30px 80px rgba(13, 22, 40, 0.28) !important;
+}
+/* Overlay behind any dialog: dimmed and lightly blurred. */
+html:root .gl-shell .fixed.inset-0:is([class*="bg-black/"], [class*="bg-slate-9"], [class*="bg-slate-950/"]) {
+  background-color: rgba(13, 22, 40, 0.38) !important;
+  -webkit-backdrop-filter: blur(4px);
+  backdrop-filter: blur(4px);
+}
+/* Native checkboxes inside forms pick up the theme accent and a softer size. */
+:is(.gl-wizard, [role="dialog"], .fixed.inset-0, form, .gl-drawer) input[type="checkbox"]:not([class*="appearance-none"]) { accent-color: var(--g-b); width: 16px; height: 16px; }
+/* Grouped sections inside step forms. */
+.gl-form-section { background: var(--g-glass2); border: 1px solid var(--g-edge, var(--g-line)); }
+/* Primary buttons in dialogs use the theme accent, like the design's footer button. */
+html:root .gl-shell :is(.fixed.inset-0, [role="dialog"]) button:is(.bg-slate-900, .bg-emerald-600, .bg-cyan-600, .bg-slate-950):not(:disabled) {
+  background-color: var(--g-bfill, var(--g-b)) !important;
+  color: #fff !important;
+  border-radius: 13px;
+  box-shadow: 0 8px 20px var(--g-bglow, rgba(37, 73, 214, .3));
+}

@@ -748,8 +748,8 @@ export default function App() {
   // page as well as take one away. A role without it falls back to the built-in
   // `allowedRoles` list passed here, which is the behaviour that always applied.
   //
-  // Admin and Settings routes pass no allowedRoles - they keep their own role
-  // check below, so page access can narrow them but never widen them.
+  // Admin routes keep their own role check. Settings are device-local preferences
+  // and are available to every signed-in user.
   const withPageAccess = useCallback(
     (page, element, allowedRoles) => (
       <PageAccessGate page={page} allowedRoles={allowedRoles}>{element}</PageAccessGate>
@@ -911,7 +911,7 @@ export default function App() {
       <Route
         path="/settings"
         element={withPageAccess(
-          "settings",
+          null,
           <SystemSettings
             themeMode={themeMode}
             resolvedTheme={theme}
@@ -919,7 +919,6 @@ export default function App() {
             colorTheme={colorTheme}
             onColorThemeChange={changeColorTheme}
           />,
-          ["ADMIN", "MANAGER"],
         )}
       />
       <Route

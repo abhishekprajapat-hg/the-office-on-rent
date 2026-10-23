@@ -3,6 +3,7 @@ import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import { getProjectsWithMeta } from "../../services/projectService";
 import { motion as Motion, AnimatePresence } from "framer-motion";
 import {
+  Building2,
   Check,
   ChevronDown,
   MapPin,
@@ -34,6 +35,7 @@ import { toErrorMessage } from "../../utils/errorMessage";
 import { useDebouncedValue } from "../../hooks/useDebouncedValue";
 import { usePermissions } from "../../context/usePermissions";
 import ToastNotice from "../../components/ui/ToastNotice";
+import FormWizard from "../../components/ui/FormWizard";
 import InventoryRevenueFields, { EMPTY_ENTERPRISE_DETAILS } from "./components/InventoryRevenueFields";
 import FittedImage from "../../components/ui/FittedImage";
 import GoogleMapPicker from "../../components/common/GoogleMapPicker";
@@ -135,15 +137,15 @@ const ImageThumbnail = ({ url, alt }) => {
 const formatCalculatedPlotArea = (area) =>
   Number.isInteger(area) ? String(area) : String(Number(area.toFixed(2)));
 const INVENTORY_MODAL_INPUT_CLASS =
-  "h-11 w-full rounded-lg border border-slate-300 bg-white px-3 text-sm text-slate-700 focus:outline-none focus:border-blue-500 md:h-10";
+  "h-[46px] w-full rounded-[13px] border-[1.5px] border-[var(--g-edge)] bg-[var(--g-glassHi)] px-3.5 text-[14px] text-[var(--g-ink)] outline-none transition focus:border-[var(--g-b)] focus:shadow-[0_0_0_4px_var(--g-bs)]";
 const INVENTORY_MODAL_FIELD_TITLE_CLASS =
-  "text-[11px] font-bold uppercase tracking-[0.08em] text-slate-500";
+  "text-[13px] font-medium text-[var(--g-mut)]";
 const INVENTORY_MODAL_SECTION_CLASS =
-  "rounded-xl border border-slate-200 bg-slate-50/60 p-3";
+  "gl-form-section rounded-2xl p-4";
 const INVENTORY_MODAL_SECTION_HEADING_CLASS =
-  "mb-2 text-[11px] font-bold uppercase tracking-[0.14em] text-slate-500";
+  "mb-3 text-[14px] font-semibold text-[var(--g-ink)]";
 const INVENTORY_MODAL_CHECKBOX_CLASS =
-  "inline-flex min-h-10 items-center gap-1.5 rounded border border-slate-300 bg-white px-2.5 py-2 text-[11px] text-slate-700 md:min-h-0 md:px-2 md:py-1";
+  "inline-flex min-h-9 items-center gap-1.5 rounded-full border border-[var(--g-edge)] bg-[var(--g-glassHi)] px-3 py-1.5 text-[12.5px] font-medium text-[var(--g-ink)]";
 
 const InventoryModalSelect = ({ value, onChange, className = "", children }) => (
   <div className="relative">
@@ -156,7 +158,7 @@ const InventoryModalSelect = ({ value, onChange, className = "", children }) => 
     </select>
     <ChevronDown
       size={16}
-      className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-slate-500"
+      className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-[var(--g-fnt)]"
     />
   </div>
 );
@@ -889,7 +891,20 @@ const AssetVault = () => {
   const [formErrorPersistent, setFormErrorPersistent] = useState(true);
   const [formStep, setFormStep] = useState(INVENTORY_FORM_STEPS[0].id);
   const formStepIndex = Math.max(0, INVENTORY_FORM_STEPS.findIndex((step) => step.id === formStep));
-  const inventoryFormStepClass = (stepId) => (formStep === stepId ? "space-y-3" : "hidden");
+  const [formStepDir, setFormStepDir] = useState(1);
+  // Every step stays mounted (only hidden); the shown one slides in from the side it came from.
+  const inventoryFormStepClass = (stepId) => (formStep === stepId
+    ? `flex flex-col gap-[18px] ${formStepDir < 0 ? "gl-step-back" : "gl-step-in"}`
+    : "hidden");
+  const goToFormStep = (stepId) => {
+    const nextIndex = INVENTORY_FORM_STEPS.findIndex((step) => step.id === stepId);
+    setFormStepDir(nextIndex >= formStepIndex ? 1 : -1);
+    setFormStep(stepId);
+  };
+  const formErrorStep = formError
+    ? INVENTORY_ERROR_STEP_RULES.find((rule) => rule.pattern.test(formError))?.step || ""
+    : "";
+  const formBusy = uploading || uploadingFloorPlans || uploadingDocuments || saving || resolvingLocation;
   const setFormError = (message, persistent = true) => {
     setFormErrorMessage(message);
     setFormErrorPersistent(persistent);
@@ -3183,80 +3198,43 @@ const AssetVault = () => {
 
       <AnimatePresence>
         {((isAddModalOpen && canOpenCreateModal) || (isEditModalOpen && canOpenEditModal)) && (
-          <Motion.div
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
-            className="mobile-bottom-sheet fixed inset-0 z-50 flex items-stretch justify-center bg-slate-900/60 p-0 backdrop-blur-sm sm:items-center sm:p-4"
+          <FormWizard
+            icon={Building2}
+            title={isEditModalOpen ? (canManage ? "Edit Property" : "Request Property Edit") : "Add Property"}
+            steps={INVENTORY_FORM_STEPS.map((step) => ({ key: step.id, label: step.label, hint: step.hint }))}
+            step={formStepIndex}
+            dir={formStepDir}
+            persistent
+            stepState={(index) => (formErrorStep === INVENTORY_FORM_STEPS[index].id ? "bad" : index < formStepIndex ? "done" : "todo")}
+            canOpenStep={() => true}
+            onStep={(index) => goToFormStep(INVENTORY_FORM_STEPS[index].id)}
+            onClose={closeFormModal}
+            onBack={() => goToFormStep(INVENTORY_FORM_STEPS[Math.max(0, formStepIndex - 1)].id)}
+            onNext={formStepIndex < INVENTORY_FORM_STEPS.length - 1
+              ? () => goToFormStep(INVENTORY_FORM_STEPS[formStepIndex + 1].id)
+              : (isEditModalOpen ? handleUpdateAsset : handleSaveAsset)}
+            onSkip={isEditModalOpen && !formBusy && formStepIndex < INVENTORY_FORM_STEPS.length - 1 ? handleUpdateAsset : undefined}
+            skipLabel={canManage ? "Save now" : "Send request now"}
+            primaryLabel={formStepIndex < INVENTORY_FORM_STEPS.length - 1
+              ? `Next: ${INVENTORY_FORM_STEPS[formStepIndex + 1].label}`
+              : formBusy
+                ? (resolvingLocation ? "Resolving..." : isEditModalOpen ? "Updating..." : "Saving...")
+                : isEditModalOpen
+                  ? (canManage ? "Update Property" : "Submit Edit Request")
+                  : "Save Property"}
+            primaryIcon={formStepIndex < INVENTORY_FORM_STEPS.length - 1 ? "next" : "save"}
+            busy={formStepIndex === INVENTORY_FORM_STEPS.length - 1 && formBusy}
+            width={900}
           >
-            <Motion.div
-              initial={{ scale: 0.95, y: 20 }}
-              animate={{ scale: 1, y: 0 }}
-              exit={{ scale: 0.95, y: 20 }}
-              className="mobile-fullscreen-panel ui-soft-panel flex h-dvh max-h-dvh w-full max-w-3xl flex-col overflow-hidden bg-white shadow-2xl sm:h-auto sm:max-h-[92vh] sm:rounded-2xl"
-            >
-              <div className="flex shrink-0 items-center justify-between border-b border-slate-200 px-4 py-3 sm:px-5">
-                <div className="min-w-0">
-                  <h3 className="min-w-0 truncate text-lg font-bold text-slate-900">
-                    {isEditModalOpen
-                      ? canManage
-                        ? "Edit Property"
-                        : "Request Property Edit"
-                      : "Add Property"}
-                  </h3>
-                  <p className="text-[12.5px] text-slate-500">
-                    Step {formStepIndex + 1} of {INVENTORY_FORM_STEPS.length} · {INVENTORY_FORM_STEPS[formStepIndex].hint}
-                  </p>
-                </div>
-                <button
-                  onClick={closeFormModal}
-                  className="ml-3 inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-xl text-slate-600 hover:bg-slate-100"
-                  aria-label="Close inventory modal"
-                >
-                  <X size={18} />
-                </button>
-              </div>
-
               <ToastNotice message={formError} type="error" persistent={formErrorPersistent} onDismiss={() => setFormError("")} />
 
-              <nav aria-label="Property form steps" className="inventory-form-steps shrink-0 border-b border-slate-200 bg-slate-50/70 px-3 py-2 sm:px-5">
-                <ol className="custom-scrollbar flex gap-1.5 overflow-x-auto pb-0.5">
-                  {INVENTORY_FORM_STEPS.map((step, index) => {
-                    const active = step.id === formStep;
-                    const done = index < formStepIndex;
-                    return (
-                      <li key={step.id} className="shrink-0">
-                        <button
-                          type="button"
-                          onClick={() => setFormStep(step.id)}
-                          aria-current={active ? "step" : undefined}
-                          title={step.hint}
-                          className={`flex items-center gap-2 rounded-xl border px-3 py-1.5 text-left transition ${
-                            active
-                              ? "border-blue-600 bg-white text-blue-700 shadow-sm"
-                              : "border-transparent text-slate-600 hover:bg-white hover:text-slate-900"
-                          }`}
-                        >
-                          <span className={`grid h-6 w-6 shrink-0 place-items-center rounded-full text-[12px] font-bold ${
-                            active ? "bg-blue-600 text-white" : done ? "bg-emerald-600 text-white" : "bg-slate-200 text-slate-600"
-                          }`}>
-                            {done ? <Check size={13} strokeWidth={3} /> : index + 1}
-                          </span>
-                          <span className="text-[13px] font-semibold leading-tight">{step.label}</span>
-                        </button>
-                      </li>
-                    );
-                  })}
-                </ol>
-              </nav>
-
-              <div className="mobile-modal-scroll custom-scrollbar inventory-form-uppercase flex-1 space-y-3 px-3 py-3 sm:px-5">
+              <div className="inventory-form-uppercase flex flex-col gap-[18px]">
                 <div className={inventoryFormStepClass("basics")}>
                 <div className={INVENTORY_MODAL_SECTION_CLASS}>
                   <div className={INVENTORY_MODAL_SECTION_HEADING_CLASS}>Inventory Details</div>
                   <div className="mb-4 grid grid-cols-1 gap-3 sm:grid-cols-2 sm:gap-4">
                     <div>
-                      <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">
+                      <label className="text-[13px] font-medium text-[var(--g-mut)]">
                         Inventory Type
                       </label>
                       <select
@@ -3287,7 +3265,7 @@ const AssetVault = () => {
                       </select>
                     </div>
                     <div>
-                      <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">
+                      <label className="text-[13px] font-medium text-[var(--g-mut)]">
                         Rent or Sale
                       </label>
                       <select
@@ -3310,7 +3288,7 @@ const AssetVault = () => {
                       </select>
                     </div>
                     <div>
-                      <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">
+                      <label className="text-[13px] font-medium text-[var(--g-mut)]">
                         Property ID
                       </label>
                       <input
@@ -3356,7 +3334,7 @@ const AssetVault = () => {
                     <div className={INVENTORY_MODAL_SECTION_HEADING_CLASS}>Availability</div>
                   </div>
                   <div className="sm:col-span-2">
-                    <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">
+                    <label className="text-[13px] font-medium text-[var(--g-mut)]">
                       Status
                     </label>
                     <select
@@ -3416,7 +3394,7 @@ const AssetVault = () => {
                       </p>
 
                       <div>
-                        <label className="text-[10px] font-bold text-slate-500 uppercase tracking-widest">
+                        <label className="text-[13px] font-medium text-[var(--g-mut)]">
                           Sold To Lead *
                         </label>
                         <select
@@ -3437,7 +3415,7 @@ const AssetVault = () => {
 
                       <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
                         <div>
-                          <label className="text-[10px] font-bold text-slate-500 uppercase tracking-widest">
+                          <label className="text-[13px] font-medium text-[var(--g-mut)]">
                             Payment Mode *
                           </label>
                           <select
@@ -3455,7 +3433,7 @@ const AssetVault = () => {
                         </div>
 
                         <div>
-                          <label className="text-[10px] font-bold text-slate-500 uppercase tracking-widest">
+                          <label className="text-[13px] font-medium text-[var(--g-mut)]">
                             Payment Type *
                           </label>
                           <select
@@ -3475,7 +3453,7 @@ const AssetVault = () => {
 
                       <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
                         <div>
-                          <label className="text-[10px] font-bold text-slate-500 uppercase tracking-widest">
+                          <label className="text-[13px] font-medium text-[var(--g-mut)]">
                             Total Amount *
                           </label>
                           <input
@@ -3490,7 +3468,7 @@ const AssetVault = () => {
 
                         {formData.salePaymentType === "PARTIAL" ? (
                           <div>
-                            <label className="text-[10px] font-bold text-slate-500 uppercase tracking-widest">
+                            <label className="text-[13px] font-medium text-[var(--g-mut)]">
                               Remaining Amount *
                             </label>
                             <input
@@ -3504,7 +3482,7 @@ const AssetVault = () => {
                           </div>
                         ) : (
                           <div>
-                            <label className="text-[10px] font-bold text-slate-500 uppercase tracking-widest">
+                            <label className="text-[13px] font-medium text-[var(--g-mut)]">
                               Remaining Amount
                             </label>
                             <input
@@ -3518,7 +3496,7 @@ const AssetVault = () => {
                       </div>
 
                       <div>
-                        <label className="text-[10px] font-bold text-slate-500 uppercase tracking-widest">
+                        <label className="text-[13px] font-medium text-[var(--g-mut)]">
                           Payment Reference {isNonCashPaymentMode(formData.salePaymentMode) ? "*" : ""}
                         </label>
                         <input
@@ -3537,7 +3515,7 @@ const AssetVault = () => {
                       </div>
 
                       <div>
-                        <label className="text-[10px] font-bold text-slate-500 uppercase tracking-widest">
+                        <label className="text-[13px] font-medium text-[var(--g-mut)]">
                           Sale Note
                         </label>
                         <textarea
@@ -3561,7 +3539,7 @@ const AssetVault = () => {
                     <div className={INVENTORY_MODAL_SECTION_HEADING_CLASS}>Location</div>
                   </div>
                   <div className="sm:col-span-2">
-                    <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">
+                    <label className="text-[13px] font-medium text-[var(--g-mut)]">
                       Location
                     </label>
                     <div className="relative">
@@ -3644,7 +3622,7 @@ const AssetVault = () => {
 
                   <div className="grid grid-cols-1 gap-3 sm:col-span-2 sm:grid-cols-2 sm:gap-4">
                     <div>
-                      <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">
+                      <label className="text-[13px] font-medium text-[var(--g-mut)]">
                         Latitude (Optional)
                       </label>
                       <input
@@ -3657,7 +3635,7 @@ const AssetVault = () => {
                       />
                     </div>
                     <div>
-                      <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">
+                      <label className="text-[13px] font-medium text-[var(--g-mut)]">
                         Longitude (Optional)
                       </label>
                       <input
@@ -3688,7 +3666,7 @@ const AssetVault = () => {
 
                   <div className="grid grid-cols-1 gap-3 sm:col-span-2 sm:grid-cols-3 sm:gap-4">
                     <div>
-                      <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">
+                      <label className="text-[13px] font-medium text-[var(--g-mut)]">
                         City
                       </label>
                       <input
@@ -3700,7 +3678,7 @@ const AssetVault = () => {
                       />
                     </div>
                     <div>
-                      <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">
+                      <label className="text-[13px] font-medium text-[var(--g-mut)]">
                         Locality
                       </label>
                       <input
@@ -3712,7 +3690,7 @@ const AssetVault = () => {
                       />
                     </div>
                     <div>
-                      <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">
+                      <label className="text-[13px] font-medium text-[var(--g-mut)]">
                         Pincode
                       </label>
                       <input
@@ -3726,7 +3704,7 @@ const AssetVault = () => {
                   </div>
 
                   <div className="hidden">
-                    <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">
+                    <label className="text-[13px] font-medium text-[var(--g-mut)]">
                       Category
                     </label>
                     <select
@@ -3760,7 +3738,7 @@ const AssetVault = () => {
                   </div>
 
                   <div className="hidden">
-                    <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">
+                    <label className="text-[13px] font-medium text-[var(--g-mut)]">
                       Furnishing Status
                     </label>
                     <select
@@ -3788,7 +3766,7 @@ const AssetVault = () => {
 
                       <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 sm:gap-4">
                         <div>
-                          <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">
+                          <label className="text-[13px] font-medium text-[var(--g-mut)]">
                             Commercial Property Type
                           </label>
                           <select
@@ -3825,7 +3803,7 @@ const AssetVault = () => {
                         </div>
 
                         <div>
-                          <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">
+                          <label className="text-[13px] font-medium text-[var(--g-mut)]">
                             Washroom Type
                           </label>
                           <select
@@ -3845,7 +3823,7 @@ const AssetVault = () => {
 
                       <div className="grid grid-cols-1 gap-3 sm:grid-cols-3 sm:gap-4">
                         <div>
-                          <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">
+                          <label className="text-[13px] font-medium text-[var(--g-mut)]">
                             Cabins
                           </label>
                           <input
@@ -3859,7 +3837,7 @@ const AssetVault = () => {
                           />
                         </div>
                         <div>
-                          <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">
+                          <label className="text-[13px] font-medium text-[var(--g-mut)]">
                             Cabin Seats
                           </label>
                           <input
@@ -3873,7 +3851,7 @@ const AssetVault = () => {
                           />
                         </div>
                         <div>
-                          <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">
+                          <label className="text-[13px] font-medium text-[var(--g-mut)]">
                             Workstations
                           </label>
                           <input
@@ -3887,7 +3865,7 @@ const AssetVault = () => {
                           />
                         </div>
                         <div>
-                          <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">
+                          <label className="text-[13px] font-medium text-[var(--g-mut)]">
                             Seats
                           </label>
                           <input
@@ -3899,7 +3877,7 @@ const AssetVault = () => {
                           />
                         </div>
                         <div>
-                          <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">
+                          <label className="text-[13px] font-medium text-[var(--g-mut)]">
                             Conference Rooms
                           </label>
                           <input
@@ -3913,7 +3891,7 @@ const AssetVault = () => {
                           />
                         </div>
                         <div>
-                          <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">
+                          <label className="text-[13px] font-medium text-[var(--g-mut)]">
                             Conference Seats
                           </label>
                           <input
@@ -3927,7 +3905,7 @@ const AssetVault = () => {
                           />
                         </div>
                         <div>
-                          <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">
+                          <label className="text-[13px] font-medium text-[var(--g-mut)]">
                             Building Total Floors
                           </label>
                           <input
@@ -3944,7 +3922,7 @@ const AssetVault = () => {
 
                       <div className="grid grid-cols-1 gap-3 sm:grid-cols-3 sm:gap-4">
                         <div>
-                          <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">
+                          <label className="text-[13px] font-medium text-[var(--g-mut)]">
                             Reserved Parking Type
                           </label>
                           <select
@@ -3962,7 +3940,7 @@ const AssetVault = () => {
                           </select>
                         </div>
                         <div>
-                          <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">
+                          <label className="text-[13px] font-medium text-[var(--g-mut)]">
                             Reserved Parking Slots
                           </label>
                           <input
@@ -3976,7 +3954,7 @@ const AssetVault = () => {
                           />
                         </div>
                         <div>
-                          <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">
+                          <label className="text-[13px] font-medium text-[var(--g-mut)]">
                             Security
                           </label>
                           <select
@@ -4029,7 +4007,7 @@ const AssetVault = () => {
                       </div>
 
                       <div>
-                        <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">
+                        <label className="text-[13px] font-medium text-[var(--g-mut)]">
                           Available From
                         </label>
                         <input
@@ -4052,7 +4030,7 @@ const AssetVault = () => {
 
                       <div className="grid grid-cols-1 gap-3 sm:grid-cols-3 sm:gap-4">
                         <div>
-                          <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">
+                          <label className="text-[13px] font-medium text-[var(--g-mut)]">
                             Property Type
                           </label>
                           <select
@@ -4087,7 +4065,7 @@ const AssetVault = () => {
                           </select>
                         </div>
                         <div>
-                          <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">
+                          <label className="text-[13px] font-medium text-[var(--g-mut)]">
                             BHK Type
                           </label>
                           <select
@@ -4108,7 +4086,7 @@ const AssetVault = () => {
                           </select>
                         </div>
                         <div>
-                          <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">
+                          <label className="text-[13px] font-medium text-[var(--g-mut)]">
                             Reserved Parking Slots
                           </label>
                           <input
@@ -4122,7 +4100,7 @@ const AssetVault = () => {
                           />
                         </div>
                         <div>
-                          <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">
+                          <label className="text-[13px] font-medium text-[var(--g-mut)]">
                             Bedrooms
                           </label>
                           <input
@@ -4136,7 +4114,7 @@ const AssetVault = () => {
                           />
                         </div>
                         <div>
-                          <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">
+                          <label className="text-[13px] font-medium text-[var(--g-mut)]">
                             Bathrooms
                           </label>
                           <input
@@ -4150,7 +4128,7 @@ const AssetVault = () => {
                           />
                         </div>
                         <div>
-                          <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">
+                          <label className="text-[13px] font-medium text-[var(--g-mut)]">
                             Balcony
                           </label>
                           <input
@@ -4164,7 +4142,7 @@ const AssetVault = () => {
                           />
                         </div>
                         <div className="sm:col-span-3">
-                          <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">
+                          <label className="text-[13px] font-medium text-[var(--g-mut)]">
                             Water Supply
                           </label>
                           <select
@@ -4227,7 +4205,7 @@ const AssetVault = () => {
                   </div>
                   {isInventoryPriceRequired(formData.type) ? (
                     <div>
-                      <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">
+                      <label className="text-[13px] font-medium text-[var(--g-mut)]">
                         Price (Rs)
                       </label>
                       <input
@@ -4242,7 +4220,7 @@ const AssetVault = () => {
 
                   {isInventoryRentRequired(formData.type) ? (
                     <div>
-                      <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">
+                      <label className="text-[13px] font-medium text-[var(--g-mut)]">
                         Rent (Rs)
                       </label>
                       <input
@@ -4258,7 +4236,7 @@ const AssetVault = () => {
 
                   {isInventoryRentRequired(formData.type) ? (
                     <div>
-                      <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">
+                      <label className="text-[13px] font-medium text-[var(--g-mut)]">
                         Security Deposit (Rs)
                       </label>
                       <input
@@ -4273,7 +4251,7 @@ const AssetVault = () => {
                   ) : null}
 
                   <div>
-                    <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">
+                    <label className="text-[13px] font-medium text-[var(--g-mut)]">
                       Maintenance Charges
                     </label>
                     <input
@@ -4290,7 +4268,7 @@ const AssetVault = () => {
                   {isInventoryRentRequired(formData.type) ? (
                     <>
                       <div>
-                        <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">
+                        <label className="text-[13px] font-medium text-[var(--g-mut)]">
                           Security Deposit (Months)
                         </label>
                         <input
@@ -4304,7 +4282,7 @@ const AssetVault = () => {
                       </div>
 
                       <div>
-                        <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">
+                        <label className="text-[13px] font-medium text-[var(--g-mut)]">
                           Agreement (Years)
                         </label>
                         <input
@@ -4318,7 +4296,7 @@ const AssetVault = () => {
                       </div>
 
                       <div>
-                        <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">
+                        <label className="text-[13px] font-medium text-[var(--g-mut)]">
                           Lock-in (Years)
                         </label>
                         <input
@@ -4338,7 +4316,7 @@ const AssetVault = () => {
                     <div className={INVENTORY_MODAL_SECTION_HEADING_CLASS}>Deal Details</div>
                   </div>
                   <div>
-                    <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">
+                    <label className="text-[13px] font-medium text-[var(--g-mut)]">
                       Property Date
                     </label>
                     <input
@@ -4356,7 +4334,7 @@ const AssetVault = () => {
                     <div className={INVENTORY_MODAL_SECTION_HEADING_CLASS}>Owner Details</div>
                   </div>
                   <div>
-                    <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">
+                    <label className="text-[13px] font-medium text-[var(--g-mut)]">
                       Owner Name
                     </label>
                     <input
@@ -4368,7 +4346,7 @@ const AssetVault = () => {
                     />
                   </div>
                   <div>
-                    <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">
+                    <label className="text-[13px] font-medium text-[var(--g-mut)]">
                       Owner Number
                     </label>
                     <input
@@ -4380,7 +4358,7 @@ const AssetVault = () => {
                     />
                   </div>
                   <div>
-                    <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">
+                    <label className="text-[13px] font-medium text-[var(--g-mut)]">
                       Owner WhatsApp Number
                     </label>
                     <input
@@ -4392,7 +4370,7 @@ const AssetVault = () => {
                     />
                   </div>
                   <div>
-                    <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">
+                    <label className="text-[13px] font-medium text-[var(--g-mut)]">
                       Ownership
                     </label>
                     <select
@@ -4414,7 +4392,7 @@ const AssetVault = () => {
                     <div className={INVENTORY_MODAL_SECTION_HEADING_CLASS}>Key Manager Details</div>
                   </div>
                   <div>
-                    <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">
+                    <label className="text-[13px] font-medium text-[var(--g-mut)]">
                       Key Manager Name
                     </label>
                     <input
@@ -4426,7 +4404,7 @@ const AssetVault = () => {
                     />
                   </div>
                   <div>
-                    <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">
+                    <label className="text-[13px] font-medium text-[var(--g-mut)]">
                       Key Manager Number
                     </label>
                     <input
@@ -4495,7 +4473,7 @@ const AssetVault = () => {
 
                   <div className="mt-4 grid grid-cols-1 gap-3 sm:grid-cols-2 sm:gap-4">
                     <div>
-                      <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">
+                      <label className="text-[13px] font-medium text-[var(--g-mut)]">
                         Floor Plans
                       </label>
 
@@ -4547,7 +4525,7 @@ const AssetVault = () => {
                       </div>
                     </div>
                     <div>
-                      <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">
+                      <label className="text-[13px] font-medium text-[var(--g-mut)]">
                         Documents (if any available)
                       </label>
 
@@ -4599,7 +4577,7 @@ const AssetVault = () => {
                       </div>
                     </div>
                     <div>
-                      <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">
+                      <label className="text-[13px] font-medium text-[var(--g-mut)]">
                         Video Tours (one URL per line)
                       </label>
                       <textarea
@@ -4656,53 +4634,7 @@ const AssetVault = () => {
                 </div>
                 </div>
               </div>
-
-              <div className="mobile-safe-footer flex shrink-0 flex-wrap gap-3 border-t border-slate-100 bg-slate-50/50 px-3 pt-3 sm:p-6">
-                <button
-                  onClick={closeFormModal}
-                  className="flex-1 py-3 text-xs font-bold uppercase text-slate-500 hover:bg-slate-100 rounded-xl"
-                >
-                  Cancel
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setFormStep(INVENTORY_FORM_STEPS[Math.max(0, formStepIndex - 1)].id)}
-                  disabled={formStepIndex === 0}
-                  className="flex-1 rounded-xl border border-slate-200 bg-white py-3 text-xs font-bold uppercase text-slate-700 hover:bg-slate-50 disabled:opacity-40"
-                >
-                  Back
-                </button>
-                {formStepIndex < INVENTORY_FORM_STEPS.length - 1 ? (
-                  <button
-                    type="button"
-                    onClick={() => setFormStep(INVENTORY_FORM_STEPS[formStepIndex + 1].id)}
-                    className="flex-1 rounded-xl border border-blue-600 bg-white py-3 text-xs font-bold uppercase text-blue-700 hover:bg-blue-50"
-                  >
-                    Next: {INVENTORY_FORM_STEPS[formStepIndex + 1].label}
-                  </button>
-                ) : null}
-                <button
-                  onClick={isEditModalOpen ? handleUpdateAsset : handleSaveAsset}
-                  disabled={uploading || uploadingFloorPlans || uploadingDocuments || saving || resolvingLocation}
-                  className={`flex-1 py-3 text-white rounded-xl text-xs font-bold uppercase tracking-widest shadow-lg transition-all ${
-                    uploading || uploadingFloorPlans || uploadingDocuments || saving || resolvingLocation
-                      ? "bg-slate-400 cursor-not-allowed"
-                      : "bg-emerald-600 hover:bg-emerald-700"
-                  }`}
-                >
-                  {uploading || uploadingFloorPlans || uploadingDocuments || saving || resolvingLocation
-                    ? isEditModalOpen
-                      ? (resolvingLocation ? "Resolving..." : "Updating...")
-                      : (resolvingLocation ? "Resolving..." : "Saving...")
-                    : isEditModalOpen
-                      ? canManage
-                        ? "Update Asset"
-                        : "Submit Edit Request"
-                      : "Save Asset"}
-                </button>
-              </div>
-            </Motion.div>
-          </Motion.div>
+          </FormWizard>
         )}
       </AnimatePresence>
 

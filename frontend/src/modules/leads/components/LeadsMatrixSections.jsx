@@ -29,8 +29,13 @@ import {
   Sparkles,
   Trash2,
   UploadCloud,
+  UserPlus,
+  UserRound,
   Users2,
   X,
+  Briefcase,
+  Home,
+  IndianRupee,
 } from "lucide-react";
 import { EmptyState, Skeleton } from "../../../components/ui";
 import { StatusBadge } from "../../../components/crm";
@@ -46,6 +51,8 @@ import {
   getPropertySubtypeOptions,
 } from "../../../config/propertyRequirementConfig";
 import ContactPicker from "../../inventory/components/ContactPicker";
+import FormWizard from "../../../components/ui/FormWizard";
+import { ChoiceCards, FormField, FormGroup, FormInput, FormLabel, PickChips, ReviewGroup } from "../../../components/ui/formKit";
 
 const INR_CURRENCY_FORMATTER = new Intl.NumberFormat("en-IN", {
   style: "currency",
@@ -1386,6 +1393,35 @@ export const LeadsMatrixTable = ({
   );
 };
 
+/* ---- Add / Edit lead step form (CRM Web Glass form design) ---- */
+const LEAD_WIZARD_STEPS = [
+  { key: "contact", label: "Contact", hint: "Who is the lead" },
+  { key: "location", label: "Location", hint: "Where they want" },
+  { key: "requirement", label: "Requirement", hint: "Type & budget" },
+  { key: "inventory", label: "Inventory", hint: "Link properties" },
+  { key: "review", label: "Review", hint: "Check & save" },
+];
+const LEAD_TYPE_ICON = { RESIDENTIAL: Home, COMMERCIAL: Building2, COWORKING: Users2 };
+const LEAD_TYPE_SUB = {
+  "": "Not decided yet",
+  RESIDENTIAL: "Flats, houses, plots",
+  COMMERCIAL: "Shops, offices, land",
+  COWORKING: "Seats & cabins",
+};
+const LEAD_INPUT_CLASS =
+  "h-[46px] w-full rounded-[13px] border-[1.5px] border-[var(--g-edge)] bg-[var(--g-glassHi)] px-3.5 text-[14px] text-[var(--g-ink)] outline-none transition focus:border-[var(--g-b)] focus:shadow-[0_0_0_4px_var(--g-bs)]";
+const LEAD_FIELD_TITLE_CLASS = "text-[13px] font-medium text-[var(--g-mut)]";
+/* Same rule as the server (and LeadsMatrix): 10-digit Indian number or country code + number. */
+const isLeadPhoneLike = (value) => {
+  const raw = String(value || "").trim();
+  if (!raw || !/^[0-9+().\-\s]+$/.test(raw)) return false;
+  let digits = raw.replace(/\D/g, "");
+  if (digits.startsWith("00")) digits = digits.slice(2);
+  if (digits.length === 12 && digits.startsWith("91")) digits = digits.slice(2);
+  if (digits.length === 11 && digits.startsWith("0")) digits = digits.slice(1);
+  return digits.length >= 10 && digits.length <= 15;
+};
+
 export const AddLeadModal = ({
   isDark,
   title = "Add New Lead",
@@ -1399,26 +1435,22 @@ export const AddLeadModal = ({
   onClose,
   onSave,
   savingLead,
+  saveError = "",
   availableInventoryTypes = INVENTORY_TYPE_OPTIONS,
 }) => {
   const [customNumberFields, setCustomNumberFields] = React.useState({});
   const [isManualBudgetRange, setIsManualBudgetRange] = React.useState(false);
   const [inventorySearchText, setInventorySearchText] = React.useState("");
-  const inputClass = `h-11 w-full rounded-lg border px-3 text-sm md:h-10 ${
-    isDark ? "border-slate-700 bg-slate-950 text-slate-200" : "border-slate-300 bg-white text-slate-700"
-  }`;
-  const fieldTitleClass = `text-[11px] font-bold uppercase tracking-[0.08em] ${
-    isDark ? "text-slate-400" : "text-slate-500"
-  }`;
-  const sectionCardClass = `rounded-xl border p-3 ${
-    isDark ? "border-slate-700 bg-slate-950/55" : "border-slate-200 bg-slate-50/60"
-  }`;
-  const sectionHeadingClass = `mb-2 text-[11px] font-bold uppercase tracking-[0.14em] ${
-    isDark ? "text-slate-400" : "text-slate-500"
-  }`;
-  const checkboxLabelClass = `inline-flex min-h-10 items-center gap-1.5 rounded border px-2.5 py-2 text-[11px] md:min-h-0 md:px-2 md:py-1 ${
-    isDark ? "border-slate-700 bg-slate-900 text-slate-200" : "border-slate-300 bg-white text-slate-700"
-  }`;
+  const [wizardStep, setWizardStep] = React.useState(0);
+  const [wizardDir, setWizardDir] = React.useState(1);
+  const [wizardTried, setWizardTried] = React.useState({});
+  const [stepError, setStepError] = React.useState("");
+  const [saveTried, setSaveTried] = React.useState(false);
+  const inputClass = LEAD_INPUT_CLASS;
+  const fieldTitleClass = LEAD_FIELD_TITLE_CLASS;
+  const sectionCardClass = "gl-form-section flex flex-col gap-3 rounded-2xl p-4";
+  const sectionHeadingClass = "text-[14px] font-semibold text-[var(--g-ink)]";
+  const checkboxLabelClass = "inline-flex min-h-9 items-center gap-1.5 rounded-full border border-[var(--g-edge)] bg-[var(--g-glassHi)] px-3 py-1.5 text-[12.5px] font-medium text-[var(--g-ink)]";
 
   const requirementInventoryType = String(formData.requirementsInventoryType || "").trim().toUpperCase();
   const requirementPropertySubtype = String(formData.requirementsPropertySubtype || "").trim().toUpperCase();
@@ -1683,403 +1715,386 @@ export const AddLeadModal = ({
     );
   };
 
-  return (
-    <Motion.div
-      initial={{ opacity: 0 }}
-      animate={{ opacity: 1 }}
-      exit={{ opacity: 0 }}
-      className={`mobile-bottom-sheet fixed inset-0 z-50 flex items-stretch justify-center p-0 sm:items-center sm:p-4 ${
-        isDark ? "bg-slate-950/70" : "bg-slate-900/40"
-      }`}
-    >
-      <Motion.div
-        initial={{ scale: 0.96, y: 10 }}
-        animate={{ scale: 1, y: 0 }}
-        exit={{ scale: 0.96, y: 10 }}
-        className={`mobile-fullscreen-panel ui-soft-panel flex h-dvh w-full max-w-3xl flex-col overflow-hidden rounded-none shadow-2xl sm:h-auto sm:max-h-[92vh] sm:rounded-2xl ${
-          isDark ? "border-slate-700 bg-slate-900" : "border-slate-200 bg-white"
-        }`}
-      >
-        <div className="flex shrink-0 items-center justify-between border-b border-slate-200 px-4 py-3 dark:border-slate-700 sm:px-5">
-          <h3 className={`text-lg font-bold ${isDark ? "text-slate-100" : "text-slate-900"}`}>{title}</h3>
-          <button
-            onClick={onClose}
-            className={`inline-flex h-10 w-10 items-center justify-center rounded-xl ${isDark ? "text-slate-300 hover:bg-slate-800" : "text-slate-600 hover:bg-slate-100"}`}
-            aria-label={`Close ${title} modal`}
-          >
-            <X size={16} />
-          </button>
-        </div>
+  /* ---- step wizard (CRM Web Glass form design) ---- */
+  const nameMissing = !String(formData.name || "").trim();
+  const phoneMissing = !String(formData.phone || "").trim();
+  const phoneFieldError = phoneMissing
+    ? "Phone is required"
+    : !isLeadPhoneLike(formData.phone) ? "Enter a valid phone number: a 10-digit mobile, or country code + number" : "";
+  const contactIssue = nameMissing && phoneMissing ? "Name and phone are required"
+    : nameMissing ? "Name is required" : phoneFieldError;
+  const locationIssue = (() => {
+    const lat = String(formData.siteLat ?? "").trim();
+    const lng = String(formData.siteLng ?? "").trim();
+    if (!lat && !lng) return "";
+    const okLat = lat && Number.isFinite(Number(lat)) && Math.abs(Number(lat)) <= 90;
+    const okLng = lng && Number.isFinite(Number(lng)) && Math.abs(Number(lng)) <= 180;
+    return okLat && okLng ? "" : "Enter valid site latitude and longitude";
+  })();
+  const issueOfStep = (i) => (i === 0 ? contactIssue : i === 1 ? locationIssue : "");
+  const lastStep = LEAD_WIZARD_STEPS.length - 1;
 
-        <div className="mobile-modal-scroll custom-scrollbar flex-1 space-y-3 px-3 py-3 sm:px-5">
-          <div className="grid grid-cols-1 gap-2 md:grid-cols-2">
-            <AddLeadFieldShell fieldTitleClass={fieldTitleClass} title="Name">
-              <input placeholder="Name" value={formData.name} onChange={(event) => updateField("name", event.target.value)} className={inputClass} />
-            </AddLeadFieldShell>
-            <AddLeadFieldShell fieldTitleClass={fieldTitleClass} title="Phone">
-              <div><input placeholder="Phone" value={formData.phone} onChange={(event) => updateField("phone", event.target.value)} className={inputClass} /><BrokerPhoneHint phone={formData.phone} /></div>
-            </AddLeadFieldShell>
-            <AddLeadFieldShell fieldTitleClass={fieldTitleClass} title="Email">
-              <input placeholder="Email" value={formData.email} onChange={(event) => updateField("email", event.target.value)} className={inputClass} />
-            </AddLeadFieldShell>
-            <AddLeadFieldShell fieldTitleClass={fieldTitleClass} title="City">
-              <input placeholder="City" value={formData.city} onChange={(event) => updateField("city", event.target.value)} className={inputClass} />
-            </AddLeadFieldShell>
+  const goToStep = (i) => {
+    setWizardDir(i >= wizardStep ? 1 : -1);
+    setWizardStep(i);
+    setStepError("");
+  };
+  const wizardNext = () => {
+    if (wizardStep === lastStep) {
+      const bad = [0, 1].find((i) => issueOfStep(i));
+      if (bad !== undefined) {
+        setWizardTried((prev) => ({ ...prev, [bad]: true }));
+        goToStep(bad);
+        setStepError(issueOfStep(bad));
+        return;
+      }
+      setSaveTried(true);
+      onSave();
+      return;
+    }
+    const issue = issueOfStep(wizardStep);
+    if (issue) {
+      setWizardTried((prev) => ({ ...prev, [wizardStep]: true }));
+      setStepError(issue);
+      return;
+    }
+    goToStep(wizardStep + 1);
+  };
+  const stepState = (i) => {
+    if (wizardTried[i] && issueOfStep(i)) return "bad";
+    return i < wizardStep ? "done" : "todo";
+  };
+  const wizardError = (stepError && stepError === issueOfStep(wizardStep) ? stepError : "")
+    || (saveTried && wizardStep === lastStep ? saveError : "");
+
+  const labelOf = (options, value, fallback = "") => options.find((o) => o.value === value)?.label || fallback;
+  const inventoryTypeCards = availableInventoryTypes.map((option) => ({
+    value: option.value,
+    label: option.value ? option.label : "Any",
+    icon: LEAD_TYPE_ICON[option.value] || Filter,
+    sub: LEAD_TYPE_SUB[option.value] || "",
+  }));
+  const dealTypeChips = [
+    { value: "", label: "Any" },
+    ...(canPurchaseRequirement ? [{ value: "SALE", label: "Purchase" }] : []),
+    ...(canRentRequirement ? [{ value: "RENT", label: "Rent" }] : []),
+    { value: "LEASE", label: "Lease" },
+  ];
+  const anyLabel = (options) => options.map((o) => (o.value ? o : { ...o, label: "Any" }));
+  const toChips = (list) => list.map((item) => ({ value: item, label: item }));
+  const budgetLabel = (() => {
+    if (isCustomBudgetRange) {
+      const min = formData.requirementsBudgetMin;
+      const max = formData.requirementsBudgetMax;
+      return min || max ? `${min ? formatCurrencyInr(min) : "Any"} – ${max ? formatCurrencyInr(max) : "Any"}` : "";
+    }
+    return budgetRangeValue ? labelOf(budgetRangeOptions, budgetRangeValue) : "";
+  })();
+  const linkedInventoryNames = inventoryOptions
+    .filter((inventory) => selectedInventoryIds.has(String(inventory?._id || "")))
+    .map((inventory) => getInventoryLeadLabel(inventory) || "Inventory Unit");
+  const preferredLocationsText = Array.isArray(formData.preferredLocations)
+    ? formData.preferredLocations.filter(Boolean).join(", ")
+    : String(formData.preferredLocations || "");
+
+  return (
+    <FormWizard
+      icon={UserPlus}
+      title={title}
+      steps={LEAD_WIZARD_STEPS}
+      step={wizardStep}
+      dir={wizardDir}
+      stepState={stepState}
+      canOpenStep={(i) => i < wizardStep || [...Array(i).keys()].every((k) => !issueOfStep(k))}
+      onStep={goToStep}
+      onClose={onClose}
+      onBack={() => goToStep(Math.max(0, wizardStep - 1))}
+      onNext={wizardNext}
+      onSkip={wizardStep >= 1 && wizardStep <= 3 ? () => goToStep(wizardStep + 1) : undefined}
+      primaryLabel={wizardStep === lastStep ? (savingLead ? savingLabel : saveLabel) : "Continue"}
+      primaryIcon={wizardStep === lastStep ? "save" : "next"}
+      busy={savingLead}
+      error={wizardError}
+      width={820}
+    >
+      {wizardStep === 0 && (
+        <>
+          <div className="grid grid-cols-1 gap-3.5 md:grid-cols-2">
+            <FormField label="Full name" required error={wizardTried[0] && nameMissing ? "Name is required" : ""}>
+              <FormInput icon={UserRound} big placeholder="e.g. Rahul Sharma" value={formData.name} onChange={(event) => updateField("name", event.target.value)} error={wizardTried[0] && nameMissing} autoFocus />
+            </FormField>
+            <FormField label="Phone" required error={wizardTried[0] ? phoneFieldError : ""}>
+              <FormInput icon={Phone} big inputMode="tel" placeholder="10-digit mobile" value={formData.phone} onChange={(event) => updateField("phone", event.target.value)} error={wizardTried[0] && Boolean(phoneFieldError)} />
+              <BrokerPhoneHint phone={formData.phone} />
+            </FormField>
+            <FormField label="Email">
+              <FormInput icon={Mail} type="email" placeholder="name@example.com" value={formData.email} onChange={(event) => updateField("email", event.target.value)} />
+            </FormField>
+            <FormField label="City">
+              <FormInput icon={MapPin} placeholder="City" value={formData.city} onChange={(event) => updateField("city", event.target.value)} />
+            </FormField>
             {/* Free text on purpose: any profession or business (Marketing, Lawyer, DSA...). */}
-            <AddLeadFieldShell fieldTitleClass={fieldTitleClass} title="Work Profile">
-              <input
-                placeholder="e.g. Marketing, Lawyer, DSA"
-                value={formData.clientProfession || ""}
-                onChange={(event) => updateField("clientProfession", event.target.value)}
-                maxLength={120}
-                className={inputClass}
-              />
-            </AddLeadFieldShell>
+            <FormField label="Work profile" hint="Any profession or business">
+              <FormInput icon={Briefcase} placeholder="e.g. Marketing, Lawyer, DSA" value={formData.clientProfession || ""} onChange={(event) => updateField("clientProfession", event.target.value)} maxLength={120} />
+            </FormField>
             {/* A coworking enquiry is often one person, so the firm is optional
                 and only asked for where it means something. */}
             {requirementInventoryType === "COWORKING" ? (
-              <AddLeadFieldShell fieldTitleClass={fieldTitleClass} title="Company (optional)">
-                <input placeholder="Company name" value={formData.company || ""} onChange={(event) => updateField("company", event.target.value)} className={inputClass} />
-              </AddLeadFieldShell>
-            ) : null}
-            <AddLeadFieldShell fieldTitleClass={fieldTitleClass} title="Lead Source">
-              <AddLeadSelectControl inputClass={inputClass} isDark={isDark} value={formData.sourceChannel || ""} onChange={(event) => updateField("sourceChannel", event.target.value)}>
-                {LEAD_SOURCE_CHANNELS.map((option) => (
-                  <option key={option.value || "any-source"} value={option.value}>{option.label}</option>
-                ))}
-              </AddLeadSelectControl>
-            </AddLeadFieldShell>
-            {formData.sourceChannel === "BROKER" ? (
-              <AddLeadFieldShell fieldTitleClass={fieldTitleClass} title="Referred by broker">
-                <ContactPicker kind="BROKER" value={formData.referredBroker || null} onPick={(broker) => updateField("referredBroker", broker)} placeholder="Search the Broker Database" />
-              </AddLeadFieldShell>
-            ) : null}
-            <AddLeadFieldShell fieldTitleClass={fieldTitleClass} title="Location" className="md:col-span-2">
-              <PlaceAutocompleteInput
-                multiValue
-                value={formData.preferredLocations}
-                onChange={(next) => updateField("preferredLocations", next)}
-                onSelect={({ lat, lng }) => {
-                  // Coordinates only exist for a picked suggestion; a typed
-                  // locality leaves the site fields alone.
-                  if (Number.isFinite(lat) && Number.isFinite(lng)) {
-                    updateField("siteLat", String(lat));
-                    updateField("siteLng", String(lng));
-                  }
-                }}
-                placeholder="Search a locality, or type several separated by comma"
-                className={inputClass}
-              />
-            </AddLeadFieldShell>
-          </div>
-
-          <div className="grid grid-cols-1 gap-2 md:grid-cols-2">
-            <AddLeadFieldShell fieldTitleClass={fieldTitleClass} title="Site Latitude">
-              <input placeholder="Site Latitude (optional)" value={formData.siteLat} onChange={(event) => updateField("siteLat", event.target.value)} className={inputClass} />
-            </AddLeadFieldShell>
-            <AddLeadFieldShell fieldTitleClass={fieldTitleClass} title="Site Longitude">
-              <input placeholder="Site Longitude (optional)" value={formData.siteLng} onChange={(event) => updateField("siteLng", event.target.value)} className={inputClass} />
-            </AddLeadFieldShell>
-          </div>
-
-          <GoogleMapPicker
-            latitude={formData.siteLat}
-            longitude={formData.siteLng}
-            onChange={({ lat, lng }) => {
-              setFormData((prev) => ({
-                ...prev,
-                siteLat: String(lat),
-                siteLng: String(lng),
-              }));
-            }}
-            heightClass="h-52 sm:h-60"
-            isDark={isDark}
-          />
-
-          <div className={sectionCardClass}>
-            <div className={sectionHeadingClass}>Lead Requirement (Inventory Filters)</div>
-
-            <div className="grid grid-cols-1 gap-2 md:grid-cols-2">
-              <AddLeadFieldShell fieldTitleClass={fieldTitleClass} title="Inventory Type">
-                <AddLeadSelectControl inputClass={inputClass} isDark={isDark} value={formData.requirementsInventoryType} onChange={(event) => updateRequirementInventoryType(event.target.value)}>
-                  {availableInventoryTypes.map((option) => (
-                    <option key={option.value || "any-inventory-type"} value={option.value}>{option.label}</option>
-                  ))}
-                </AddLeadSelectControl>
-              </AddLeadFieldShell>
-              {requirementInventoryType && requirementInventoryType !== "COWORKING" ? (
-                <AddLeadFieldShell fieldTitleClass={fieldTitleClass} title={requirementInventoryType === "COMMERCIAL" ? "Commercial Property Type" : "Residential Property Type"}>
-                  <AddLeadSelectControl inputClass={inputClass} isDark={isDark} value={formData.requirementsPropertySubtype} onChange={(event) => updateRequirementPropertySubtype(event.target.value)}>
-                    <option value="">Property Type (Any)</option>
-                    {propertySubtypeOptions.map((option) => (
-                      <option key={option.value} value={option.value}>{option.label}</option>
-                    ))}
-                  </AddLeadSelectControl>
-                </AddLeadFieldShell>
-              ) : null}
-              <AddLeadFieldShell fieldTitleClass={fieldTitleClass} title="Deal Type">
-                <AddLeadSelectControl inputClass={inputClass} isDark={isDark} value={transactionTypeValue} onChange={(event) => updateTransactionType(event.target.value)}>
-                  <option value="">Deal Type (Any)</option>
-                  {canPurchaseRequirement ? <option value="SALE">Purchase</option> : null}
-                  {canRentRequirement ? <option value="RENT">Rent</option> : null}
-                  <option value="LEASE">Lease</option>
-                </AddLeadSelectControl>
-              </AddLeadFieldShell>
-              {showFurnishing ? (
-                <AddLeadFieldShell fieldTitleClass={fieldTitleClass} title="Furnishing">
-                  <AddLeadSelectControl inputClass={inputClass} isDark={isDark} value={furnishingValue} onChange={(event) => updateField("requirementsFurnishingStatus", event.target.value)}>
-                    {furnishingOptions.map((option) => (
-                      <option key={option.value || "any-furnishing"} value={option.value}>{option.label}</option>
-                    ))}
-                  </AddLeadSelectControl>
-                </AddLeadFieldShell>
-              ) : null}
-            </div>
-
-            {requirementInventoryType === "COWORKING" ? (
-              <div className="mt-3">
-                <CoworkingRequirementFields
-                  value={formData.requirementsCoworking || {}}
-                  onChange={(next) => updateField("requirementsCoworking", next)}
-                  inputClass={inputClass}
-                  labelClass={fieldTitleClass}
-                />
-              </div>
-            ) : null}
-
-            {isPlotRequirement ? (
-              <div className="mt-2 grid grid-cols-1 gap-2 md:grid-cols-2">
-                <AddLeadFieldShell fieldTitleClass={fieldTitleClass} title="Project Interested">
-                  <input
-                    placeholder="Project Interested"
-                    value={formData.projectInterested}
-                    onChange={(event) => updateField("projectInterested", event.target.value)}
-                    className={inputClass}
-                  />
-                </AddLeadFieldShell>
-                <AddLeadFieldShell fieldTitleClass={fieldTitleClass} title="Budget Range">
-                  <AddLeadSelectControl
-                    inputClass={inputClass}
-                    isDark={isDark}
-                    value={selectedBudgetRangeValue}
-                    onChange={(event) => updateBudgetRange(event.target.value)}
-                  >
-                    {budgetRangeOptions.map((option) => (
-                      <option key={option.value || "any-plot-budget"} value={option.value}>
-                        {option.label}
-                      </option>
-                    ))}
-                  </AddLeadSelectControl>
-                </AddLeadFieldShell>
-                {isCustomBudgetRange ? (
-                  <>
-                    <AddLeadFieldShell fieldTitleClass={fieldTitleClass} title="Budget Min">
-                      <input
-                        type="number"
-                        step="any"
-                        placeholder="Budget Min"
-                        value={formData.requirementsBudgetMin}
-                        onChange={(event) => updateField("requirementsBudgetMin", event.target.value)}
-                        className={inputClass}
-                      />
-                    </AddLeadFieldShell>
-                    <AddLeadFieldShell fieldTitleClass={fieldTitleClass} title="Budget Max">
-                      <input
-                        type="number"
-                        step="any"
-                        placeholder="Budget Max"
-                        value={formData.requirementsBudgetMax}
-                        onChange={(event) => updateField("requirementsBudgetMax", event.target.value)}
-                        className={inputClass}
-                      />
-                    </AddLeadFieldShell>
-                  </>
-                ) : null}
-                <AddLeadFieldShell fieldTitleClass={fieldTitleClass} title="Plot Location">
-                  <AddLeadSelectControl
-                    inputClass={inputClass}
-                    isDark={isDark}
-                    value={plotLocationValue}
-                    onChange={(event) => updateSubtypeField("plotLocation", event.target.value)}
-                  >
-                    <option value="">Location</option>
-                    {PLOT_LOCATION_OPTIONS.map((location) => (
-                      <option key={location} value={location}>
-                        {location}
-                      </option>
-                    ))}
-                  </AddLeadSelectControl>
-                </AddLeadFieldShell>
-                <AddLeadFieldShell fieldTitleClass={fieldTitleClass} title="Occupancy">
-                  <AddLeadSelectControl
-                    inputClass={inputClass}
-                    isDark={isDark}
-                    value={plotOccupancyValue}
-                    onChange={(event) => updateSubtypeField("plotOccupancy", event.target.value)}
-                  >
-                    <option value="">Occupancy</option>
-                    {PLOT_OCCUPANCY_OPTIONS.map((occupancy) => (
-                      <option key={occupancy} value={occupancy}>
-                        {occupancy}
-                      </option>
-                    ))}
-                  </AddLeadSelectControl>
-                </AddLeadFieldShell>
-                <AddLeadFieldShell fieldTitleClass={fieldTitleClass} title="Purpose">
-                  <AddLeadSelectControl
-                    inputClass={inputClass}
-                    isDark={isDark}
-                    value={plotPurposeValue}
-                    onChange={(event) => updateSubtypeField("plotPurpose", event.target.value)}
-                  >
-                    <option value="">Purpose</option>
-                    {PLOT_PURPOSE_OPTIONS.map((purpose) => (
-                      <option key={purpose} value={purpose}>
-                        {purpose}
-                      </option>
-                    ))}
-                  </AddLeadSelectControl>
-                </AddLeadFieldShell>
-              </div>
-            ) : (
-              <div className="mt-2 grid grid-cols-1 gap-2 md:grid-cols-2">
-                <AddLeadFieldShell fieldTitleClass={fieldTitleClass} title="Budget Range">
-                  <AddLeadSelectControl
-                    inputClass={inputClass}
-                    isDark={isDark}
-                    value={selectedBudgetRangeValue}
-                    onChange={(event) => updateBudgetRange(event.target.value)}
-                  >
-                    {budgetRangeOptions.map((option) => (
-                      <option key={option.value || "any-budget"} value={option.value}>
-                        {option.label}
-                      </option>
-                    ))}
-                  </AddLeadSelectControl>
-                </AddLeadFieldShell>
-                {isCustomBudgetRange ? (
-                  <>
-                    <AddLeadFieldShell fieldTitleClass={fieldTitleClass} title="Budget Min">
-                      <input
-                        type="number"
-                        step="any"
-                        placeholder="Budget Min"
-                        value={formData.requirementsBudgetMin}
-                        onChange={(event) => updateField("requirementsBudgetMin", event.target.value)}
-                        className={inputClass}
-                      />
-                    </AddLeadFieldShell>
-                    <AddLeadFieldShell fieldTitleClass={fieldTitleClass} title="Budget Max">
-                      <input
-                        type="number"
-                        step="any"
-                        placeholder="Budget Max"
-                        value={formData.requirementsBudgetMax}
-                        onChange={(event) => updateField("requirementsBudgetMax", event.target.value)}
-                        className={inputClass}
-                      />
-                    </AddLeadFieldShell>
-                  </>
-                ) : null}
-              </div>
-            )}
-
-            {propertySubtypeConfig ? (
-              <div className="mt-2">
-                <div className={sectionHeadingClass}>{propertySubtypeConfig.label} Preferences</div>
-                <div className="grid grid-cols-1 gap-2 md:grid-cols-2">
-                  {(propertySubtypeConfig.fields || [])
-                    .filter((field) => field.type !== "checkbox" && !PLOT_INLINE_FIELD_KEYS.has(field.key))
-                    .map(renderDynamicField)}
-                </div>
-                <div className="mt-2 flex flex-wrap gap-2">
-                  {(propertySubtypeConfig.fields || [])
-                    .filter((field) => field.type === "checkbox" && !PLOT_INLINE_FIELD_KEYS.has(field.key))
-                    .map(renderDynamicField)}
-                </div>
-              </div>
+              <FormField label="Company (optional)">
+                <FormInput icon={Building2} placeholder="Company name" value={formData.company || ""} onChange={(event) => updateField("company", event.target.value)} />
+              </FormField>
             ) : null}
           </div>
+          <div className="flex flex-col gap-2">
+            <FormLabel>Lead source</FormLabel>
+            <PickChips
+              round
+              options={LEAD_SOURCE_CHANNELS.map((o) => (o.value ? o : { ...o, label: "Not set" }))}
+              value={formData.sourceChannel || ""}
+              onChange={(value) => updateField("sourceChannel", value)}
+            />
+          </div>
+          {formData.sourceChannel === "BROKER" ? (
+            <FormField label="Referred by broker">
+              <ContactPicker kind="BROKER" value={formData.referredBroker || null} onPick={(broker) => updateField("referredBroker", broker)} placeholder="Search the Broker Database" />
+            </FormField>
+          ) : null}
+        </>
+      )}
 
-          <AddLeadFieldShell fieldTitleClass={fieldTitleClass} title="Select Inventory">
-            <input
-              type="search"
-              value={inventorySearchText}
-              onChange={(event) => setInventorySearchText(event.target.value)}
-              placeholder="Search inventory"
+      {wizardStep === 1 && (
+        <>
+          <FormField label="Preferred locations" hint="Pick a suggestion to fill the coordinates, or type several separated by comma">
+            <PlaceAutocompleteInput
+              multiValue
+              value={formData.preferredLocations}
+              onChange={(next) => updateField("preferredLocations", next)}
+              onSelect={({ lat, lng }) => {
+                // Coordinates only exist for a picked suggestion; a typed
+                // locality leaves the site fields alone.
+                if (Number.isFinite(lat) && Number.isFinite(lng)) {
+                  updateField("siteLat", String(lat));
+                  updateField("siteLng", String(lng));
+                }
+              }}
+              placeholder="Search a locality"
               className={inputClass}
             />
-            <div className={`mt-2 max-h-44 overflow-auto rounded-lg border ${
-              isDark ? "border-slate-700 bg-slate-950" : "border-slate-200 bg-white"
-            }`}>
-              {filteredInventoryOptions.length ? filteredInventoryOptions.map((inventory) => {
-                const inventoryLabel = getInventoryLeadLabel(inventory) || "Inventory Unit";
-                const inventoryLocation = getInventoryLocationLabel(inventory);
-                const inventoryQuickInfo = getInventoryQuickInfo(inventory);
-                const optionText = [
-                  inventoryLabel,
-                  inventoryLocation,
-                  inventoryQuickInfo,
-                ]
-                  .filter(Boolean)
-                  .join(" | ");
-                const inventoryId = String(inventory?._id || "");
-                const checked = selectedInventoryIds.has(inventoryId);
-                return (
-                  <label
-                    key={inventoryId}
-                    className={`flex cursor-pointer items-start gap-2 border-b px-3 py-2 text-sm last:border-b-0 ${
-                      isDark ? "border-slate-800 text-slate-200 hover:bg-slate-900" : "border-slate-100 text-slate-700 hover:bg-slate-50"
-                    }`}
-                  >
-                    <input
-                      type="checkbox"
-                      className="mt-1 h-4 w-4"
-                      checked={checked}
-                      onChange={(event) => onInventorySelection(inventoryId, event.target.checked)}
-                    />
-                    <span className="min-w-0 flex-1">
-                      <span className="block truncate font-semibold">{inventoryLabel}</span>
-                      {optionText ? (
-                        <span className={`block truncate text-xs ${isDark ? "text-slate-400" : "text-slate-500"}`}>
-                          {optionText}
-                        </span>
-                      ) : null}
-                    </span>
-                  </label>
-                );
-              }) : (
-                <div className={`px-3 py-3 text-sm ${isDark ? "text-slate-400" : "text-slate-500"}`}>
-                  No inventory found
-                </div>
-              )}
-            </div>
-          </AddLeadFieldShell>
-        </div>
+          </FormField>
+          <div className="grid grid-cols-1 gap-3.5 md:grid-cols-2">
+            <FormField label="Site latitude">
+              <FormInput icon={MapPin} placeholder="Optional" value={formData.siteLat} onChange={(event) => updateField("siteLat", event.target.value)} error={wizardTried[1] && Boolean(locationIssue)} />
+            </FormField>
+            <FormField label="Site longitude">
+              <FormInput icon={MapPin} placeholder="Optional" value={formData.siteLng} onChange={(event) => updateField("siteLng", event.target.value)} error={wizardTried[1] && Boolean(locationIssue)} />
+            </FormField>
+          </div>
+        </>
+      )}
 
-        <div className={`mobile-safe-footer flex shrink-0 gap-2 border-t px-3 pt-3 sm:px-5 sm:pb-3 ${
-          isDark ? "border-slate-700 bg-slate-900" : "border-slate-200 bg-white"
-        }`}>
-          <button
-            onClick={onClose}
-            className={`h-11 flex-1 rounded-lg text-sm font-semibold md:h-10 ${
-              isDark ? "bg-slate-800 text-slate-200 hover:bg-slate-700" : "bg-slate-100 text-slate-600"
-            }`}
-          >
-            Cancel
-          </button>
-          <button
-            onClick={onSave}
-            disabled={savingLead}
-            className={`h-11 flex-1 rounded-lg text-sm font-semibold text-white disabled:opacity-60 md:h-10 ${
-              isDark ? "bg-emerald-600 hover:bg-emerald-500" : "bg-slate-900 hover:bg-emerald-600"
-            }`}
-          >
-            {savingLead ? savingLabel : saveLabel}
-          </button>
-        </div>
-      </Motion.div>
-    </Motion.div>
+      {wizardStep === 2 && (
+        <>
+          <div className="flex flex-col gap-2">
+            <FormLabel>What are they looking for?</FormLabel>
+            <ChoiceCards options={inventoryTypeCards} value={formData.requirementsInventoryType || ""} onChange={updateRequirementInventoryType} columns="minmax(150px,1fr)" />
+          </div>
+
+          {requirementInventoryType && requirementInventoryType !== "COWORKING" ? (
+            <div className="flex flex-col gap-2">
+              <FormLabel>{requirementInventoryType === "COMMERCIAL" ? "Commercial property type" : "Residential property type"}</FormLabel>
+              <PickChips
+                options={[{ value: "", label: "Any" }, ...propertySubtypeOptions]}
+                value={formData.requirementsPropertySubtype || ""}
+                onChange={updateRequirementPropertySubtype}
+              />
+            </div>
+          ) : null}
+
+          <div className="grid grid-cols-1 gap-[18px] md:grid-cols-2">
+            <div className="flex flex-col gap-2">
+              <FormLabel>Deal type</FormLabel>
+              <PickChips options={dealTypeChips} value={transactionTypeValue} onChange={updateTransactionType} />
+            </div>
+            {showFurnishing ? (
+              <div className="flex flex-col gap-2">
+                <FormLabel>Furnishing</FormLabel>
+                <PickChips options={anyLabel(furnishingOptions)} value={furnishingValue} onChange={(value) => updateField("requirementsFurnishingStatus", value)} />
+              </div>
+            ) : null}
+          </div>
+
+          {requirementInventoryType === "COWORKING" ? (
+            <FormGroup icon={Users2} title="Coworking needs">
+              <CoworkingRequirementFields
+                value={formData.requirementsCoworking || {}}
+                onChange={(next) => updateField("requirementsCoworking", next)}
+                inputClass={inputClass}
+                labelClass={fieldTitleClass}
+              />
+            </FormGroup>
+          ) : null}
+
+          <FormGroup icon={IndianRupee} title="Budget" aside={isCoworkingRequirement ? "Per month" : ""}>
+            <PickChips round options={anyLabel(budgetRangeOptions)} value={selectedBudgetRangeValue} onChange={updateBudgetRange} />
+            {isCustomBudgetRange ? (
+              <div className="grid grid-cols-1 gap-3.5 md:grid-cols-2">
+                <FormField label="Budget min">
+                  <FormInput prefix="₹" type="number" step="any" placeholder="Min" value={formData.requirementsBudgetMin} onChange={(event) => updateField("requirementsBudgetMin", event.target.value)} />
+                </FormField>
+                <FormField label="Budget max">
+                  <FormInput prefix="₹" type="number" step="any" placeholder="Max" value={formData.requirementsBudgetMax} onChange={(event) => updateField("requirementsBudgetMax", event.target.value)} />
+                </FormField>
+              </div>
+            ) : null}
+          </FormGroup>
+
+          {isPlotRequirement ? (
+            <FormGroup icon={MapPin} title="Plot preferences">
+              <FormField label="Project interested">
+                <FormInput placeholder="Project name" value={formData.projectInterested} onChange={(event) => updateField("projectInterested", event.target.value)} />
+              </FormField>
+              <div className="flex flex-col gap-2">
+                <FormLabel>Plot location</FormLabel>
+                <PickChips allowClear options={toChips(PLOT_LOCATION_OPTIONS)} value={plotLocationValue} onChange={(value) => updateSubtypeField("plotLocation", value)} />
+              </div>
+              <div className="flex flex-col gap-2">
+                <FormLabel>Occupancy</FormLabel>
+                <PickChips allowClear options={toChips(PLOT_OCCUPANCY_OPTIONS)} value={plotOccupancyValue} onChange={(value) => updateSubtypeField("plotOccupancy", value)} />
+              </div>
+              <div className="flex flex-col gap-2">
+                <FormLabel>Purpose</FormLabel>
+                <PickChips allowClear options={toChips(PLOT_PURPOSE_OPTIONS)} value={plotPurposeValue} onChange={(value) => updateSubtypeField("plotPurpose", value)} />
+              </div>
+            </FormGroup>
+          ) : null}
+
+          {propertySubtypeConfig ? (
+            <div className={sectionCardClass}>
+              <div className={sectionHeadingClass}>{propertySubtypeConfig.label} preferences</div>
+              <div className="grid grid-cols-1 gap-3.5 md:grid-cols-2">
+                {(propertySubtypeConfig.fields || [])
+                  .filter((field) => field.type !== "checkbox" && !PLOT_INLINE_FIELD_KEYS.has(field.key))
+                  .map(renderDynamicField)}
+              </div>
+              <div className="flex flex-wrap gap-2">
+                {(propertySubtypeConfig.fields || [])
+                  .filter((field) => field.type === "checkbox" && !PLOT_INLINE_FIELD_KEYS.has(field.key))
+                  .map(renderDynamicField)}
+              </div>
+            </div>
+          ) : null}
+        </>
+      )}
+
+      {wizardStep === 3 && (
+        <>
+          <div className="flex items-center gap-2">
+            <FormInput icon={Search} type="search" className="flex-1" value={inventorySearchText} onChange={(event) => setInventorySearchText(event.target.value)} placeholder="Search by name, project, unit or location" />
+            <span className="whitespace-nowrap rounded-full px-3 py-1.5 text-[12px] font-medium" style={{ background: "var(--g-bs)", color: "var(--g-b)" }}>
+              {selectedInventoryIds.size} linked
+            </span>
+          </div>
+          <div className="flex max-h-[46vh] flex-col gap-1.5 overflow-auto pr-0.5">
+            {filteredInventoryOptions.length ? filteredInventoryOptions.map((inventory) => {
+              const inventoryLabel = getInventoryLeadLabel(inventory) || "Inventory Unit";
+              const optionText = [
+                getInventoryLocationLabel(inventory),
+                getInventoryQuickInfo(inventory),
+              ]
+                .filter(Boolean)
+                .join(" · ");
+              const inventoryId = String(inventory?._id || "");
+              const checked = selectedInventoryIds.has(inventoryId);
+              return (
+                <label
+                  key={inventoryId}
+                  className="flex cursor-pointer items-center gap-3 rounded-[14px] px-3.5 py-2.5 transition-colors"
+                  style={checked
+                    ? { background: "var(--g-bs)", border: "1.5px solid var(--g-b)" }
+                    : { background: "var(--g-glassHi)", border: "1.5px solid var(--g-edge, var(--g-line))" }}
+                >
+                  <input
+                    type="checkbox"
+                    className="h-4 w-4 shrink-0"
+                    checked={checked}
+                    onChange={(event) => onInventorySelection(inventoryId, event.target.checked)}
+                  />
+                  <span className="grid h-9 w-9 shrink-0 place-items-center rounded-[11px]" style={checked ? { background: "var(--g-bfill, var(--g-b))", color: "#fff" } : { background: "var(--g-track)", color: "var(--g-mut)" }}>
+                    <Building2 size={16} />
+                  </span>
+                  <span className="min-w-0 flex-1">
+                    <span className="block truncate text-[14px] font-semibold" style={{ color: checked ? "var(--g-b)" : "var(--g-ink)" }}>{inventoryLabel}</span>
+                    {optionText ? (
+                      <span className="block truncate text-[12px]" style={{ color: "var(--g-mut)" }}>{optionText}</span>
+                    ) : null}
+                  </span>
+                </label>
+              );
+            }) : (
+              <div className="rounded-2xl px-4 py-8 text-center text-[13px]" style={{ background: "var(--g-glassHi)", color: "var(--g-mut)", border: "1px dashed var(--g-edge, var(--g-line))" }}>
+                No inventory found
+              </div>
+            )}
+          </div>
+        </>
+      )}
+
+      {wizardStep === 4 && (
+        <>
+          <div className="flex items-center gap-3 rounded-2xl px-4 py-3.5" style={{ background: "var(--g-bs)" }}>
+            <span className="grid h-10 w-10 shrink-0 place-items-center rounded-full text-[15px] font-semibold text-white" style={{ background: "var(--g-bfill, var(--g-b))" }}>
+              {String(formData.name || "?").trim().charAt(0).toUpperCase() || "?"}
+            </span>
+            <div className="flex min-w-0 flex-col">
+              <span className="truncate text-[15px] font-semibold">{formData.name || "Unnamed lead"}</span>
+              <span className="truncate text-[12.5px]" style={{ color: "var(--g-mut)" }}>
+                {[formData.phone, labelOf(availableInventoryTypes, formData.requirementsInventoryType || "", "")].filter(Boolean).join(" · ")}
+              </span>
+            </div>
+          </div>
+          <ReviewGroup
+            title="Contact"
+            onEdit={() => goToStep(0)}
+            rows={[
+              ["Phone", formData.phone],
+              ["Email", formData.email],
+              ["City", formData.city],
+              ["Work profile", formData.clientProfession],
+              ...(requirementInventoryType === "COWORKING" ? [["Company", formData.company]] : []),
+              ["Lead source", labelOf(LEAD_SOURCE_CHANNELS, formData.sourceChannel || "", "")],
+              ...(formData.sourceChannel === "BROKER" ? [["Referred by", formData.referredBroker?.name || ""]] : []),
+            ]}
+          />
+          <ReviewGroup
+            title="Location"
+            onEdit={() => goToStep(1)}
+            rows={[
+              ["Preferred locations", preferredLocationsText],
+              ["Site pin", formData.siteLat && formData.siteLng ? `${formData.siteLat}, ${formData.siteLng}` : ""],
+            ]}
+          />
+          <ReviewGroup
+            title="Requirement"
+            onEdit={() => goToStep(2)}
+            rows={[
+              ["Looking for", labelOf(availableInventoryTypes, formData.requirementsInventoryType || "", "Any") || "Any"],
+              ...(requirementInventoryType && requirementInventoryType !== "COWORKING"
+                ? [["Property type", labelOf(propertySubtypeOptions, formData.requirementsPropertySubtype || "", "Any")]]
+                : []),
+              ["Deal type", labelOf(dealTypeChips, transactionTypeValue, "Any")],
+              ...(showFurnishing ? [["Furnishing", furnishingValue ? labelOf(furnishingOptions, furnishingValue) : "Any"]] : []),
+              ["Budget", budgetLabel || "Any"],
+              ...(isPlotRequirement ? [["Project interested", formData.projectInterested]] : []),
+            ]}
+          />
+          <ReviewGroup
+            title="Linked inventory"
+            onEdit={() => goToStep(3)}
+            rows={[["Properties", linkedInventoryNames.length ? linkedInventoryNames.slice(0, 3).join(", ") + (linkedInventoryNames.length > 3 ? ` +${linkedInventoryNames.length - 3}` : "") : ""]]}
+          />
+        </>
+      )}
+    </FormWizard>
   );
 };
 
