@@ -522,3 +522,88 @@ test("a user created on a company-defined role keeps their base role's pages", a
   assert.equal(profile.enforcePageAccess, false);
   assert.ok(profile.pages.some((page) => page.pageKey === "leads"), "Leads must still be reachable");
 });
+
+/*
+ * Regression (26 Oct 2026): a Coworking Admin could open Attendance but got
+ * "Your account does not have permission to perform this action on the page"
+ * on Check in. The router gated every write on the attendance "edit" action,
+ * which a self-service check-in must not need, and the role's defaults did not
+ * list the page at all.
+ */
+const loadAttendanceRoutes = () => load("routes/attendance.routes.js", {
+  "../controllers/attendance.controller": new Proxy({}, {
+    get: (_target, name) => Object.assign(() => {}, { handlerName: String(name) }),
+  }),
+  "../middleware/auth.middleware": { protect: Object.assign(() => {}, { guard: "protect" }) },
+  "../middleware/rateLimit.middleware": { writeLimiter: Object.assign(() => {}, { guard: "write-limiter" }) },
+  "../middleware/pageAccess.middleware": {
+    requirePageAccess: () => Object.assign(() => {}, { guard: "page-access" }),
+    requirePageActionForMethod: () => Object.assign(() => {}, { guard: "page-action" }),
+  },
+});
+
+const guardsFor = (router, method, routePath) => {
+  const layer = router.stack.find((entry) =>
+    entry.route && entry.route.path === routePath && entry.route.methods[method]);
+  assert.ok(layer, `${method.toUpperCase()} ${routePath} is not registered`);
+  return layer.route.stack.map((entry) => entry.handle.guard).filter(Boolean);
+};
+
+test("marking your own attendance does not need the attendance edit action", () => {
+  const router = loadAttendanceRoutes();
+
+  // Every attendance route still needs the page itself.
+  assert.ok(router.stack.some((entry) => !entry.route && entry.handle.guard === "page-access"));
+
+  // The regression itself: a blanket router.use gate would catch check-in
+  // again without touching any single route declaration.
+  assert.equal(
+    router.stack.some((entry) => !entry.route && entry.handle.guard === "page-action"),
+    false,
+    "the attendance action gate must sit on the admin routes, not on the whole router",
+  );
+
+  [
+    ["post", "/check-in"],
+    ["post", "/check-out"],
+    ["post", "/break/start"],
+    ["post", "/break/end"],
+    ["post", "/leave-requests"],
+  ].forEach(([method, routePath]) => {
+    assert.equal(
+      guardsFor(router, method, routePath).includes("page-action"),
+      false,
+      `${method.toUpperCase()} ${routePath} is self-service: a view-only page grant must still allow it`,
+    );
+  });
+});
+
+test("changing somebody else's attendance still needs the attendance action grant", () => {
+  const router = loadAttendanceRoutes();
+
+  [
+    ["patch", "/users/:userId/:date/status"],
+    ["patch", "/users/:userId/:date/breaks"],
+    ["post", "/users/:userId/break"],
+    ["patch", "/violations/:violationId"],
+    ["patch", "/policy"],
+    ["put", "/offices"],
+    ["patch", "/leave-requests/:requestId/review"],
+  ].forEach(([method, routePath]) => {
+    assert.ok(
+      guardsFor(router, method, routePath).includes("page-action"),
+      `${method.toUpperCase()} ${routePath} must stay behind the attendance page action`,
+    );
+  });
+});
+
+test("a Coworking Admin keeps their own Attendance page by default", () => {
+  const { getDefaultPageAccessForRole } = require("../src/constants/rolePageAccess.constants");
+  const { USER_ROLES } = require("../src/constants/role.constants");
+
+  const attendance = getDefaultPageAccessForRole(USER_ROLES.COWORKING_ADMIN)
+    .find((entry) => entry.pageKey === "attendance");
+
+  assert.ok(attendance, "a Coworking Admin checks in like any other employee");
+  sameShape(attendance.actions, ["view"], "managing attendance stays with the management roles");
+});

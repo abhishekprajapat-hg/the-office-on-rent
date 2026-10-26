@@ -75,6 +75,16 @@ const CHANNEL_PARTNER_PAGES = [
 const COWORKING_ADMIN_PAGES = [
   page("dashboard"),
   page("tasks", [VIEW, CREATE, EDIT]),
+  /*
+   * A Coworking Admin is staff: they check in, take breaks and apply for leave
+   * like anyone else, so they need their own Attendance page. Leaving it out
+   * here was why the role could not check in at all.
+   *
+   * View only, on purpose. Changing somebody else's record, the policy or the
+   * offices needs the EDIT action AND a management role (see
+   * attendance.controller), and this role is neither.
+   */
+  page("attendance", [VIEW]),
   page("coworking_booking", [VIEW, CREATE, EDIT]),
   page("coworking_clients", [VIEW, CREATE, EDIT, DELETE]),
   page("profile", [VIEW, EDIT]),
