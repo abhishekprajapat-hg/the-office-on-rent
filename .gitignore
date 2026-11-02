@@ -33,3 +33,9 @@ _to_delete/
 
 # Local before/after copies kept while reworking screens - not source.
 frontend/.glass-backup/
+
+# Built app binaries belong in GitHub Releases, not in history - every clone
+# and every deploy carried this one, and git never lets it go.
+artifacts/
+*.apk
+*.aab
