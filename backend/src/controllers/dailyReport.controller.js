@@ -1,5 +1,8 @@
 const mongoose = require("mongoose");
 const DailyReport = require("../models/DailyReport");
+const DailyReportTarget = require("../models/DailyReportTarget");
+
+const loadTargets = (companyId) => DailyReportTarget.find({ companyId }).lean();
 const Attendance = require("../models/Attendance");
 const { writeAuditLog } = require("../services/auditLog.service");
 const {
@@ -10,6 +13,9 @@ const {
   parseDateRange,
   summarizeEmployee,
   publicForm,
+  sanitizeTargets,
+  resolveTargets,
+  withTargets,
   DAILY_REPORT_FORMS,
   ISSUE_CATEGORIES,
   ISSUE_STATUSES,
@@ -61,18 +67,47 @@ exports.listForms = async (req, res) => res.json({
   issuePriorities: ISSUE_PRIORITIES,
 });
 
+/* GET /targets - every target row, for the targets screen (3 Nov 2026, 7.1). */
+exports.listTargets = async (req, res) => {
+  try {
+    const rows = await loadTargets(req.user.companyId);
+    return res.json({ targets: rows.map((r) => ({ formKey: r.formKey, segment: r.segment || "", targets: r.targets || {}, updatedAt: r.updatedAt, updatedByName: r.updatedByName || "" })) });
+  } catch (error) {
+    return handleError(req, res, error, "listTargets failed");
+  }
+};
+
+/* PUT /targets { formKey, segment, targets } - Admin / Manager set a form's daily targets. */
+exports.saveTargets = async (req, res) => {
+  try {
+    if (!isManagerOrAdmin(req.user)) return res.status(403).json({ message: "Only Admin or Manager can set report targets" });
+    const clean = sanitizeTargets(req.body?.formKey, req.body?.segment, req.body?.targets);
+    const row = await DailyReportTarget.findOneAndUpdate(
+      { companyId: req.user.companyId, formKey: clean.formKey, segment: clean.segment },
+      { $set: { targets: clean.targets, updatedBy: req.user._id, updatedByName: req.user.name || "" } },
+      { upsert: true, returnDocument: "after", runValidators: true },
+    ).lean();
+    await writeAuditLog({ companyId: req.user.companyId, actor: req.user, action: "DAILY_REPORT_TARGETS_SAVED", entityType: "DailyReportTarget", entityId: row._id, metadata: clean, req });
+    return res.json({ message: "Targets saved", target: { formKey: row.formKey, segment: row.segment || "", targets: row.targets || {} } });
+  } catch (error) {
+    return handleError(req, res, error, "saveTargets failed");
+  }
+};
+
 /* GET /me/today - my form, today's date and today's report if I sent it. */
 exports.getMyToday = async (req, res) => {
   try {
     const reportDate = await todayKeyFor(req.user.companyId);
     const formKey = resolveDailyReportFormKey(req.user);
-    const report = formKey
-      ? await DailyReport.findOne({ companyId: req.user.companyId, userId: req.user._id, reportDate }).lean()
-      : null;
+    const [report, targetRows] = await Promise.all([
+      formKey ? DailyReport.findOne({ companyId: req.user.companyId, userId: req.user._id, reportDate }).lean() : null,
+      formKey ? loadTargets(req.user.companyId) : [],
+    ]);
     return res.json({
       reportDate,
       required: Boolean(formKey),
       form: publicForm(getDailyReportForm(formKey)),
+      targets: formKey ? resolveTargets(targetRows, formKey, req.user.roleType) : {},
       report: reportView(report),
       submitted: Boolean(report),
     });
@@ -206,9 +241,10 @@ exports.getSummary = async (req, res) => {
     const scoped = filterScopedUsers(await getScopedUsers(req.user, { includeInactive: true }), req.query)
       .filter((u) => resolveDailyReportFormKey(u) || String(u._id) === String(req.user._id));
     const userIds = scoped.map((u) => u._id);
-    const [reports, worked] = await Promise.all([
+    const [reports, worked, targetRows] = await Promise.all([
       DailyReport.find({ companyId: req.user.companyId, userId: { $in: userIds }, reportDate: { $gte: from, $lte: to } }).lean(),
       loadWorkedDates({ companyId: req.user.companyId, userIds, from, to, today }),
+      loadTargets(req.user.companyId),
     ]);
     const byUser = new Map();
     reports.forEach((r) => {
@@ -217,11 +253,14 @@ exports.getSummary = async (req, res) => {
       byUser.get(key).push(r);
     });
     const employees = scoped
-      .map((user) => summarizeEmployee({
-        user,
-        reports: byUser.get(String(user._id)) || [],
-        workedDates: resolveDailyReportFormKey(user) ? worked.get(String(user._id)) || [] : [],
-      }))
+      .map((user) => {
+        const row = summarizeEmployee({
+          user,
+          reports: byUser.get(String(user._id)) || [],
+          workedDates: resolveDailyReportFormKey(user) ? worked.get(String(user._id)) || [] : [],
+        });
+        return withTargets(row, resolveTargets(targetRows, row.formKey, user.roleType));
+      })
       // Inactive people only appear if they have something in the period.
       .filter((row, i) => scoped[i].isActive !== false || row.daysSubmitted || row.missingDates.length);
 

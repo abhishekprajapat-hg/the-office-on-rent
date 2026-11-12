@@ -1,0 +1,34 @@
+import api from "./api";
+
+/* Enterprise leasing (Developmental Updates Oct 2026 - Update 02). */
+export const getEnterpriseMeta = async () => (await api.get("/enterprise/meta")).data;
+export const getEnterpriseDashboard = async () => (await api.get("/enterprise/dashboard")).data;
+export const getEnterpriseReport = async (params) => (await api.get("/enterprise/report", { params })).data;
+export const listOffices = async () => (await api.get("/enterprise/offices")).data;
+export const createOffice = async (payload) => (await api.post("/enterprise/offices", payload)).data;
+export const getOffice = async (id) => (await api.get(`/enterprise/offices/${id}`)).data;
+export const updateOffice = async (id, payload) => (await api.patch(`/enterprise/offices/${id}`, payload)).data;
+export const createAgreement = async (officeId, payload) => (await api.post(`/enterprise/offices/${officeId}/agreements`, payload)).data;
+export const updateAgreement = async (id, payload) => (await api.patch(`/enterprise/agreements/${id}`, payload)).data;
+export const listTenants = async () => (await api.get("/enterprise/tenants")).data;
+export const createTenant = async (payload) => (await api.post("/enterprise/tenants", payload)).data;
+export const updateTenant = async (id, payload) => (await api.patch(`/enterprise/tenants/${id}`, payload)).data;
+export const getTenantChecklist = async (id, agreementId) => (await api.get(`/enterprise/tenants/${id}/checklist`, { params: { agreementId } })).data;
+export const listChecklists = async () => (await api.get("/enterprise/checklists")).data;
+export const saveChecklist = async (entityType, payload) => (await api.put(`/enterprise/checklists/${entityType}`, payload)).data;
+export const uploadEnterpriseDocument = async (payload) => (await api.post("/enterprise/documents", payload)).data;
+export const reviewEnterpriseDocument = async (id, payload) => (await api.patch(`/enterprise/documents/${id || "new"}/status`, payload)).data;
+export const createObligation = async (officeId, payload) => (await api.post(`/enterprise/offices/${officeId}/obligations`, payload)).data;
+export const recoverFromTenant = async (id, payload = {}) => (await api.post(`/enterprise/obligations/${id}/recover`, payload)).data;
+export const addPromise = async (id, payload) => (await api.post(`/enterprise/obligations/${id}/promise`, payload)).data;
+export const addFollowUp = async (id, payload) => (await api.post(`/enterprise/obligations/${id}/follow-up`, payload)).data;
+export const setDispute = async (id, payload) => (await api.post(`/enterprise/obligations/${id}/dispute`, payload)).data;
+export const addAdjustment = async (id, payload) => (await api.post(`/enterprise/obligations/${id}/adjust`, payload)).data;
+export const recordPayment = async (officeId, payload) => (await api.post(`/enterprise/offices/${officeId}/transactions`, payload)).data;
+export const allocatePayment = async (id, payload) => (await api.post(`/enterprise/transactions/${id}/allocate`, payload)).data;
+export const addLedgerEntry = async (officeId, payload) => (await api.post(`/enterprise/offices/${officeId}/ledger`, payload)).data;
+export const updateLedgerEntry = async (id, payload) => (await api.patch(`/enterprise/ledger/${id}`, payload)).data;
+export const addEnterpriseAttachment = async (payload) => (await api.post("/enterprise/attachments", payload)).data;
+export const listEnterpriseReminders = async (params) => (await api.get("/enterprise/reminders", { params })).data;
+export const markEnterpriseReminderDone = async (id, payload = {}) => (await api.post(`/enterprise/reminders/${id}/done`, payload)).data;
+export const runEnterpriseReminders = async () => (await api.post("/enterprise/reminders/run")).data;

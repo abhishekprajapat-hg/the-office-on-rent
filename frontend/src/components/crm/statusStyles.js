@@ -104,6 +104,10 @@ export const STATUS_STYLES = {
     label: "Sold",
     tone: "slate",
   },
+  UNAVAILABLE: {
+    label: "Unavailable",
+    tone: "outline",
+  },
   PENDING: {
     label: "Pending",
     tone: "amber",

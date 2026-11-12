@@ -47,6 +47,8 @@ import {
   CoworkingBasicsFields, CoworkingContactsFields, CoworkingPartnerTerms, CoworkingPricingFields, CoworkingServicesEditor,
 } from "./ProjectCoworkingFields";
 import { COWORKING_FORM_KEYS, coworkingReviewRows, withCoworkingDerived } from "./projectCoworkingFormat";
+import { ChargeItemsEditor, MarketRatesEditor, PlcOptionsEditor, SizeInventoryEditor } from "./ProjectStockFields";
+import { PLC_RULE_OPTIONS, toDateInput } from "./projectStockFormat";
 import { toErrorMessage } from "../../utils/errorMessage";
 import { useDebouncedValue } from "../../hooks/useDebouncedValue";
 import { usePermissions } from "../../context/usePermissions";
@@ -213,6 +215,7 @@ const CATEGORY_CARD_META = {
 };
 const TYPE_ICON = { PLOTTING: MapIcon, BUILDING: Building2, VILLAS_FARMHOUSE: Trees };
 const STATUS_DOT = {
+  UPCOMING: "var(--g-fnt)", LAUNCHED: "var(--g-info, var(--g-b))",
   PRE_LAUNCH: "var(--g-info, var(--g-b))", TNC: "var(--g-vio)", RERA_APPROVED: "var(--g-b)",
   UNDER_CONSTRUCTION: "var(--g-warn)", READY_TO_MOVE: "var(--g-ok)", RESALE: "var(--g-fnt)",
 };
@@ -292,6 +295,16 @@ const DEFAULT_FORM = {
   brokerManagerMobile: "",
   plotsAvailable: "",
   images: [],
+  // Requirements 3 Nov 2026 (4.2-4.5).
+  startingRateDate: "",
+  currentRateDate: "",
+  sizeInventory: [],
+  plcOptions: [],
+  chargeItems: [],
+  gstPercent: "",
+  stampDutyPercent: "",
+  marketRates: [],
+  plcRule: "NOT_SET",
 };
 
 const toFormFromProject = (project = {}) => ({
@@ -364,7 +377,25 @@ const toFormFromProject = (project = {}) => ({
   brokerManagerMobile: project.brokerManagerMobile || "",
   plotsAvailable: project.plotsAvailable ?? "",
   images: Array.isArray(project.images) ? project.images : [],
+  startingRateDate: toDateInput(project.startingRateDate),
+  currentRateDate: toDateInput(project.currentRateDate),
+  sizeInventory: (project.sizeInventory || []).map((r) => ({ ...r, areaSqft: r.areaSqft ?? "" })),
+  plcOptions: (project.plcOptions || []).map((r) => ({ ...r, value: r.value ?? "" })),
+  chargeItems: (project.chargeItems || []).map((r) => ({ ...r, value: r.value ?? "" })),
+  gstPercent: project.gstPercent ?? "",
+  stampDutyPercent: project.stampDutyPercent ?? "",
+  marketRates: (project.marketRates || []).map((r) => ({ ...r, rate: r.rate ?? "", asOf: toDateInput(r.asOf) })),
+  plcRule: project.plcRule || "NOT_SET",
 });
+
+// Editor rows carry a React key; the server gets the fields only.
+const stripRowKeys = (rows = []) => rows.map((row) => {
+  const rest = { ...row };
+  delete rest._key;
+  delete rest._id;
+  return rest;
+});
+const numOrBlank = (value) => (value === "" || value === null || value === undefined ? null : Number(value));
 
 const numOrZero = (value) => (value === "" || value === null || value === undefined ? 0 : Number(value));
 const numOrNull = (value) => (value === "" || value === null || value === undefined ? null : Number(value));
@@ -406,6 +437,18 @@ const buildProjectPayload = (formData) => {
     brokerManagerName: formData.brokerManagerName.trim(),
     brokerManagerMobile: formData.brokerManagerMobile.trim(),
     images: Array.isArray(formData.images) ? formData.images : [],
+    startingRateDate: formData.startingRateDate || null,
+    currentRateDate: formData.currentRateDate || null,
+    sizeInventory: isCoworking ? [] : stripRowKeys(formData.sizeInventory).map((r) => ({
+      dimension: String(r.dimension || "").trim(), areaSqft: numOrBlank(r.areaSqft),
+      total: numOrBlank(r.total) ?? 0, available: numOrBlank(r.available) ?? 0, sold: numOrBlank(r.sold) ?? 0,
+    })),
+    plcOptions: isCoworking ? [] : stripRowKeys(formData.plcOptions).map((r) => ({ name: String(r.name || "").trim(), basis: r.basis || "PERCENT", value: numOrBlank(r.value), condition: String(r.condition || "").trim() })),
+    chargeItems: stripRowKeys(formData.chargeItems).map((r) => ({ key: r.key || "OTHER", label: String(r.label || "").trim(), basis: r.basis || "AMOUNT", value: numOrBlank(r.value), note: String(r.note || "").trim() })),
+    plcRule: isCoworking ? "NOT_SET" : (formData.plcRule || "NOT_SET"),
+    gstPercent: numOrBlank(formData.gstPercent),
+    stampDutyPercent: numOrBlank(formData.stampDutyPercent),
+    marketRates: stripRowKeys(formData.marketRates).map((r) => ({ place: String(r.place || "").trim(), rate: numOrBlank(r.rate), unit: String(r.unit || "").trim(), asOf: r.asOf || null, source: String(r.source || "").trim() })),
   };
 
   if (isPlotBased) {
@@ -778,7 +821,7 @@ const ProjectsPage = () => {
   const [statusFilter, setStatusFilter] = useState("all");
   // Knowledge search (requirements 5.1): developer, location, rate, size, amenity.
   const [showMoreFilters, setShowMoreFilters] = useState(false);
-  const [moreFilters, setMoreFilters] = useState({ developer: "", city: "", priceMin: "", priceMax: "", sizeMin: "", sizeMax: "", amenity: "" });
+  const [moreFilters, setMoreFilters] = useState({ developer: "", city: "", priceMin: "", priceMax: "", sizeMin: "", sizeMax: "", amenity: "", localAuthority: "", ews: "", lig: "" });
   const debouncedMoreFilters = useDebouncedValue(moreFilters, 300);
   const activeMoreFilters = Object.values(moreFilters).filter((v) => String(v).trim() !== "").length;
 
@@ -1381,10 +1424,27 @@ const ProjectsPage = () => {
               ))}
             </select>
           </label>
+          {/* 3 Nov 2026 (4.1): local authority and EWS / LIG. */}
+          {[
+            ["localAuthority", "Local authority", [["", "Any"], ["NAGAR_NIGAM", "Nagar Nigam"], ["GRAM_PANCHAYAT", "Gram Panchayat"], ["OTHER", "Other"]]],
+            ["ews", "EWS", [["", "Any"], ["YES", "EWS included"]]],
+            ["lig", "LIG", [["", "Any"], ["YES", "LIG included"]]],
+          ].map(([key, label, options]) => (
+            <label key={key} className="block">
+              <span className="mb-1 block text-[11px] font-semibold text-slate-500">{label}</span>
+              <select
+                value={moreFilters[key]}
+                onChange={(e) => setMoreFilters((prev) => ({ ...prev, [key]: e.target.value }))}
+                className="h-9 w-full rounded-lg border border-slate-200 bg-white px-2 text-sm text-slate-700 focus:outline-none focus:border-emerald-500"
+              >
+                {options.map(([value, text]) => <option key={value} value={value}>{text}</option>)}
+              </select>
+            </label>
+          ))}
           {activeMoreFilters ? (
             <button
               type="button"
-              onClick={() => setMoreFilters({ developer: "", city: "", priceMin: "", priceMax: "", sizeMin: "", sizeMax: "", amenity: "" })}
+              onClick={() => setMoreFilters({ developer: "", city: "", priceMin: "", priceMax: "", sizeMin: "", sizeMax: "", amenity: "", localAuthority: "", ews: "", lig: "" })}
               className="col-span-2 h-9 self-end rounded-lg text-sm font-semibold text-slate-500 hover:text-slate-800 sm:col-span-1"
             >
               Clear filters
@@ -1872,11 +1932,40 @@ const ProjectsPage = () => {
                     <FormInput big prefix="₹" suffix={isCoworkingForm ? "/ seat / mo" : "/ sq ft"} type="number" min="0" inputMode="decimal" placeholder="5,200" value={formData.currentRate} error={/^Current/.test(rateIssue)} onChange={(e) => setFormData((prev) => ({ ...prev, currentRate: e.target.value }))} />
                   </FormField>
                 </div>
+                <div className="grid gap-3.5 [grid-template-columns:repeat(auto-fit,minmax(220px,1fr))]">
+                  <FormField label={isCoworkingForm ? "Starting price applied from" : "Starting rate applied from"} hint="When this rate started">
+                    <FormInput type="date" value={formData.startingRateDate || ""} onChange={(e) => setFormData((prev) => ({ ...prev, startingRateDate: e.target.value }))} />
+                  </FormField>
+                  <FormField label={isCoworkingForm ? "Current price as of" : "Current rate as of"} hint="Date this rate was last updated">
+                    <FormInput type="date" value={formData.currentRateDate || ""} onChange={(e) => setFormData((prev) => ({ ...prev, currentRateDate: e.target.value }))} />
+                  </FormField>
+                </div>
                 {isCoworkingForm && coworkingFields.length ? (
                   <CoworkingPricingFields fields={coworkingFields} specs={knowledgeDraft.specs || {}} setSpec={setSpecField} />
                 ) : null}
                 {!isCoworkingForm ? (
-                <FormGroup icon={MapPin} title="Preferential location charges" aside="% or ₹ amount">
+                <FormGroup icon={MapPin} title="Preferential location charges (PLC)" aside="A plot can have several">
+                  <PlcOptionsEditor rows={formData.plcOptions} onChange={(plcOptions) => setFormData((prev) => ({ ...prev, plcOptions }))} />
+                  <FormField label="When a plot has several PLCs" hint="% PLCs are taken on the plot's price (or area × current rate). Tick the PLCs on each plot in Inventory.">
+                    <select className="gl-field h-[46px] px-3.5 text-[14px]" value={formData.plcRule || "NOT_SET"} onChange={(e) => setFormData((prev) => ({ ...prev, plcRule: e.target.value }))}>
+                      {PLC_RULE_OPTIONS.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
+                    </select>
+                  </FormField>
+                </FormGroup>
+                ) : null}
+                <FormGroup icon={Receipt} title="Charges & taxes" aside="Shown with a total on the project page">
+                  <ChargeItemsEditor rows={formData.chargeItems} onChange={(chargeItems) => setFormData((prev) => ({ ...prev, chargeItems }))} />
+                  <div className="grid gap-2.5 [grid-template-columns:repeat(auto-fit,minmax(200px,1fr))]">
+                    <FormField label="GST" hint="Configurable, e.g. 18 — not fixed">
+                      <FormInput type="number" min="0" max="100" step="any" inputMode="decimal" suffix="%" value={formData.gstPercent} onChange={(e) => setFormData((prev) => ({ ...prev, gstPercent: e.target.value }))} />
+                    </FormField>
+                    <FormField label="Stamp duty / registration" hint="Government charge, kept apart from developer charges">
+                      <FormInput type="number" min="0" max="100" step="any" inputMode="decimal" suffix="%" value={formData.stampDutyPercent} onChange={(e) => setFormData((prev) => ({ ...prev, stampDutyPercent: e.target.value }))} />
+                    </FormField>
+                  </div>
+                </FormGroup>
+                {!isCoworkingForm && PLC_FIELDS.some(([key]) => String(formData[key] || "").trim()) ? (
+                <FormGroup icon={MapPin} title="Earlier PLC notes" aside="Free text, from before the PLC list">
                   <div className="grid gap-2.5 [grid-template-columns:repeat(auto-fit,minmax(200px,1fr))]">
                     {PLC_FIELDS.map(([key, label]) => (
                       <FormField key={key} label={label}>
@@ -1886,7 +1975,7 @@ const ProjectsPage = () => {
                   </div>
                 </FormGroup>
                 ) : null}
-                <FormCollapsible icon={Receipt} title="Other charges" hint={filledCharges ? `${filledCharges} added` : `Optional · ${CHARGE_FIELDS.length + 1} fields`} open={chargesOpen} onToggle={() => setChargesOpen((open) => !open)}>
+                <FormCollapsible icon={Receipt} title="Earlier charge notes" hint={filledCharges ? `${filledCharges} filled · free text` : "Free text, optional"} open={chargesOpen} onToggle={() => setChargesOpen((open) => !open)}>
                   <div className="grid gap-2.5 [grid-template-columns:repeat(auto-fit,minmax(200px,1fr))]">
                     {CHARGE_FIELDS.map(([key, label, placeholder]) => (
                       <FormField key={key} label={label}>
@@ -1904,7 +1993,7 @@ const ProjectsPage = () => {
               <div className="flex flex-col gap-2">
                 <span className={FIELD_TITLE_CLASS}>Status *</span>
                 <ChoiceCards
-                  options={PROJECT_STATUS_OPTIONS.map((option) => ({ ...option, dot: STATUS_DOT[option.value] }))}
+                  options={PROJECT_STATUS_OPTIONS.filter((option) => !option.legacy || option.value === formData.status).map((option) => ({ ...option, dot: STATUS_DOT[option.value] }))}
                   value={formData.status}
                   onChange={(value) => setFormData((prev) => ({ ...prev, status: value }))}
                   error={issueHere(3) && !formData.status}
@@ -2054,7 +2143,17 @@ const ProjectsPage = () => {
                   <CoworkingPartnerTerms fields={coworkingFields} specs={knowledgeDraft.specs || {}} setSpec={setSpecField} />
                 </>
               ) : null}
+              <FormGroup icon={Landmark} title="Nearby / comparable market rates" aside="Reference only">
+                <MarketRatesEditor rows={formData.marketRates} onChange={(marketRates) => setFormData((prev) => ({ ...prev, marketRates }))} />
+              </FormGroup>
               </>)}
+
+              {wizardStep === 0 && formData.projectCategory && !isCoworkingForm && (
+                <FormGroup icon={LayoutGrid} title="Sizes on offer & availability" aside="Typed figures; linked plots count live">
+                  <SizeInventoryEditor rows={formData.sizeInventory} onChange={(sizeInventory) => setFormData((prev) => ({ ...prev, sizeInventory }))} />
+                  <span className="text-[11.5px]" style={{ color: "var(--g-fnt)" }}>Once individual plots / units of a size are added in Inventory and linked to this project, that size is counted live from them and this figure is kept for reference only.</span>
+                </FormGroup>
+              )}
 
               {wizardStep === 0 && isPlotBasedType(formData.projectType) && (
                 <div className={SECTION_CLASS}>
@@ -2254,8 +2353,11 @@ const ProjectsPage = () => {
                 <ReviewGroup title="Pricing" onEdit={() => goToStep(1)} rows={[
                   [isCoworkingForm ? "Starting price" : "Starting rate", formData.startingRate !== "" ? `₹${Number(formData.startingRate).toLocaleString("en-IN")} ${isCoworkingForm ? "/ seat / mo" : "/ sq ft"}` : ""],
                   [isCoworkingForm ? "Current price" : "Current rate", formData.currentRate !== "" ? `₹${Number(formData.currentRate).toLocaleString("en-IN")} ${isCoworkingForm ? "/ seat / mo" : "/ sq ft"}` : ""],
-                  ...(isCoworkingForm ? [] : [["PLC", `${filledPlc} of ${PLC_FIELDS.length - 1} filled`]]),
-                  ["Other charges", `${filledCharges} of ${CHARGE_FIELDS.length + 1} filled`],
+                  ["Rate dates", [formData.startingRateDate && `from ${formData.startingRateDate}`, formData.currentRateDate && `current as of ${formData.currentRateDate}`].filter(Boolean).join(" · ")],
+                  ...(isCoworkingForm ? [] : [["PLCs", formData.plcOptions.length ? formData.plcOptions.map((p) => p.name).filter(Boolean).join(", ") : (filledPlc ? `${filledPlc} earlier notes` : "")]]),
+                  ["Charges", formData.chargeItems.length ? `${formData.chargeItems.length} rows` : ""],
+                  ["GST / stamp duty", [formData.gstPercent !== "" && `GST ${formData.gstPercent}%`, formData.stampDutyPercent !== "" && `Stamp ${formData.stampDutyPercent}%`].filter(Boolean).join(" · ")],
+                  ...(isCoworkingForm ? [] : [["Sizes", formData.sizeInventory.length ? `${formData.sizeInventory.length} sizes · ${formData.sizeInventory.reduce((a, r) => a + (Number(r.available) || 0), 0)} available (typed)` : ""]]),
                 ]} />
                 <ReviewGroup title="Location & contacts" onEdit={() => goToStep(2)} rows={[
                   ["Address", [formData.location, formData.city, formData.pincode].filter(Boolean).join(", ")],

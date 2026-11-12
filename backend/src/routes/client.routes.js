@@ -24,6 +24,8 @@ router.use("/webhook", require("./webhook.routes"));
 router.use("/chat", require("./chat.routes"));
 router.use("/saas", require("./saas.routes"));
 router.use("/contacts", require("./crmContact.routes"));
+router.use("/database", require("./database.routes"));
+router.use("/enterprise", require("./enterprise.routes"));
 router.use("/roles", require("./customRole.routes"));
 router.use("/delete-requests", require("./deleteRequest.routes"));
 router.use("/push", require("./push.routes"));

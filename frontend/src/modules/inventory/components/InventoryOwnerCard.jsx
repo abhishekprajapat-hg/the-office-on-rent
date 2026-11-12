@@ -37,6 +37,10 @@ const InventoryOwnerCard = ({ source = {}, canViewOwner }) => {
     { label: "WhatsApp", value: source?.ownerWhatsapp || source?.ownerNumber, mono: true },
     { label: "Key manager", value: source?.keyManagerName },
     { label: "Key phone", value: source?.keyManagerNumber, mono: true },
+    { label: "Broker", value: source?.brokerName },
+    { label: "Broker phone", value: source?.brokerNumber, mono: true },
+    { label: "Developer", value: source?.developerName },
+    { label: "Developer phone", value: source?.developerNumber, mono: true },
   ];
 
   const hasAny = rows.some((row) => row.value);

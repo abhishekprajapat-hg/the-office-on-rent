@@ -134,7 +134,8 @@ app.use(
       // ask the server every time instead of reopening a saved copy.
       res.setHeader(
         "Cache-Control",
-        require("./services/documentAccess.service").isProtectedClientDocument(relativeUpload)
+        (require("./services/documentAccess.service").isProtectedClientDocument(relativeUpload)
+          || require("./services/documentAccess.service").isBrokerKycDocument(relativeUpload))
           ? "private, no-store"
           : "private, max-age=2592000, immutable",
       );
@@ -164,6 +165,9 @@ app.use("/api/webhook", require("./routes/webhook.routes"));
 app.use("/api/chat", require("./routes/chat.routes"));
 app.use("/api/assistant", require("./routes/officeAssistant.routes"));
 app.use("/api/contacts", require("./routes/crmContact.routes"));
+// Developmental Updates Oct 2026: Database module and Enterprise leasing.
+app.use("/api/database", require("./routes/database.routes"));
+app.use("/api/enterprise", require("./routes/enterprise.routes"));
 app.use("/api/roles", require("./routes/customRole.routes"));
 app.use("/api/delete-requests", require("./routes/deleteRequest.routes"));
 app.use("/api/push", require("./routes/push.routes"));

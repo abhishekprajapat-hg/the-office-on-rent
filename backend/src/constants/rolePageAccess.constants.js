@@ -32,6 +32,8 @@ const EXECUTIVE_PAGES = [
   page("leads", SALES_FULL_LEADS),
   page("my_leads", OWN_LEADS),
   page("inventory", [VIEW, CREATE, EDIT]),
+  // Database module (Oct 2026): executives add and link contacts and buildings; merge/archive stay with management.
+  page("database", [VIEW, CREATE, EDIT]),
   page("projects", [VIEW]),
   page("finance", [VIEW]),
   page("leaderboard"),

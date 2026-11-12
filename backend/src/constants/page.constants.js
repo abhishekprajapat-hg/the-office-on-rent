@@ -82,6 +82,15 @@ const CRM_PAGES = Object.freeze([
     ],
   },
   {
+    // Database module (Oct 2026): buildings, owners and every contact who
+    // gives the team inventory information.
+    key: "database",
+    label: "Database",
+    group: "Sales",
+    path: "/database",
+    actions: [PAGE_ACTIONS.VIEW, PAGE_ACTIONS.CREATE, PAGE_ACTIONS.EDIT, PAGE_ACTIONS.DELETE],
+  },
+  {
     key: "field_ops",
     label: "Field Ops",
     group: "Sales",
@@ -96,6 +105,15 @@ const CRM_PAGES = Object.freeze([
     // CREATE and EDIT arrived with the mobile Add Entry screen, which records
     // an income or an expense against the shared ledger.
     actions: [PAGE_ACTIONS.VIEW, PAGE_ACTIONS.CREATE, PAGE_ACTIONS.EDIT, PAGE_ACTIONS.EXPORT],
+  },
+  {
+    // Enterprise leasing (Oct 2026 update 02): offices taken on master lease
+    // and given to an enterprise tenant. Admin and Manager by default.
+    key: "enterprise",
+    label: "Enterprise Leasing",
+    group: "Business",
+    path: "/enterprise",
+    actions: [PAGE_ACTIONS.VIEW, PAGE_ACTIONS.CREATE, PAGE_ACTIONS.EDIT, PAGE_ACTIONS.DELETE, PAGE_ACTIONS.EXPORT],
   },
   {
     key: "reports",

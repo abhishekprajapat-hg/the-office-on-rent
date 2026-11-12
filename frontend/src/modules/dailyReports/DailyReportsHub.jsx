@@ -2,7 +2,7 @@ import React, { useCallback, useEffect, useMemo, useState } from "react";
 import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import {
   AlertTriangle, CalendarDays, CheckCircle2, ClipboardCheck, Clock, Download, FileSpreadsheet,
-  History, Loader2, LogOut, Pencil, RefreshCw, Users,
+  History, Loader2, LogOut, Pencil, Printer, RefreshCw, Users,
 } from "lucide-react";
 import { usePermissions } from "../../context/usePermissions";
 import { toErrorMessage } from "../../utils/errorMessage";
@@ -14,7 +14,8 @@ import DailyReportForm from "./DailyReportForm";
 import LeadResponseReport from "./LeadResponseReport";
 import { emptyFormValue, findFormProblem, toPayload, valueFromReport } from "./dailyReportFormValue";
 import {
-  amendDailyReport, getDailyReportDayStatus, getDailyReportSummary, getMyDailyReportToday, submitDailyReport,
+  amendDailyReport, getDailyReportDayStatus, getDailyReportForms, getDailyReportSummary, getDailyReportTargets, getMyDailyReportToday,
+  saveDailyReportTargets, submitDailyReport,
 } from "../../services/dailyReportService";
 import { columnsFor, downloadDailyReportsPdf, downloadDailyReportsXlsx, formatDateKey, periodLabel } from "./dailyReportExport";
 
@@ -125,7 +126,7 @@ const TodayReport = ({ onToast, fromCheckout }) => {
           ) : null}
         </SectionHeader>
         <div className="p-5">
-          <DailyReportForm form={data.form} value={value} onChange={setValue} errorField={errorField} disabled={submitted && !editing} />
+          <DailyReportForm form={data.form} value={value} onChange={setValue} errorField={errorField} disabled={submitted && !editing} targets={data.targets || {}} />
           {data.report?.amendments?.length ? (
             <p className="mt-4 text-[12px] text-slate-500">Edited {data.report.amendments.length} time(s); earlier values are kept in the history.</p>
           ) : null}
@@ -257,6 +258,21 @@ const EmployeeBlock = ({ employee, forms, canCorrect, onCorrect }) => {
                 {cols.counts.map((f) => <td key={f.key} className="px-3 py-2 text-right font-mono tabular-nums">{employee.averages?.[f.key] ?? "–"}</td>)}
                 <td colSpan={cols.texts.length + (cols.hasIssues ? 1 : 0) + (canCorrect ? 1 : 0)} />
               </tr>
+              {Object.keys(employee.targets || {}).length ? (
+                <tr className="bg-blue-50/60 text-blue-900" title={`Daily target × ${employee.workedDays} day(s) worked in the period`}>
+                  <td className="px-3 py-2">Target (achieved)</td>
+                  {cols.counts.map((f) => {
+                    const target = employee.periodTargets?.[f.key];
+                    const pct = employee.achievement?.[f.key];
+                    return (
+                      <td key={f.key} className="px-3 py-2 text-right font-mono tabular-nums">
+                        {target === undefined ? "–" : <>{target}{pct !== null && pct !== undefined ? <span className={pct >= 100 ? "ml-1 text-emerald-700" : "ml-1 text-amber-700"}>({pct}%)</span> : null}</>}
+                      </td>
+                    );
+                  })}
+                  <td colSpan={cols.texts.length + (cols.hasIssues ? 1 : 0) + (canCorrect ? 1 : 0)} />
+                </tr>
+              ) : null}
             </tbody>
           </table>
         </div>
@@ -315,6 +331,7 @@ const HistoryView = ({ isManager, onToast }) => {
     try {
       const name = `daily-reports-${summary.from}_${summary.to}`;
       if (kind === "pdf") await downloadDailyReportsPdf(summary, `${name}.pdf`);
+      else if (kind === "print") await downloadDailyReportsPdf(summary, `${name}.pdf`, { mode: "print" });
       else await downloadDailyReportsXlsx(summary, `${name}.xlsx`);
     } catch (error) {
       onToast({ type: "error", message: toErrorMessage(error, "Download failed") });
@@ -338,6 +355,9 @@ const HistoryView = ({ isManager, onToast }) => {
             </button>
             <button type="button" className={secondaryButtonClass} onClick={() => download("xlsx")} disabled={!summary || Boolean(downloading)}>
               {downloading === "xlsx" ? <Loader2 size={14} className="animate-spin" /> : <FileSpreadsheet size={14} />} Excel
+            </button>
+            <button type="button" className={secondaryButtonClass} onClick={() => download("print")} disabled={!summary || Boolean(downloading)}>
+              {downloading === "print" ? <Loader2 size={14} className="animate-spin" /> : <Printer size={14} />} Print
             </button>
           </div>
         </SectionHeader>
@@ -493,6 +513,83 @@ const TeamStatus = ({ onToast }) => {
   );
 };
 
+/* ------------------------------------------------------------- targets -- */
+// 3 Nov 2026 (7.1): expected activity per day, per form and segment.
+const TARGET_SEGMENTS = [["", "All segments"], ["COMMERCIAL", "Commercial"], ["RESIDENTIAL", "Residential"], ["COWORKING", "Coworking"], ["BOTH", "Both"]];
+
+const TargetsView = ({ onToast }) => {
+  const [forms, setForms] = useState([]);
+  const [rows, setRows] = useState([]);
+  const [formKey, setFormKey] = useState("");
+  const [segment, setSegment] = useState("");
+  const [draft, setDraft] = useState({});
+  const [saving, setSaving] = useState(false);
+
+  useEffect(() => {
+    Promise.all([getDailyReportForms(), getDailyReportTargets()])
+      .then(([f, t]) => {
+        const list = (f.forms || []).filter((form) => form.fields.some((x) => x.kind === "count"));
+        setForms(list);
+        setRows(t.targets || []);
+        setFormKey((k) => k || list[0]?.key || "");
+      })
+      .catch((error) => onToast({ type: "error", message: toErrorMessage(error, "Couldn't load targets") }));
+  }, [onToast]);
+
+  useEffect(() => {
+    const row = rows.find((r) => r.formKey === formKey && (r.segment || "") === segment);
+    setDraft(Object.fromEntries(Object.entries(row?.targets || {}).map(([k, v]) => [k, String(v)])));
+  }, [rows, formKey, segment]);
+
+  const form = forms.find((f) => f.key === formKey);
+  const save = async (e) => {
+    e.preventDefault();
+    setSaving(true);
+    try {
+      const out = await saveDailyReportTargets({ formKey, segment, targets: draft });
+      setRows((list) => [...list.filter((r) => !(r.formKey === formKey && (r.segment || "") === segment)), out.target]);
+      onToast({ type: "success", message: "Targets saved" });
+    } catch (error) {
+      onToast({ type: "error", message: toErrorMessage(error, "Couldn't save targets") });
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <form onSubmit={save} className={cardClass}>
+      <SectionHeader icon={ClipboardCheck} tone="blue" title="Daily report targets" subtitle="Expected activity per day. A segment's own targets replace the all-segments ones; blank means no target." />
+      <div className="flex flex-wrap items-end gap-3 px-5 pt-4">
+        <label className="block">
+          <span className="text-[12px] font-semibold text-slate-600">Report form</span>
+          <select className={`${fieldClass} mt-1 block`} value={formKey} onChange={(e) => setFormKey(e.target.value)}>
+            {forms.map((f) => <option key={f.key} value={f.key}>{f.label}</option>)}
+          </select>
+        </label>
+        <label className="block">
+          <span className="text-[12px] font-semibold text-slate-600">Segment</span>
+          <select className={`${fieldClass} mt-1 block`} value={segment} onChange={(e) => setSegment(e.target.value)}>
+            {TARGET_SEGMENTS.map(([v, l]) => <option key={v} value={v}>{l}</option>)}
+          </select>
+        </label>
+      </div>
+      <div className="grid gap-3 px-5 py-4 sm:grid-cols-2 lg:grid-cols-3">
+        {(form?.fields || []).filter((f) => f.kind === "count").map((f) => (
+          <label key={f.key} className="block">
+            <span className="text-[13px] font-semibold text-slate-800">{f.label} <span className="font-normal text-slate-400">per day</span></span>
+            <input type="text" inputMode="decimal" placeholder="No target" value={draft[f.key] ?? ""}
+              onChange={(e) => setDraft((d) => ({ ...d, [f.key]: e.target.value.replace(/[^\d.]/g, "") }))}
+              className={`${fieldClass} mt-1 w-full font-mono`} />
+          </label>
+        ))}
+      </div>
+      <div className="flex justify-end border-t border-slate-100 px-5 py-3">
+        <button type="submit" className={primaryButtonClass} disabled={saving || !formKey}>{saving ? <Loader2 size={14} className="animate-spin" /> : null} Save targets</button>
+      </div>
+    </form>
+  );
+};
+
 /* ---------------------------------------------------------------- page -- */
 
 const DailyReportsHub = () => {
@@ -510,6 +607,7 @@ const DailyReportsHub = () => {
     list.push({ id: "history", label: isManager ? "History & downloads" : "My history" });
     if (isManager) list.push({ id: "team", label: "Team status" });
     if (isManager) list.push({ id: "response", label: "Lead response time" });
+    if (isManager) list.push({ id: "targets", label: "Targets" });
     return list;
   }, [role, isManager]);
   const [tab, setTab] = useState(() => (fromCheckout || role !== "ADMIN" ? "today" : "history"));
@@ -528,6 +626,7 @@ const DailyReportsHub = () => {
       {active === "history" ? <HistoryView isManager={isManager} onToast={onToast} /> : null}
       {active === "team" ? <TeamStatus onToast={onToast} /> : null}
       {active === "response" ? <LeadResponseReport onToast={onToast} /> : null}
+      {active === "targets" ? <TargetsView onToast={onToast} /> : null}
     </div>
   );
 };

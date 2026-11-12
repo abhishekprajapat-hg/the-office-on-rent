@@ -94,7 +94,7 @@ export const PropertyDetailScreen = ({ route, navigation }: RootScreenProps<"Pro
   const terms: [string, string][] = [
     property.type !== "Rent" && property.price ? ["Sale price", formatRupees(property.price)] : null,
     property.type !== "Sale" && property.rent ? ["Rent", `${formatRupees(property.rent)} / mo`] : null,
-    property.maintenanceCharges ? ["Maintenance", formatRupees(property.maintenanceCharges)] : null,
+    property.maintenanceCharges ? ["Maintenance", `${formatRupees(property.maintenanceCharges)} / sq ft`] : null,
     property.depositMonths ? ["Security deposit", `${property.depositMonths} months`] : property.deposit ? ["Security deposit", formatRupees(property.deposit)] : null,
     property.lockInYears ? ["Lock-in", `${property.lockInYears} year${property.lockInYears === 1 ? "" : "s"}`] : null,
     property.agreementYears ? ["Agreement", `${property.agreementYears} years`] : null,

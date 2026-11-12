@@ -18,6 +18,11 @@ const UPLOAD_CATEGORIES = Object.freeze([
   "coworking-documents",
   // Files attached to tasks and task comments.
   "task-attachments",
+  // Broker / channel partner KYC (Aadhaar, PAN). Admin and Manager only.
+  "broker-kyc",
+  // Enterprise tenant / signatory / agreement documents (Oct 2026 update 02).
+  // Admin or an authorised user only; every download is logged.
+  "enterprise-documents",
 ]);
 const DEFAULT_CATEGORY = "chat";
 

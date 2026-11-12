@@ -12,6 +12,50 @@ const MAX_SEEN_KEYS = 500;
 
 const toIdString = (value) => String(value || "").trim();
 
+/*
+ * True while a form, modal or bottom sheet covers the page (4 Nov 2026): the
+ * reminder steps aside so it never hides a dialog's Next / Save buttons, and
+ * comes back when the dialog closes. Covers dialogs marked aria-modal and the
+ * older full-screen overlays (fixed inset-0, z-index 50 or more).
+ */
+const isOverlayOpen = (doc = document, win = window) => {
+  if (doc.querySelector('[aria-modal="true"], .mobile-bottom-sheet')) return true;
+  const minW = win.innerWidth * 0.9;
+  const minH = win.innerHeight * 0.8;
+  for (const el of doc.querySelectorAll(".fixed.inset-0")) {
+    if (el.closest(".follow-up-reminder-toast")) continue;
+    const style = win.getComputedStyle(el);
+    if (style.display === "none" || style.visibility === "hidden" || style.pointerEvents === "none") continue;
+    if (!(Number.parseInt(style.zIndex, 10) >= 50)) continue;
+    const rect = el.getBoundingClientRect();
+    if (rect.width >= minW && rect.height >= minH) return true;
+  }
+  return false;
+};
+
+const useOverlayOpen = (enabled) => {
+  const [open, setOpen] = useState(false);
+  useEffect(() => {
+    if (!enabled) return undefined;
+    let frame = 0;
+    const check = () => {
+      frame = 0;
+      setOpen(isOverlayOpen());
+    };
+    const schedule = () => { if (!frame) frame = window.requestAnimationFrame(check); };
+    const observer = new MutationObserver(schedule);
+    observer.observe(document.body, { childList: true, subtree: true });
+    window.addEventListener("resize", schedule);
+    check();
+    return () => {
+      observer.disconnect();
+      window.removeEventListener("resize", schedule);
+      if (frame) window.cancelAnimationFrame(frame);
+    };
+  }, [enabled]);
+  return open;
+};
+
 const readSeenReminderKeys = () => {
   try {
     const parsed = JSON.parse(localStorage.getItem(REMINDER_STORAGE_KEY) || "[]");
@@ -107,6 +151,7 @@ const FollowUpReminderToast = ({ enabled = true }) => {
     document.documentElement.classList.contains("theme-dark"),
   );
   const loadingRef = useRef(false);
+  const overlayOpen = useOverlayOpen(enabled);
 
   const loadReminderLeads = useCallback(async () => {
     if (!enabled || loadingRef.current) return;
@@ -193,23 +238,25 @@ const FollowUpReminderToast = ({ enabled = true }) => {
     navigate(`/leads/${leadId}`);
   }, [activeReminder, navigate, rememberReminder]);
 
-  if (!enabled || !activeReminder) return null;
+  if (!enabled || !activeReminder || overlayOpen) return null;
 
   const timeLeftText = getTimeLeftText(activeReminder._reminderDiffMs);
   const isOverdue = activeReminder._reminderDiffMs < -60 * 1000;
 
   return (
-    <div className="follow-up-reminder-toast pointer-events-none fixed bottom-4 left-4 z-[113] w-[min(92vw,25rem)]">
+    // Phones: a one-line strip under the header, so it never covers a page's
+    // bottom buttons. Larger screens: the full card, bottom left.
+    <div className="follow-up-reminder-toast pointer-events-none fixed left-3 right-3 top-[calc(env(safe-area-inset-top,0px)+72px)] z-[113] sm:bottom-4 sm:left-4 sm:right-auto sm:top-auto sm:w-[min(92vw,25rem)]">
       <div
-        className={`pointer-events-auto rounded-2xl border p-3 shadow-2xl ${
+        className={`pointer-events-auto rounded-2xl border px-3 py-2 shadow-2xl sm:p-3 ${
           isDark
             ? "border-amber-400/25 bg-slate-900/95 text-slate-100"
             : "border-amber-200 bg-white text-slate-900"
         }`}
       >
-        <div className="flex items-start gap-3">
+        <div className="flex items-center gap-2.5 sm:items-start sm:gap-3">
           <span
-            className={`mt-0.5 flex h-10 w-10 shrink-0 items-center justify-center rounded-xl ${
+            className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-lg sm:mt-0.5 sm:h-10 sm:w-10 sm:rounded-xl ${
               isOverdue
                 ? isDark ? "bg-rose-500/15 text-rose-200" : "bg-rose-50 text-rose-700"
                 : isDark ? "bg-amber-500/15 text-amber-200" : "bg-amber-50 text-amber-700"
@@ -220,7 +267,7 @@ const FollowUpReminderToast = ({ enabled = true }) => {
 
           <div className="min-w-0 flex-1">
             <p
-              className={`text-[10px] font-bold uppercase tracking-[0.14em] ${
+              className={`hidden text-[10px] font-bold uppercase tracking-[0.14em] sm:block ${
                 isOverdue
                   ? isDark ? "text-rose-200" : "text-rose-700"
                   : isDark ? "text-amber-200" : "text-amber-700"
@@ -228,13 +275,13 @@ const FollowUpReminderToast = ({ enabled = true }) => {
             >
               Follow-up reminder
             </p>
-            <p className="mt-0.5 truncate text-sm font-semibold">
+            <p className="truncate text-[13px] font-semibold sm:mt-0.5 sm:text-sm">
               {activeReminder.name || "Lead follow-up"} | {timeLeftText}
             </p>
-            <p className={`mt-0.5 text-xs ${isDark ? "text-slate-300" : "text-slate-600"}`}>
+            <p className={`mt-0.5 hidden text-xs sm:block ${isDark ? "text-slate-300" : "text-slate-600"}`}>
               {activeReminder.projectInterested || activeReminder.city || activeReminder.phone || "Follow up scheduled"}
             </p>
-            <p className={`mt-1 text-[11px] ${isDark ? "text-slate-500" : "text-slate-500"}`}>
+            <p className={`mt-1 hidden text-[11px] sm:block ${isDark ? "text-slate-500" : "text-slate-500"}`}>
               Scheduled: {formatFollowUpTime(activeReminder.nextFollowUp)}
             </p>
           </div>

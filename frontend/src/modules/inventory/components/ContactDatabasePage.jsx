@@ -26,7 +26,9 @@ import { CP_TONE, FNT, MUT, TONE, field, glassCard, prettyPhone, telHref, waHref
  * because only brokers gate lead intake.
  */
 
-const EMPTY_FILTERS = { segment: "", cpStatus: "", transactionType: "", area: "", source: "", stale: "", verified: "" };
+const EMPTY_FILTERS = { segment: "", cpStatus: "", transactionType: "", area: "", source: "", stale: "", verified: "", registrationType: "", preferred: "" };
+// 3 Nov 2026 (3.1): Regular broker / Channel partner, and the Preferred CP mark.
+const REGISTRATION_FILTERS = [["REGULAR_BROKER", "Regular brokers"], ["CHANNEL_PARTNER", "Channel partners"]];
 const SOURCE_OPTIONS = [["RERA_IMPORT", "RERA list"], ["MANUAL", "Added manually"], ["LEAD", "From leads"], ["BULK", "Bulk upload"]];
 
 const FilterSelect = ({ label, value, onChange, options, placeholder }) => (
@@ -216,6 +218,8 @@ const ContactDatabasePage = ({ kind, title, blurb }) => {
   const activeChips = [
     ...(filters.segment ? [["segment", labelOf(SEGMENT_OPTIONS, filters.segment)]] : []),
     ...(filters.cpStatus ? [["cpStatus", labelOf(CP_STATUS_OPTIONS, filters.cpStatus)]] : []),
+    ...(filters.registrationType ? [["registrationType", REGISTRATION_FILTERS.find(([v]) => v === filters.registrationType)?.[1] || filters.registrationType]] : []),
+    ...(filters.preferred === "true" ? [["preferred", "Preferred CPs"]] : []),
     ...(filters.transactionType ? [["transactionType", labelOf(TRANSACTION_OPTIONS, filters.transactionType)]] : []),
     ...(filters.source ? [["source", SOURCE_OPTIONS.find(([v]) => v === filters.source)?.[1] || filters.source]] : []),
     ...(filters.area ? [["area", `Area: ${filters.area}`]] : []),
@@ -320,6 +324,8 @@ const ContactDatabasePage = ({ kind, title, blurb }) => {
             {isBroker ? (
               <>
                 <FilterSelect label="Segment" value={filters.segment} onChange={(e) => setFilter("segment", e.target.value)} placeholder="All segments" options={SEGMENT_OPTIONS.map((o) => [o.value, o.label])} />
+                <FilterSelect label="Registration" value={filters.registrationType} onChange={(e) => setFilter("registrationType", e.target.value)} placeholder="Any registration" options={REGISTRATION_FILTERS} />
+                <FilterSelect label="Preferred" value={filters.preferred} onChange={(e) => setFilter("preferred", e.target.value)} placeholder="Preferred or not" options={[["true", "Preferred CPs only"]]} />
                 <FilterSelect label="Channel partner status" value={filters.cpStatus} onChange={(e) => setFilter("cpStatus", e.target.value)} placeholder="Any CP status" options={CP_STATUS_OPTIONS.map((o) => [o.value, o.label])} />
                 <FilterSelect label="Transaction type" value={filters.transactionType} onChange={(e) => setFilter("transactionType", e.target.value)} placeholder="Any transaction" options={TRANSACTION_OPTIONS.map((o) => [o.value, o.label])} />
                 <FilterSelect label="Source" value={filters.source} onChange={(e) => setFilter("source", e.target.value)} placeholder="Any source" options={SOURCE_OPTIONS} />
@@ -395,7 +401,9 @@ const ContactDatabasePage = ({ kind, title, blurb }) => {
                   </div>
 
                   <div className="flex flex-wrap gap-1.5">
-                    {isBroker ? <Pill tone={CP_TONE[cp] || "mute"}>{labelOf(CP_STATUS_OPTIONS, cp)}</Pill> : null}
+                    {isBroker ? <Pill tone={row.registrationType === "CHANNEL_PARTNER" ? "vio" : "mute"}>{row.registrationType === "CHANNEL_PARTNER" ? "Channel partner" : "Regular broker"}</Pill> : null}
+                    {isBroker && row.preferredPartner ? <Pill tone="ok">Preferred CP</Pill> : null}
+                    {isBroker && (cp !== "NOT_ONBOARDED" || row.registrationType === "CHANNEL_PARTNER") ? <Pill tone={CP_TONE[cp] || "mute"}>{labelOf(CP_STATUS_OPTIONS, cp)}</Pill> : null}
                     {isBroker && !row.verified ? <Pill tone="warn">Not verified</Pill> : null}
                     {!isBroker && !row.lastVerifiedAt ? <Pill tone="warn">Not verified</Pill> : null}
                     {(row.segments || []).slice(0, 2).map((s) => <Pill key={s} tone="info">{labelOf(SEGMENT_OPTIONS, s)}</Pill>)}

@@ -65,6 +65,21 @@ exports.requireFileAccess = async (req, res, next) => {
   const cookies = parseCookies(req.headers.cookie);
   const docs = require("../services/documentAccess.service");
 
+  // Broker KYC (Aadhaar / PAN): Admin or Manager only, never a per-URL token.
+  if (docs.isBrokerKycDocument(requestedPath)) {
+    try {
+      const userId = staffIdFromBearer(req) || cookieUserId(cookies[FILE_COOKIE_NAME]);
+      const user = await docs.loadUserForFileAccess(userId);
+      if (!user) return res.status(401).json({ message: "Not authorized to access this file" });
+      if (!docs.canOpenBrokerKyc(user)) {
+        return res.status(403).json({ message: "Only an Admin or Manager can open broker KYC documents" });
+      }
+      return next();
+    } catch {
+      return res.status(500).json({ message: "Could not check file access" });
+    }
+  }
+
   // Coworking client documents: Admin or an authorised manager only, never a
   // per-URL token (requirements 16 Oct 2026, section 09).
   if (docs.isProtectedClientDocument(requestedPath)) {

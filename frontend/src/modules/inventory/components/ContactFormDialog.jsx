@@ -132,7 +132,7 @@ const ContactFormDialog = ({ open, kind, contact, saving, onClose, onSubmit }) =
         {kind === "BROKER" && !isEdit ? (
           <p className="flex items-start gap-1.5 rounded-lg border border-amber-200 bg-amber-50 p-2.5 text-[11.5px] text-amber-800 sm:col-span-2">
             <ShieldAlert size={13} className="mt-px shrink-0" />
-            If this number has an open enquiry you still want to work, close it before saving — existing leads stay, but no new ones will come through.
+            Once this number is saved as a broker, new enquiries from it will not become leads. Leads you already have from this number stay as they are.
           </p>
         ) : null}
         {/* Enter submits the form; the footer button lives outside it. */}

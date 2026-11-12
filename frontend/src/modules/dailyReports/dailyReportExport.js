@@ -84,6 +84,12 @@ export const downloadDailyReportsXlsx = async (summary, fileName) => {
     };
     allCountKeys.forEach((k) => { row[`${labels.get(k)} (total)`] = e.totals?.[k] ?? ""; });
     allCountKeys.forEach((k) => { row[`${labels.get(k)} (avg/day reported)`] = e.averages?.[k] ?? ""; });
+    // 3 Nov 2026 (7.1): target for the period and how much of it was done.
+    allCountKeys.forEach((k) => {
+      if (e.periodTargets?.[k] === undefined) return;
+      row[`${labels.get(k)} (target)`] = e.periodTargets[k];
+      row[`${labels.get(k)} (% of target)`] = e.achievement?.[k] ?? "";
+    });
     return row;
   });
   XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(totalRows.length ? totalRows : [{ Note: "Nobody in scope" }]), "Totals");
@@ -99,7 +105,8 @@ export const downloadDailyReportsXlsx = async (summary, fileName) => {
 
 /* ------------------------------------------------------------- PDF -- */
 
-export const downloadDailyReportsPdf = async (summary, fileName) => {
+// mode "print" opens the same PDF in a new tab with the print dialog (3 Nov 2026, 7.2).
+export const downloadDailyReportsPdf = async (summary, fileName, { mode = "download" } = {}) => {
   const { jsPDF } = await import("jspdf");
   const doc = new jsPDF({ unit: "pt", format: "a4", orientation: "landscape", compress: true });
   const pageW = doc.internal.pageSize.getWidth();
@@ -191,6 +198,9 @@ export const downloadDailyReportsPdf = async (summary, fileName) => {
     if (rows.length) {
       rows.push(["Total", ...cols.counts.map((f) => e.totals?.[f.key] ?? 0), ...textCols.map(() => "")]);
       rows.push(["Avg/day", ...cols.counts.map((f) => e.averages?.[f.key] ?? "-"), ...textCols.map(() => "")]);
+      if (Object.keys(e.periodTargets || {}).length) {
+        rows.push(["Target (achieved)", ...cols.counts.map((f) => (e.periodTargets?.[f.key] === undefined ? "-" : `${e.periodTargets[f.key]}${e.achievement?.[f.key] !== null && e.achievement?.[f.key] !== undefined ? ` (${e.achievement[f.key]}%)` : ""}`)), ...textCols.map(() => "")]);
+      }
       drawTable(headers, rows, widths, { boldLastRow: false });
     } else {
       doc.setFontSize(9);
@@ -216,5 +226,12 @@ export const downloadDailyReportsPdf = async (summary, fileName) => {
   });
 
   footer();
+  if (mode === "print") {
+    doc.autoPrint();
+    const url = doc.output("bloburl");
+    const win = window.open(url, "_blank");
+    if (!win) doc.save(fileName || `daily-reports-${summary.from}_${summary.to}.pdf`);
+    return;
+  }
   doc.save(fileName || `daily-reports-${summary.from}_${summary.to}.pdf`);
 };

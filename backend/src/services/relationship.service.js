@@ -148,6 +148,15 @@ const sanitizeContactPatch = (body = {}, user) => {
     if (has(k)) patch[k] = body[k] ? normalizePhone(body[k]) || cleanText(body[k], 20) : "";
   }
   if (has("brokerType")) patch.brokerType = cleanEnum(body.brokerType || "", R.BROKER_TYPES, "brokerType");
+  // Database module (Oct 2026): several roles per person, owner type, contact points.
+  if (has("roles")) patch.roles = cleanEnumList(body.roles, require("../constants/database.constants").CONTACT_ROLES, "roles");
+  if (has("ownerType")) patch.ownerType = cleanEnum(body.ownerType || "", require("../constants/database.constants").OWNER_TYPES, "ownerType");
+  if (has("isContactPoint")) patch.isContactPoint = Boolean(body.isContactPoint);
+  if (has("sourceNote")) patch.sourceNote = cleanText(body.sourceNote, 1000);
+  if (has("archived")) {
+    if (!canSeeRestricted(user)) throw new RelationshipError(403, "Only Admin or Manager can archive a contact");
+    patch.archived = Boolean(body.archived);
+  }
   if (has("relationshipStatus")) patch.relationshipStatus = cleanEnum(body.relationshipStatus || "", R.RELATIONSHIP_STATUSES, "relationshipStatus");
   if (has("preferredContact")) patch.preferredContact = cleanEnum(body.preferredContact || "", R.CONTACT_METHODS, "preferredContact");
   if (has("segments")) patch.segments = cleanEnumList(body.segments, R.SEGMENTS, "segments");
@@ -165,17 +174,54 @@ const sanitizeContactPatch = (body = {}, user) => {
     if (!canSeeRestricted(user)) throw new RelationshipError(403, "Only Admin or Manager can mark a contact verified");
     patch.verified = Boolean(body.verified);
   }
+  if (has("registrationType")) patch.registrationType = cleanEnum(body.registrationType || "REGULAR_BROKER", R.BROKER_REGISTRATION_TYPES, "registrationType");
+  if (has("preferredPartner")) {
+    if (!canSeeRestricted(user)) throw new RelationshipError(403, "Only Admin or Manager can mark a Preferred Channel Partner");
+    patch.preferredPartner = body.preferredPartner === true || body.preferredPartner === "true";
+  }
   if (has("cpStatus")) {
     if (!canSeeRestricted(user)) throw new RelationshipError(403, "Only Admin or Manager can change channel partner status");
     patch.cpStatus = cleanEnum(body.cpStatus, R.CP_STATUSES, "cpStatus");
   }
   if (has("cpDocuments")) {
+    if (!canSeeRestricted(user)) throw new RelationshipError(403, "Only Admin or Manager can change channel partner documents");
     const docs = Array.isArray(body.cpDocuments) ? body.cpDocuments : [];
     patch.cpDocuments = docs.slice(0, 20).map((d) => ({
+      type: R.CP_DOCUMENT_TYPES.includes(String(d?.type || "").toUpperCase()) ? String(d.type).toUpperCase() : "OTHER",
       name: cleanText(d?.name, 200), url: cleanText(d?.url, 1000), uploadedAt: d?.uploadedAt ? cleanDate(d.uploadedAt, "uploadedAt") : new Date(),
     })).filter((d) => d.url);
   }
+  if (has("cpUserId")) {
+    // Checked against the users collection by the route before saving.
+    if (!canSeeRestricted(user)) throw new RelationshipError(403, "Only Admin or Manager can link a channel partner login");
+    patch.cpUserId = cleanObjectId(body.cpUserId, "cpUserId");
+  }
   return patch;
+};
+
+/*
+ * 3 Nov 2026 (3.1): only a Channel Partner can be Preferred. Turning a CP back
+ * into a regular broker drops the mark; asking for it on a regular broker fails.
+ */
+const applyRegistrationRules = (contact, patch = {}) => {
+  // Onboarding someone as a CP registers them as one.
+  if (!patch.registrationType && patch.cpStatus && patch.cpStatus !== "NOT_ONBOARDED") patch.registrationType = "CHANNEL_PARTNER";
+  const type = patch.registrationType || contact.registrationType || "REGULAR_BROKER";
+  // Registering as a CP is a request until Admin / Manager activates it.
+  if (type === "CHANNEL_PARTNER" && !patch.cpStatus && (contact.cpStatus || "NOT_ONBOARDED") === "NOT_ONBOARDED") patch.cpStatus = "PENDING";
+  // Back to a regular broker: no longer a CP.
+  if (patch.registrationType === "REGULAR_BROKER" && !patch.cpStatus && contact.cpStatus && contact.cpStatus !== "NOT_ONBOARDED") patch.cpStatus = "NOT_ONBOARDED";
+  if (patch.preferredPartner === true && type !== "CHANNEL_PARTNER") {
+    throw new RelationshipError(400, "Only a broker registered as a Channel Partner can be marked Preferred");
+  }
+  if (type !== "CHANNEL_PARTNER") patch.preferredPartner = false;
+  return patch;
+};
+
+/* Which of the CP documents asked for are on file (shown as a checklist). */
+const cpDocumentChecklist = (contact = {}) => {
+  const have = new Set((contact.cpDocuments || []).map((d) => String(d.type || "").toUpperCase()));
+  return R.CP_REQUIRED_DOCUMENTS.map((type) => ({ type, present: have.has(type) }));
 };
 
 /* Applies a CP status change: onboarding date and approver ride along. */
@@ -247,6 +293,8 @@ const buildContactProfile = async ({ contactId, user }) => {
 
   return {
     contact: stripRestrictedContact(contact, user),
+    // 3 Nov 2026 (3.1): which CP documents are on file; presence only.
+    cpChecklist: contact.kind === "BROKER" ? cpDocumentChecklist(contact) : [],
     inventory: inventoryRows,
     referredLeads: leads,
     stats: {
@@ -276,7 +324,7 @@ const mergeContacts = async ({ companyId, keepId, dropId }) => {
     Contact.findOne({ _id: dropId, companyId }),
   ]);
   if (!keep || !drop) throw new RelationshipError(404, "Contact not found");
-  if (keep.kind !== drop.kind) throw new RelationshipError(400, "Only records of the same kind (owner/broker) can be merged");
+  if (keep.kind !== drop.kind) throw new RelationshipError(400, "Only records of the same kind (owner, broker or contact) can be merged. Link the two instead.");
 
   const fillIfBlank = ["email", "company", "city", "designation", "whatsapp", "brokerType", "firmId", "reraNumber",
     "relationshipStatus", "relationshipOwnerId", "preferredContact", "lastContactAt", "nextFollowUpAt", "lastVerifiedAt"];
@@ -288,7 +336,7 @@ const mergeContacts = async ({ companyId, keepId, dropId }) => {
   ["notes", "propertyDetails", "marketNotes", "relationshipNotes", "internalRemarks", "brokerageTerms", "netRateNotes"].forEach((f) => {
     if (drop[f] && !String(keep[f] || "").includes(drop[f])) keep[f] = [keep[f], drop[f]].filter(Boolean).join("\n").slice(0, 3000);
   });
-  ["segments", "areas", "projects", "propertyTypes", "transactionTypes", "customerTypes", "leadIds", "inventoryIds"].forEach((f) => {
+  ["segments", "areas", "projects", "propertyTypes", "transactionTypes", "customerTypes", "leadIds", "inventoryIds", "roles"].forEach((f) => {
     const merged = [...(keep[f] || []), ...(drop[f] || [])];
     keep[f] = [...new Map(merged.map((x) => [String(x), x])).values()];
   });
@@ -306,6 +354,8 @@ const mergeContacts = async ({ companyId, keepId, dropId }) => {
     Lead.updateMany({ companyId, brokerContactId: drop._id }, { $set: { brokerContactId: keep._id } }),
   ]);
   await Contact.updateMany({ companyId, linkedContactId: drop._id }, { $set: { linkedContactId: keep._id } });
+  // Database module (Oct 2026): building / property links and call history move too.
+  const databaseMoved = await require("./database.service").moveDatabaseLinks({ companyId, keepId: keep._id, dropId: drop._id });
   await keep.save();
   await Contact.deleteOne({ _id: drop._id, companyId });
   return {
@@ -315,6 +365,8 @@ const mergeContacts = async ({ companyId, keepId, dropId }) => {
       sourcedInventory: inv2.modifiedCount || 0,
       referredLeads: leads1.modifiedCount || 0,
       brokerLeads: leads2.modifiedCount || 0,
+      databaseLinks: databaseMoved.relationships,
+      callHistory: databaseMoved.interactions,
     },
     removed: { _id: drop._id, name: drop.name, phone: drop.phone },
   };
@@ -446,6 +498,8 @@ module.exports = {
   isStale,
   staleCutoff,
   sanitizeContactPatch,
+  applyRegistrationRules,
+  cpDocumentChecklist,
   applyCpStatus,
   buildContactProfile,
   mergeContacts,

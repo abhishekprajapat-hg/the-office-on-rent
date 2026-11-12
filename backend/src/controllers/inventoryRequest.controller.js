@@ -12,11 +12,16 @@ const PARTNER_HIDDEN_INVENTORY_FIELDS = [
   "ownerName",
   "ownerNumber",
   "ownerWhatsappNumber",
+  "ownerContacts",
   "ownerType",
   "ownerContactId",
   "enterpriseDetails",
   "keyManagerName",
   "keyManagerNumber",
+  "brokerName",
+  "brokerNumber",
+  "developerName",
+  "developerNumber",
 ];
 
 const toPartnerRequestView = (request) => {

@@ -34,7 +34,7 @@ const InventoryRevenueFields = ({ formData, setFormData, inputClass, sectionClas
   return (
     <div className={`${sectionClass} grid grid-cols-1 gap-3 sm:grid-cols-2 sm:gap-4`}>
       <div className="sm:col-span-2">
-        <div className={headingClass}>Revenue</div>
+        <div className={headingClass}>Other Details</div>
         {ownership ? <p className="mt-1 text-xs text-slate-500">Earns {REVENUE_TYPE_LABEL[ownership].toLowerCase()}.</p> : null}
       </div>
       <div>

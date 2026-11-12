@@ -6,6 +6,7 @@ const {
   INVENTORY_SALE_PAYMENT_TYPES,
   INVENTORY_DEAL_TYPES,
   INVENTORY_OWNER_TYPES,
+  INVENTORY_OWNER_CONTACT_ROLES,
 } = require("../constants/inventory.constants");
 
 const MAX_SALE_PAYMENT_NOTE_LENGTH = 1000;
@@ -295,6 +296,25 @@ const inventorySchema = new mongoose.Schema(
     sourceLinks: { type: [sourceLinkSchema], default: [] },
     lastConfirmedAt: { type: Date, default: null },
     projectId: { type: mongoose.Schema.Types.ObjectId, ref: "Project", default: null },
+    // Database module (Oct 2026, 1.1 / 1.6): the building this unit is in,
+    // occupancy kept apart from availability, and availability verification
+    // kept apart from owner / contact verification.
+    buildingId: { type: mongoose.Schema.Types.ObjectId, ref: "Building", default: null, index: true },
+    occupancy: {
+      status: { type: String, enum: ["UNKNOWN", "VACANT", "OCCUPIED"], default: "UNKNOWN" },
+      availableFrom: { type: Date, default: null },
+    },
+    availabilityVerification: {
+      state: { type: String, enum: ["NEVER", "PENDING", "CONFIRMED_OWNER", "CONFIRMED_REPRESENTATIVE", "DISPUTED"], default: "NEVER" },
+      confirmedAt: { type: Date, default: null },
+      confirmedByContactId: { type: mongoose.Schema.Types.ObjectId, ref: "CrmContact", default: null },
+      nextDueAt: { type: Date, default: null },
+    },
+    // Set when the unit is created from a contact's profile (guard, broker...):
+    // that contact is recorded as the source once the unit exists.
+    initialSourceContactId: { type: mongoose.Schema.Types.ObjectId, ref: "CrmContact", default: null },
+    // 3 Nov 2026 (4.3 / 5): PLCs that apply to this plot, by name from its project's PLC list.
+    appliedPlcs: { type: [{ type: String, trim: true, maxlength: 80 }], default: [] },
     originLeadId: { type: mongoose.Schema.Types.ObjectId, ref: "Lead", default: null },
     ownerName: {
       type: String,
@@ -313,6 +333,19 @@ const inventorySchema = new mongoose.Schema(
       trim: true,
       default: "",
       maxlength: 20,
+    },
+    ownerContacts: {
+      type: [
+        new mongoose.Schema(
+          {
+            role: { type: String, enum: INVENTORY_OWNER_CONTACT_ROLES, default: "OTHER" },
+            name: { type: String, trim: true, default: "", maxlength: 120 },
+            number: { type: String, trim: true, default: "", maxlength: 20 },
+          },
+          { _id: false },
+        ),
+      ],
+      default: [],
     },
     ownerType: {
       type: String,
@@ -353,6 +386,31 @@ const inventorySchema = new mongoose.Schema(
       maxlength: 120,
     },
     keyManagerNumber: {
+      type: String,
+      trim: true,
+      default: "",
+      maxlength: 20,
+    },
+    brokerName: {
+      type: String,
+      trim: true,
+      default: "",
+      maxlength: 120,
+    },
+    brokerNumber: {
+      type: String,
+      trim: true,
+      default: "",
+      maxlength: 20,
+    },
+    // Plots record the developer in place of a key manager.
+    developerName: {
+      type: String,
+      trim: true,
+      default: "",
+      maxlength: 120,
+    },
+    developerNumber: {
       type: String,
       trim: true,
       default: "",
@@ -506,6 +564,18 @@ const inventorySchema = new mongoose.Schema(
       default: "SQ_FT",
     },
     maintenanceCharges: {
+      type: Number,
+      default: null,
+      min: 0,
+    },
+    // Commercial sale price quoted as a total or as a rate per area unit;
+    // `price` always holds the total either way.
+    priceBasis: {
+      type: String,
+      enum: ["TOTAL", "PER_AREA"],
+      default: "TOTAL",
+    },
+    pricePerArea: {
       type: Number,
       default: null,
       min: 0,
@@ -718,8 +788,30 @@ inventorySchema.pre("validate", function enforceStatusDetails() {
 
 inventorySchema.pre("save", async function syncOwner() {
  if (!this.companyId || !this.ownerNumber || !(this.isNew || this.isModified("ownerName") || this.isModified("ownerNumber"))) return;
- const contact = await require("../services/crmContact.service").upsertContact({ companyId: this.companyId, kind: "OWNER", phone: this.ownerNumber, name: this.ownerName, inventoryId: this._id, actor: this.createdBy,
+ const contact = await require("../services/crmContact.service").upsertContact({ companyId: this.companyId, kind: "OWNER", phone: this.ownerNumber, name: this.ownerName, inventoryId: this._id, actor: this.createdBy, keepExistingName: true,
  propertyDetails: [this.projectName, this.buildingName, this.unitNumber, this.location, this.city].filter(Boolean).join(", ") });
  this.ownerContactId = contact?._id || null;
+});
+// The form's broker name/number become a Broker Database record and a source link on this unit.
+inventorySchema.pre("save", async function syncBroker() {
+ if (!this.companyId || !this.brokerNumber || !(this.isNew || this.isModified("brokerName") || this.isModified("brokerNumber"))) return;
+ const contact = await require("../services/crmContact.service").upsertContact({ companyId: this.companyId, kind: "BROKER", phone: this.brokerNumber, name: this.brokerName, inventoryId: this._id, actor: this.createdBy, keepExistingName: true });
+ if (!contact?._id) return;
+ const links = this.sourceLinks || [];
+ if (!links.some((link) => String(link.contactId || "") === String(contact._id))) {
+  links.push({ contactId: contact._id, addedBy: this.createdBy || null });
+  this.sourceLinks = links;
+ }
+});
+// Database module (Oct 2026, 1.5 / 1.6): a unit created from a contact's profile
+// records that contact as its source - a relationship plus a dated source
+// report - once the unit exists. Runs once; the field is then cleared.
+inventorySchema.post("save", async function recordInitialSource(doc) {
+ if (!doc.initialSourceContactId || !doc.companyId) return;
+ try {
+  await require("../services/database.service").recordSourceForNewInventory(doc);
+ } catch (error) {
+  require("../config/logger").warn({ message: "Could not record inventory source", error: error.message, inventoryId: String(doc._id) });
+ }
 });
 module.exports = mongoose.model("Inventory", inventorySchema);

@@ -17,14 +17,21 @@ import {
   createInventoryShareLink,
 } from "../../services/inventoryService";
 import { toErrorMessage } from "../../utils/errorMessage";
+import { getProjectById } from "../../services/projectService";
+import { PLC_RULE_SHORT, combinePlcs, formatBasisValue, inrRounded, plcCharge, plotBasis } from "./projectStockFormat";
 import ToastNotice from "../../components/ui/ToastNotice";
 import FittedImage from "../../components/ui/FittedImage";
 import { StatusBadge } from "../../components/crm";
 import { Badge, Button, Card, CardContent } from "../../components/ui";
 import InventorySpecTabs from "./components/InventorySpecTabs";
+import InventoryDatabasePanel from "../database/InventoryDatabasePanel";
 import InventorySourcesPanel from "./components/InventorySourcesPanel";
 
+// Blank values show "-" rather than Number(null) = 0.
+const isBlankValue = (value) => value === null || value === undefined || (typeof value === "string" && value.trim() === "");
+
 const formatPrice = (value) => {
+  if (isBlankValue(value)) return "-";
   const parsed = Number(value);
   if (!Number.isFinite(parsed)) return "-";
   return `Rs ${parsed.toLocaleString("en-IN")}`;
@@ -70,6 +77,7 @@ const formatEnumLabel = (value) => {
 };
 
 const formatArea = (value, unit) => {
+  if (isBlankValue(value)) return "-";
   const parsed = Number(value);
   if (!Number.isFinite(parsed)) return "-";
   const unitLabel = String(unit || "").toUpperCase() === "SQ_M" ? "sq m" : "sq ft";
@@ -115,6 +123,9 @@ const InventoryDetails = () => {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [asset, setAsset] = useState(null);
+  // The linked project's PLC list, to price the PLCs ticked on this unit (3 Nov 2026).
+  const [projectPlcs, setProjectPlcs] = useState([]);
+  const [plcProject, setPlcProject] = useState(null);
   const [inventory, setInventory] = useState(null);
   const [activities, setActivities] = useState([]);
   const [activeImageIndex, setActiveImageIndex] = useState(0);
@@ -151,6 +162,17 @@ const InventoryDetails = () => {
   }, [canViewActivity, id]);
 
   // Re-reads the unit without the full-page loader (source panel edits).
+  const linkedProjectId = asset?.projectId?._id || asset?.projectId || "";
+  const hasAppliedPlcs = Boolean(asset?.appliedPlcs?.length);
+  useEffect(() => {
+    if (!linkedProjectId || !hasAppliedPlcs) return undefined;
+    let alive = true;
+    getProjectById(String(linkedProjectId))
+      .then((project) => { if (alive) { setProjectPlcs(project?.plcOptions || []); setPlcProject(project || null); } })
+      .catch(() => { if (alive) { setProjectPlcs([]); setPlcProject(null); } });
+    return () => { alive = false; };
+  }, [linkedProjectId, hasAppliedPlcs]);
+
   const refreshQuietly = useCallback(async () => {
     const detail = await getInventoryAssetById(id);
     setAsset(detail?.asset || null);
@@ -349,8 +371,9 @@ const InventoryDetails = () => {
     );
   }
 
-  const priceValue = formatPrice(inventory?.price ?? asset?.price);
   const isRent = String(transactionType || "").trim().toUpperCase() === "RENT";
+  // A rent listing's headline figure is its rent; price is only set for sale.
+  const priceValue = formatPrice(isRent ? (inventory?.rent ?? asset?.rent) : (inventory?.price ?? asset?.price));
   const areaUnit = inventory?.areaUnit || asset?.areaUnit;
 
   const addressLine = [
@@ -421,7 +444,7 @@ const InventoryDetails = () => {
       title: isRent ? "Lease terms" : "Terms",
       rows: [
         { label: "Deal type", value: formatEnumLabel(inventory?.dealType || asset?.dealType) },
-        { label: "Maintenance", value: formatPrice(inventory?.maintenanceCharges ?? asset?.maintenanceCharges) },
+        { label: "Maintenance", value: (inventory?.maintenanceCharges ?? asset?.maintenanceCharges) ? `${formatPrice(inventory?.maintenanceCharges ?? asset?.maintenanceCharges)} / sq ft` : formatPrice(null) },
         ...(isRent ? [{ label: "Deposit", value: formatPrice(inventory?.deposit ?? asset?.deposit) }] : []),
         { label: "GST", value: (inventory?.gstApplicable ?? asset?.gstApplicable) ? "Applicable" : "Not applicable" },
         { label: "Available", value: formatDate(commercialAvailability?.availableFrom) },
@@ -562,7 +585,7 @@ const InventoryDetails = () => {
                     <DetailMetric icon={Ruler} label="Total Area" value={formatArea(inventory?.totalArea ?? asset?.totalArea, areaUnit)} />
                     <DetailMetric icon={Building2} label="Property Type" value={formatEnumLabel(isCommercial ? commercialDetails?.officeType : residentialDetails?.propertyType)} />
                     <DetailMetric icon={ImageIcon} label="Floor" value={(inventory?.floorNumber ?? asset?.floorNumber) !== undefined ? `${inventory?.floorNumber ?? asset?.floorNumber} Floor` : "-"} />
-                    <DetailMetric icon={Ruler} label={isRent ? "Monthly Rent" : "Sale Price"} value={`${priceValue}${isRent ? "/mo" : ""}`} valueClassName="!overflow-visible text-[13px] whitespace-nowrap" />
+                    <DetailMetric icon={Ruler} label={isRent ? "Monthly Rent" : "Sale Price"} value={`${priceValue}${isRent && priceValue !== "-" ? "/mo" : ""}`} valueClassName="!overflow-visible text-[13px] whitespace-nowrap" />
                   </div>
                 </div>
                 <div className="hidden ml-auto text-right">
@@ -596,6 +619,13 @@ const InventoryDetails = () => {
             approvalRows={approvalRows}
             formatDate={formatDate}
           />
+          {/* Database module (Oct 2026): building, owners, contacts, sources, verification. */}
+          {role !== "CHANNEL_PARTNER" && asset ? (
+            <section aria-label="Database" className="flex flex-col gap-2">
+              <h2 className="text-[15px] font-semibold text-slate-800 dark:text-slate-100">Building, owners and contacts</h2>
+              <InventoryDatabasePanel inventoryId={id} />
+            </section>
+          ) : null}
         </div>
 
         <div className="flex flex-col gap-4">
@@ -607,6 +637,30 @@ const InventoryDetails = () => {
                   {asset.project?.projectName || asset.projectId?.projectName || "Open project"}
                 </Link>
                 {asset.project?.projectId || asset.projectId?.projectId ? <span className="text-[12px] text-slate-500">{asset.project?.projectId || asset.projectId?.projectId}</span> : null}
+                {(asset.appliedPlcs || []).length ? (() => {
+                  const { items, ifAdded } = combinePlcs(projectPlcs, asset.appliedPlcs);
+                  const rule = plcProject?.plcRule || "NOT_SET";
+                  const charge = plcCharge({ plcOptions: projectPlcs, selected: asset.appliedPlcs, rule, ...plotBasis(asset, plcProject || {}) });
+                  return (
+                    <div className="mt-2 border-t border-slate-100 pt-2">
+                      <span className="text-[11px] font-bold uppercase tracking-[0.12em] text-slate-500">PLCs on this unit</span>
+                      <ul className="mt-1 space-y-0.5 text-[13px]">
+                        {asset.appliedPlcs.map((name) => {
+                          const plc = items.find((p) => p.name.toLowerCase() === String(name).toLowerCase());
+                          return <li key={name} className="flex justify-between gap-2"><span>{name}</span><span className="font-semibold">{plc ? formatBasisValue(plc.basis, plc.value) : "no longer on the project"}</span></li>;
+                        })}
+                      </ul>
+                      {rule === "NOT_SET" ? (
+                        ifAdded ? <p className="mt-1 text-[12px] text-slate-500">If added together: <strong>{ifAdded}</strong> (the project's PLC rule isn't set yet)</p> : null
+                      ) : (
+                        <p className="mt-1 text-[12.5px] text-slate-700">
+                          PLC amount ({PLC_RULE_SHORT[rule]}): <strong>{inrRounded(charge.total)}</strong>
+                          {charge.incomplete ? <span className="block text-[11.5px] text-amber-700">Some % PLCs need the plot's price or area to be priced.</span> : null}
+                        </p>
+                      )}
+                    </div>
+                  );
+                })() : null}
               </CardContent>
             </Card>
           ) : null}

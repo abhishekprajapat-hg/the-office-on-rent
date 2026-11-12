@@ -29,6 +29,9 @@ const DAILY_REPORT_FORMS = Object.freeze({
       FIELD.count("followUpCalls", "Follow-up calls", "Calls to existing leads in the pipeline."),
       FIELD.count("inventoryCalls", "Inventory calls", "Calls to owners/contacts to find or verify offices, availability, building, size and rent."),
       FIELD.count("siteVisitsScheduled", "Site visits scheduled", "Client visits arranged with field executives."),
+      // 3 Nov 2026 (7.1): every report captures visits completed and closures.
+      FIELD.count("siteVisitsCompleted", "Site visits completed", "Visits you arranged that actually took place."),
+      FIELD.count("dealsClosed", "Deals closed", "Deals closed today."),
       OTHER_WORK("Anything else you did today, in a line or two."),
     ],
   },
@@ -77,8 +80,11 @@ const DAILY_REPORT_FORMS = Object.freeze({
     label: "Manager",
     fields: [
       FIELD.count("totalCalls", "Total calls", "Calls made today."),
+      // 3 Nov 2026 (7.1): new-lead calls and visits completed added.
+      FIELD.count("newLeadCalls", "New lead calls", "Calls to new enquiries (part of total calls).", { partOf: "totalCalls" }),
       FIELD.count("followUpCalls", "Follow-up calls", "Follow-ups with clients, brokers or other contacts (part of total calls).", { partOf: "totalCalls" }),
       FIELD.count("siteVisitsScheduled", "Site visits scheduled", "Visits arranged through the team."),
+      FIELD.count("siteVisitsCompleted", "Site visits completed", "Visits that actually took place."),
       FIELD.count("dealsClosed", "Deals closed", "Deals closed today."),
       OTHER_WORK("Team management, coordination, meetings and other responsibilities."),
     ],

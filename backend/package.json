@@ -24,7 +24,8 @@
     "migrate:company": "node src/seeder/backfillCompany.cjs",
     "migrate:cloudinary-uploads": "node src/seeder/migrateCloudinaryUploads.cjs",
     "migrate:task-subtasks-v2": "node src/scripts/migrateTaskSubtasksV2.cjs",
-    "check:property-ids": "node src/scripts/checkPropertyIdDuplicates.cjs"
+    "check:property-ids": "node src/scripts/checkPropertyIdDuplicates.cjs",
+    "migrate:project-manager-contacts": "node src/scripts/syncProjectManagerContacts.cjs"
   },
   "type": "commonjs",
   "dependencies": {

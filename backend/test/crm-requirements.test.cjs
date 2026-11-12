@@ -377,7 +377,10 @@ test("a contact is keyed by tenant, kind and phone so repeat leads update one re
   const Contact = require("../src/models/CrmContact");
   const unique = Contact.schema.indexes().find(([, options]) => options.unique);
   assert.deepEqual(unique[0], { companyId: 1, kind: 1, phone: 1 });
-  assert.deepEqual(Contact.schema.path("kind").enumValues, ["OWNER", "BROKER"]);
+  // Oct 2026 Database module: a third kind for guards, PAs, accountants...;
+  // they may have no phone, so the unique key only applies to a real number.
+  assert.deepEqual(Contact.schema.path("kind").enumValues, ["OWNER", "BROKER", "CONTACT"]);
+  assert.deepEqual(unique[1].partialFilterExpression, { phone: { $type: "string", $gt: "" } });
 });
 test("classifying a lead as Owner or Broker is what files the contact", () => {
   const source = fs.readFileSync(path.resolve(__dirname, "../src/models/Lead.js"), "utf8");

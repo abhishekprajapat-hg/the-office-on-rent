@@ -223,6 +223,39 @@ const startAttendanceViolationSweep = () => {
  const sweep = async () => { if (running) return; running = true; try { await require("./services/attendanceViolation.service").runViolationSweep(); } catch (error) { logger.error({ error: error.message, message: "Attendance violation sweep failed" }); } finally { running = false; } };
  const timer = setInterval(sweep, 60 * 60 * 1000); timer.unref(); sweep();
 };
+// Enterprise leasing (Oct 2026): lease, notice, escalation and payment reminders.
+const startEnterpriseReminderSweep = () => {
+  if (String(process.env.ENTERPRISE_REMINDER_SWEEP_ENABLED || "true").toLowerCase() === "false") return;
+  const intervalMs = Math.max(5 * 60 * 1000, toPositiveInt(process.env.ENTERPRISE_REMINDER_SWEEP_INTERVAL_MS, 60 * 60 * 1000));
+  let running = false;
+  const sweep = async () => {
+    if (running) return;
+    running = true;
+    try {
+      const { created, cleared } = await require("./services/enterprise.service").runReminders();
+      if (created || cleared) logger.info({ created, cleared, message: "Enterprise reminder sweep completed" });
+    } catch (error) {
+      logger.error({ error: error.message, message: "Enterprise reminder sweep failed" });
+    } finally {
+      running = false;
+    }
+  };
+  const timer = setInterval(sweep, intervalMs);
+  if (typeof timer.unref === "function") timer.unref();
+  sweep();
+};
+// Database module (Oct 2026): contacts without a phone number are allowed, so
+// the old unique (company, kind, phone) index is replaced once by one that only
+// covers rows with a number. Safe on every start.
+const ensureDatabaseIndexes = async () => {
+  try {
+    const { dropped } = await require("./services/database.service").ensureContactIndexes();
+    if (dropped) logger.info({ message: "Replaced the contact phone index so contacts without a number can be saved" });
+  } catch (error) {
+    logger.error({ error: error.message, message: "Could not update the contact phone index" });
+  }
+};
+
 // One-off lead tidying at start: retired statuses move to their replacements,
 // then follow-ups left on dead leads are cleared (status changes do both live).
 const tidyStoredLeads = async () => {
@@ -242,9 +275,11 @@ const tidyStoredLeads = async () => {
 const bootstrap = async () => {
   await connectDB();
   tidyStoredLeads();
+  ensureDatabaseIndexes();
   require('./services/billstackSync.service').startWorker();
   startAttendanceAutoCheckoutSweep();
   startAttendanceViolationSweep();
+  startEnterpriseReminderSweep();
   startBookingExpirySweep();
   startContractLifecycleSweep();
   startInvoiceOverdueSweep();

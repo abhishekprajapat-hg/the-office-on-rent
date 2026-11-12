@@ -224,6 +224,56 @@ const summarizeEmployee = ({ user, reports = [], workedDates = [] }) => {
   };
 };
 
+/* ---------------------------------------------------------- targets -- */
+// 3 Nov 2026 (7.1): expected daily activity per form and segment.
+const TARGET_SEGMENTS = ["", "COMMERCIAL", "RESIDENTIAL", "COWORKING", "BOTH"];
+
+/* Checks a { fieldKey: number } map against the form's count fields. Blank removes a target. */
+const sanitizeTargets = (formKey, segment, raw = {}) => {
+  const form = getDailyReportForm(formKey);
+  if (!form) throw new DailyReportValidationError("Unknown report form", "formKey");
+  const seg = String(segment || "").toUpperCase();
+  if (!TARGET_SEGMENTS.includes(seg)) throw new DailyReportValidationError("Unknown segment", "segment");
+  const out = {};
+  const countKeys = form.fields.filter((f) => f.kind === "count").map((f) => f.key);
+  Object.entries(raw && typeof raw === "object" ? raw : {}).forEach(([key, value]) => {
+    if (!countKeys.includes(key)) throw new DailyReportValidationError(`${key} is not on the ${form.label} form`, key);
+    if (value === "" || value === null || value === undefined) return;
+    const n = Number(value);
+    if (!Number.isFinite(n) || n < 0 || n > MAX_COUNT) throw new DailyReportValidationError(`Target for ${key} must be 0 or more`, key);
+    out[key] = Math.round(n * 100) / 100;
+  });
+  return { formKey, segment: seg, targets: out };
+};
+
+const plainTargets = (row) => {
+  if (!row?.targets) return {};
+  return row.targets instanceof Map ? Object.fromEntries(row.targets) : { ...row.targets };
+};
+
+/* The targets that apply: the segment's own row, else the all-segments row. */
+const resolveTargets = (rows = [], formKey, segment) => {
+  const seg = String(segment || "").toUpperCase();
+  const own = rows.find((r) => r.formKey === formKey && r.segment === seg);
+  const all = rows.find((r) => r.formKey === formKey && !r.segment);
+  return { ...plainTargets(all), ...plainTargets(own) };
+};
+
+/*
+ * Adds target figures to a summarizeEmployee() row. The period target is the
+ * daily target times the days they worked (reported + worked without a report).
+ */
+const withTargets = (row, dailyTargets = {}) => {
+  const workedDays = row.daysSubmitted + (row.missingDates || []).length;
+  const periodTargets = {};
+  const achievement = {};
+  Object.entries(dailyTargets).forEach(([key, perDay]) => {
+    periodTargets[key] = Math.round(perDay * workedDays * 100) / 100;
+    achievement[key] = periodTargets[key] > 0 ? Math.round(((row.totals[key] || 0) / periodTargets[key]) * 100) : null;
+  });
+  return { ...row, workedDays, targets: dailyTargets, periodTargets, achievement };
+};
+
 const publicForm = (form) => form && ({
   key: form.key,
   label: form.label,
@@ -239,6 +289,10 @@ module.exports = {
   parseDateRange,
   summarizeEmployee,
   publicForm,
+  TARGET_SEGMENTS,
+  sanitizeTargets,
+  resolveTargets,
+  withTargets,
   DAILY_REPORT_FORMS,
   ISSUE_CATEGORIES,
   ISSUE_STATUSES,

@@ -31,11 +31,14 @@ import {
 import { getAllLeads } from "../../services/leadService";
 import { deleteOutcomeMessage, isDeleteApprovalPending } from "../../services/deleteRequestService";
 import { uploadFile } from "../../services/uploadService";
+import { getBuilding, getContactLinks } from "../../services/databaseService";
 import { toErrorMessage } from "../../utils/errorMessage";
 import { useDebouncedValue } from "../../hooks/useDebouncedValue";
 import { usePermissions } from "../../context/usePermissions";
 import ToastNotice from "../../components/ui/ToastNotice";
 import FormWizard from "../../components/ui/FormWizard";
+import InventoryAmenityEditor from "./components/InventoryAmenityEditor";
+import InventoryContactLinker from "./components/InventoryContactLinker";
 import InventoryRevenueFields, { EMPTY_ENTERPRISE_DETAILS } from "./components/InventoryRevenueFields";
 import FittedImage from "../../components/ui/FittedImage";
 import GoogleMapPicker from "../../components/common/GoogleMapPicker";
@@ -60,7 +63,7 @@ import {
   getInventorySubtypeOptions,
 } from "../../config/propertyRequirementConfig";
 
-const STATUS_OPTIONS = ["Available", "Blocked", "Sold"];
+const STATUS_OPTIONS = ["Available", "Blocked", "Sold", "Unavailable"];
 const CUSTOM_NUMBER_OPTION_VALUE = "__CUSTOM_NUMBER__";
 const SHOW_LEGACY_INVENTORY_DETAIL_FIELDS = false;
 const UNFURNISHED_LIKE_STATUSES = ["UNFURNISHED", "BARE_SHELL", "WARM_SHELL"];
@@ -166,6 +169,8 @@ const STATUS_UPDATE_OPTIONS = [
   { label: "Available", value: "Available" },
   { label: "Blocked", value: "Blocked" },
   { label: "Sold", value: "Sold" },
+  // 3 Nov 2026: withdrawn / not for sale right now. Kept, never deleted.
+  { label: "Unavailable", value: "Unavailable" },
 ];
 const INVENTORY_LIST_PAGE_LIMIT = 200;
 
@@ -234,12 +239,28 @@ const INVENTORY_LIST_FIELDS = [
   "ownerNumber",
   "keyManagerName",
   "keyManagerNumber",
+  "brokerName",
+  "brokerNumber",
+  "developerName",
+  "developerNumber",
   "dealType",
   "propertyDate",
   "gstApplicable",
   "createdAt",
   "updatedAt",
 ].join(",");
+// No longer offered when adding inventory.
+const RETIRED_INVENTORY_SUBTYPES = new Set(["COWORKING", "MANAGED_OFFICE", "ROOFTOP"]);
+const OWNER_CONTACT_ROLE_OPTIONS = [
+  { value: "MANAGER", label: "Manager" },
+  { value: "PA", label: "PA" },
+  { value: "ACCOUNTANT", label: "Accountant" },
+  { value: "RELATIVE", label: "Relative" },
+  { value: "BROKER", label: "Broker" },
+  { value: "OTHER", label: "Other" },
+];
+const getOwnerContactRoleLabel = (role) =>
+  OWNER_CONTACT_ROLE_OPTIONS.find((option) => option.value === role)?.label || "Other";
 const SOLD_PAYMENT_MODE_OPTIONS = [
   { value: "UPI", label: "UPI" },
   { value: "CASH", label: "Cash" },
@@ -299,15 +320,23 @@ const DEFAULT_FORM = {
   ownerName: "",
   ownerNumber: "",
   ownerWhatsappNumber: "",
+  // Manager / PA / accountant etc. who speak for the owner: [{ role, name, number }].
+  ownerContacts: [],
   ownerType: "",
   ownershipType: "",
   businessModel: "",
   sourceType: "",
   // The project this unit belongs to (21 Oct 2026); "" = not part of one.
   projectLinkId: "",
+  // PLCs from that project's list that apply to this unit (3 Nov 2026).
+  appliedPlcs: [],
   enterpriseDetails: { ...EMPTY_ENTERPRISE_DETAILS },
   keyManagerName: "",
   keyManagerNumber: "",
+  brokerName: "",
+  brokerNumber: "",
+  developerName: "",
+  developerNumber: "",
   dealType: "",
   propertyDate: "",
   gstApplicable: false,
@@ -315,6 +344,9 @@ const DEFAULT_FORM = {
   locationLat: "",
   locationLng: "",
   price: "",
+  // Commercial sale price can be quoted as a total or as a rate per area unit.
+  priceBasis: "TOTAL",
+  pricePerArea: "",
   rent: "",
   type: "Sale",
   category: "Office",
@@ -418,6 +450,51 @@ const toNumberOrNull = (value) => {
   if (typeof value === "string" && value.trim() === "") return null;
   const parsed = Number(value);
   return Number.isFinite(parsed) ? parsed : null;
+};
+
+/** Any sale listing may quote a rate per sq ft / sq m instead of a total. */
+const canQuotePricePerArea = (form) => isInventoryPriceRequired(form.type);
+const isPricedPerArea = (form) => canQuotePricePerArea(form) && form.priceBasis === "PER_AREA";
+const getAreaUnitShortLabel = (unit) => (String(unit || "").toUpperCase() === "SQ_M" ? "sq m" : "sq ft");
+// The rate applies to the largest area entered: super built-up, then built-up, then carpet.
+// Houses, bungalows and farm houses are measured as Plot Area (L x W) + Total Construction Area.
+const PLOT_BASED_SUBTYPES = new Set(["INDEPENDENT_HOUSE", "BUNGALOW", "FARM_HOUSE"]);
+const getPricingArea = (form) => {
+  const subtype = getInventorySubtypeValue(form);
+  if (PLOT_BASED_SUBTYPES.has(subtype)) {
+    const plotArea = toNumberOrNull(form.totalArea);
+    return plotArea && plotArea > 0 ? { label: "plot", area: plotArea } : null;
+  }
+  const candidates = [
+    ["super built-up", form.superBuiltUpArea],
+    ["built-up", form.builtUpArea],
+    [["PLOT", "FARM_HOUSE"].includes(getInventorySubtypeValue(form)) ? "total" : "carpet", form.totalArea],
+    ["carpet", form.carpetArea],
+  ];
+  for (const [label, value] of candidates) {
+    const area = toNumberOrNull(value);
+    if (area && area > 0) return { label, area };
+  }
+  return null;
+};
+const SQ_FT_PER_SQ_M = 10.7639;
+// Maintenance is always quoted per sq ft per month, whatever unit the area is in.
+const getMaintenanceEstimate = (form) => {
+  const rate = toNumberOrNull(form.maintenanceCharges);
+  const pricingArea = getPricingArea(form);
+  if (!rate || !pricingArea) return null;
+  const areaSqFt = String(form.areaUnit || "").toUpperCase() === "SQ_M"
+    ? pricingArea.area * SQ_FT_PER_SQ_M
+    : pricingArea.area;
+  return { total: Math.round(rate * areaSqFt), areaSqFt: Math.round(areaSqFt), label: pricingArea.label };
+};
+/** The total sale price to save: typed directly, or rate x area ("" when it can't be worked out). */
+const getEffectiveSalePrice = (form) => {
+  if (!isPricedPerArea(form)) return form.price;
+  const rate = toNumberOrNull(form.pricePerArea);
+  const pricingArea = getPricingArea(form);
+  if (rate === null || !pricingArea) return "";
+  return String(Math.round(rate * pricingArea.area));
 };
 
 const normalizeInventoryResidentialPropertyType = (value) => {
@@ -728,12 +805,17 @@ const REQUEST_FIELD_LABELS = {
   ownerName: "Owner Name",
   ownerNumber: "Owner Number",
   ownerWhatsappNumber: "Owner WhatsApp Number",
+  ownerContacts: "Owner Contacts",
   ownerType: "Ownership",
   ownershipType: "Ownership Type",
   businessModel: "Business Model",
   enterpriseDetails: "Enterprise Details",
   keyManagerName: "Key Manager Name",
   keyManagerNumber: "Key Manager Number",
+  brokerName: "Broker Name",
+  brokerNumber: "Broker Number",
+  developerName: "Developer Name",
+  developerNumber: "Developer Number",
   dealType: "Deal Type",
   propertyDate: "Property Date",
   gstApplicable: "GST Applicable",
@@ -795,7 +877,16 @@ const toSiteLocationPayload = ({ lat, lng }) => {
 };
 
 const formatRequestValue = (key, value) => {
-  if (key === "price" || key === "rent" || key === "maintenanceCharges" || key === "deposit") {
+  if (key === "ownerContacts") {
+    const contacts = Array.isArray(value) ? value : [];
+    return contacts.length
+      ? contacts.map((c) => `${getOwnerContactRoleLabel(c?.role)}: ${[c?.name, c?.number].filter(Boolean).join(" ")}`).join(", ")
+      : "-";
+  }
+  if (key === "maintenanceCharges") {
+    return value === null || value === undefined || value === "" ? "-" : `${formatCurrency(value)} / sq ft`;
+  }
+  if (key === "price" || key === "rent" || key === "deposit") {
     return formatCurrency(value);
   }
   if (key === "siteLocation") {
@@ -833,6 +924,7 @@ const AssetVault = () => {
   // Set when a background page load fails, so it is not retried in a loop.
   const autoLoadStoppedRef = useRef(false);
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
+  const [databaseLink, setDatabaseLink] = useState(null);
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
   const [editingAssetId, setEditingAssetId] = useState("");
   const [modeType, setModeType] = useState("all");
@@ -869,6 +961,8 @@ const AssetVault = () => {
   // Opened from a project's Units tab: show all of its units, whatever their status.
   const [projectFilter, setProjectFilter] = useState(() => searchParams.get("projectId") || "");
   const [projectOptions, setProjectOptions] = useState([]);
+  // Narrows the project dropdown in the form (3 Nov 2026, 5).
+  const [projectQuery, setProjectQuery] = useState("");
   const [statusFilter, setStatusFilter] = useState(() => (searchParams.get("projectId") ? "all" : "Available"));
   const [inventoryTypeFilter, setInventoryTypeFilter] = useState(getDefaultInventoryTypeFilter);
   const [furnishingFilter, setFurnishingFilter] = useState("");
@@ -964,9 +1058,18 @@ const AssetVault = () => {
   const canOpenEditModal = canManage || canRequestEdit;
   const canRequestStatusChange = UPDATE_STATUS_REQUEST_ROLES.has(role);
   const inventorySubtype = getInventorySubtypeValue(formData);
-  const inventorySubtypeOptions = getInventorySubtypeOptions(formData.inventoryType);
+  // Retired types stay selectable only on a listing that already has one.
+  const inventorySubtypeOptions = getInventorySubtypeOptions(formData.inventoryType)
+    .filter((option) => !RETIRED_INVENTORY_SUBTYPES.has(option.value) || option.value === inventorySubtype)
+    // Plots are only sold, never rented.
+    .filter((option) => option.value !== "PLOT" || !isInventoryRentRequired(formData.type) || option.value === inventorySubtype);
   const inventorySubtypeConfig = getInventorySubtypeConfig(formData.inventoryType, inventorySubtype);
   const isLandOnlyPropertyType = ["PLOT", "FARM_HOUSE"].includes(inventorySubtype);
+  const isPlotBasedPropertyType = PLOT_BASED_SUBTYPES.has(inventorySubtype);
+  const plotAreaIsCalculated = isPlotBasedPropertyType
+    && toNumberOrNull(formData.length) > 0 && toNumberOrNull(formData.width) > 0;
+  // Warehouses, houses and bungalows skip building name and floors too.
+  const hidesBuildingFields = isLandOnlyPropertyType || ["WAREHOUSE", "INDEPENDENT_HOUSE", "BUNGALOW"].includes(inventorySubtype);
   const isUnfurnishedLikeOffice =
     inventorySubtype === "OFFICE"
     && UNFURNISHED_LIKE_STATUSES.includes(String(formData.furnishingStatus || "").toUpperCase());
@@ -1026,7 +1129,7 @@ const AssetVault = () => {
     const visibleTypeAssets = assets.filter((asset) =>
       !inventoryTypeFilter || inventoryTypeFilter === "all"
         || String(asset.inventoryType || "").toUpperCase() === inventoryTypeFilter);
-    const counts = { all: visibleTypeAssets.length, Available: 0, Blocked: 0, Sold: 0, Rented: 0 };
+    const counts = { all: visibleTypeAssets.length, Available: 0, Blocked: 0, Sold: 0, Unavailable: 0, Rented: 0 };
     visibleTypeAssets.forEach((asset) => {
       const status = toApiStatus(asset?.status);
       if (counts[status] !== undefined) counts[status] += 1;
@@ -1639,6 +1742,7 @@ const AssetVault = () => {
   };
 
   const closeFormModal = () => {
+    setDatabaseLink(null);
     setFormStep(INVENTORY_FORM_STEPS[0].id);
     setIsAddModalOpen(false);
     setIsEditModalOpen(false);
@@ -1682,6 +1786,40 @@ const AssetVault = () => {
     setFormStep(INVENTORY_FORM_STEPS[0].id);
     setIsAddModalOpen(true);
   };
+
+  /*
+   * /inventory?databaseBuilding=<id>&databaseSource=<contactId> opens Add
+   * Property from a Database profile (Oct 2026 update 01): the unit is filed
+   * under that building and the contact is recorded as where it came from.
+   * An owner's name and number are filled in so the existing owner link
+   * finds the same Owner Database record.
+   */
+  const databaseBuildingId = searchParams.get("databaseBuilding") || "";
+  const databaseSourceId = searchParams.get("databaseSource") || "";
+  useEffect(() => {
+    if ((!databaseBuildingId && !databaseSourceId) || !canOpenCreateModal) return undefined;
+    let cancelled = false;
+    (async () => {
+      const [b, c] = await Promise.all([
+        databaseBuildingId ? getBuilding(databaseBuildingId).catch(() => null) : null,
+        databaseSourceId ? getContactLinks(databaseSourceId).catch(() => null) : null,
+      ]);
+      if (cancelled) return;
+      const building = b?.building || null;
+      const contact = c?.contact || null;
+      openAddModal();
+      setDatabaseLink({ buildingId: building?._id || "", buildingName: building?.name || "", sourceId: contact?._id || "", sourceName: contact?.name || "" });
+      setFormData((prev) => ({
+        ...prev,
+        ...(building ? { buildingName: building.name, location: prev.location || [building.address, building.locality, building.city].filter(Boolean).join(", ") } : {}),
+        ...(contact?.kind === "OWNER" ? { ownerName: contact.name, ownerNumber: contact.phone || "" } : {}),
+      }));
+      setSearchParams((prev) => { const next = new URLSearchParams(prev); next.delete("databaseBuilding"); next.delete("databaseSource"); return next; }, { replace: true });
+    })();
+    return () => { cancelled = true; };
+    // openAddModal is recreated each render; this should run once per request.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [databaseBuildingId, databaseSourceId, canOpenCreateModal]);
 
   // /inventory?addToProject=<id> opens Add Property already linked to that project.
   const addToProjectId = searchParams.get("addToProject") || "";
@@ -1931,6 +2069,8 @@ const AssetVault = () => {
     const subtypeData = formData.inventorySubtypeData || {};
     const payloadSubtype = getInventorySubtypeValue(formData);
     const isLandOnlyPayload = ["PLOT", "FARM_HOUSE"].includes(payloadSubtype);
+    // Their main area is the plot, so it is not also saved as carpet area.
+    const keepsCarpetSeparate = isLandOnlyPayload || PLOT_BASED_SUBTYPES.has(payloadSubtype);
     const subtypeFieldKeys = new Set(
       (getInventorySubtypeConfig(inventoryType, payloadSubtype)?.fields || []).map((field) => field.key),
     );
@@ -1958,7 +2098,7 @@ const AssetVault = () => {
       totalArea: toNumberOrNull(formData.totalArea)
         ?? (isLandOnlyPayload ? toSubtypeDataNumber(subtypeData, "plotArea", "landArea") : null),
       // The "Carpet Area" input edits totalArea; save it as carpet area too.
-      carpetArea: isLandOnlyPayload
+      carpetArea: keepsCarpetSeparate
         ? toNumberOrNull(formData.carpetArea)
         : (toNumberOrNull(formData.totalArea) ?? toNumberOrNull(formData.carpetArea)),
       builtUpArea: toNumberOrNull(formData.builtUpArea),
@@ -1967,7 +2107,11 @@ const AssetVault = () => {
       width: toNumberOrNull(formData.width),
       height: toNumberOrNull(formData.height),
       areaUnit: String(formData.areaUnit || "SQ_FT").toUpperCase(),
-      price: isInventoryPriceRequired(formData.type) ? Number(formData.price) : toNumberOrNull(formData.price),
+      price: isInventoryPriceRequired(formData.type)
+        ? Number(getEffectiveSalePrice(formData))
+        : toNumberOrNull(formData.price),
+      priceBasis: isPricedPerArea(formData) ? "PER_AREA" : "TOTAL",
+      pricePerArea: isPricedPerArea(formData) ? toNumberOrNull(formData.pricePerArea) : null,
       rent: toNumberOrNull(formData.rent),
       maintenanceCharges: toNumberOrNull(formData.maintenanceCharges),
       // Rental-only terms are cleared for sale-only listings.
@@ -1987,11 +2131,19 @@ const AssetVault = () => {
       ownerName: String(formData.ownerName || "").trim(),
       ownerNumber: String(formData.ownerNumber || "").trim(),
       ownerWhatsappNumber: String(formData.ownerWhatsappNumber || "").trim(),
+      ownerContacts: (formData.ownerContacts || [])
+        .map((contact) => ({
+          role: contact.role || "OTHER",
+          name: String(contact.name || "").trim(),
+          number: String(contact.number || "").trim(),
+        }))
+        .filter((contact) => contact.name || contact.number),
       ownerType: String(formData.ownerType || "").toUpperCase(),
       ownershipType: String(formData.ownershipType || "").toUpperCase(),
       businessModel: String(formData.businessModel || "").toUpperCase(),
       sourceType: String(formData.sourceType || "").toUpperCase(),
       projectId: formData.projectLinkId || null,
+      appliedPlcs: formData.projectLinkId && Array.isArray(formData.appliedPlcs) ? formData.appliedPlcs : [],
       enterpriseDetails: formData.businessModel === "ENTERPRISE"
         ? {
           leaseRent: formData.enterpriseDetails?.leaseRent === "" ? null : Number(formData.enterpriseDetails?.leaseRent),
@@ -2004,6 +2156,10 @@ const AssetVault = () => {
         : null,
       keyManagerName: String(formData.keyManagerName || "").trim(),
       keyManagerNumber: String(formData.keyManagerNumber || "").trim(),
+      brokerName: String(formData.brokerName || "").trim(),
+      brokerNumber: String(formData.brokerNumber || "").trim(),
+      developerName: String(formData.developerName || "").trim(),
+      developerNumber: String(formData.developerNumber || "").trim(),
       dealType: String(formData.dealType || "").toUpperCase(),
       propertyDate: formData.propertyDate || null,
       gstApplicable: Boolean(formData.gstApplicable),
@@ -2147,8 +2303,10 @@ const AssetVault = () => {
       return;
     }
 
-    if (isInventoryPriceRequired(formData.type) && formData.price === "") {
-      setFormError("Price is required for Sale listings");
+    if (isInventoryPriceRequired(formData.type) && getEffectiveSalePrice(formData) === "") {
+      setFormError(isPricedPerArea(formData)
+        ? "Enter the rate and an area (carpet, built-up or super built-up) to work out the price"
+        : "Price is required for Sale listings");
       return;
     }
 
@@ -2195,6 +2353,8 @@ const AssetVault = () => {
         saleDetails: saleDetailsPayload.value,
         parsedSiteLocation,
       });
+      if (databaseLink?.buildingId) payload.buildingId = databaseLink.buildingId;
+      if (databaseLink?.sourceId) payload.initialSourceContactId = databaseLink.sourceId;
 
       // A Channel Partner's property waits for Admin / Manager approval.
       if (role === "CHANNEL_PARTNER") {
@@ -2278,6 +2438,8 @@ const AssetVault = () => {
       carpetArea: asset.carpetArea ?? "",
       builtUpArea: asset.builtUpArea ?? "",
       superBuiltUpArea: asset.superBuiltUpArea ?? "",
+      priceBasis: asset.priceBasis === "PER_AREA" ? "PER_AREA" : "TOTAL",
+      pricePerArea: asset.pricePerArea ?? "",
       length: asset.length ?? "",
       width: asset.width ?? "",
       height: asset.height ?? "",
@@ -2299,11 +2461,19 @@ const AssetVault = () => {
       ownerName: asset.ownerName || "",
       ownerNumber: asset.ownerNumber || "",
       ownerWhatsappNumber: asset.ownerWhatsappNumber || "",
+      ownerContacts: Array.isArray(asset.ownerContacts)
+        ? asset.ownerContacts.map((contact) => ({
+          role: contact?.role || "OTHER",
+          name: contact?.name || "",
+          number: contact?.number || "",
+        }))
+        : [],
       ownerType: asset.ownerType || "",
       ownershipType: asset.ownershipType || "",
       businessModel: asset.businessModel || "",
       sourceType: asset.sourceType || "",
       projectLinkId: String(asset.projectId?._id || asset.projectId || ""),
+      appliedPlcs: Array.isArray(asset.appliedPlcs) ? asset.appliedPlcs : [],
       enterpriseDetails: {
         leaseRent: asset.enterpriseDetails?.leaseRent ?? "",
         clientRent: asset.enterpriseDetails?.clientRent ?? "",
@@ -2314,6 +2484,10 @@ const AssetVault = () => {
       },
       keyManagerName: asset.keyManagerName || "",
       keyManagerNumber: asset.keyManagerNumber || "",
+      brokerName: asset.brokerName || "",
+      brokerNumber: asset.brokerNumber || "",
+      developerName: asset.developerName || "",
+      developerNumber: asset.developerNumber || "",
       dealType: asset.dealType || "",
       propertyDate: asset.propertyDate ? String(asset.propertyDate).slice(0, 10) : "",
       gstApplicable: Boolean(asset.gstApplicable),
@@ -2433,8 +2607,10 @@ const AssetVault = () => {
       return;
     }
 
-    if (isInventoryPriceRequired(formData.type) && formData.price === "") {
-      setFormError("Price is required for Sale listings");
+    if (isInventoryPriceRequired(formData.type) && getEffectiveSalePrice(formData) === "") {
+      setFormError(isPricedPerArea(formData)
+        ? "Enter the rate and an area (carpet, built-up or super built-up) to work out the price"
+        : "Price is required for Sale listings");
       return;
     }
 
@@ -2876,7 +3052,7 @@ const AssetVault = () => {
           </div>
         ) : null}
 
-        {isLandOnlyPropertyType ? null : (
+        {hidesBuildingFields ? null : (
           <>
             <div>
               <label className={INVENTORY_MODAL_FIELD_TITLE_CLASS}>
@@ -2945,33 +3121,57 @@ const AssetVault = () => {
             className={`${INVENTORY_MODAL_INPUT_CLASS} mt-1`}
           />
         </div>
+        {inventorySubtype === "PLOT" ? null : (
+          <div>
+            <label className={INVENTORY_MODAL_FIELD_TITLE_CLASS}>
+              Height
+            </label>
+            <input
+              type="number"
+              min="0"
+              placeholder="10"
+              value={formData.height}
+              onChange={(e) => updateInventoryDimensionField("height", e.target.value)}
+              className={`${INVENTORY_MODAL_INPUT_CLASS} mt-1`}
+            />
+          </div>
+        )}
         <div>
           <label className={INVENTORY_MODAL_FIELD_TITLE_CLASS}>
-            Height
+            {isPlotBasedPropertyType ? "Plot Area" : isLandOnlyPropertyType ? "Total Area" : "Carpet Area"}
           </label>
           <input
             type="number"
             min="0"
-            placeholder="10"
-            value={formData.height}
-            onChange={(e) => updateInventoryDimensionField("height", e.target.value)}
-            className={`${INVENTORY_MODAL_INPUT_CLASS} mt-1`}
-          />
-        </div>
-        <div>
-          <label className={INVENTORY_MODAL_FIELD_TITLE_CLASS}>
-            {isLandOnlyPropertyType ? "Total Area" : "Carpet Area"}
-          </label>
-          <input
-            type="number"
-            min="0"
-            placeholder="2800"
+            placeholder={isPlotBasedPropertyType ? "10000" : "2800"}
             value={formData.totalArea}
+            readOnly={plotAreaIsCalculated}
             onChange={(e) => setFormData((prev) => ({ ...prev, totalArea: e.target.value }))}
-            className={`${INVENTORY_MODAL_INPUT_CLASS} mt-1`}
+            className={`${INVENTORY_MODAL_INPUT_CLASS} mt-1 ${plotAreaIsCalculated ? "cursor-not-allowed opacity-70" : ""}`}
           />
+          {isPlotBasedPropertyType ? (
+            <p className="mt-1 text-[11.5px] text-slate-500">
+              {plotAreaIsCalculated ? "Length × Width" : "Fill Length and Width to calculate it"}
+            </p>
+          ) : null}
         </div>
-        {isLandOnlyPropertyType ? null : (
+        {isPlotBasedPropertyType ? (
+          <div>
+            <label className={INVENTORY_MODAL_FIELD_TITLE_CLASS}>
+              Total Construction Area
+            </label>
+            <input
+              type="number"
+              min="0"
+              placeholder="9000"
+              value={formData.inventorySubtypeData?.constructionArea ?? ""}
+              onChange={(e) => updateInventorySubtypeData("constructionArea", e.target.value)}
+              className={`${INVENTORY_MODAL_INPUT_CLASS} mt-1`}
+            />
+            <p className="mt-1 text-[11.5px] text-slate-500">All floors together, e.g. 3,000 sq ft on G+2 = 9,000</p>
+          </div>
+        ) : null}
+        {isLandOnlyPropertyType || isPlotBasedPropertyType ? null : (
           <>
             <div>
               <label className={INVENTORY_MODAL_FIELD_TITLE_CLASS}>
@@ -3001,27 +3201,31 @@ const AssetVault = () => {
             </div>
           </>
         )}
+        {/* Type-specific fields sit in Property Details; the form's own Carpet Area replaces theirs. */}
+        {(inventorySubtypeConfig?.fields || [])
+          .filter((field) => field.type !== "checkbox" && !["carpetArea", "warehouseArea", "plotLength", "plotWidth", "plotArea"].includes(field.key))
+          .filter((field) => !isUnfurnishedLikeOffice || OFFICE_UNFURNISHED_VISIBLE_FIELD_KEYS.has(field.key))
+          .map(renderInventorySubtypeField)}
       </div>
 
       {inventorySubtypeConfig ? (
         <>
-          <div>
-            <div className={INVENTORY_MODAL_SECTION_HEADING_CLASS}>
-              {inventorySubtypeConfig.label} Preferences
-            </div>
-            <div className="grid grid-cols-1 gap-2 md:grid-cols-2">
+          {inventorySubtypeConfig.editableAmenities ? (
+            <InventoryAmenityEditor
+              fields={(inventorySubtypeConfig.fields || []).filter((field) => field.type === "checkbox")}
+              subtypeData={formData.inventorySubtypeData || {}}
+              onChange={updateInventorySubtypeData}
+              checkboxClass={INVENTORY_MODAL_CHECKBOX_CLASS}
+              inputClass={INVENTORY_MODAL_INPUT_CLASS}
+            />
+          ) : (
+            <div className="flex flex-wrap gap-2">
               {(inventorySubtypeConfig.fields || [])
-                .filter((field) => field.type !== "checkbox")
+                .filter((field) => field.type === "checkbox")
                 .filter((field) => !isUnfurnishedLikeOffice || OFFICE_UNFURNISHED_VISIBLE_FIELD_KEYS.has(field.key))
                 .map(renderInventorySubtypeField)}
             </div>
-          </div>
-          <div className="flex flex-wrap gap-2">
-            {(inventorySubtypeConfig.fields || [])
-              .filter((field) => field.type === "checkbox")
-              .filter((field) => !isUnfurnishedLikeOffice || OFFICE_UNFURNISHED_VISIBLE_FIELD_KEYS.has(field.key))
-              .map(renderInventorySubtypeField)}
-          </div>
+          )}
         </>
       ) : null}
     </div>
@@ -3227,6 +3431,12 @@ const AssetVault = () => {
             width={900}
           >
               <ToastNotice message={formError} type="error" persistent={formErrorPersistent} onDismiss={() => setFormError("")} />
+              {databaseLink && isAddModalOpen ? (
+                <div className="mb-3 rounded-xl border border-blue-200 bg-blue-50 px-3 py-2 text-[12.5px] text-blue-800 dark:border-blue-900 dark:bg-blue-950/40 dark:text-blue-200">
+                  {databaseLink.buildingName ? <>Building: <b>{databaseLink.buildingName}</b>. </> : null}
+                  {databaseLink.sourceName ? <>Source: <b>{databaseLink.sourceName}</b> (saved on the unit as who told us about it).</> : null}
+                </div>
+              ) : null}
 
               <div className="inventory-form-uppercase flex flex-col gap-[18px]">
                 <div className={inventoryFormStepClass("basics")}>
@@ -3283,8 +3493,8 @@ const AssetVault = () => {
                         className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl text-sm font-bold text-slate-900 focus:outline-none focus:border-emerald-500 mt-1"
                       >
                         <option value="Sale">For Sale</option>
-                        <option value="Rent">For Rent</option>
-                        <option value="Both">For Sale &amp; Rent</option>
+                        {getInventorySubtypeValue(formData) !== "PLOT" || formData.type === "Rent" ? <option value="Rent">For Rent</option> : null}
+                        {getInventorySubtypeValue(formData) !== "PLOT" || formData.type === "Both" ? <option value="Both">For Sale &amp; Rent</option> : null}
                       </select>
                     </div>
                     <div>
@@ -3306,17 +3516,56 @@ const AssetVault = () => {
                   <label className={INVENTORY_MODAL_FIELD_TITLE_CLASS}>
                     Project
                   </label>
+                  <input
+                    type="search"
+                    value={projectQuery}
+                    onChange={(e) => setProjectQuery(e.target.value)}
+                    placeholder="Search projects by name or ID"
+                    aria-label="Search projects"
+                    className="w-full p-2.5 bg-white border border-slate-200 rounded-xl text-sm text-slate-900 focus:outline-none focus:border-emerald-500 mt-1"
+                  />
                   <select
                     value={formData.projectLinkId || ""}
-                    onChange={(e) => applyProjectToForm(projectOptions.find((p) => String(p._id) === e.target.value) || null, { adding: !editingAssetId })}
+                    onChange={(e) => {
+                      const next = projectOptions.find((p) => String(p._id) === e.target.value) || null;
+                      const sameProject = next && String(next._id) === String(formData.projectLinkId);
+                      applyProjectToForm(next, { adding: !editingAssetId });
+                      // PLCs belong to a project; a different project starts with none ticked.
+                      if (!sameProject) setFormData((prev) => ({ ...prev, appliedPlcs: [] }));
+                    }}
                     className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl text-sm font-bold text-slate-900 focus:outline-none focus:border-emerald-500 mt-1 mb-3"
                   >
                     <option value="">Not part of a project</option>
                     {projectOptions
                       .filter((p) => String(p._id) === String(formData.projectLinkId)
-                        || String(p.projectCategory || "").toUpperCase() === String(formData.inventoryType || "").toUpperCase())
+                        || (String(p.projectCategory || "").toUpperCase() === String(formData.inventoryType || "").toUpperCase()
+                          && (!projectQuery.trim() || `${p.projectName} ${p.projectId} ${p.location || ""}`.toLowerCase().includes(projectQuery.trim().toLowerCase()))))
                       .map((p) => <option key={p._id} value={p._id}>{p.projectName} ({p.projectId})</option>)}
                   </select>
+                  {(() => {
+                    const project = projectOptions.find((p) => String(p._id) === String(formData.projectLinkId));
+                    const plcs = project?.plcOptions || [];
+                    if (!plcs.length) return null;
+                    const picked = new Set((formData.appliedPlcs || []).map((n) => n.toLowerCase()));
+                    const toggle = (name) => setFormData((prev) => {
+                      const list = prev.appliedPlcs || [];
+                      return { ...prev, appliedPlcs: list.some((n) => n.toLowerCase() === name.toLowerCase()) ? list.filter((n) => n.toLowerCase() !== name.toLowerCase()) : [...list, name] };
+                    });
+                    return (
+                      <div className="mb-3 rounded-xl border border-slate-200 bg-white p-3">
+                        <div className="mb-1.5 text-[12px] font-semibold text-slate-600">PLCs that apply to this unit (tick all that apply)</div>
+                        <div className="flex flex-wrap gap-x-4 gap-y-2">
+                          {plcs.map((plc) => (
+                            <label key={plc.name} className="flex items-center gap-1.5 text-[13px] text-slate-800">
+                              <input type="checkbox" checked={picked.has(plc.name.toLowerCase())} onChange={() => toggle(plc.name)} />
+                              {plc.name}
+                              <span className="text-slate-500">({plc.value === null || plc.value === undefined || plc.value === "" ? "—" : plc.basis === "PERCENT" ? `${plc.value}%` : plc.basis === "PER_SQFT" ? `₹${plc.value}/sq ft` : `₹${Number(plc.value).toLocaleString("en-IN")}`})</span>
+                            </label>
+                          ))}
+                        </div>
+                      </div>
+                    );
+                  })()}
 
                   <label className={INVENTORY_MODAL_FIELD_TITLE_CLASS}>
                     Property / Project Name
@@ -3790,12 +4039,12 @@ const AssetVault = () => {
                           >
                             <option value="">Select property type</option>
                             <option value="OFFICE">Office</option>
-                            <option value="COWORKING">Coworking</option>
-                            <option value="MANAGED_OFFICE">Managed Office</option>
+                            {formData.officeType === "COWORKING" ? <option value="COWORKING">Coworking</option> : null}
+                            {formData.officeType === "MANAGED_OFFICE" ? <option value="MANAGED_OFFICE">Managed Office</option> : null}
                             <option value="SHOP">Shop</option>
                             <option value="SHOWROOM">Showroom</option>
                             <option value="CAFE">Cafe</option>
-                            <option value="ROOFTOP">Rooftop</option>
+                            {formData.officeType === "ROOFTOP" ? <option value="ROOFTOP">Rooftop</option> : null}
                             <option value="WAREHOUSE">Warehouse</option>
                             <option value="INDUSTRIAL">Industrial</option>
                             <option value="OTHER">Other</option>
@@ -4203,7 +4452,51 @@ const AssetVault = () => {
                   <div className="sm:col-span-2">
                     <div className={INVENTORY_MODAL_SECTION_HEADING_CLASS}>Price</div>
                   </div>
-                  {isInventoryPriceRequired(formData.type) ? (
+                  {canQuotePricePerArea(formData) ? (
+                    <div>
+                      <label className="text-[13px] font-medium text-[var(--g-mut)]">
+                        Price Basis
+                      </label>
+                      <select
+                        value={formData.priceBasis === "PER_AREA" ? "PER_AREA" : "TOTAL"}
+                        onChange={(e) => setFormData((prev) => ({ ...prev, priceBasis: e.target.value }))}
+                        className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl text-sm text-slate-900 focus:outline-none focus:border-emerald-500 mt-1"
+                      >
+                        <option value="TOTAL">Total amount</option>
+                        <option value="PER_AREA">Price per {getAreaUnitShortLabel(formData.areaUnit)}</option>
+                      </select>
+                    </div>
+                  ) : null}
+
+                  {isPricedPerArea(formData) ? (
+                    <div>
+                      <label className="text-[13px] font-medium text-[var(--g-mut)]">
+                        Rate (Rs per {getAreaUnitShortLabel(formData.areaUnit)})
+                      </label>
+                      <input
+                        type="number"
+                        min="0"
+                        placeholder="9500"
+                        value={formData.pricePerArea}
+                        onChange={(e) => setFormData((prev) => ({ ...prev, pricePerArea: e.target.value }))}
+                        className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl text-sm font-mono text-slate-900 focus:outline-none focus:border-emerald-500 mt-1"
+                      />
+                      {(() => {
+                        const pricingArea = getPricingArea(formData);
+                        const total = getEffectiveSalePrice(formData);
+                        const unit = getAreaUnitShortLabel(formData.areaUnit);
+                        if (!pricingArea) {
+                          return <p className="mt-1 text-[11.5px] text-amber-600">Enter an area in the Area step to work out the total.</p>;
+                        }
+                        const areaText = `${pricingArea.area.toLocaleString("en-IN")} ${unit} ${pricingArea.label} area`;
+                        return (
+                          <p className="mt-1 text-[11.5px] text-slate-500">
+                            {total ? `Total: Rs ${Number(total).toLocaleString("en-IN")} for ${areaText}` : `Applies to ${areaText}`}
+                          </p>
+                        );
+                      })()}
+                    </div>
+                  ) : isInventoryPriceRequired(formData.type) ? (
                     <div>
                       <label className="text-[13px] font-medium text-[var(--g-mut)]">
                         Price (Rs)
@@ -4252,16 +4545,25 @@ const AssetVault = () => {
 
                   <div>
                     <label className="text-[13px] font-medium text-[var(--g-mut)]">
-                      Maintenance Charges
+                      Maintenance (Rs per sq ft / month)
                     </label>
                     <input
                       type="number"
                       min="0"
-                      placeholder="25000"
+                      step="any"
+                      placeholder="12"
                       value={formData.maintenanceCharges}
                       onChange={(e) => setFormData((prev) => ({ ...prev, maintenanceCharges: e.target.value }))}
                       className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl text-sm font-mono text-slate-900 focus:outline-none focus:border-emerald-500 mt-1"
                     />
+                    {(() => {
+                      const estimate = getMaintenanceEstimate(formData);
+                      return estimate ? (
+                        <p className="mt-1 text-[11.5px] text-slate-500">
+                          About Rs {estimate.total.toLocaleString("en-IN")} / month for {estimate.areaSqFt.toLocaleString("en-IN")} sq ft {estimate.label} area
+                        </p>
+                      ) : null;
+                    })()}
                   </div>
 
                   {/* Deposit months, agreement and lock-in only apply to rentals. */}
@@ -4329,6 +4631,7 @@ const AssetVault = () => {
                 </div>
                 </div>
                 <div className={inventoryFormStepClass("owner")}>
+                <InventoryContactLinker formData={formData} setFormData={setFormData} inputClass={INVENTORY_MODAL_INPUT_CLASS} sectionClass={INVENTORY_MODAL_SECTION_CLASS} headingClass={INVENTORY_MODAL_SECTION_HEADING_CLASS} />
                 <div className={`${INVENTORY_MODAL_SECTION_CLASS} grid grid-cols-1 gap-3 sm:grid-cols-2 sm:gap-4`}>
                   <div className="sm:col-span-2">
                     <div className={INVENTORY_MODAL_SECTION_HEADING_CLASS}>Owner Details</div>
@@ -4359,18 +4662,6 @@ const AssetVault = () => {
                   </div>
                   <div>
                     <label className="text-[13px] font-medium text-[var(--g-mut)]">
-                      Owner WhatsApp Number
-                    </label>
-                    <input
-                      type="tel"
-                      value={formData.ownerWhatsappNumber}
-                      onChange={(e) => setFormData((prev) => ({ ...prev, ownerWhatsappNumber: e.target.value }))}
-                      placeholder="e.g. 9876543210"
-                      className={`${INVENTORY_MODAL_INPUT_CLASS} mt-1`}
-                    />
-                  </div>
-                  <div>
-                    <label className="text-[13px] font-medium text-[var(--g-mut)]">
                       Ownership
                     </label>
                     <select
@@ -4385,8 +4676,129 @@ const AssetVault = () => {
                       <option value="POWER_OF_ATTORNEY">Power of Attorney</option>
                     </select>
                   </div>
+                  <div className="sm:col-span-2">
+                    <label className="block text-[13px] font-medium text-[var(--g-mut)]">
+                      Other Contacts
+                    </label>
+                    {(formData.ownerContacts || []).map((contact, index) => {
+                      const updateContact = (patch) => setFormData((prev) => ({
+                        ...prev,
+                        ownerContacts: (prev.ownerContacts || []).map((item, i) => (i === index ? { ...item, ...patch } : item)),
+                      }));
+                      return (
+                        <div key={index} className="mt-2 grid grid-cols-1 gap-2 sm:grid-cols-[140px_1fr_1fr_auto] sm:items-center">
+                          <select
+                            value={contact.role || "OTHER"}
+                            onChange={(e) => updateContact({ role: e.target.value })}
+                            aria-label="Contact role"
+                            className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl text-sm text-slate-900 focus:outline-none focus:border-emerald-500"
+                          >
+                            {OWNER_CONTACT_ROLE_OPTIONS.map((option) => (
+                              <option key={option.value} value={option.value}>{option.label}</option>
+                            ))}
+                          </select>
+                          <input
+                            type="text"
+                            value={contact.name}
+                            onChange={(e) => updateContact({ name: e.target.value })}
+                            placeholder="Name"
+                            aria-label="Contact name"
+                            className={INVENTORY_MODAL_INPUT_CLASS}
+                          />
+                          <input
+                            type="tel"
+                            value={contact.number}
+                            onChange={(e) => updateContact({ number: e.target.value })}
+                            placeholder="e.g. 9876543210"
+                            aria-label="Contact number"
+                            className={INVENTORY_MODAL_INPUT_CLASS}
+                          />
+                          <button
+                            type="button"
+                            onClick={() => setFormData((prev) => ({
+                              ...prev,
+                              ownerContacts: (prev.ownerContacts || []).filter((_, i) => i !== index),
+                            }))}
+                            className="justify-self-start rounded-lg px-2 py-2 text-[12.5px] font-semibold text-red-600 hover:bg-red-50"
+                          >
+                            Remove
+                          </button>
+                        </div>
+                      );
+                    })}
+                    <button
+                      type="button"
+                      onClick={() => setFormData((prev) => ({
+                        ...prev,
+                        ownerContacts: [...(prev.ownerContacts || []), { role: "MANAGER", name: "", number: "" }],
+                      }))}
+                      className="mt-2 rounded-lg border border-dashed border-slate-300 px-3 py-2 text-[12.5px] font-semibold text-emerald-700 hover:bg-emerald-50"
+                    >
+                      + Add contact
+                    </button>
+                  </div>
+                </div>
+                <div className={`${INVENTORY_MODAL_SECTION_CLASS} grid grid-cols-1 gap-3 sm:grid-cols-2 sm:gap-4`}>
+                  <div className="sm:col-span-2">
+                    <div className={INVENTORY_MODAL_SECTION_HEADING_CLASS}>Broker Details</div>
+                  </div>
+                  <div>
+                    <label className="text-[13px] font-medium text-[var(--g-mut)]">
+                      Broker Name
+                    </label>
+                    <input
+                      type="text"
+                      value={formData.brokerName}
+                      onChange={(e) => setFormData((prev) => ({ ...prev, brokerName: e.target.value }))}
+                      placeholder="Broker name"
+                      className={`${INVENTORY_MODAL_INPUT_CLASS} mt-1`}
+                    />
+                  </div>
+                  <div>
+                    <label className="text-[13px] font-medium text-[var(--g-mut)]">
+                      Broker Number
+                    </label>
+                    <input
+                      type="tel"
+                      value={formData.brokerNumber}
+                      onChange={(e) => setFormData((prev) => ({ ...prev, brokerNumber: e.target.value }))}
+                      placeholder="e.g. 9876543210"
+                      className={`${INVENTORY_MODAL_INPUT_CLASS} mt-1`}
+                    />
+                  </div>
                 </div>
                 <InventoryRevenueFields formData={formData} setFormData={setFormData} inputClass={INVENTORY_MODAL_INPUT_CLASS} sectionClass={INVENTORY_MODAL_SECTION_CLASS} headingClass={INVENTORY_MODAL_SECTION_HEADING_CLASS} />
+                {inventorySubtype === "PLOT" ? (
+                <div className={`${INVENTORY_MODAL_SECTION_CLASS} grid grid-cols-1 gap-3 sm:grid-cols-2 sm:gap-4`}>
+                  <div className="sm:col-span-2">
+                    <div className={INVENTORY_MODAL_SECTION_HEADING_CLASS}>Developer Details</div>
+                  </div>
+                  <div>
+                    <label className="text-[13px] font-medium text-[var(--g-mut)]">
+                      Developer Name
+                    </label>
+                    <input
+                      type="text"
+                      value={formData.developerName}
+                      onChange={(e) => setFormData((prev) => ({ ...prev, developerName: e.target.value }))}
+                      placeholder="Developer name"
+                      className={`${INVENTORY_MODAL_INPUT_CLASS} mt-1`}
+                    />
+                  </div>
+                  <div>
+                    <label className="text-[13px] font-medium text-[var(--g-mut)]">
+                      Developer Number
+                    </label>
+                    <input
+                      type="tel"
+                      value={formData.developerNumber}
+                      onChange={(e) => setFormData((prev) => ({ ...prev, developerNumber: e.target.value }))}
+                      placeholder="e.g. 9876543210"
+                      className={`${INVENTORY_MODAL_INPUT_CLASS} mt-1`}
+                    />
+                  </div>
+                </div>
+                ) : (
                 <div className={`${INVENTORY_MODAL_SECTION_CLASS} grid grid-cols-1 gap-3 sm:grid-cols-2 sm:gap-4`}>
                   <div className="sm:col-span-2">
                     <div className={INVENTORY_MODAL_SECTION_HEADING_CLASS}>Key Manager Details</div>
@@ -4416,6 +4828,7 @@ const AssetVault = () => {
                     />
                   </div>
                 </div>
+                )}
                 </div>
                 <div className={inventoryFormStepClass("media")}>
                 <div className={INVENTORY_MODAL_SECTION_CLASS}>

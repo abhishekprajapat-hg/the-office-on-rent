@@ -26,6 +26,9 @@ const OVERVIEW_FIELDS = [
   F("nearbyLandmarks", "Nearby landmarks", "list"),
   F("roadAccess", "Road access"),
   F("distances", "Verified distances / travel times", "longtext"),
+  // 3 Nov 2026 (4.5).
+  F("videoLinks", "YouTube / video / animation links", "list", { completeness: false }),
+  F("additionalDetails", "Additional details", "longtext", { completeness: false }),
 ];
 
 const PRICING_FIELDS = [
@@ -46,6 +49,10 @@ const PRICING_FIELDS = [
   F("parkingCharges", "Parking charges", "text", { source: "project" }),
   F("taxes", "Taxes (GST etc.)", "text", { source: "project" }),
   F("registrationStampDuty", "Registration / stamp duty", "text", { source: "project", legacy: "registration" }),
+  // 3 Nov 2026 (4.3): the government guideline (DLC) rate, kept apart from the project's own rates.
+  F("guidelineRate", "Guideline / DLC rate", "money", { completeness: false }),
+  F("guidelineRateUnit", "Guideline rate unit (e.g. per sq m)", "text", { completeness: false }),
+  F("guidelineRateDate", "Guideline rate effective from", "date", { completeness: false }),
   F("bookingAmount", "Booking amount", "money"),
   F("paymentSchedule", "Payment schedule / milestones", "longtext"),
 ];
@@ -54,6 +61,14 @@ const LEGAL_FIELDS = [
   F("reraNumber", "RERA registration no."),
   F("reraUrl", "RERA verification link", "url"),
   F("approvingAuthority", "Approving authority"),
+  // 3 Nov 2026 (4.1): kept apart from the project stage, and searchable.
+  S("localAuthority", "Local governing authority", ["NAGAR_NIGAM", "GRAM_PANCHAYAT", "OTHER"]),
+  S("buildingPermission", "Building permission", ["YES", "NO", "PENDING", "NOT_APPLICABLE"]),
+  F("buildingPermissionNote", "Building permission note / reference", "text", { completeness: false }),
+  F("ewsIncluded", "EWS plots / units included", "yesno", { completeness: false }),
+  F("ewsCount", "EWS count", "number", { completeness: false }),
+  F("ligIncluded", "LIG plots / units included", "yesno", { completeness: false }),
+  F("ligCount", "LIG count", "number", { completeness: false }),
   F("approvedLayout", "Approved layout / plan reference"),
   F("permissions", "Relevant permissions & status", "longtext"),
 ];
@@ -144,7 +159,11 @@ const SPEC_FIELDS = {
   ],
 };
 
-const CONTACT_ROLES = ["SALES", "SITE", "DEVELOPER", "MANAGER", "RECEPTION", "MAINTENANCE", "ESCALATION", "LEGAL", "OTHER"];
+// 3 Nov 2026 (4.4): the parties behind a project come first; the older roles stay valid.
+const CONTACT_ROLES = [
+  "DEVELOPER", "DIRECT_DEVELOPER", "OWNER", "OWNERS_MANAGER", "MARKETED_BY", "ASSOCIATE", "BROKER",
+  "SALES", "SITE", "MANAGER", "RECEPTION", "MAINTENANCE", "ESCALATION", "LEGAL", "OTHER",
+];
 const AMENITY_STATUSES = ["AVAILABLE", "PLANNED", "NOT_AVAILABLE"];
 const DOCUMENT_CATEGORIES = ["BROCHURE", "LAYOUT", "PRICE_LIST", "FLOOR_PLAN", "APPROVAL", "OC_CC", "FIRE_SAFETY", "PAYMENT_PLAN", "AGREEMENT", "OTHER"];
 // 5.5: residential (entrance, roads, layouts, gardens, amenities, plots,

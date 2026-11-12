@@ -514,7 +514,14 @@ export const INVENTORY_PROPERTY_REQUIREMENT_CONFIG = {
     subtypeLabel: "Residential Property Type",
     subtypes: {
       APARTMENT: RESIDENTIAL_COMMON_SUBTYPES.APARTMENT,
-      INDEPENDENT_HOUSE: RESIDENTIAL_COMMON_SUBTYPES.INDEPENDENT_HOUSE,
+      // The form's own Carpet / Built-up / Super Built-up Area cover the area fields; no Purpose.
+      INDEPENDENT_HOUSE: {
+        ...RESIDENTIAL_COMMON_SUBTYPES.INDEPENDENT_HOUSE,
+        fields: [
+          ...RESIDENTIAL_COMMON_SUBTYPES.INDEPENDENT_HOUSE.fields
+            .filter((field) => !["area", "superBuiltUpArea", "carpetArea", "purpose"].includes(field.key)),
+        ],
+      },
       PLOT: { label: "Plot", showFurnishing: false, fields: [
         { key: "plotLocation", label: "Plot Location", type: "select", options: PLOT_LOCATION_OPTIONS },
         { key: "projectStatus", label: "Project Status", type: "select", options: INVENTORY_PLOT_PROJECT_STATUS_OPTIONS },
@@ -532,13 +539,38 @@ export const INVENTORY_PROPERTY_REQUIREMENT_CONFIG = {
         { key: "gatedColony", label: "Gated Colony", type: "checkbox" },
         { key: "approvedColony", label: "Approved Colony", type: "checkbox" },
       ] },
-      BUNGALOW: BUNGALOW_SUBTYPE,
-      FARM_HOUSE: FARM_HOUSE_SUBTYPE,
+      // Same trim as House.
+      BUNGALOW: {
+        ...BUNGALOW_SUBTYPE,
+        fields: [
+          ...BUNGALOW_SUBTYPE.fields
+            .filter((field) => !["area", "superBuiltUpArea", "carpetArea", "purpose"].includes(field.key)),
+        ],
+      },
+      // Area is just Plot Area + Total Construction Area (in the form itself); no Purpose; amenities are editable.
+      FARM_HOUSE: {
+        ...FARM_HOUSE_SUBTYPE,
+        editableAmenities: true,
+        fields: FARM_HOUSE_SUBTYPE.fields.filter((field) => !["landArea", "builtUpArea", "purpose"].includes(field.key)),
+      },
       PG_HOSTEL: INVENTORY_PG_HOSTEL_SUBTYPE,
       OTHER: RESIDENTIAL_COMMON_SUBTYPES.OTHER,
     },
   },
 };
+
+// Every residential inventory type starts with the project or colony it is in.
+const PROJECT_COLONY_FIELD = { key: "colonyName", label: "Project / Colony Name", type: "text" };
+const residentialInventorySubtypes = INVENTORY_PROPERTY_REQUIREMENT_CONFIG.RESIDENTIAL.subtypes;
+Object.entries(residentialInventorySubtypes).forEach(([value, config]) => {
+  residentialInventorySubtypes[value] = { ...config, fields: [PROJECT_COLONY_FIELD, ...(config.fields || [])] };
+});
+// A move-in date belongs to a client's requirement, not to a property.
+Object.values(INVENTORY_PROPERTY_REQUIREMENT_CONFIG).forEach(({ subtypes }) => {
+  Object.entries(subtypes).forEach(([value, config]) => {
+    subtypes[value] = { ...config, fields: (config.fields || []).filter((field) => field.key !== "moveInDate") };
+  });
+});
 
 export const getPropertySubtypeOptions = (inventoryType = "") =>
   Object.entries(PROPERTY_REQUIREMENT_CONFIG[String(inventoryType).toUpperCase()]?.subtypes || {})

@@ -1,4 +1,5 @@
-const INVENTORY_STATUSES = ["Available", "Blocked", "Sold"];
+// "Unavailable" (3 Nov 2026, 5): withdrawn or not for sale right now; kept for history, never deleted.
+const INVENTORY_STATUSES = ["Available", "Blocked", "Sold", "Unavailable"];
 const INVENTORY_TYPES = ["Sale", "Rent", "Both"];
 const INVENTORY_SALE_PAYMENT_MODES = [
   "UPI",
@@ -9,6 +10,8 @@ const INVENTORY_SALE_PAYMENT_MODES = [
 const INVENTORY_SALE_PAYMENT_TYPES = ["FULL", "PARTIAL"];
 const INVENTORY_DEAL_TYPES = ["PURCHASE", "RENT", "LEASE"];
 const INVENTORY_OWNER_TYPES = ["1ST", "2ND", "3RD", "POWER_OF_ATTORNEY"];
+// People who speak for the owner, listed under Owner Details.
+const INVENTORY_OWNER_CONTACT_ROLES = ["MANAGER", "PA", "ACCOUNTANT", "RELATIVE", "BROKER", "OTHER"];
 
 const INVENTORY_REQUEST_TYPES = ["create", "update", "delete"];
 const INVENTORY_REQUEST_STATUSES = ["pending", "approved", "rejected"];
@@ -48,6 +51,8 @@ const INVENTORY_ALLOWED_FIELDS = [
   "height",
   "areaUnit",
   "maintenanceCharges",
+  "priceBasis",
+  "pricePerArea",
   "commercialDetails",
   "residentialDetails",
   "documentsAvailable",
@@ -60,12 +65,17 @@ const INVENTORY_ALLOWED_FIELDS = [
   "ownerName",
   "ownerNumber",
   "ownerWhatsappNumber",
+  "ownerContacts",
   "ownerType",
   "ownershipType",
   "businessModel",
   "enterpriseDetails",
   "keyManagerName",
   "keyManagerNumber",
+  "brokerName",
+  "brokerNumber",
+  "developerName",
+  "developerNumber",
   "dealType",
   "propertyDate",
   "gstApplicable",
@@ -74,6 +84,11 @@ const INVENTORY_ALLOWED_FIELDS = [
   "lastConfirmedAt",
   "projectId",
   "originLeadId",
+  // 3 Nov 2026: PLCs that apply to this plot (names from the project's PLC list).
+  "appliedPlcs",
+  // Database module (Oct 2026): the building, and the contact who reported the unit.
+  "buildingId",
+  "initialSourceContactId",
 ];
 
 const INVENTORY_REQUIRED_CREATE_FIELDS = [
@@ -101,6 +116,7 @@ module.exports = {
   INVENTORY_SALE_PAYMENT_TYPES,
   INVENTORY_DEAL_TYPES,
   INVENTORY_OWNER_TYPES,
+  INVENTORY_OWNER_CONTACT_ROLES,
   INVENTORY_REQUEST_TYPES,
   INVENTORY_REQUEST_STATUSES,
   INVENTORY_ALLOWED_FIELDS,

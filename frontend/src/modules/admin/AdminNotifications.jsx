@@ -44,6 +44,7 @@ import {
 import { toErrorMessage } from "../../utils/errorMessage";
 import { useChatNotifications } from "../../context/useChatNotifications";
 import ToastNotice from "../../components/ui/ToastNotice";
+import EnterpriseReminderBanner from "../enterprise/EnterpriseReminderBanner";
 
 const APPROVAL_FILTERS = [
   { value: "ALL", label: "All decisions" },
@@ -1129,6 +1130,8 @@ const AdminNotifications = () => {
           </button>
         ))}
       </div>
+
+      <EnterpriseReminderBanner />
 
       <div className="grid gap-4 xl:grid-cols-[minmax(0,430px)_minmax(0,1fr)]">
         {/* Inbox */}

@@ -70,6 +70,11 @@ const FollowUpReminderToast = lazy(() => import("./components/layout/FollowUpRem
 
 const LeadsMatrix = lazy(() => import("./modules/leads/LeadsMatrix"));
 const OwnerDatabase = lazy(() => import("./modules/inventory/OwnerDatabase"));
+const DatabasePage = lazy(() => import("./modules/database/DatabasePage"));
+const BuildingProfilePage = lazy(() => import("./modules/database/BuildingProfilePage"));
+const DbContactPage = lazy(() => import("./modules/database/DbContactPage"));
+const EnterpriseDashboard = lazy(() => import("./modules/enterprise/EnterpriseDashboard"));
+const EnterpriseOfficePage = lazy(() => import("./modules/enterprise/EnterpriseOfficePage"));
 const BrokerDatabase = lazy(() => import("./modules/inventory/BrokerDatabase"));
 const AssetVault = lazy(() => import("./modules/inventory/AssetVault"));
 const InventoryDetails = lazy(() => import("./modules/inventory/InventoryDetails"));
@@ -156,6 +161,7 @@ const DASHBOARD_DESTINATIONS = [
   ["tasks", "/tasks", "Tasks"], ["attendance", "/attendance", "Attendance"],
   ["chat", "/chat", "Team Chat"], ["coworking_booking", "/coworking/booking-board", "Booking Board"],
   ["coworking_clients", "/coworking/clients", "Clients"],
+  ["database", "/database", "Database"], ["enterprise", "/enterprise", "Enterprise Leasing"],
 ];
 
 const GrantedDashboard = () => {
@@ -820,6 +826,13 @@ export default function App() {
         path="/inventory/brokers/:contactId"
         element={withPageAccess("inventory", <ContactProfilePage />, ["ADMIN", ...MANAGEMENT_ROLES, "EXECUTIVE", "FIELD_EXECUTIVE"])}
       />
+      {/* Database module (Oct 2026 update 01). */}
+      <Route path="/database" element={withPageAccess(["database", "inventory"], <DatabasePage />, ["ADMIN", ...MANAGEMENT_ROLES, "EXECUTIVE", "INSIDE_EXECUTIVE", "FIELD_EXECUTIVE"])} />
+      <Route path="/database/buildings/:buildingId" element={withPageAccess(["database", "inventory"], <BuildingProfilePage />, ["ADMIN", ...MANAGEMENT_ROLES, "EXECUTIVE", "INSIDE_EXECUTIVE", "FIELD_EXECUTIVE"])} />
+      <Route path="/database/contacts/:contactId" element={withPageAccess(["database", "inventory"], <DbContactPage />, ["ADMIN", ...MANAGEMENT_ROLES, "EXECUTIVE", "INSIDE_EXECUTIVE", "FIELD_EXECUTIVE"])} />
+      {/* Enterprise leasing (Oct 2026 update 02). */}
+      <Route path="/enterprise" element={withPageAccess("enterprise", <EnterpriseDashboard />, ["ADMIN", "MANAGER"])} />
+      <Route path="/enterprise/offices/:officeId" element={withPageAccess("enterprise", <EnterpriseOfficePage />, ["ADMIN", "MANAGER"])} />
       {/* Replaced by the two pages above; existing links still resolve. */}
       <Route path="/inventory/contacts" element={<Navigate to="/inventory/owners" replace />} />
       <Route

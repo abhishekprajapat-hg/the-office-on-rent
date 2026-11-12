@@ -16,7 +16,7 @@ const titleCase = (s) => s.charAt(0) + s.slice(1).toLowerCase();
 
 const newIssue = () => ({ category: "MAINTENANCE", description: "", location: "", actionTaken: "", status: "PENDING", priority: "MEDIUM" });
 
-const DailyReportForm = ({ form, value, onChange, errorField, disabled = false }) => {
+const DailyReportForm = ({ form, value, onChange, errorField, disabled = false, targets = {} }) => {
   if (!form) return null;
   const counts = form.fields.filter((f) => f.kind === "count");
   const texts = form.fields.filter((f) => f.kind === "text");
@@ -29,7 +29,10 @@ const DailyReportForm = ({ form, value, onChange, errorField, disabled = false }
       <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
         {counts.map((f) => (
           <label key={f.key} className="block">
-            <span className="text-[13px] font-semibold text-slate-800">{f.label}</span>
+            <span className="flex items-baseline justify-between gap-2 text-[13px] font-semibold text-slate-800">
+              {f.label}
+              {targets[f.key] !== undefined ? <span className="text-[11.5px] font-medium text-blue-700" title="Daily target set by your manager">Target {targets[f.key]}/day</span> : null}
+            </span>
             <input
               type="text"
               inputMode="numeric"

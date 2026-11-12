@@ -12,6 +12,8 @@ const {
   PROJECT_OFFICE_TYPES,
   PROJECT_FACING_OPTIONS,
   PROJECT_UNIT_STATUSES,
+  PROJECT_CHARGE_BASES,
+  PROJECT_PLC_RULES,
 } = require("../constants/project.constants");
 
 const MOBILE_PATTERN = /^[0-9]{10}$/;
@@ -621,6 +623,59 @@ const projectSchema = new mongoose.Schema(
         clientVisible: { type: Boolean, default: true },
         uploadedAt: { type: Date, default: Date.now },
         archived: { type: Boolean, default: false },
+      }],
+      default: [],
+    },
+    /*
+     * Requirements 3 Nov 2026.
+     * 4.3: the date each rate applied from.
+     * 4.2: size-wise stock typed in by hand ("aggregate only"), used for a size
+     *      until individual plots of that size are linked from Inventory.
+     * 4.3: configurable PLCs and charge rows, GST and stamp duty percentages.
+     * 4.5: nearby / comparable market rates, reference only.
+     */
+    startingRateDate: { type: Date, default: null },
+    currentRateDate: { type: Date, default: null },
+    sizeInventory: {
+      type: [{
+        dimension: { type: String, trim: true, maxlength: 40, default: "" },
+        areaSqft: { type: Number, min: 0, default: null },
+        total: { type: Number, min: 0, default: 0 },
+        available: { type: Number, min: 0, default: 0 },
+        sold: { type: Number, min: 0, default: 0 },
+      }],
+      default: [],
+    },
+    plcOptions: {
+      type: [{
+        name: { type: String, trim: true, maxlength: 80, required: true },
+        basis: { type: String, enum: PROJECT_CHARGE_BASES, default: "PERCENT" },
+        value: { type: Number, min: 0, default: null },
+        condition: { type: String, trim: true, maxlength: 200, default: "" },
+      }],
+      default: [],
+    },
+    chargeItems: {
+      type: [{
+        key: { type: String, trim: true, maxlength: 40, default: "OTHER" },
+        label: { type: String, trim: true, maxlength: 80, required: true },
+        basis: { type: String, enum: PROJECT_CHARGE_BASES, default: "AMOUNT" },
+        value: { type: Number, min: 0, default: null },
+        note: { type: String, trim: true, maxlength: 200, default: "" },
+      }],
+      default: [],
+    },
+    // How several PLCs on one plot combine: not decided yet, all added, or only the highest.
+    plcRule: { type: String, enum: PROJECT_PLC_RULES, default: "NOT_SET" },
+    gstPercent: { type: Number, min: 0, max: 100, default: null },
+    stampDutyPercent: { type: Number, min: 0, max: 100, default: null },
+    marketRates: {
+      type: [{
+        place: { type: String, trim: true, maxlength: 120, required: true },
+        rate: { type: Number, min: 0, default: null },
+        unit: { type: String, trim: true, maxlength: 40, default: "per sq ft" },
+        asOf: { type: Date, default: null },
+        source: { type: String, trim: true, maxlength: 160, default: "" },
       }],
       default: [],
     },

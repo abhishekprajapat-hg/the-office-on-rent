@@ -76,7 +76,14 @@ test('no row gets a direct Mark Present button', () => {
   );
   assert.doesNotMatch(source, /Mark Present/, 'absent rows must get the dropdown too');
   assert.doesNotMatch(source, /handleManualStatusChange\(row, "PRESENT"\)/);
-  assert.match(source, /value=\{manualStatusSelectValue\(row\.attendance\)\}/);
+  // The row control is now a set of marks (P/H/A/L) plus a menu for the rest,
+  // rendered on every row - not a <select>. What must hold is unchanged: the
+  // current value comes from manualStatusSelectValue, the marks are not gated
+  // on a check-in, and the menu is derived from the full list so no status the
+  // backend accepts becomes unreachable.
+  assert.match(source, /manualStatusSelectValue\(a\)/);
+  assert.match(source, /\{MARKS\.map\(/);
+  assert.match(source, /MORE_MARKS = MANUAL_ATTENDANCE_STATUS_OPTIONS\.filter\(/);
 });
 
 /*

@@ -1,17 +1,31 @@
 import React, { useEffect, useMemo, useState } from "react";
-import { useNavigate, useParams } from "react-router-dom";
+import { Link, useNavigate, useParams } from "react-router-dom";
 import {
-  ArrowLeft, Building2, Car, ChevronDown, ChevronRight, ChevronUp, FileText, Flame, Image as ImageIcon, IndianRupee,
-  Layers3, LayoutGrid, Loader2, MapPin, MessageCircle, Navigation, Pencil, Phone, Ruler, Share2, Store, Tag, Trash2, TrendingUp, Users,
+  ArrowLeft, BookOpen, Building2, Car, ChevronDown, ChevronRight, ChevronUp, FileText, Flame, Image as ImageIcon, IndianRupee,
+  Layers3, LayoutGrid, Loader2, MapPin, MessageCircle, Navigation, Pencil, Phone, Plus, Ruler, Search, Share2, Store, Tag, Trash2, TrendingUp, Users,
 } from "lucide-react";
-import { getProjectById, deleteProject, getProjectDetailsCatalogue, getProjectExport } from "../../services/projectService";
+import { deleteProject, getProjectDetailsCatalogue, getProjectExport, getProjectInventory, getProjectKnowledge } from "../../services/projectService";
+import { SizeAvailabilityTable } from "./ProjectStockFields";
+import { LOCAL_AUTHORITY_LABELS, PLC_RULE_SHORT, chargeBreakdown, formatBasisValue, formatDate, inrRounded, plcCharge, plotBasis, sizeLabel } from "./projectStockFormat";
+import { humanizeKey } from "./projectKnowledgeFormat";
 import { deleteOutcomeMessage, isDeleteApprovalPending } from "../../services/deleteRequestService";
 import { toErrorMessage } from "../../utils/errorMessage";
 import { usePermissions } from "../../context/usePermissions";
 import ToastNotice from "../../components/ui/ToastNotice";
 import FittedImage from "../../components/ui/FittedImage";
 import ProjectKnowledgePanel from "./ProjectKnowledgePanel";
-import { downloadProjectPdf } from "./projectPdf";
+import { BROCHURE_SECTIONS, downloadProjectPdf } from "./projectPdf";
+
+// The sections last chosen for the brochure, per browser (a convenience only).
+const BROCHURE_PREF_KEY = "toor.brochureSections";
+const readBrochurePref = () => {
+  try {
+    const saved = JSON.parse(localStorage.getItem(BROCHURE_PREF_KEY) || "null");
+    return Array.isArray(saved) && saved.length ? saved : BROCHURE_SECTIONS.map(([k]) => k);
+  } catch {
+    return BROCHURE_SECTIONS.map(([k]) => k);
+  }
+};
 import { GhostButton, IconTile, Pill, PrimaryButton } from "./components/contactGlassUi";
 import { FNT, MUT, TONE, field, glassCard, prettyPhone, telHref, waHref } from "./components/contactGlassTokens";
 import {
@@ -46,6 +60,7 @@ const PROJECT_MANAGE_ROLES = new Set(["ADMIN", "MANAGER"]);
 const PROJECT_DELETE_ROLES = new Set(["ADMIN", "MANAGER"]);
 
 const STATUS_TONE = {
+  UPCOMING: "mute", LAUNCHED: "info",
   PRE_LAUNCH: "info", TNC: "vio", RERA_APPROVED: "a",
   UNDER_CONSTRUCTION: "warn", READY_TO_MOVE: "ok", RESALE: "mute",
 };
@@ -132,6 +147,21 @@ const ProjectDetailsPage = () => {
   const [unitFilter, setUnitFilter] = useState("all");
   const [area, setArea] = useState(1000);
   const [pdfBusy, setPdfBusy] = useState(false);
+  const [pdfDialog, setPdfDialog] = useState(false);
+  const [pdfSections, setPdfSections] = useState(readBrochurePref);
+  const [pdfType, setPdfType] = useState("client");
+  // 3 Nov 2026 (4.2 / 5): the project's plots / units in Inventory and the live size counts.
+  const [linked, setLinked] = useState(null);
+  const [unitSearch, setUnitSearch] = useState("");
+  const [linkedStatus, setLinkedStatus] = useState("all");
+
+  useEffect(() => {
+    let cancelled = false;
+    getProjectInventory(id)
+      .then((data) => { if (!cancelled) setLinked(data); })
+      .catch(() => { if (!cancelled) setLinked(null); });
+    return () => { cancelled = true; };
+  }, [id]);
 
   useEffect(() => {
     let cancelled = false;
@@ -140,9 +170,10 @@ const ProjectDetailsPage = () => {
       setLoading(true);
       setError("");
     });
-    getProjectById(id)
-      .then((data) => {
-        if (!cancelled) setProject(data);
+    // The knowledge record (approvals, overview, contacts) comes alongside, filtered by role.
+    getProjectKnowledge(id)
+      .then(({ project: data, knowledge }) => {
+        if (!cancelled) setProject(data ? { ...data, knowledge: knowledge || {} } : null);
       })
       .catch((fetchError) => {
         if (!cancelled) setError(toErrorMessage(fetchError, "Failed to load project"));
@@ -186,8 +217,10 @@ const ProjectDetailsPage = () => {
     setPdfBusy(true);
     setError("");
     try {
-      const [catalogue, data] = await Promise.all([getProjectDetailsCatalogue(), getProjectExport(id, "client")]);
-      await downloadProjectPdf(data, catalogue);
+      try { localStorage.setItem(BROCHURE_PREF_KEY, JSON.stringify(pdfSections)); } catch { /* storage unavailable */ }
+      const [catalogue, data] = await Promise.all([getProjectDetailsCatalogue(), getProjectExport(id, pdfType)]);
+      await downloadProjectPdf(data, catalogue, { sections: pdfSections });
+      setPdfDialog(false);
     } catch (pdfError) {
       setError(toErrorMessage(pdfError, "Couldn't create the brochure PDF"));
     } finally {
@@ -309,16 +342,49 @@ const ProjectDetailsPage = () => {
           [Building2, units.length || "", "Units on file"],
         ];
 
-  const contacts = [
+  // 3 Nov 2026 (4.4): every party behind the project - developer, owner, marketed by, associates.
+  const parties = (project.knowledge?.contacts || []).map((c) => [
+    [humanizeKey(c.role || "OTHER"), c.organization].filter(Boolean).join(" · "), c.name, c.phone, "vio",
+  ]);
+  // The old owner / broker manager fields are copied into the parties on save; show them only until then.
+  const partyPhones = new Set((project.knowledge?.contacts || []).map((c) => String(c.phone || "").replace(/\D/g, "").slice(-10)).filter(Boolean));
+  const legacy = [
     ["Owner / manager", project.ownerManagerName, project.ownerManagerMobile, "a"],
     ["Broker manager", project.brokerManagerName, project.brokerManagerMobile, "info"],
-  ].filter(([, name, phone]) => name || phone);
+  ].filter(([, , phone]) => !phone || !partyPhones.has(String(phone).replace(/\D/g, "").slice(-10)));
+  const contacts = [...legacy, ...parties].filter(([, name, phone]) => name || phone);
+  const legal = project.knowledge?.legal || {};
+  const overview = project.knowledge?.overview || {};
+  const pricingDetails = project.knowledge?.pricing || {};
+  const availability = linked?.availability || null;
+  const linkedUnits = Array.isArray(linked?.units) ? linked.units : [];
+  const linkedCounts = linkedUnits.reduce((acc, u) => ({ ...acc, [u.status]: (acc[u.status] || 0) + 1 }), {});
+  const unitTerm = unitSearch.trim().toLowerCase();
+  const shownLinked = linkedUnits.filter((u) => (linkedStatus === "all" || u.status === linkedStatus)
+    && (!unitTerm || [u.propertyId, u.unitNumber, u.towerName, u.residentialDetails?.subtypeData?.plotNumber, u.residentialDetails?.subtypeData?.facing]
+      .some((v) => String(v || "").toLowerCase().includes(unitTerm))));
+  const breakdown = chargeBreakdown(project, area);
+  const yesCount = (flag, count) => (flag === true ? `Yes${count || count === 0 ? ` · ${count}` : ""}` : flag === false ? "No" : "");
+  const approvalRows = [
+    ["RERA registration no.", legal.reraNumber],
+    ["Approving authority", legal.approvingAuthority],
+    ["Building permission", legal.buildingPermission ? `${humanizeKey(legal.buildingPermission)}${legal.buildingPermissionNote ? ` · ${legal.buildingPermissionNote}` : ""}` : ""],
+    ["Local authority", LOCAL_AUTHORITY_LABELS[legal.localAuthority] || legal.localAuthority],
+    ["EWS included", yesCount(legal.ewsIncluded, legal.ewsCount)],
+    ["LIG included", yesCount(legal.ligIncluded, legal.ligCount)],
+    ["Launch date", formatDate(overview.launchDate)],
+    ["Expected possession", formatDate(overview.possessionDate)],
+    ["Completion date", formatDate(overview.completionDate)],
+  ];
+  const mapsHref = /^https?:\/\//i.test(String(overview.mapsUrl || "")) ? overview.mapsUrl : "";
+  const landmarks = Array.isArray(overview.nearbyLandmarks) ? overview.nearbyLandmarks : [];
 
   const tabs = [
     { key: "overview", label: "Overview", icon: LayoutGrid },
     { key: "pricing", label: "Pricing", icon: IndianRupee },
-    { key: "units", label: plotBased ? "Plots" : "Units", icon: Building2, count: units.length },
+    { key: "units", label: plotBased ? "Plots" : "Units", icon: Building2, count: units.length + linkedUnits.length },
     { key: "location", label: "Location", icon: MapPin },
+    { key: "knowledge", label: "Knowledge", icon: BookOpen },
     { key: "documents", label: "Documents", icon: FileText },
   ];
 
@@ -409,7 +475,7 @@ const ProjectDetailsPage = () => {
 
           <div className="mt-auto flex flex-wrap gap-2">
             <PrimaryButton className="h-11 flex-[1_1_120px] rounded-[13px]" onClick={shareLink}><Share2 size={16} />Share link</PrimaryButton>
-            <GhostButton className="h-11 w-11 rounded-[13px] px-0" title="Download brochure PDF" disabled={pdfBusy} onClick={downloadBrochure}>
+            <GhostButton className="h-11 w-11 rounded-[13px] px-0" title="Download brochure PDF" aria-label="Download brochure PDF" disabled={pdfBusy} onClick={() => setPdfDialog(true)}>
               {pdfBusy ? <Loader2 size={17} className="animate-spin" /> : <FileText size={17} />}
             </GhostButton>
             {canManage ? (
@@ -451,6 +517,14 @@ const ProjectDetailsPage = () => {
             <div className="grid gap-2.5" style={{ gridTemplateColumns: "repeat(auto-fit,minmax(150px,1fr))" }}>
               {facts.map(([icon, value, label]) => <Fact key={label} icon={icon} value={value} label={label} />)}
             </div>
+
+            {availability?.rows?.length ? (
+              <Panel title="Size-wise availability" aside={`${availability.totals.available} of ${availability.totals.total} available`}>
+                <SizeAvailabilityTable availability={availability} />
+              </Panel>
+            ) : null}
+
+            <DetailGroup title="Approvals, authority & dates" rows={approvalRows} />
 
             <div className="flex flex-wrap items-start gap-4">
               {units.length ? (
@@ -582,8 +656,11 @@ const ProjectDetailsPage = () => {
               <DetailGroup
                 title="Rates & charges"
                 rows={[
-                  [`Starting rate ${rateUnit}`, money(startingRate)],
-                  [`Current rate ${rateUnit}`, money(currentRate)],
+                  [`Starting rate ${rateUnit}`, money(startingRate) ? `${money(startingRate)}${project.startingRateDate ? ` · from ${formatDate(project.startingRateDate)}` : ""}` : ""],
+                  [`Current rate ${rateUnit}`, money(currentRate) ? `${money(currentRate)}${project.currentRateDate ? ` · as of ${formatDate(project.currentRateDate)}` : ""}` : ""],
+                  ["Guideline / DLC rate", pricingDetails.guidelineRate ? `${money(pricingDetails.guidelineRate)}${pricingDetails.guidelineRateUnit ? ` ${pricingDetails.guidelineRateUnit}` : ""}${pricingDetails.guidelineRateDate ? ` · from ${formatDate(pricingDetails.guidelineRateDate)}` : ""}` : ""],
+                  ["GST", project.gstPercent !== null && project.gstPercent !== undefined ? `${project.gstPercent}%` : ""],
+                  ["Stamp duty / registration", project.stampDutyPercent !== null && project.stampDutyPercent !== undefined ? `${project.stampDutyPercent}%` : ""],
                   ["Development charges", project.developmentCharges],
                   ["Maintenance charges", project.maintenanceCharges],
                   ["Amenity / club charges", project.amenityCharges],
@@ -594,8 +671,41 @@ const ProjectDetailsPage = () => {
                   ["Other charges", project.otherCharges],
                 ]}
               />
+              {(project.plcOptions || []).length ? (
+                <Panel title="Preferential location charges (PLC)" aside={`Several on a plot: ${PLC_RULE_SHORT[project.plcRule || "NOT_SET"]}`}>
+                  {project.plcOptions.map((p) => (
+                    <div key={p.name} className="flex items-baseline gap-3 py-2" style={{ borderTop: "1px solid var(--g-div)" }}>
+                      <span className="flex-1 text-[13.5px]">{p.name}{p.condition ? <span className="block text-[11.5px]" style={MUT}>{p.condition}</span> : null}</span>
+                      <span className="text-[13.5px] font-medium">{formatBasisValue(p.basis, p.value)}</span>
+                    </div>
+                  ))}
+                </Panel>
+              ) : null}
+              {breakdown.lines.length ? (
+                <Panel title="Charges" aside={breakdown.base ? `Worked for ${area.toLocaleString("en-IN")} sq ft` : "Add a current rate to see amounts"}>
+                  {breakdown.base ? (
+                    <div className="flex items-baseline gap-3 py-2" style={{ borderTop: "1px solid var(--g-div)" }}>
+                      <span className="flex-1 text-[13.5px]" style={MUT}>Base price (current rate × area)</span>
+                      <span className="font-mono text-[13.5px] font-medium">{breakdown.money(breakdown.base)}</span>
+                    </div>
+                  ) : null}
+                  {breakdown.lines.map((l, i) => (
+                    <div key={`${l.label}-${i}`} className="flex items-baseline gap-3 py-2" style={{ borderTop: "1px solid var(--g-div)" }}>
+                      <span className="flex-1 text-[13.5px]">{l.label} <span style={MUT}>· {l.rate}</span>{l.note ? <span className="block text-[11.5px]" style={MUT}>{l.note}</span> : null}</span>
+                      <span className="font-mono text-[13.5px] font-medium">{breakdown.money(l.amount)}</span>
+                    </div>
+                  ))}
+                  {breakdown.total !== null ? (
+                    <div className="flex items-baseline justify-between pt-3" style={{ borderTop: "1px solid var(--g-div)" }}>
+                      <span className="text-[13.5px] font-semibold">Total incl. charges</span>
+                      <span className="text-[20px] font-semibold" style={{ color: "var(--g-b)" }}>{breakdown.money(breakdown.total)}</span>
+                    </div>
+                  ) : null}
+                  <span className="text-[11.5px]" style={FNT}>Estimate. % charges, GST and stamp duty are taken on the base price; the business confirms the exact rules.</span>
+                </Panel>
+              ) : null}
               <DetailGroup
-                title="Preferential location charges"
+                title="PLC notes (free text)"
                 rows={[
                   ["PLC", project.plc],
                   ["Wide road", project.plcWideRoad],
@@ -609,8 +719,8 @@ const ProjectDetailsPage = () => {
           </div>
         ) : null}
 
-        {tab === "units" ? (
-          units.length ? (
+        {tab === "units" ? (<>
+          {units.length || !linkedUnits.length ? (units.length ? (
             <>
               <div className="flex flex-wrap gap-1.5">
                 {[{ value: "all", label: "All", count: units.length }, ...statusCounts].map((option) => {
@@ -667,8 +777,59 @@ const ProjectDetailsPage = () => {
                 </span>
               </div>
             </Panel>
-          )
-        ) : null}
+          )) : null}
+
+          {/* 3 Nov 2026 (5): the individual plots / units in Inventory linked to this project. */}
+          <Panel
+            title={`${plotBased ? "Plots" : "Units"} in Inventory · ${linkedUnits.length}`}
+            aside={canManage || role !== "CHANNEL_PARTNER" ? (
+              <Link to={`/inventory?addToProject=${project._id}`} className="inline-flex items-center gap-1 font-medium" style={{ color: "var(--g-b)" }}><Plus size={14} />Add {plotBased ? "plot" : "unit"}</Link>
+            ) : null}
+          >
+            {linkedUnits.length ? (
+              <>
+                <div className="flex flex-wrap items-center gap-2">
+                  <label className="flex h-[38px] min-w-0 flex-[1_1_220px] items-center gap-2 rounded-xl px-3" style={field}>
+                    <Search size={15} style={MUT} />
+                    <input value={unitSearch} onChange={(e) => setUnitSearch(e.target.value)} placeholder="Plot no., unit, facing…" aria-label="Search plots and units" className="h-full min-w-0 flex-1 bg-transparent text-[13px] outline-none" />
+                  </label>
+                  <select value={linkedStatus} onChange={(e) => setLinkedStatus(e.target.value)} aria-label="Status" className="h-[38px] rounded-xl px-3 text-[13px]" style={field}>
+                    <option value="all">All · {linkedUnits.length}</option>
+                    {Object.entries(linkedCounts).map(([status, count]) => <option key={status} value={status}>{status === "Blocked" ? "On hold" : status} · {count}</option>)}
+                  </select>
+                </div>
+                <div className="flex flex-col">
+                  {shownLinked.map((u) => {
+                    const sub = u.residentialDetails?.subtypeData || {};
+                    const brokers = (u.sourceLinks || []).map((l) => l.contactId?.name).filter(Boolean);
+                    return (
+                      <Link key={u._id} to={`/inventory/${u._id}`} className="flex flex-wrap items-center gap-x-3 gap-y-1 py-2.5 hover:opacity-80" style={{ borderTop: "1px solid var(--g-div)" }}>
+                        <span className="min-w-0 flex-[1_1_180px] truncate text-[13.5px] font-semibold" style={{ color: "var(--g-b)" }}>
+                          {u.propertyId}{sub.plotNumber ? ` · Plot ${sub.plotNumber}` : u.unitNumber && u.unitNumber !== u.propertyId ? ` · ${u.unitNumber}` : ""}
+                        </span>
+                        <span className="text-[12.5px]" style={MUT}>{sizeLabel({ dimension: sub.plotLength && sub.plotWidth ? `${sub.plotLength}x${sub.plotWidth}` : "", areaSqft: sub.plotArea || u.totalArea || u.carpetArea || null })}</span>
+                        {sub.facing ? <span className="text-[12.5px]" style={MUT}>{sub.facing} facing</span> : null}
+                        {(u.appliedPlcs || []).length ? (
+                          <span className="text-[12px]" style={MUT}>
+                            PLC: {u.appliedPlcs.join(" + ")}
+                            {project.plcRule && project.plcRule !== "NOT_SET" ? ` · ${inrRounded(plcCharge({ plcOptions: project.plcOptions, selected: u.appliedPlcs, rule: project.plcRule, ...plotBasis(u, project) }).total)}` : ""}
+                          </span>
+                        ) : null}
+                        <span className="text-[12px]" style={MUT}>{u.sourceType === "BROKER" || brokers.length ? `Broker${brokers.length ? `: ${brokers.join(", ")}` : ""}` : u.sourceType ? humanizeKey(u.sourceType) : "Direct"}</span>
+                        <Pill tone={u.status === "Available" ? "ok" : u.status === "Sold" ? "bad" : u.status === "Unavailable" ? "mute" : "warn"}>{u.status === "Blocked" ? "On hold" : u.status}</Pill>
+                      </Link>
+                    );
+                  })}
+                  {!shownLinked.length ? <span className="py-3 text-[12.5px]" style={MUT}>No {plotBased ? "plots" : "units"} match.</span> : null}
+                </div>
+              </>
+            ) : (
+              <span className="text-[12.5px]" style={MUT}>
+                No individual {plotBased ? "plots" : "units"} are linked yet. Add them in Inventory with this project selected; their status then updates the size-wise counts here.
+              </span>
+            )}
+          </Panel>
+        </>) : null}
 
         {tab === "location" ? (
           <div className="flex flex-wrap items-stretch gap-4">
@@ -687,8 +848,8 @@ const ProjectDetailsPage = () => {
               </div>
               <div className="absolute bottom-3 left-3 flex gap-1.5">
                 <a
-                  href={project.siteLocation?.lat && project.siteLocation?.lng
-                    ? `https://www.google.com/maps/search/?api=1&query=${project.siteLocation.lat},${project.siteLocation.lng}`
+                  href={mapsHref || (project.siteLocation?.lat && project.siteLocation?.lng)
+                    ? (mapsHref || `https://www.google.com/maps/search/?api=1&query=${project.siteLocation.lat},${project.siteLocation.lng}`)
                     : `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(addressLine || project.projectName)}`}
                   target="_blank"
                   rel="noreferrer"
@@ -709,15 +870,39 @@ const ProjectDetailsPage = () => {
                   ["State", project.state],
                   ["Pincode", project.pincode],
                   ["Coordinates", project.siteLocation?.lat && project.siteLocation?.lng ? `${project.siteLocation.lat}, ${project.siteLocation.lng}` : ""],
+                  ["Locality", overview.locality],
+                  ["Road access", overview.roadAccess],
                 ]}
               />
             </div>
+            {landmarks.length ? (
+              <Panel className="min-w-0 flex-[1_1_300px]" title="Nearby landmarks">
+                <div className="flex flex-wrap gap-1.5">
+                  {landmarks.map((l) => <span key={l} className="flex h-8 items-center rounded-full px-3 text-[12.5px]" style={{ background: "var(--g-track)" }}>{l}</span>)}
+                </div>
+              </Panel>
+            ) : null}
+            {(project.marketRates || []).length ? (
+              <Panel className="min-w-0 flex-[1_1_460px]" title="Nearby / comparable market rates" aside="Reference only">
+                {project.marketRates.map((r, i) => (
+                  <div key={`${r.place}-${i}`} className="flex flex-wrap items-baseline gap-x-3 py-2" style={{ borderTop: "1px solid var(--g-div)" }}>
+                    <span className="flex-1 text-[13.5px] font-medium">{r.place}</span>
+                    <span className="text-[13.5px]">{money(r.rate) || "—"} {r.unit}</span>
+                    <span className="w-full text-[11.5px]" style={MUT}>{[r.asOf ? `As of ${formatDate(r.asOf)}` : "No date", r.source ? `Source: ${r.source}` : ""].filter(Boolean).join(" · ")}</span>
+                  </div>
+                ))}
+              </Panel>
+            ) : null}
           </div>
+        ) : null}
+
+        {tab === "knowledge" ? (
+          <ProjectKnowledgePanel projectId={id} category={project.projectCategory} canManage={canManage} isManagement={PROJECT_MANAGE_ROLES.has(role)} />
         ) : null}
 
         {tab === "documents" ? (
           <>
-            <ProjectKnowledgePanel projectId={id} category={project.projectCategory} canManage={canManage} isManagement={PROJECT_MANAGE_ROLES.has(role)} />
+            <ProjectKnowledgePanel key="documents" onlyTab="documents" projectId={id} category={project.projectCategory} canManage={canManage} isManagement={PROJECT_MANAGE_ROLES.has(role)} />
             <div className="flex items-center gap-2.5 rounded-[18px] px-[18px] py-3.5 text-[12.5px]" style={{ ...glassCard, ...MUT }}>
               <Users size={17} />
               Created by {project.createdBy?.name || "—"}
@@ -726,6 +911,41 @@ const ProjectDetailsPage = () => {
           </>
         ) : null}
       </div>
+
+      {pdfDialog ? (
+        <>
+          <button type="button" aria-label="Close" onClick={() => setPdfDialog(false)} className="fixed inset-0 z-[120] cursor-default" style={{ background: "rgba(13,22,40,.32)", backdropFilter: "blur(2px)" }} />
+          <div role="dialog" aria-modal="true" aria-label="Download PDF" className="fixed left-1/2 top-1/2 z-[121] flex max-h-[calc(100vh-32px)] w-[min(440px,calc(100vw-32px))] -translate-x-1/2 -translate-y-1/2 flex-col gap-3 overflow-auto rounded-3xl p-5" style={{ background: "var(--g-modal)", border: "1px solid var(--g-edge, var(--g-line))", boxShadow: "var(--g-shadow-lg, 0 20px 60px rgba(0,0,0,.2))" }}>
+            <span className="text-[17px] font-semibold">Download PDF</span>
+            {PROJECT_MANAGE_ROLES.has(role) ? (
+              <div className="flex gap-1.5">
+                {[["client", "Client brochure"], ["internal", "Internal dossier"]].map(([value, label]) => (
+                  <button key={value} type="button" onClick={() => setPdfType(value)} className="h-9 flex-1 rounded-xl text-[13px] font-medium"
+                    style={pdfType === value ? { background: "var(--g-bs)", color: "var(--g-b)", border: "1px solid var(--g-b)" } : field}>{label}</button>
+                ))}
+              </div>
+            ) : null}
+            <span className="text-[12.5px]" style={MUT}>
+              {pdfType === "client" ? "Choose what goes in. Internal notes never do; pricing shows only once published." : "Internal dossier: everything, including units and internal notes. Not for clients."}
+            </span>
+            <div className="grid grid-cols-2 gap-1.5">
+              {BROCHURE_SECTIONS.map(([key, label]) => (
+                <label key={key} className="flex items-center gap-2 rounded-xl px-2.5 py-2 text-[12.5px] leading-tight" style={field}>
+                  <input type="checkbox" checked={pdfSections.includes(key)}
+                    onChange={(e) => setPdfSections((list) => (e.target.checked ? [...new Set([...list, key])] : list.filter((k) => k !== key)))} />
+                  {label}
+                </label>
+              ))}
+            </div>
+            <div className="mt-1 flex justify-end gap-2">
+              <GhostButton className="h-[42px]" onClick={() => setPdfDialog(false)}>Cancel</GhostButton>
+              <PrimaryButton className="h-[42px]" disabled={pdfBusy || !pdfSections.length} onClick={downloadBrochure}>
+                {pdfBusy ? <Loader2 size={15} className="animate-spin" /> : <FileText size={15} />}Download
+              </PrimaryButton>
+            </div>
+          </div>
+        </>
+      ) : null}
 
       {confirmingDelete && (
         <>

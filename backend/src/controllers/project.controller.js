@@ -12,6 +12,7 @@ const details = require("../services/projectDetails.service");
 const Project = require("../models/Project");
 const Inventory = require("../models/Inventory");
 const { writeAuditLog } = require("../services/auditLog.service");
+const { buildAvailability } = require("../services/projectAvailability.service");
 
 const handleError = (res, error) => {
   const statusCode = error.statusCode || 500;
@@ -44,6 +45,9 @@ exports.getProjects = async (req, res) => {
         priceMax: req.query?.priceMax,
         sizeMin: req.query?.sizeMin,
         sizeMax: req.query?.sizeMax,
+        localAuthority: req.query?.localAuthority,
+        ews: req.query?.ews,
+        lig: req.query?.lig,
       },
       pagination,
     });
@@ -160,10 +164,12 @@ const linkedInventory = async (req, project) => {
     return { counts, units: cabins.map((c) => ({ _id: c._id, propertyId: c.cabinCode || c.name, unitNumber: c.name, status: c.status, isCabin: true })), properties };
   }
   const rows = await Inventory.find({ companyId: req.user.companyId, $or: [{ projectId: project._id }, { projectName: project.projectName }] })
-    .select("propertyId projectId projectName towerName unitNumber status type price rent totalArea areaUnit floorNumber inventoryType")
-    .sort({ status: 1, unitNumber: 1 }).limit(500).lean();
+    .select("propertyId projectId projectName towerName unitNumber status type price rent totalArea carpetArea builtUpArea superBuiltUpArea length width areaUnit floorNumber inventoryType category sourceType ownershipType appliedPlcs residentialDetails.subtypeData sourceLinks.contactId")
+    .populate("sourceLinks.contactId", "name phone")
+    .sort({ status: 1, unitNumber: 1 }).limit(2000).lean();
   const counts = rows.reduce((acc, r) => ({ ...acc, [r.status]: (acc[r.status] || 0) + 1 }), {});
-  return { counts, units: rows };
+  // 3 Nov 2026 (4.2 / 5): size-wise availability, live from these records.
+  return { counts, units: rows, availability: buildAvailability(project, rows) };
 };
 
 /*
@@ -212,10 +218,21 @@ exports.exportProject = async (req, res) => {
       projectId: base.projectId, projectName: base.projectName, projectCategory: base.projectCategory, projectType: base.projectType,
       status: base.status, location: base.location, landmark: base.landmark, city: base.city, state: base.state, pincode: base.pincode,
       totalLandArea: base.totalLandArea, amenities: base.amenities || [], images: base.images || [],
-      ...(type === "internal" || knowledge.pricingPublished ? { startingRate: base.startingRate, currentRate: base.currentRate, otherCharges: base.otherCharges } : {}),
+      ...(type === "internal" || knowledge.pricingPublished ? {
+        startingRate: base.startingRate, currentRate: base.currentRate, otherCharges: base.otherCharges,
+        // 3 Nov 2026 (4.3): rate dates, PLCs, charge rows, GST and stamp duty.
+        startingRateDate: base.startingRateDate, currentRateDate: base.currentRateDate,
+        plcOptions: base.plcOptions || [], plcRule: base.plcRule || "NOT_SET", chargeItems: base.chargeItems || [],
+        gstPercent: base.gstPercent ?? null, stampDutyPercent: base.stampDutyPercent ?? null,
+      } : {}),
+      marketRates: base.marketRates || [],
+      lastUpdatedAt: base.updatedAt,
       ...(type === "internal" ? { ownerManagerName: base.ownerManagerName, ownerManagerMobile: base.ownerManagerMobile, brokerManagerName: base.brokerManagerName, brokerManagerMobile: base.brokerManagerMobile } : {}),
     };
-    const inventory = type === "internal" ? await linkedInventory(req, project) : null;
+    const linked = await linkedInventory(req, project);
+    // The brochure gets size-wise counts only, never individual units (6).
+    summary.availability = linked.availability || null;
+    const inventory = type === "internal" ? linked : null;
     await writeAuditLog({ companyId: req.user.companyId, actor: req.user, action: type === "internal" ? "PROJECT_DOSSIER_EXPORTED" : "PROJECT_BROCHURE_EXPORTED", entityType: "Project", entityId: project._id, metadata: { projectId: base.projectId }, req });
     return res.json({ type, generatedAt: new Date(), project: summary, knowledge, inventory });
   } catch (error) {

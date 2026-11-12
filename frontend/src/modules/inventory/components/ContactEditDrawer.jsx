@@ -1,9 +1,10 @@
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import {
-  Briefcase, Check, IdCard, Lock, Mail, MapPin, Phone, Plus, ShieldAlert, User, UserPlus, UserRoundPen,
+  Briefcase, Check, FileText, IdCard, KeyRound, Loader2, Lock, Mail, MapPin, Phone, Plus, ShieldAlert, Upload, User, UserPlus, UserRoundPen, X,
 } from "lucide-react";
 import api from "../../../services/api";
+import { uploadFile } from "../../../services/uploadService";
 import { createFirm, listFirms, updateContact } from "../../../services/relationshipService";
 import {
   CONTACT_METHOD_OPTIONS, CP_STATUS_OPTIONS, CUSTOMER_TYPE_OPTIONS, RELATIONSHIP_OPTIONS, SEGMENT_OPTIONS, TRANSACTION_OPTIONS,
@@ -25,6 +26,11 @@ import { CP_TONE, FNT, MUT, field } from "./contactGlassTokens";
  *    clash instead of silently creating a second record.
  *  - Restricted fields (CP status, verified, brokerage, net rates, internal
  *    remarks) are only shown and sent for Admin / Manager.
+ *  - Making a broker an Active CP (Terms step) opens two more sections:
+ *    Aadhaar / PAN upload (stored under uploads/broker-kyc, Admin / Manager
+ *    only) and an optional CRM login with page access. The login is a
+ *    CHANNEL_PARTNER user made through POST /users/create, its pages set via
+ *    PATCH /access/users/:id/pages, and the broker record keeps its id.
  */
 
 const toDateInput = (v) => (v ? new Date(v).toISOString().slice(0, 10) : "");
@@ -78,6 +84,48 @@ const Toggle = ({ on, onChange, title, sub }) => (
   </button>
 );
 
+// Aadhaar and photograph are asked for on CP registration (3 Nov 2026); PAN optional.
+const KYC_TYPES = [
+  { type: "AADHAAR", label: "Aadhaar card" },
+  { type: "PHOTO", label: "Photograph" },
+  { type: "PAN", label: "PAN card" },
+];
+const REGISTRATION_OPTIONS = [
+  { value: "REGULAR_BROKER", label: "Regular broker" },
+  { value: "CHANNEL_PARTNER", label: "Channel partner (CP)" },
+];
+const KYC_ACCEPT = "image/jpeg,image/png,image/webp,image/heic,application/pdf,.jpg,.jpeg,.png,.webp,.heic,.pdf";
+const docOf = (docs, type) => (docs || []).find((x) => x.type === type);
+const storedUser = () => {
+  try { return JSON.parse(localStorage.getItem("user") || "{}") || {}; } catch { return {}; }
+};
+const makePassword = () => {
+  const chars = "ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnpqrstuvwxyz23456789";
+  const bytes = new Uint32Array(10);
+  window.crypto.getRandomValues(bytes);
+  return Array.from(bytes, (n) => chars[n % chars.length]).join("");
+};
+
+/* One KYC upload slot: pick a file, see it, open it, or remove it. */
+const KycSlot = ({ label, doc, busy, onPick, onRemove }) => (
+  <div className="flex min-w-0 flex-col gap-1.5">
+    <Label>{label}</Label>
+    {doc ? (
+      <span className="flex h-11 items-center gap-2 rounded-xl px-3" style={field}>
+        <FileText size={15} style={{ color: "var(--g-b)" }} aria-hidden="true" />
+        <a href={doc.url} target="_blank" rel="noreferrer" className="min-w-0 flex-1 truncate text-[13.5px] underline-offset-2 hover:underline" title={doc.name}>{doc.name || "View file"}</a>
+        <button type="button" onClick={onRemove} aria-label={`Remove ${label}`} className="grid h-7 w-7 place-items-center rounded-lg" style={FNT}><X size={14} /></button>
+      </span>
+    ) : (
+      <label className="flex h-11 cursor-pointer items-center justify-center gap-2 rounded-xl px-3 text-[13.5px] font-medium" style={{ ...field, borderStyle: "dashed", color: "var(--g-b)" }}>
+        {busy ? <Loader2 size={15} className="animate-spin" /> : <Upload size={15} />}
+        {busy ? "Uploading…" : `Upload ${label}`}
+        <input type="file" accept={KYC_ACCEPT} className="hidden" disabled={busy} onChange={(e) => { const f = e.target.files?.[0]; e.target.value = ""; if (f) onPick(f); }} />
+      </label>
+    )}
+  </div>
+);
+
 const ContactEditDrawer = ({ kind, contact, canSeeRestricted, onClose, onSaved }) => {
   const isBroker = kind === "BROKER";
   const isNew = !contact?._id;
@@ -102,8 +150,22 @@ const ContactEditDrawer = ({ kind, contact, canSeeRestricted, onClose, onSaved }
       cpStatus: c.cpStatus || "NOT_ONBOARDED", reraNumber: c.reraNumber || "", verified: Boolean(c.verified),
       brokerageTerms: c.brokerageTerms || "", netRateNotes: c.netRateNotes || "", internalRemarks: c.internalRemarks || "",
       notes: c.notes || "", propertyDetails: c.propertyDetails || "", lastVerifiedAt: toDateInput(c.lastVerifiedAt),
+      cpDocuments: Array.isArray(c.cpDocuments) ? c.cpDocuments : [],
+      registrationType: c.registrationType || (c.cpStatus && c.cpStatus !== "NOT_ONBOARDED" ? "CHANNEL_PARTNER" : "REGULAR_BROKER"),
+      preferredPartner: Boolean(c.preferredPartner),
     };
   });
+  /* Channel partner login (Terms step, Active CP only). */
+  const existingCpUserId = contact?.cpUserId?._id || contact?.cpUserId || "";
+  const [kycBusy, setKycBusy] = useState("");
+  const [cpTemplate, setCpTemplate] = useState(null);
+  const [cpLogin, setCpLogin] = useState({ enabled: Boolean(existingCpUserId), email: contact?.email || "", password: "", pages: null, existingAccess: null });
+  const [cpErrors, setCpErrors] = useState({});
+  const createdCpUserId = useRef("");
+  const isCp = isBroker && canSeeRestricted && (d.cpStatus !== "NOT_ONBOARDED" || d.registrationType === "CHANNEL_PARTNER");
+  const cpActive = isBroker && canSeeRestricted && d.cpStatus === "ACTIVE";
+  const wantsCpLogin = cpActive && cpLogin.enabled;
+  const setCp = (k, value) => { setCpLogin((v) => ({ ...v, [k]: value })); setCpErrors((v) => (v[k] ? { ...v, [k]: "" } : v)); };
   const set = (k) => (e) => {
     const value = e?.target ? e.target.value : e;
     setD((v) => ({ ...v, [k]: value }));
@@ -111,6 +173,109 @@ const ContactEditDrawer = ({ kind, contact, canSeeRestricted, onClose, onSaved }
   };
 
   useEffect(() => { if (isBroker) listFirms().then((r) => setFirms(r.firms || [])).catch(() => {}); }, [isBroker]);
+
+  // Page list for the CP login, loaded the first time the broker is made Active.
+  useEffect(() => {
+    if (!cpActive || cpTemplate) return;
+    let live = true;
+    Promise.all([
+      api.get("/contacts/cp-access-template"),
+      existingCpUserId ? api.get(`/access/users/${existingCpUserId}/pages`).catch(() => null) : Promise.resolve(null),
+    ]).then(([tpl, current]) => {
+      if (!live) return;
+      const pages = tpl.data?.pages || [];
+      setCpTemplate(pages);
+      const offered = new Set(pages.map((p) => p.key));
+      const existingAccess = current?.data?.pageAccess || null;
+      setCpLogin((v) => ({
+        ...v,
+        existingAccess,
+        pages: v.pages || (existingAccess
+          ? existingAccess.map((e) => e.pageKey).filter((k) => offered.has(k))
+          : pages.filter((p) => p.defaultOn).map((p) => p.key)),
+      }));
+    }).catch((e) => { if (live) setError(e?.response?.data?.message || "Couldn't load channel partner pages"); });
+    return () => { live = false; };
+  }, [cpActive, cpTemplate, existingCpUserId]);
+
+  const pickKyc = async (type, file) => {
+    setKycBusy(type); setError("");
+    try {
+      const saved = await uploadFile(file, "broker-kyc");
+      const doc = { type, name: saved.fileName || file.name, url: saved.url, uploadedAt: new Date().toISOString() };
+      setD((v) => ({ ...v, cpDocuments: [...v.cpDocuments.filter((x) => x.type !== type), doc] }));
+    } catch (e) {
+      setError(e.message || "Upload failed");
+    } finally {
+      setKycBusy("");
+    }
+  };
+  const removeKyc = (type) => setD((v) => ({ ...v, cpDocuments: v.cpDocuments.filter((x) => x.type !== type) }));
+
+  const cpLoginErrors = () => {
+    const found = {};
+    if (!wantsCpLogin || existingCpUserId || createdCpUserId.current) return found;
+    if (!cpLogin.email.trim()) found.email = "Login email is required";
+    else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(cpLogin.email.trim())) found.email = "Enter a valid email address";
+    if (cpLogin.password.length < 6) found.password = "At least 6 characters";
+    if (!(cpLogin.pages || []).length) found.pages = "Pick at least one page";
+    return found;
+  };
+
+  // The page list as the access API wants it: a page keeps the actions the CP
+  // already has, else the CP role's default actions, else view only.
+  const cpPageAccess = () => {
+    const had = new Map((cpLogin.existingAccess || []).map((e) => [e.pageKey, e.actions]));
+    const offered = new Set((cpTemplate || []).map((p) => p.key));
+    const kept = (cpLogin.existingAccess || []).filter((e) => !offered.has(e.pageKey));
+    return [
+      ...kept,
+      ...(cpLogin.pages || []).map((key) => {
+        const page = (cpTemplate || []).find((p) => p.key === key);
+        return { pageKey: key, actions: had.get(key) || page?.defaultActions || ["view"] };
+      }),
+    ];
+  };
+  const cpPagesChanged = () => {
+    if (!cpLogin.existingAccess || !cpLogin.pages) return false;
+    const offered = new Set((cpTemplate || []).map((p) => p.key));
+    const before = cpLogin.existingAccess.map((e) => e.pageKey).filter((k) => offered.has(k)).sort().join(",");
+    return before !== [...cpLogin.pages].sort().join(",");
+  };
+
+  /* Makes (or updates) the CP login before the broker is saved, so the broker
+   * record can carry its id. Returns the user id, or "" when there is none. */
+  const syncCpLogin = async () => {
+    if (!wantsCpLogin) return "";
+    if (existingCpUserId) {
+      if (cpPagesChanged()) {
+        await api.patch(`/access/users/${existingCpUserId}/pages`, { pageAccess: cpPageAccess() });
+        // Inventory for a CP also needs the per-account view flag.
+        const hadInventory = (cpLogin.existingAccess || []).some((e) => e.pageKey === "inventory");
+        const hasInventory = (cpLogin.pages || []).includes("inventory");
+        if (hadInventory !== hasInventory) await api.patch(`/users/${existingCpUserId}/channel-partner/inventory-access`, { canViewInventory: hasInventory });
+      }
+      return existingCpUserId;
+    }
+    if (!createdCpUserId.current) {
+      const me = storedUser();
+      const { data } = await api.post("/users/create", {
+        role: "CHANNEL_PARTNER",
+        name: d.name.trim(),
+        email: cpLogin.email.trim().toLowerCase(),
+        phone: normalizePhone(d.phone),
+        password: cpLogin.password,
+        mustChangePassword: true,
+        canViewInventory: (cpLogin.pages || []).includes("inventory"),
+        // A Manager's new CP reports to that Manager; an Admin's is balanced across Managers.
+        ...(String(localStorage.getItem("role") || me.role || "").toUpperCase() === "MANAGER" && (me._id || me.id) ? { reportingToId: me._id || me.id } : {}),
+      });
+      createdCpUserId.current = data?.user?._id || "";
+      if (!createdCpUserId.current) throw new Error("The login was not created");
+    }
+    await api.patch(`/access/users/${createdCpUserId.current}/pages`, { pageAccess: cpPageAccess() });
+    return createdCpUserId.current;
+  };
 
   const addFirm = async () => {
     const name = newFirm.trim();
@@ -130,7 +295,10 @@ const ContactEditDrawer = ({ kind, contact, canSeeRestricted, onClose, onSaved }
   const steps = [
     { key: "contact", label: "Contact", hint: "Name & numbers" },
     { key: "business", label: isBroker ? "Business" : "Property", hint: isBroker ? "Firm & segments" : "What they own" },
-    { key: "relationship", label: "Relationship", hint: "Status & follow-up" },
+    // Brokers: the Relationship step is channel-partner onboarding, which only
+    // Admin / Manager can do, so other roles skip it.
+    ...(!isBroker ? [{ key: "relationship", label: "Relationship", hint: "Status & follow-up" }]
+      : canSeeRestricted ? [{ key: "relationship", label: "Relationship", hint: "Channel partner" }] : []),
     ...(canSeeRestricted ? [{ key: "terms", label: "Terms", hint: "Admins only" }] : []),
     { key: "review", label: "Review", hint: "Check & save" },
   ];
@@ -153,6 +321,8 @@ const ContactEditDrawer = ({ kind, contact, canSeeRestricted, onClose, onSaved }
     return found;
   };
   const contactBad = Object.keys(contactErrors()).length > 0;
+  const cpStepIndex = steps.findIndex((s) => s.key === "relationship");
+  const stepAt = (key) => steps.findIndex((s) => s.key === key);
   const goTo = (index) => {
     setStepDir(index >= stepIndex ? 1 : -1);
     setTab(steps[index].key);
@@ -163,6 +333,9 @@ const ContactEditDrawer = ({ kind, contact, canSeeRestricted, onClose, onSaved }
     const found = contactErrors();
     setErrors(found);
     if (Object.keys(found).length) { setTried(true); goTo(0); return; }
+    const cpFound = cpLoginErrors();
+    setCpErrors(cpFound);
+    if (Object.keys(cpFound).length) { if (cpStepIndex >= 0) goTo(cpStepIndex); setError("Finish the channel partner login, or switch it off"); return; }
 
     const patch = {
       ...d,
@@ -170,12 +343,22 @@ const ContactEditDrawer = ({ kind, contact, canSeeRestricted, onClose, onSaved }
       firmId: d.firmId || null, lastContactAt: d.lastContactAt || null, nextFollowUpAt: d.nextFollowUpAt || null, lastVerifiedAt: d.lastVerifiedAt || null,
     };
     if (!isBroker) {
-      ["designation", "brokerType", "firmId", "segments", "areas", "projects", "propertyTypes", "transactionTypes", "customerTypes", "marketNotes", "cpStatus", "reraNumber", "brokerageTerms", "netRateNotes", "verified"].forEach((k) => delete patch[k]);
+      ["designation", "brokerType", "firmId", "segments", "areas", "projects", "propertyTypes", "transactionTypes", "customerTypes", "marketNotes", "cpStatus", "reraNumber", "brokerageTerms", "netRateNotes", "verified", "cpDocuments"].forEach((k) => delete patch[k]);
     }
-    if (!canSeeRestricted) ["brokerageTerms", "netRateNotes", "internalRemarks", "cpStatus", "verified"].forEach((k) => delete patch[k]);
+    if (!canSeeRestricted) ["brokerageTerms", "netRateNotes", "internalRemarks", "cpStatus", "verified", "cpDocuments", "preferredPartner"].forEach((k) => delete patch[k]);
+    if (!isBroker) { delete patch.registrationType; delete patch.preferredPartner; }
+    if (isBroker && patch.registrationType !== "CHANNEL_PARTNER" && "preferredPartner" in patch) patch.preferredPartner = false;
 
     setSaving(true); setError("");
     try {
+      try {
+        const cpUserId = await syncCpLogin();
+        if (cpUserId && cpUserId !== existingCpUserId) patch.cpUserId = cpUserId;
+      } catch (e) {
+        if (cpStepIndex >= 0) goTo(cpStepIndex);
+        setError(`Channel partner login: ${e?.response?.data?.message || e.message || "couldn't be saved"}`);
+        return;
+      }
       if (isNew) {
         const { data } = await api.post("/contacts", { ...patch, kind });
         onSaved?.(data, data?.alreadyExisted ? `${d.name} was already on file - record updated` : `${d.name} added`);
@@ -199,6 +382,11 @@ const ContactEditDrawer = ({ kind, contact, canSeeRestricted, onClose, onSaved }
       const found = contactErrors();
       setErrors(found);
       if (Object.keys(found).length) { setTried(true); return; }
+    }
+    if (isBroker && steps[stepIndex]?.key === "relationship") {
+      const found = cpLoginErrors();
+      setCpErrors(found);
+      if (Object.keys(found).length) return;
     }
     goTo(stepIndex + 1);
   };
@@ -258,6 +446,20 @@ const ContactEditDrawer = ({ kind, contact, canSeeRestricted, onClose, onSaved }
 
           {tab === "business" && isBroker ? (
             <div className="flex flex-col gap-4">
+              <div className="flex flex-col gap-2">
+                <Label>Registration type</Label>
+                <PickButtons options={REGISTRATION_OPTIONS} value={d.registrationType} onChange={(v) => setD((x) => ({
+                  ...x,
+                  registrationType: v || "REGULAR_BROKER",
+                  // A CP registration starts as Pending; a regular broker isn't a CP.
+                  ...(v === "CHANNEL_PARTNER" ? (x.cpStatus === "NOT_ONBOARDED" ? { cpStatus: "PENDING" } : {}) : { preferredPartner: false, cpStatus: "NOT_ONBOARDED" }),
+                }))} />
+                <span className="text-[12px]" style={MUT}>
+                  {d.registrationType === "CHANNEL_PARTNER"
+                    ? (canSeeRestricted ? "Upload Aadhaar and a photograph under Relationship to complete CP registration." : "An Admin or Manager completes CP registration (Aadhaar and photograph).")
+                    : "Name and phone are enough for a regular broker."}
+                </span>
+              </div>
               <div className="flex flex-col gap-2"><Label>Broker type</Label><PickButtons options={BROKER_TYPES} value={d.brokerType} onChange={set("brokerType")} /></div>
               <div className="flex flex-col gap-2">
                 <Label>Firm</Label>
@@ -288,7 +490,85 @@ const ContactEditDrawer = ({ kind, contact, canSeeRestricted, onClose, onSaved }
             </div>
           ) : null}
 
-          {tab === "relationship" ? (
+          {tab === "relationship" && isBroker && canSeeRestricted ? (
+            <div className="flex flex-col gap-3.5">
+              <Toggle
+                on={isCp}
+                onChange={(v) => setD((x) => ({ ...x, cpStatus: v ? (x.cpStatus !== "NOT_ONBOARDED" ? x.cpStatus : "ACTIVE") : "NOT_ONBOARDED", registrationType: v ? "CHANNEL_PARTNER" : "REGULAR_BROKER", ...(v ? {} : { preferredPartner: false }) }))}
+                title="Add this broker as a channel partner?"
+                sub={isCp ? "Upload KYC and, if you want, give them a CRM login" : "Turn on to onboard them as a CP"}
+              />
+              {isCp || d.registrationType === "CHANNEL_PARTNER" ? (
+                <Toggle
+                  on={Boolean(d.preferredPartner) && d.registrationType === "CHANNEL_PARTNER"}
+                  onChange={(v) => setD((x) => ({ ...x, preferredPartner: Boolean(v), registrationType: "CHANNEL_PARTNER" }))}
+                  title="Preferred Channel Partner"
+                  sub="Set by hand for CPs who completed registration. Never automatic."
+                />
+              ) : null}
+              {isCp ? (
+                <div className="flex flex-col gap-2"><Label>Channel partner status</Label><PickButtons options={CP_STATUS_OPTIONS.filter((o) => o.value !== "NOT_ONBOARDED")} value={d.cpStatus} onChange={set("cpStatus")} toneFor={(v) => CP_TONE[v] || "mute"} /></div>
+              ) : null}
+              {!isCp && existingCpUserId ? (
+                <p className="flex items-start gap-2 rounded-xl px-3 py-2.5 text-[12px]" style={{ background: "var(--g-warns)", color: "var(--g-warn)" }}>
+                  <ShieldAlert size={14} className="mt-px shrink-0" />
+                  This broker still has a CRM login. Turning CP off does not remove it - deactivate the user from Team if they should no longer sign in.
+                </p>
+              ) : null}
+                  {isCp ? (
+                    <div className="flex flex-col gap-3 rounded-2xl p-3.5" style={{ ...field, background: "var(--g-bs)" }}>
+                      <div className="flex flex-col">
+                        <span className="text-[13.5px] font-semibold">Channel partner KYC</span>
+                        <span className="text-[12px]" style={MUT}>Photo or PDF. Only admins and managers can open these.</span>
+                      </div>
+                      <div className="grid gap-3 sm:grid-cols-2">
+                        {KYC_TYPES.map((k) => (
+                          <KycSlot key={k.type} label={k.label} doc={docOf(d.cpDocuments, k.type)} busy={kycBusy === k.type} onPick={(f) => pickKyc(k.type, f)} onRemove={() => removeKyc(k.type)} />
+                        ))}
+                      </div>
+                    </div>
+                  ) : null}
+                  {cpActive ? (
+                    <div className="flex flex-col gap-3 rounded-2xl p-3.5" style={{ ...field, background: "var(--g-bs)" }}>
+                      {existingCpUserId ? (
+                        <div className="flex items-center gap-2.5">
+                          <KeyRound size={16} style={{ color: "var(--g-b)" }} />
+                          <span className="flex flex-col"><span className="text-[13.5px] font-semibold">CRM login active</span><span className="text-[12px]" style={MUT}>Change which pages this channel partner can open.</span></span>
+                        </div>
+                      ) : (
+                        <Toggle on={cpLogin.enabled} onChange={(v) => { setCp("enabled", v); if (v && !cpLogin.password) setCp("password", makePassword()); if (v && !cpLogin.email) setCp("email", d.email); }} title="Give CRM login" sub="Lets this channel partner sign in and use the pages you pick" />
+                      )}
+                      {cpLogin.enabled && !existingCpUserId ? (
+                        <div className="grid gap-3 sm:grid-cols-2">
+                          <TextField label="Login email *" icon={Mail} value={cpLogin.email} onChange={(e) => setCp("email", e.target.value)} placeholder="name@firm.com" type="email" error={cpErrors.email} />
+                          <label className="flex min-w-0 flex-col gap-1.5">
+                            <Label>Temporary password *</Label>
+                            <span className="flex h-11 items-center gap-2 rounded-xl px-3" style={cpErrors.password ? { ...field, borderColor: "var(--g-bad)" } : field}>
+                              <KeyRound size={15} style={FNT} aria-hidden="true" />
+                              <input data-bare-input value={cpLogin.password} onChange={(e) => setCp("password", e.target.value)} className="h-full min-w-0 flex-1 border-0 bg-transparent font-mono text-[14px] outline-none" style={{ color: "var(--g-ink)" }} />
+                              <button type="button" onClick={() => setCp("password", makePassword())} className="text-[12px] font-medium" style={{ color: "var(--g-b)" }}>New</button>
+                            </span>
+                            {cpErrors.password ? <span className="text-[11.5px] font-medium" style={{ color: "var(--g-bad)" }}>{cpErrors.password}</span> : <span className="text-[11.5px]" style={FNT}>Share it with the CP; they set their own at first sign-in</span>}
+                          </label>
+                        </div>
+                      ) : null}
+                      {cpLogin.enabled ? (
+                        <div className="flex flex-col gap-2">
+                          <Label>Page access</Label>
+                          {cpTemplate && cpLogin.pages ? (
+                            <PickButtons multi round options={cpTemplate.map((p) => ({ value: p.key, label: p.label }))} value={cpLogin.pages} onChange={(v) => setCp("pages", v)} />
+                          ) : (
+                            <span className="flex items-center gap-2 text-[12.5px]" style={MUT}><Loader2 size={14} className="animate-spin" />Loading pages…</span>
+                          )}
+                          {cpErrors.pages ? <span className="text-[11.5px] font-medium" style={{ color: "var(--g-bad)" }}>{cpErrors.pages}</span> : <span className="text-[11.5px]" style={FNT}>Pre-filled with the Channel Partner role defaults. Inventory also lets them view listings.</span>}
+                        </div>
+                      ) : null}
+                    </div>
+                  ) : null}
+            </div>
+          ) : null}
+
+          {tab === "relationship" && !isBroker ? (
             <div className="grid gap-3 sm:grid-cols-2">
               <SelectField label="Status" value={d.relationshipStatus} onChange={set("relationshipStatus")} options={RELATIONSHIP_OPTIONS} />
               <SelectField label="Preferred contact" value={d.preferredContact} onChange={set("preferredContact")} options={CONTACT_METHOD_OPTIONS} />
@@ -306,7 +586,6 @@ const ContactEditDrawer = ({ kind, contact, canSeeRestricted, onClose, onSaved }
               </p>
               {isBroker ? (
                 <>
-                  <div className="flex flex-col gap-2"><Label>Channel partner status</Label><PickButtons options={CP_STATUS_OPTIONS} value={d.cpStatus} onChange={set("cpStatus")} toneFor={(v) => CP_TONE[v] || "mute"} /></div>
                   <Toggle on={d.verified} onChange={(v) => setD((x) => ({ ...x, verified: v }))} title="Details verified" sub="Phone, firm and RERA checked by you" />
                   <AreaField label="Brokerage / referral terms" value={d.brokerageTerms} onChange={set("brokerageTerms")} placeholder="e.g. 1 month rent on lease closure" rows={2} />
                   <AreaField label="Net rates" value={d.netRateNotes} onChange={set("netRateNotes")} placeholder="Rates shared by this broker" rows={2} />
@@ -334,6 +613,7 @@ const ContactEditDrawer = ({ kind, contact, canSeeRestricted, onClose, onSaved }
               ]} />
               {isBroker ? (
                 <ReviewGroup title="Business" onEdit={() => goTo(1)} rows={[
+                  ["Registration", labelOf(REGISTRATION_OPTIONS, d.registrationType)],
                   ["Broker type", labelOf(BROKER_TYPES, d.brokerType)], ["Firm", firmName],
                   ["Segments", labelsOf(SEGMENT_OPTIONS, d.segments)], ["Transaction types", labelsOf(TRANSACTION_OPTIONS, d.transactionTypes)],
                   ["Areas", d.areas], ["RERA no.", d.reraNumber],
@@ -341,12 +621,29 @@ const ContactEditDrawer = ({ kind, contact, canSeeRestricted, onClose, onSaved }
               ) : (
                 <ReviewGroup title="Property" onEdit={() => goTo(1)} rows={[["Property details", d.propertyDetails], ["Last verified", d.lastVerifiedAt]]} />
               )}
-              <ReviewGroup title="Relationship" onEdit={() => goTo(2)} rows={[
-                ["Status", labelOf(RELATIONSHIP_OPTIONS, d.relationshipStatus)], ["Preferred contact", labelOf(CONTACT_METHOD_OPTIONS, d.preferredContact)],
-                ["Next follow-up", d.nextFollowUpAt],
-              ]} />
+              {!isBroker ? (
+                <ReviewGroup title="Relationship" onEdit={() => goTo(stepAt("relationship"))} rows={[
+                  ["Status", labelOf(RELATIONSHIP_OPTIONS, d.relationshipStatus)], ["Preferred contact", labelOf(CONTACT_METHOD_OPTIONS, d.preferredContact)],
+                  ["Next follow-up", d.nextFollowUpAt],
+                ]} />
+              ) : null}
               {canSeeRestricted && isBroker ? (
-                <ReviewGroup title="Terms" onEdit={() => goTo(3)} rows={[["CP status", labelOf(CP_STATUS_OPTIONS, d.cpStatus)], ["Verified", d.verified ? "Yes" : "No"]]} />
+                <ReviewGroup title="Channel partner" onEdit={() => goTo(stepAt("relationship"))} rows={[
+                  ["Channel partner", isCp ? labelOf(CP_STATUS_OPTIONS, d.cpStatus) : "No"],
+                  ["Preferred CP", d.preferredPartner && d.registrationType === "CHANNEL_PARTNER" ? "Yes" : "No"],
+                  ...(isCp ? [
+                    ["Aadhaar card", docOf(d.cpDocuments, "AADHAAR") ? "Uploaded" : "Not uploaded"],
+                    ["Photograph", docOf(d.cpDocuments, "PHOTO") ? "Uploaded" : "Not uploaded"],
+                    ["PAN card", docOf(d.cpDocuments, "PAN") ? "Uploaded" : "Not uploaded"],
+                  ] : []),
+                  ...(cpActive ? [
+                    ["CRM login", existingCpUserId ? "Active" : cpLogin.enabled ? `Will be created · ${cpLogin.email}` : "No login"],
+                    ...(cpLogin.enabled ? [["Page access", (cpLogin.pages || []).map((k) => cpTemplate?.find((p) => p.key === k)?.label || k).join(", ")]] : []),
+                  ] : []),
+                ]} />
+              ) : null}
+              {canSeeRestricted && isBroker ? (
+                <ReviewGroup title="Terms" onEdit={() => goTo(stepAt("terms"))} rows={[["Verified", d.verified ? "Yes" : "No"]]} />
               ) : null}
             </>
           ) : null}

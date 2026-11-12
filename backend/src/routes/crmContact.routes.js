@@ -23,6 +23,14 @@ router.use(requirePageAccess("inventory"), requirePageActionForMethod("inventory
 // The master contact directory is internal; shared inventory access does not expose it.
 router.use((req, res, next) => req.user.role === "CHANNEL_PARTNER" ? res.status(403).json({ message: "Internal contacts only" }) : next());
 
+// A broker can only be linked to a channel-partner login in the same company.
+const assertCpUser = async (patch, companyId) => {
+ if (!patch.cpUserId) return;
+ const User = require("../models/User");
+ const ok = await User.exists({ _id: patch.cpUserId, companyId, role: "CHANNEL_PARTNER" });
+ if (!ok) throw new rel.RelationshipError(400, "That channel partner login was not found");
+};
+
 const parseKind = (value) => (String(value || "").toUpperCase() === "BROKER" ? "BROKER" : "OWNER");
 
 const escapeRegex = (v) => String(v || "").slice(0, 100).replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
@@ -57,6 +65,10 @@ router.get("/", async (req, res) => {
   if (req.query.segment) and.push({ segments: { $in: upperList(req.query.segment) } });
   if (req.query.transactionType) and.push({ transactionTypes: { $in: upperList(req.query.transactionType) } });
   if (req.query.cpStatus) and.push({ cpStatus: { $in: upperList(req.query.cpStatus) } });
+  if (req.query.registrationType) and.push(upperList(req.query.registrationType).includes("REGULAR_BROKER")
+   ? { $or: [{ registrationType: { $in: upperList(req.query.registrationType) } }, { registrationType: { $exists: false } }] }
+   : { registrationType: { $in: upperList(req.query.registrationType) } });
+  if (req.query.preferred === "true") and.push({ preferredPartner: true });
   if (req.query.relationshipStatus) and.push({ relationshipStatus: { $in: upperList(req.query.relationshipStatus) } });
   if (req.query.area) and.push({ areas: { $regex: escapeRegex(req.query.area), $options: "i" } });
   if (req.query.project) and.push({ projects: { $regex: escapeRegex(req.query.project), $options: "i" } });
@@ -163,6 +175,27 @@ router.post("/import-rera", require("../middleware/rateLimit.middleware").writeL
 });
 
 /* --------------------------------------------------- profile (6.4/17) -- */
+/*
+ * Pages an Admin / Manager can open to a broker made a channel partner, and
+ * which of them a CP gets by default (the company's CHANNEL_PARTNER role, so a
+ * customised role shows up here too). Internal pages - team, settings, salary,
+ * coworking admin - are never offered from the broker form.
+ */
+const CP_OFFERED_PAGES = ["dashboard", "leads", "my_leads", "inventory", "projects", "finance", "leaderboard", "targets", "calendar", "tasks", "attendance", "chat", "profile"];
+router.get("/cp-access-template", require("../middleware/auth.middleware").checkRole(["ADMIN", "MANAGER"]), async (req, res) => {
+ try {
+  const { CRM_PAGES } = require("../constants/page.constants");
+  const { resolveAccessProfile } = require("../services/access.service");
+  const profile = await resolveAccessProfile({ role: "CHANNEL_PARTNER", companyId: req.user.companyId, pageAccessOverride: null, pageActionOverrides: {} });
+  const defaults = new Map((profile.pages || []).map((p) => [p.pageKey, p.actions]));
+  const pages = CRM_PAGES.filter((p) => CP_OFFERED_PAGES.includes(p.key)).map((p) => ({
+   key: p.key, label: p.label, actions: p.actions,
+   defaultOn: defaults.has(p.key), defaultActions: defaults.get(p.key) || ["view"],
+  }));
+  res.json({ pages });
+ } catch (error) { req.log?.error(error); res.status(500).json({ message: "Could not load channel partner pages" }); }
+});
+
 router.get("/:contactId", async (req, res) => {
  try {
   const profile = await rel.buildContactProfile({ contactId: req.params.contactId, user: req.user });
@@ -186,6 +219,8 @@ router.patch("/:contactId", require("../middleware/rateLimit.middleware").writeL
    const firm = await BrokerFirm.exists({ _id: patch.firmId, companyId: req.user.companyId });
    if (!firm) return res.status(400).json({ message: "Firm not found" });
   }
+  await assertCpUser(patch, req.user.companyId);
+  if (contact.kind === "BROKER") rel.applyRegistrationRules(contact, patch);
   const cpChange = rel.applyCpStatus(contact, patch.cpStatus, req.user);
   delete patch.cpStatus;
   Object.assign(contact, patch);
@@ -223,9 +258,11 @@ router.post("/", require("../middleware/rateLimit.middleware").writeLimiter, asy
   // Profile fields beyond the basics are checked first, so a bad value saves nothing.
   const { kind: _k, name: _n, phone: _p, email: _e, notes: _no, propertyDetails: _pd, company: _c, city: _ci, ...extra } = req.body || {};
   const patch = rel.sanitizeContactPatch(extra, req.user);
+  await assertCpUser(patch, req.user.companyId);
   const existed = await Contact.exists({ companyId: req.user.companyId, kind, phone: normalizePhone(phone) });
   const contact = await upsertContact({ companyId: req.user.companyId, kind, name, phone, email, notes, propertyDetails, company, city, actor: req.user._id });
   if (contact && Object.keys(patch).length) {
+   if (kind === "BROKER") rel.applyRegistrationRules(contact, patch);
    const cpChange = rel.applyCpStatus(contact, patch.cpStatus, req.user);
    delete patch.cpStatus;
    Object.assign(contact, patch);

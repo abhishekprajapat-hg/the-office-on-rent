@@ -21,6 +21,8 @@ router.get("/forms", controller.listForms);
 router.get("/me/today", controller.getMyToday);
 router.get("/summary", controller.getSummary);
 router.get("/status", controller.getDayStatus);
+router.get("/targets", controller.listTargets);
+router.put("/targets", writeLimiter, controller.saveTargets);
 router.get("/:reportId", controller.getReport);
 router.post("/", writeLimiter, controller.submitReport);
 router.patch("/:reportId", writeLimiter, controller.amendReport);

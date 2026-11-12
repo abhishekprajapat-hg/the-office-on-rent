@@ -34,10 +34,15 @@ const CLIENT_HIDDEN_FIELDS = new Set([
   "ownerName",
   "ownerNumber",
   "ownerWhatsappNumber",
+  "ownerContacts",
   "ownerContactId",
   "ownerType",
   "keyManagerName",
   "keyManagerNumber",
+  "brokerName",
+  "brokerNumber",
+  "developerName",
+  "developerNumber",
 ]);
 
 // subtypeData is free-form and can carry plot numbers or similar identifiers;

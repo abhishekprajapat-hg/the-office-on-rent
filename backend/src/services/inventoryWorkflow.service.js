@@ -22,6 +22,7 @@ const {
   INVENTORY_SALE_PAYMENT_TYPES,
   INVENTORY_DEAL_TYPES,
   INVENTORY_OWNER_TYPES,
+  INVENTORY_OWNER_CONTACT_ROLES,
   INVENTORY_ALLOWED_FIELDS,
   INVENTORY_REQUIRED_CREATE_FIELDS,
   INVENTORY_ACTIVITY_ACTIONS,
@@ -1075,6 +1076,9 @@ const getInventoryRequestEventTitle = ({ status, stage }) => {
   if (normalized === "Sold") {
     return `Inventory sold request ${stageLabel}`;
   }
+  if (normalized === "Unavailable") {
+    return `Inventory unavailable request ${stageLabel}`;
+  }
   if (normalized === "Available") {
     return `Inventory available request ${stageLabel}`;
   }
@@ -1141,6 +1145,15 @@ const resolveInventoryProject = async ({ user, payload, currentProjectId = null 
   if (!payload) return;
   const Project = require("../models/Project");
   const companyId = getCompanyIdForUser(user);
+  // Database module (Oct 2026): a building or source contact must be this company's.
+  if (payload.buildingId) {
+    const exists = await require("../models/Building").exists({ _id: payload.buildingId, companyId });
+    if (!exists) throw createHttpError(400, "That building doesn't exist in your company");
+  }
+  if (payload.initialSourceContactId) {
+    const exists = await require("../models/CrmContact").exists({ _id: payload.initialSourceContactId, companyId });
+    if (!exists) throw createHttpError(400, "That source contact doesn't exist in your company");
+  }
   if (payload.projectId) {
     const exists = await Project.exists({ _id: payload.projectId, companyId, deletedAt: null });
     if (!exists) throw createHttpError(400, "That project doesn't exist in your company");
@@ -1314,7 +1327,7 @@ const sanitizeInventoryPayload = ({
       return;
     }
 
-    if (field === "ownerName" || field === "keyManagerName") {
+    if (field === "ownerName" || field === "keyManagerName" || field === "brokerName" || field === "developerName") {
       safePayload[field] = sanitizeUppercaseCappedString(value, 120);
       return;
     }
@@ -1329,8 +1342,34 @@ const sanitizeInventoryPayload = ({
       return;
     }
 
+    if (field === "ownerContacts") {
+      if (!Array.isArray(value)) throw createHttpError(400, "ownerContacts must be a list");
+      if (value.length > 20) throw createHttpError(400, "ownerContacts can have at most 20 people");
+      safePayload[field] = value
+        .map((contact) => {
+          const role = toUpperSnake(contact?.role);
+          return {
+            role: INVENTORY_OWNER_CONTACT_ROLES.includes(role) ? role : "OTHER",
+            name: sanitizeCappedString(contact?.name, 120),
+            number: sanitizePhoneNumber(contact?.number, "Contact number"),
+          };
+        })
+        .filter((contact) => contact.name || contact.number);
+      return;
+    }
+
     if (field === "keyManagerNumber") {
       safePayload[field] = sanitizePhoneNumber(value, "keyManagerNumber");
+      return;
+    }
+
+    if (field === "brokerNumber") {
+      safePayload[field] = sanitizePhoneNumber(value, "Broker number");
+      return;
+    }
+
+    if (field === "developerNumber") {
+      safePayload[field] = sanitizePhoneNumber(value, "Developer number");
       return;
     }
 
@@ -1402,7 +1441,7 @@ const sanitizeInventoryPayload = ({
       return;
     }
 
-    if (field === "projectId" || field === "originLeadId") {
+    if (field === "projectId" || field === "originLeadId" || field === "buildingId" || field === "initialSourceContactId") {
       if (value === "" || value === null) { safePayload[field] = null; return; }
       if (!mongoose.isValidObjectId(String(value))) throw createHttpError(400, `${field} is invalid`);
       safePayload[field] = String(value);
@@ -1424,6 +1463,7 @@ const sanitizeInventoryPayload = ({
       || field === "width"
       || field === "height"
       || field === "maintenanceCharges"
+      || field === "pricePerArea"
       || field === "deposit"
       || field === "depositMonths"
       || field === "agreementYears"
@@ -1435,6 +1475,11 @@ const sanitizeInventoryPayload = ({
 
     if (field === "areaUnit") {
       safePayload[field] = sanitizeEnum(value, AREA_UNIT_OPTIONS, "areaUnit");
+      return;
+    }
+
+    if (field === "priceBasis") {
+      safePayload[field] = String(value || "").trim().toUpperCase() === "PER_AREA" ? "PER_AREA" : "TOTAL";
       return;
     }
 
@@ -1450,6 +1495,14 @@ const sanitizeInventoryPayload = ({
 
     if (field === "documentsAvailable") {
       safePayload[field] = sanitizeDocumentsAvailablePayload(value);
+      return;
+    }
+
+    // 3 Nov 2026 (4.3 / 5): the PLCs that apply to this plot, by name from its project's PLC list.
+    if (field === "appliedPlcs") {
+      if (!Array.isArray(value)) throw createHttpError(400, "appliedPlcs must be a list");
+      const names = value.map((item) => String(item ?? "").trim().slice(0, 80)).filter(Boolean);
+      safePayload[field] = [...new Map(names.map((n) => [n.toLowerCase(), n])).values()].slice(0, 20);
       return;
     }
 
@@ -2276,7 +2329,7 @@ const createInventoryUpdateRequest = async ({
     ...scope,
   })
     .select(
-      "_id projectName towerName unitNumber propertyId inventoryType price rent deposit depositMonths agreementYears lockInYears type category furnishingStatus status reservationReason reservationLeadId saleDetails location city area pincode buildingName floorNumber totalFloors totalArea carpetArea builtUpArea superBuiltUpArea length width height areaUnit maintenanceCharges commercialDetails residentialDetails documentsAvailable siteLocation images documents floorPlans videoTours officeNumber ownerName ownerNumber ownerWhatsappNumber ownerType ownershipType businessModel enterpriseDetails keyManagerName keyManagerNumber dealType propertyDate gstApplicable",
+      "_id projectName towerName unitNumber propertyId inventoryType price rent deposit depositMonths agreementYears lockInYears type category furnishingStatus status reservationReason reservationLeadId saleDetails location city area pincode buildingName floorNumber totalFloors totalArea carpetArea builtUpArea superBuiltUpArea length width height areaUnit maintenanceCharges priceBasis pricePerArea commercialDetails residentialDetails documentsAvailable siteLocation images documents floorPlans videoTours officeNumber ownerName ownerNumber ownerWhatsappNumber ownerContacts ownerType ownershipType businessModel enterpriseDetails keyManagerName keyManagerNumber brokerName brokerNumber developerName developerNumber dealType propertyDate gstApplicable",
     )
     .lean();
 

@@ -22,10 +22,13 @@ test("each role and segment gets its own form; nobody picks", () => {
 
 test("forms carry the fields the brief lists", () => {
   const keys = (k) => DAILY_REPORT_FORMS[k].fields.map((x) => x.key);
-  assert.deepEqual(keys("COMMERCIAL_EXECUTIVE"), ["newLeadCalls", "followUpCalls", "inventoryCalls", "siteVisitsScheduled", "otherWork"]);
+  // 3 Nov 2026 (7.1): visits completed and deals closed added to the telecaller form.
+  assert.deepEqual(keys("COMMERCIAL_EXECUTIVE"), ["newLeadCalls", "followUpCalls", "inventoryCalls", "siteVisitsScheduled", "siteVisitsCompleted", "dealsClosed", "otherWork"]);
   assert.ok(keys("COWORKING_EXECUTIVE").includes("cabinsClosed"));
   assert.ok(keys("COMMERCIAL_FIELD_EXECUTIVE").includes("newInventorySourced"));
-  assert.ok(!keys("RESIDENTIAL_MANAGER").includes("siteVisitsCompleted"), "manager form has no visits-completed field");
+  // 3 Nov 2026 (7.1): the manager form now has new-lead calls and visits completed.
+  assert.ok(keys("RESIDENTIAL_MANAGER").includes("siteVisitsCompleted"));
+  assert.ok(keys("RESIDENTIAL_MANAGER").includes("newLeadCalls"));
   assert.ok(keys("PRODUCTION").includes("postsPublished"));
   assert.equal(DAILY_REPORT_FORMS.COWORKING_ADMIN.hasIssues, true);
 });

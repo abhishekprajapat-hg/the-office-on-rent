@@ -500,7 +500,7 @@ export const AddPropertyScreen = ({ navigation, route }: RootScreenProps<"AddPro
             ) : null}
             {deal !== "Rent" ? <Field label="Sale price" value={form.price} onChangeText={set("price")} placeholder="e.g. 4.5 cr" suffix="₹" error={show("price")} hint={price ? formatPrice(price) : "You can type 65 lakh, 1.2 cr or 45k"} /> : null}
             <Pair>
-              <Field label="Maintenance" value={form.maintenance} onChangeText={set("maintenance")} placeholder="Optional" suffix="₹/mo" />
+              <Field label="Maintenance" value={form.maintenance} onChangeText={set("maintenance")} placeholder="e.g. 12" suffix="₹/sq ft" />
               {deal !== "Sale" ? <Field label="Lock-in" value={form.lockIn} onChangeText={set("lockIn")} keyboardType="numeric" placeholder="3" suffix="years" /> : <View />}
             </Pair>
             {deal !== "Sale" ? (

@@ -1,4 +1,4 @@
-import { Ban, CheckCircle2, Grid2X2, KeyRound, List, Plus, XCircle } from "lucide-react";
+import { Ban, CheckCircle2, CircleSlash, Grid2X2, KeyRound, List, Plus, XCircle } from "lucide-react";
 import { Button, cn } from "../../../components/ui";
 
 const StatusTab = ({ icon: Icon, label, count, active, tone = "slate", onClick }) => {
@@ -97,6 +97,7 @@ const InventoryToolbar = ({
         <StatusTab icon={CheckCircle2} label="Available" count={statusCounts.Available} active={activeTab === "Available"} tone="green" onClick={() => selectTab("Available")} />
         <StatusTab icon={Ban} label="Blocked" count={statusCounts.Blocked} active={activeTab === "Blocked"} tone="orange" onClick={() => selectTab("Blocked")} />
         <StatusTab icon={XCircle} label="Sold" count={statusCounts.Sold} active={activeTab === "Sold"} tone="red" onClick={() => selectTab("Sold")} />
+        <StatusTab icon={CircleSlash} label="Unavailable" count={statusCounts.Unavailable || 0} active={activeTab === "Unavailable"} tone="slate" onClick={() => selectTab("Unavailable")} />
         <StatusTab icon={KeyRound} label="For Rent" count={statusCounts.Rented || 0} active={activeTab === "Rented"} tone="purple" onClick={() => selectTab("Rented")} />
 
         <div className="ml-auto flex items-center gap-3">

@@ -24,11 +24,12 @@ const TABS = [
  * the details a new employee needs to brief a client, plus one-click client
  * brochure and internal dossier PDFs.
  */
-const ProjectKnowledgePanel = ({ projectId, category, canManage, isManagement }) => {
+// onlyTab shows just that section, without the header and tab row (used by the page's Documents tab).
+const ProjectKnowledgePanel = ({ projectId, category, canManage, isManagement, onlyTab = "" }) => {
   const [catalogue, setCatalogue] = useState(null);
   const [knowledge, setKnowledge] = useState(null);
   const [draft, setDraft] = useState(null);
-  const [tab, setTab] = useState("overview");
+  const [tab, setTab] = useState(onlyTab || "overview");
   const [busy, setBusy] = useState("");
   const [message, setMessage] = useState("");
   const [units, setUnits] = useState(null);
@@ -73,6 +74,7 @@ const ProjectKnowledgePanel = ({ projectId, category, canManage, isManagement })
 
   return (
     <div className="rounded-xl border border-slate-200 bg-white shadow-sm">
+      {onlyTab ? null : (
       <div className="flex flex-wrap items-center gap-3 border-b border-slate-100 p-4">
         <div className="min-w-0 flex-1">
           <p className="text-[11px] font-bold uppercase tracking-[0.14em] text-slate-500">Project knowledge</p>
@@ -96,13 +98,16 @@ const ProjectKnowledgePanel = ({ projectId, category, canManage, isManagement })
           </button>
         ) : null}
       </div>
+      )}
       {message ? <p className="border-b border-slate-100 px-4 py-2 text-[12px] font-semibold text-slate-600">{message}</p> : null}
 
-      <div className="flex flex-wrap gap-1 border-b border-slate-100 px-3 pt-2">
-        {TABS.map(([id, label]) => (
-          <button key={id} type="button" onClick={() => setTab(id)} className={`-mb-px border-b-2 px-2.5 py-2 text-[12.5px] font-semibold ${tab === id ? "border-blue-600 text-slate-900" : "border-transparent text-slate-500"}`}>{label}</button>
-        ))}
-      </div>
+      {onlyTab ? null : (
+        <div className="flex flex-wrap gap-1 border-b border-slate-100 px-3 pt-2">
+          {TABS.map(([id, label]) => (
+            <button key={id} type="button" onClick={() => setTab(id)} className={`-mb-px border-b-2 px-2.5 py-2 text-[12.5px] font-semibold ${tab === id ? "border-blue-600 text-slate-900" : "border-transparent text-slate-500"}`}>{label}</button>
+          ))}
+        </div>
+      )}
 
       <div className="space-y-4 p-4">
         {tab === "overview" ? (

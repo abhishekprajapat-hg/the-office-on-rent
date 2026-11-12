@@ -7,3 +7,6 @@ export const amendDailyReport = async (reportId, payload) => (await api.patch(`/
 export const getDailyReport = async (reportId) => (await api.get(`/daily-reports/${reportId}`)).data;
 export const getDailyReportSummary = async (params = {}) => (await api.get("/daily-reports/summary", { params })).data;
 export const getDailyReportDayStatus = async (params = {}) => (await api.get("/daily-reports/status", { params })).data;
+// 3 Nov 2026 (7.1): daily targets per form and segment.
+export const getDailyReportTargets = async () => (await api.get("/daily-reports/targets")).data;
+export const saveDailyReportTargets = async (payload) => (await api.put("/daily-reports/targets", payload)).data;

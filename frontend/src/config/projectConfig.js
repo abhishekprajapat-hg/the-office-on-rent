@@ -32,10 +32,14 @@ export const PROJECT_PLOT_SIZE_OPTIONS = [
   { value: "CUSTOM", label: "Custom" },
 ];
 
+// Project stage (3 Nov 2026, 4.1). TNC and RERA Approved are approvals, not
+// stages: still shown for older projects, no longer offered for new ones.
 export const PROJECT_STATUS_OPTIONS = [
+  { value: "UPCOMING", label: "Upcoming" },
   { value: "PRE_LAUNCH", label: "Pre Launch" },
-  { value: "TNC", label: "TNC" },
-  { value: "RERA_APPROVED", label: "RERA Approved" },
+  { value: "LAUNCHED", label: "Launched" },
+  { value: "TNC", label: "TNC", legacy: true },
+  { value: "RERA_APPROVED", label: "RERA Approved", legacy: true },
   { value: "UNDER_CONSTRUCTION", label: "Under Construction" },
   { value: "READY_TO_MOVE", label: "Ready To Move (RTM)" },
   { value: "RESALE", label: "Resale" },

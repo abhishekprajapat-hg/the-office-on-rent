@@ -24,6 +24,7 @@ const {
 } = require("../constants/project.constants");
 
 const ALL_AMENITIES = [...PROJECT_AMENITIES, ...PROJECT_COMMERCIAL_AMENITIES];
+const { EXTRA_FIELDS, sanitizeProjectExtras } = require("./projectAvailability.service");
 const { parsePagination, buildPaginationMeta } = require("../utils/queryOptions");
 
 const MOBILE_PATTERN = /^[0-9]{10}$/;
@@ -302,6 +303,11 @@ const sanitizeProjectPayload = ({ payload, mode, currentTotalPlots, currentProje
     if (!PROJECT_ALLOWED_FIELDS.includes(field)) return;
     const value = payload[field];
 
+    if (EXTRA_FIELDS.includes(field)) {
+      safePayload[field] = sanitizeProjectExtras(field, value);
+      return;
+    }
+
     if (field === "projectCategory") {
       safePayload[field] = sanitizeUppercaseEnum(value, PROJECT_CATEGORIES, "projectCategory");
       return;
@@ -481,10 +487,18 @@ const sanitizeProjectPayload = ({ payload, mode, currentTotalPlots, currentProje
   return safePayload;
 };
 
+/*
+ * One project per name in a company (3 Nov 2026, 4.4: several marketing
+ * channels are parties on one project, never duplicate projects). Capitals and
+ * extra spaces don't make a new name.
+ */
+const normalizeProjectName = (name) => String(name || "").trim().replace(/\s+/g, " ");
 const ensureUniqueProjectName = async ({ companyId, projectName, excludeId }) => {
+  const clean = normalizeProjectName(projectName);
+  const escaped = clean.replace(/[.*+?^${}()|[\]\\]/g, "\\$&").replace(/ /g, "\\s+");
   const query = {
     companyId,
-    projectName,
+    projectName: { $regex: `^\\s*${escaped}\\s*$`, $options: "i" },
     deletedAt: null,
   };
   if (excludeId) {
@@ -492,8 +506,36 @@ const ensureUniqueProjectName = async ({ companyId, projectName, excludeId }) =>
   }
   const existing = await Project.findOne(query).select("_id").lean();
   if (existing) {
-    throw createHttpError(409, "A project with this name already exists");
+    throw createHttpError(409, "A project with this name already exists. Add the other developer or marketing company as a party on that project instead.");
   }
+};
+
+/*
+ * The project form's owner/manager and broker manager also appear as parties
+ * (projectContacts), so every contact lives in one list (3 Nov 2026, 4.4).
+ * Added once, matched by phone (or by name when there's no phone); internal
+ * only until someone marks them shareable.
+ */
+const LEGACY_MANAGER_FIELDS = [
+  ["ownerManagerName", "ownerManagerMobile", "OWNERS_MANAGER"],
+  ["brokerManagerName", "brokerManagerMobile", "BROKER"],
+];
+const digitsOf = (v) => String(v || "").replace(/\D/g, "").slice(-10);
+const syncManagerContacts = (project) => {
+  const contacts = Array.isArray(project.projectContacts) ? [...project.projectContacts] : [];
+  let changed = false;
+  LEGACY_MANAGER_FIELDS.forEach(([nameField, phoneField, role]) => {
+    const name = String(project[nameField] || "").trim();
+    const phone = String(project[phoneField] || "").trim();
+    if (!name && !phone) return;
+    const exists = contacts.some((c) => (phone ? digitsOf(c.phone) === digitsOf(phone)
+      : String(c.name || "").trim().toLowerCase() === name.toLowerCase() && c.role === role));
+    if (exists) return;
+    contacts.push({ name: name || phone, organization: "", role, phone, whatsapp: "", email: "", notes: "From the project form", shareable: false });
+    changed = true;
+  });
+  if (changed) project.projectContacts = contacts;
+  return changed;
 };
 
 const createProject = async ({ user, payload }) => {
@@ -507,8 +549,12 @@ const createProject = async ({ user, payload }) => {
     projectCategory: safePayload.projectCategory,
   });
 
+  if (safePayload.projectName) safePayload.projectName = normalizeProjectName(safePayload.projectName);
+  const draft = { ...safePayload, projectContacts: [] };
+  syncManagerContacts(draft);
   const project = await Project.create({
     ...safePayload,
+    projectContacts: draft.projectContacts,
     companyId,
     projectId,
     createdBy: user._id,
@@ -557,7 +603,9 @@ const updateProject = async ({ user, projectId, payload }) => {
     });
   }
 
+  if (safePayload.projectName) safePayload.projectName = normalizeProjectName(safePayload.projectName);
   Object.assign(project, safePayload);
+  syncManagerContacts(project);
   project.updatedBy = user._id;
   await project.save();
 
@@ -608,6 +656,11 @@ const getProjectList = async ({ user, filters = {}, pagination }) => {
   if (developer) and.push({ "details.overview.developer": { $regex: esc(developer), $options: "i" } });
   const city = sanitizeString(filters.city);
   if (city) and.push({ $or: [{ city: { $regex: esc(city), $options: "i" } }, { location: { $regex: esc(city), $options: "i" } }, { "details.overview.locality": { $regex: esc(city), $options: "i" } }] });
+  // 3 Nov 2026 (4.1): Nagar Nigam / Gram Panchayat, and EWS / LIG included.
+  const localAuthority = sanitizeString(filters.localAuthority).toUpperCase();
+  if (localAuthority) and.push({ "details.legal.localAuthority": localAuthority });
+  if (String(filters.ews || "") === "YES") and.push({ "details.legal.ewsIncluded": true });
+  if (String(filters.lig || "") === "YES") and.push({ "details.legal.ligIncluded": true });
   const amenity = sanitizeString(filters.amenity);
   if (amenity) and.push({ $or: [{ amenities: amenity.toUpperCase() }, { "amenityStatuses.name": { $regex: esc(amenity), $options: "i" } }] });
   const priceMin = Number(filters.priceMin);
@@ -662,7 +715,7 @@ const getProjectList = async ({ user, filters = {}, pagination }) => {
 };
 
 module.exports = {
-  _test: { sanitizeProjectPayload },
+  _test: { sanitizeProjectPayload, syncManagerContacts, normalizeProjectName },
   createProject,
   getProjectById,
   updateProject,

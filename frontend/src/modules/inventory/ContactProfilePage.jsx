@@ -10,6 +10,7 @@ import { usePermissions } from "../../context/usePermissions";
 import api from "../../services/api";
 import { addInventorySource, getContactProfile, mergeContact } from "../../services/relationshipService";
 import ContactEditDrawer from "./components/ContactEditDrawer";
+import ContactLinksSection from "../database/ContactLinksSection";
 import {
   AVAILABILITY_OPTIONS, CP_STATUS_OPTIONS, RELATIONSHIP_OPTIONS, SEGMENT_OPTIONS, TRANSACTION_OPTIONS, formatShortDate, labelOf,
 } from "./relationshipOptions";
@@ -352,7 +353,13 @@ const ContactProfilePage = () => {
               {c.verified ? <BadgeCheck size={20} style={{ color: "var(--g-b)" }} aria-label="Verified" /> : null}
             </span>
             <div className="flex flex-wrap items-center gap-1.5">
-              {isBroker ? <Pill tone={CP_TONE[cp] || "mute"}>{labelOf(CP_STATUS_OPTIONS, cp)}</Pill> : null}
+              {isBroker ? <Pill tone={c.registrationType === "CHANNEL_PARTNER" ? "vio" : "mute"}>{c.registrationType === "CHANNEL_PARTNER" ? "Channel partner" : "Regular broker"}</Pill> : null}
+              {isBroker && c.preferredPartner ? <Pill tone="ok">Preferred CP</Pill> : null}
+              {isBroker && (cp !== "NOT_ONBOARDED" || c.registrationType === "CHANNEL_PARTNER") ? <Pill tone={CP_TONE[cp] || "mute"}>{labelOf(CP_STATUS_OPTIONS, cp)}</Pill> : null}
+              {/* 3 Nov 2026 (3.1): CP documents still missing, presence only. */}
+              {isBroker && c.registrationType === "CHANNEL_PARTNER" && (data.cpChecklist || []).some((d) => !d.present) ? (
+                <Pill tone="warn">Missing: {(data.cpChecklist || []).filter((d) => !d.present).map((d) => (d.type === "PHOTO" ? "Photo" : titleCase(d.type))).join(", ")}</Pill>
+              ) : null}
               {!c.verified ? <Pill tone="warn">Not verified</Pill> : null}
               {c.source === "RERA_IMPORT" ? <Pill tone="vio">From RERA list</Pill> : null}
               {(c.segments || []).map((s) => <Pill key={s} tone="info">{labelOf(SEGMENT_OPTIONS, s)}</Pill>)}
@@ -453,6 +460,8 @@ const ContactProfilePage = () => {
                 ) : null}
               </Panel>
             ) : null}
+            {/* Database module (Oct 2026): buildings, properties and owners this person is linked to, with call history. */}
+            <ContactLinksSection contactId={contactId} compact />
           </div>
 
           {/* Right column */}

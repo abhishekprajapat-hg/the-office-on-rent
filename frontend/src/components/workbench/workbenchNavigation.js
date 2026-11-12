@@ -2,6 +2,8 @@ import {
   BarChart3,
   Bell,
   BookUser,
+  Contact,
+  Landmark,
   Briefcase,
   Building,
   Building2,
@@ -52,13 +54,13 @@ export const ACTIVITY_SECTIONS = [
     id: "inventory",
     label: "Inventory",
     icon: Building2,
-    match: ["/inventory", "/map", "/projects"],
+    match: ["/inventory", "/map", "/projects", "/database"],
   },
   {
     id: "finance",
     label: "Finance",
     icon: PieChart,
-    match: ["/finance"],
+    match: ["/finance", "/enterprise"],
   },
   {
     id: "reports",
@@ -143,6 +145,8 @@ export const WORKBENCH_MENU = {
         // out here exactly as the API leaves them out.
         { label: "Owner Database", path: "/inventory/owners", icon: BookUser, page: "inventory", roles: SALES_ROLES, hiddenForRoles: ["CHANNEL_PARTNER"] },
         { label: "Broker Database", path: "/inventory/brokers", icon: Handshake, page: "inventory", roles: SALES_ROLES, hiddenForRoles: ["CHANNEL_PARTNER"] },
+        // Database module (Oct 2026): buildings, owners and every contact role. Internal only.
+        { label: "Database", path: "/database", icon: Contact, page: "database", roles: [...SALES_ROLES, "INSIDE_EXECUTIVE"], hiddenForRoles: ["CHANNEL_PARTNER"] },
         { label: "Projects", path: "/projects", icon: Briefcase, page: "projects", roles: [...SALES_ROLES, ...PARTNER_ROLES], requiresInventoryAccessForPartner: true },
         { label: "Field Ops", path: "/map", icon: Map, page: "field_ops", roles: ["ADMIN", "MANAGER", "FIELD_EXECUTIVE"] },
       ],
@@ -153,6 +157,8 @@ export const WORKBENCH_MENU = {
       group: "Money",
       items: [
         { label: "Finance", path: "/finance", icon: PieChart, page: "finance", roles: ["ADMIN", "MANAGER", "EXECUTIVE", "FIELD_EXECUTIVE", "CHANNEL_PARTNER"] },
+        // Enterprise leasing (Oct 2026): master leases, tenants, payables and receivables.
+        { label: "Enterprise Leasing", path: "/enterprise", icon: Landmark, page: "enterprise", roles: MANAGEMENT_ROLES },
       ],
     },
   ],
@@ -264,6 +270,7 @@ export const SIDEBAR_GROUPS = [
       navItem("/inventory", { label: "Inventory" }),
       navItem("/inventory/owners", { label: "Owner Database" }),
       navItem("/inventory/brokers", { label: "Broker Database" }),
+      navItem("/database", { label: "Database" }),
       navItem("/projects", { label: "Projects", icon: Layers }),
       navItem("/map", { label: "Field Ops" }),
     ],
@@ -272,6 +279,7 @@ export const SIDEBAR_GROUPS = [
     group: "BUSINESS",
     items: [
       navItem("/finance", { label: "Finance" }),
+      navItem("/enterprise", { label: "Enterprise Leasing" }),
       navItem("/reports", { label: "Reports" }),
       navItem("/leaderboard", { label: "Leaderboard" }),
       navItem("/targets", { label: "Targets" }),

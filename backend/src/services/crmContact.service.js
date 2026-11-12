@@ -10,11 +10,14 @@ const normalizePhone = (value) => {
 
 const TEXT_FIELDS = { email: 200, notes: 3000, propertyDetails: 4000, company: 200, city: 120 };
 
-const upsertContact = async ({ companyId, kind, phone, name, email, notes, propertyDetails, company, city, leadId, inventoryId, actor }) => {
+const upsertContact = async ({ companyId, kind, phone, name, email, notes, propertyDetails, company, city, leadId, inventoryId, actor, keepExistingName = false }) => {
  const normalized = normalizePhone(phone);
  if (!companyId || !normalized || !["OWNER", "BROKER"].includes(kind)) return null;
  const filter = { companyId, kind, phone: normalized };
- const fields = { name: String(name || normalized).trim().slice(0, 200) };
+ const cleanName = String(name || normalized).trim().slice(0, 200);
+ // The inventory form stores names in capitals; saving a unit must not rename
+ // the broker / owner already in the database (3 Nov 2026).
+ const fields = keepExistingName ? {} : { name: cleanName };
  const incoming = { email, notes, propertyDetails, company, city };
  for (const [field, limit] of Object.entries(TEXT_FIELDS)) {
   if (incoming[field] !== undefined && incoming[field] !== null && String(incoming[field]) !== "") {
@@ -24,7 +27,7 @@ const upsertContact = async ({ companyId, kind, phone, name, email, notes, prope
  const links = {};
  if (leadId) links.leadIds = leadId;
  if (inventoryId) links.inventoryIds = inventoryId;
- const update = { $set: fields, $setOnInsert: { createdBy: actor }, ...(Object.keys(links).length ? { $addToSet: links } : {}) };
+ const update = { ...(Object.keys(fields).length ? { $set: fields } : {}), $setOnInsert: { createdBy: actor, ...(keepExistingName ? { name: cleanName } : {}) }, ...(Object.keys(links).length ? { $addToSet: links } : {}) };
  try { return await Contact.findOneAndUpdate(filter, update, { upsert: true, returnDocument: "after", runValidators: true }); }
  catch (error) { if (error.code !== 11000) throw error; return Contact.findOneAndUpdate(filter, update, { returnDocument: "after", runValidators: true }); }
 };

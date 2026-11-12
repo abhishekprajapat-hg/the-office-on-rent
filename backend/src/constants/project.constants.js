@@ -27,7 +27,11 @@ const PROJECT_BHK_TYPES = [
   "4_5_BHK",
 ];
 
+// UPCOMING and LAUNCHED added 3 Nov 2026. TNC and RERA_APPROVED are approvals,
+// not stages; they stay valid for older projects but are no longer offered.
 const PROJECT_STATUSES = [
+  "UPCOMING",
+  "LAUNCHED",
   "PRE_LAUNCH",
   "TNC",
   "RERA_APPROVED",
@@ -178,7 +182,25 @@ const PROJECT_ALLOWED_FIELDS = [
   "ownerManagerMobile",
   "brokerManagerName",
   "brokerManagerMobile",
+  // Requirements 3 Nov 2026 (4.2-4.5).
+  "startingRateDate",
+  "currentRateDate",
+  "sizeInventory",
+  "plcOptions",
+  "chargeItems",
+  "gstPercent",
+  "stampDutyPercent",
+  "marketRates",
+  "plcRule",
 ];
+
+// How several PLCs on one plot combine (3 Nov 2026 open point, set per project).
+const PROJECT_PLC_RULES = ["NOT_SET", "ADD_ALL", "HIGHEST_ONLY"];
+
+// How a PLC or a charge row is priced (3 Nov 2026, 4.3).
+const PROJECT_CHARGE_BASES = ["PERCENT", "AMOUNT", "PER_SQFT"];
+// Standard charge rows offered in the form; "OTHER" rows carry their own label.
+const PROJECT_CHARGE_PRESETS = ["MAINTENANCE", "CLUB_HOUSE", "ELECTRICITY", "PARKING", "DEVELOPMENT", "OTHER"];
 
 // Fields required for every project, regardless of category/type.
 const PROJECT_COMMON_REQUIRED_CREATE_FIELDS = [
@@ -222,6 +244,9 @@ module.exports = {
   PROJECT_UNIT_STATUSES,
   PROJECT_ID_PREFIX,
   PROJECT_ALLOWED_FIELDS,
+  PROJECT_CHARGE_BASES,
+  PROJECT_CHARGE_PRESETS,
+  PROJECT_PLC_RULES,
   PROJECT_COMMON_REQUIRED_CREATE_FIELDS,
   PROJECT_RESIDENTIAL_REQUIRED_CREATE_FIELDS,
   PROJECT_PLOT_BASED_REQUIRED_CREATE_FIELDS,
