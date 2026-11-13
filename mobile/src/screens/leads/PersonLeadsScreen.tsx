@@ -49,7 +49,25 @@ export const PersonLeadsScreen = ({ route, navigation }: RootScreenProps<"Person
     }
   };
 
-  /* One request per lead (the API assigns one at a time); failures are counted, not fatal. */
+  /*
+   * One request per lead (the API assigns one at a time); failures are counted,
+   * not fatal. If the server's per-user write limit is reached part way, wait
+   * the time it asks for (Retry-After) and carry on.
+   */
+  const assignWithRetry = async (id: string, personId: string, reason: string) => {
+    for (let attempt = 0; ; attempt += 1) {
+      try {
+        return await assignLead(id, personId, reason);
+      } catch (err) {
+        const response = (err as { response?: { status?: number; headers?: Record<string, string> } })?.response;
+        if (response?.status !== 429 || attempt >= 4) throw err;
+        const retryAfter = Number.parseInt(String(response.headers?.["retry-after"] ?? ""), 10);
+        const seconds = Math.min(Math.max(Number.isFinite(retryAfter) ? retryAfter : 15, 1), 60);
+        await new Promise((resolve) => setTimeout(resolve, seconds * 1000));
+      }
+    }
+  };
+
   const moveTo = async (person: TeamUser) => {
     setPicking(false);
     setMoving(true);
@@ -58,7 +76,7 @@ export const PersonLeadsScreen = ({ route, navigation }: RootScreenProps<"Person
     const failures: string[] = [];
     for (const id of selected) {
       try {
-        await assignLead(id, person._id, `Bulk reassigned from ${name}`);
+        await assignWithRetry(id, person._id, `Bulk reassigned from ${name}`);
         moved += 1;
       } catch (err) {
         failures.push(errorMessage(err));

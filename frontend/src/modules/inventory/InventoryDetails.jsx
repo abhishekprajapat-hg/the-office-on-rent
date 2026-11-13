@@ -446,6 +446,10 @@ const InventoryDetails = () => {
         { label: "Deal type", value: formatEnumLabel(inventory?.dealType || asset?.dealType) },
         { label: "Maintenance", value: (inventory?.maintenanceCharges ?? asset?.maintenanceCharges) ? `${formatPrice(inventory?.maintenanceCharges ?? asset?.maintenanceCharges)} / sq ft` : formatPrice(null) },
         ...(isRent ? [{ label: "Deposit", value: formatPrice(inventory?.deposit ?? asset?.deposit) }] : []),
+        // Only shown when the property already earns rent from a tenant.
+        ...(!isRent && (inventory?.currentRentalIncome ?? asset?.currentRentalIncome)
+          ? [{ label: "Current rental income", value: `${formatPrice(inventory?.currentRentalIncome ?? asset?.currentRentalIncome)} / month` }]
+          : []),
         { label: "GST", value: (inventory?.gstApplicable ?? asset?.gstApplicable) ? "Applicable" : "Not applicable" },
         { label: "Available", value: formatDate(commercialAvailability?.availableFrom) },
         { label: "Property date", value: formatDate(inventory?.propertyDate || asset?.propertyDate) },

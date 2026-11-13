@@ -4,6 +4,9 @@
  * frontend/src/modules/leads/LeadsMatrix.jsx (normalizeCsvHeader .. parseBulkLeadCsvRows),
  * kept identical so a spreadsheet produces the same leads on web and mobile.
  * If the web parser changes, re-copy it here. Pure; unit tested.
+ * Re-copied 13 Nov 2026: Coworking sheet type, budget ranges, follow-up 1-3,
+ * NAME-cell call logs, and each row's sheet row number plus a list of rows
+ * that were skipped (and why) for the upload report.
  */
 
 const normalizeCsvHeader = (value) =>
@@ -15,6 +18,7 @@ const normalizeCsvHeader = (value) =>
 const BULK_LEAD_SHEET_TYPES = {
   COMMERCIAL: "COMMERCIAL",
   RESIDENTIAL: "RESIDENTIAL",
+  COWORKING: "COWORKING",
 };
 
 const DEFAULT_BULK_LEAD_SHEET_TYPE = BULK_LEAD_SHEET_TYPES.COMMERCIAL;
@@ -67,7 +71,7 @@ const normalizeBulkDate = (value) => {
   const raw = normalizeBulkCellText(value);
   if (!raw) return "";
 
-  const dateMatch = raw.match(/(\d{1,2})[/-](\d{1,2})[/-](\d{2,4})/);
+  const dateMatch = raw.replace(/\s+/g, "").match(/(\d{1,2})[/.-](\d{1,2})[/.-](\d{2,4})/);
   if (dateMatch) {
     const day = Number.parseInt(dateMatch[1], 10);
     const month = Number.parseInt(dateMatch[2], 10) - 1;
@@ -114,7 +118,11 @@ const resolveLeadCsvHeaderKey = (rawHeader) => {
   if (["company", "companyname", "working", "business"].includes(normalized)) return "company";
   if (["status", "leadstatus", "leadstutas", "leadstutus"].includes(normalized)) return "status";
   if (["date", "leaddate"].includes(normalized)) return "date";
-  if (["followup", "followup2", "followupdate", "followupdate2"].includes(normalized)) return "followUp";
+  if (["followup", "followupdate", "nextfollowup"].includes(normalized)) return "followUp";
+  if (["followup1", "followupdate1", "1stfollowup", "firstfollowup"].includes(normalized)) return "followUp1";
+  if (["followup2", "followupdate2", "2ndfollowup", "secondfollowup"].includes(normalized)) return "followUp2";
+  if (["followup3", "followupdate3", "3rdfollowup", "thirdfollowup"].includes(normalized)) return "followUp3";
+  if (["photovideo", "photosvideos", "photo", "photos", "video", "videos", "photovideoshared"].includes(normalized)) return "photoVideo";
   if (["callupdate", "callstatus"].includes(normalized)) return "callUpdate";
   if (["propertytype", "type"].includes(normalized)) return "propertyType";
   if (["bhk", "bhktype", "bedroom", "bedrooms", "configuration"].includes(normalized)) return "bhkType";
@@ -164,8 +172,78 @@ const resolveLeadCsvHeaderKey = (rawHeader) => {
   return "";
 };
 
+/*
+ * Budget cells are free text in real sheets: "12000", "15k to 20k", "1.2 lakh",
+ * "no budget". Returns { min, max } in rupees, or null when there is no number.
+ * A suffix on the last number carries to an earlier bare one ("15 to 20k").
+ */
+const BULK_BUDGET_MULTIPLIERS = { k: 1000, thousand: 1000, l: 100000, lac: 100000, lakh: 100000, lakhs: 100000, cr: 10000000, crore: 10000000 };
+const normalizeBulkBudgetRange = (value) => {
+  const raw = normalizeBulkCellText(value).toLowerCase().replace(/,/g, "");
+  if (!raw) return null;
+  const parts = [...raw.matchAll(/(\d+(?:\.\d+)?)\s*(k|thousand|lakhs?|lac|l|crore|cr)?\b/g)];
+  if (!parts.length) return null;
+  const lastSuffix = parts[parts.length - 1][2] || "";
+  const amounts = parts.map(([, num, suffix]) => {
+    const multiplier = BULK_BUDGET_MULTIPLIERS[suffix || lastSuffix] || 1;
+    return Math.round(Number.parseFloat(num) * multiplier);
+  }).filter((amount) => Number.isFinite(amount) && amount > 0);
+  if (!amounts.length) return null;
+  return { min: Math.min(...amounts), max: Math.max(...amounts) };
+};
+
+/*
+ * Some sheets use the NAME column as a call log - "29/7/2025\ninterested",
+ * "0" - rather than a person's name. Dates and bare status words are lifted
+ * out (the words still count towards the lead's status) and whatever real
+ * name text is left is kept.
+ */
+const BULK_STATUS_WORDS = /\b(interested|intersted|interseted|notint|not\s*interested|occupied|oocupied|npc|call\s*cut|busy|switch(?:ed)?\s*off|visited|visit|closed|lost|invalid|follow\s*up|callback|call\s*back)\b/gi;
+const splitBulkNameCell = (value) => {
+  const raw = normalizeBulkCellText(value);
+  if (!raw) return { name: "", note: "" };
+  const withoutDates = raw.replace(/\d{1,2}\s*[/.-]\s*\d{1,2}\s*[/.-]\s*\d{2,4}/g, " ");
+  const note = (withoutDates.match(BULK_STATUS_WORDS) || []).join(" ");
+  const name = withoutDates.replace(BULK_STATUS_WORDS, " ").replace(/\s+/g, " ").trim();
+  // "0", "-", "na" and similar placeholders are not names.
+  if (!name || /^[\d\s.\-/]*$/.test(name) || /^(na|n\/a|nil|none|-)$/i.test(name)) return { name: "", note };
+  return { name, note };
+};
+
+/*
+ * Coworking requirement text -> the Lead model's coworking block:
+ *   "4 seater cabin"          one cabin of 4
+ *   "6 seat 1 cabin"          one cabin of 6
+ *   "2 cabins 4 seater each"  two cabins of 4
+ *   "5 seats" / "8 SEATS"     5 / 8 workstations (open desks)
+ */
+const buildBulkCoworkingRequirement = (row) => {
+  const text = [row.requirement, row.projectInterested].map(normalizeBulkCellText).filter(Boolean).join(" ").toLowerCase();
+  const coworking = {};
+  const seatsMatch = text.match(/(\d+)\s*(?:-\s*)?(?:seater|seats?|people|persons|pax|desks?|workstations?)\b/);
+  const cabinCountMatch = text.match(/(\d+)\s*(?:private\s*)?cabins?\b/);
+  const seats = seatsMatch ? Number.parseInt(seatsMatch[1], 10) : null;
+  const explicitSeats = normalizeBulkNumber(row.seats);
+  const explicitCabins = normalizeBulkNumber(row.cabins);
+
+  if (/\bcabins?\b/.test(text) || explicitCabins) {
+    const count = Math.min(Math.max(Math.round(explicitCabins || (cabinCountMatch ? Number.parseInt(cabinCountMatch[1], 10) : 1)), 1), 20);
+    const perCabin = seats || (explicitSeats ? Math.round(explicitSeats) : null);
+    if (perCabin && perCabin >= 1 && perCabin <= 100) {
+      coworking.cabins = Array.from({ length: count }, () => ({ seats: perCabin }));
+    }
+  } else if (seats || explicitSeats) {
+    coworking.workstations = Math.round(seats || explicitSeats);
+  }
+  return coworking;
+};
+
 const resolveBulkLeadStatus = ({ sheetName = "", row = {} }) => {
-  const haystack = [
+  // An explicit status (the STATUS column, or a status written into the NAME
+  // column) outranks words that merely appear in comments.
+  const explicit = resolveBulkLeadStatusFromText([row.status, row.nameNote].map((value) => normalizeBulkCellText(value).toLowerCase()).join(" "));
+  if (explicit !== "NEW") return explicit;
+  return resolveBulkLeadStatusFromText([
     sheetName,
     row.status,
     row.visit,
@@ -175,19 +253,24 @@ const resolveBulkLeadStatus = ({ sheetName = "", row = {} }) => {
     row.projectInterested,
   ]
     .map((value) => normalizeBulkCellText(value).toLowerCase())
-    .join(" ");
+    .join(" "));
+};
 
+const resolveBulkLeadStatusFromText = (haystack = "") => {
+  if (!haystack.trim()) return "NEW";
   if (/\b(close|closed|token)\b/.test(haystack)) return "CLOSED";
   if (/\b(site\s*visit\s*(scheduled|schedule)|visit\s*(scheduled|schedule))\b/.test(haystack)) return "SITE_VISIT_SCHEDULED";
   if (/\b(site\s*visit\s*(overdue|over\s*due|over\s*deu)|visit\s*(overdue|over\s*due|over\s*deu))\b/.test(haystack)) return "SITE_VISIT_OVERDUE";
   if (/\b(missing\s*in\s*action|mia)\b/.test(haystack)) return "MISSING_IN_ACTION";
   const npcCount = haystack.match(/\bnpc\s*-?\s*([123])\b/);
   if (npcCount) return `NPC_${npcCount[1]}`;
-  if (/\b(npc|not\s*picking|not\s*pick|call\s*not\s*picked|no\s*answer)\b/.test(haystack)) return "NPC_1";
+  if (/\b(npc|not\s*picking|not\s*pick|call\s*not\s*picked|no\s*answer|call\s*cut|switch(?:ed)?\s*off|not\s*reachable)\b/.test(haystack)) return "NPC_1";
   if (/\b(invalid|invaild|wrong\s*number)\b/.test(haystack)) return "INVALID";
   if (/\b(owner)\b/.test(haystack)) return "OWNER";
   if (/\b(broker)\b/.test(haystack)) return "BROKER";
-  if (/\bvisit|visited|revisit\b/.test(haystack)) return "SITE_VISIT";
+  if (/\b(not\s*interested|notint|not\s*int|cna|lost|le\s*liya|already\s*taken|occupied|oocupied)\b/.test(haystack)) return "LOST";
+  // Only a visit that happened - "wants a visit" / "visit plan" is still interest.
+  if (/\b(visited|revisit(?:ed)?|visit\s*done|site\s*visit(?!\s*(?:plan|planned)))\b/.test(haystack)) return "SITE_VISIT";
   if (/\binterested|interest\b/.test(haystack)) return "INTERESTED";
   if (/\btransfer|contacted|follow\s*up|callback|call back\b/.test(haystack)) return "CONTACTED";
   if (/\blost|not\s*interested|notint|cna\b/.test(haystack)) return "LOST";
@@ -206,6 +289,8 @@ const buildBulkLeadProjectSummary = (row) => {
     row.city ? `Location: ${row.city}` : "",
     row.budget ? `Budget: ${row.budget}` : "",
     row.company ? `Company: ${row.company}` : "",
+    row.photoVideo ? `Photo/Video: ${row.photoVideo}` : "",
+    ...["followUp1", "followUp2", "followUp3"].map((key, index) => (row[key] && !normalizeBulkDate(row[key]) ? `Follow-up ${index + 1}: ${row[key]}` : "")),
     row.callUpdate ? `Call Update: ${row.callUpdate}` : "",
     row.comment ? `Comment: ${row.comment}` : "",
     row.visit ? `Visit: ${row.visit}` : "",
@@ -220,7 +305,8 @@ const buildBulkLeadProjectSummary = (row) => {
 };
 
 const buildBulkLeadRequirements = (row, sheetType = DEFAULT_BULK_LEAD_SHEET_TYPE) => {
-  const budget = normalizeBulkAmount(row.budget);
+  const budgetRange = normalizeBulkBudgetRange(row.budget);
+  const budget = budgetRange ? null : normalizeBulkAmount(row.budget);
   const requirementText = [
     row.projectInterested,
     row.requirement,
@@ -229,7 +315,10 @@ const buildBulkLeadRequirements = (row, sheetType = DEFAULT_BULK_LEAD_SHEET_TYPE
   const transactionType = normalizeBulkTransactionType(row.projectName || row.projectInterested);
   const requirements = {};
 
-  if (budget !== null) {
+  if (budgetRange) {
+    requirements.budgetMin = budgetRange.min;
+    requirements.budgetMax = budgetRange.max;
+  } else if (budget !== null) {
     requirements.budgetMin = budget;
     requirements.budgetMax = budget;
   }
@@ -237,6 +326,20 @@ const buildBulkLeadRequirements = (row, sheetType = DEFAULT_BULK_LEAD_SHEET_TYPE
   const selectedSheetType = Object.values(BULK_LEAD_SHEET_TYPES).includes(sheetType)
     ? sheetType
     : DEFAULT_BULK_LEAD_SHEET_TYPE;
+
+  if (selectedSheetType === BULK_LEAD_SHEET_TYPES.COWORKING) {
+    requirements.inventoryType = "COWORKING";
+    requirements.transactionType = "RENT";
+    const coworking = buildBulkCoworkingRequirement(row);
+    if (Object.keys(coworking).length) requirements.coworking = coworking;
+    const coworkingArea = requirementText.match(/(\d+(?:\.\d+)?)\s*(?:sq\s*\.?\s*ft|sqft|sqfit|sft)\b/i);
+    if (coworkingArea) {
+      requirements.areaMin = Number.parseFloat(coworkingArea[1]);
+      requirements.areaMax = requirements.areaMin;
+      requirements.areaUnit = "SQ_FT";
+    }
+    return requirements;
+  }
 
   if (["COMMERCIAL", "RESIDENTIAL"].includes(propertyType)) {
     requirements.inventoryType = propertyType;
@@ -335,7 +438,7 @@ const buildBulkLeadRequirements = (row, sheetType = DEFAULT_BULK_LEAD_SHEET_TYPE
   return Object.keys(requirements).length ? requirements : undefined;
 };
 
-const normalizeBulkLeadRow = ({ rawRow, mappedHeaders, sheetName = "", sheetType = DEFAULT_BULK_LEAD_SHEET_TYPE }) => {
+const normalizeBulkLeadRow = ({ rawRow, mappedHeaders, sheetName = "", sheetType = DEFAULT_BULK_LEAD_SHEET_TYPE, sourceRow = null, skipped = null }) => {
   const row = {};
   const allCellValues = [];
 
@@ -349,14 +452,32 @@ const normalizeBulkLeadRow = ({ rawRow, mappedHeaders, sheetName = "", sheetType
   const phone = normalizeBulkPhone(row.phone)
     || allCellValues.map(normalizeBulkPhone).find(Boolean)
     || "";
-  if (!phone) return null;
+  if (!phone) {
+    // Rows that cannot become a lead are listed for the user, not dropped silently.
+    if (skipped && allCellValues.length) {
+      skipped.push({
+        sheetName,
+        sourceRow,
+        name: normalizeBulkCellText(row.name).slice(0, 120),
+        phone: normalizeBulkCellText(row.phone).slice(0, 40),
+        reason: row.phone
+          ? `"${normalizeBulkCellText(row.phone).slice(0, 40)}" is not a valid phone number (needs at least 10 digits)`
+          : "No phone number in this row",
+      });
+    }
+    return null;
+  }
 
-  const name = normalizeBulkCellText(row.name);
+  const { name, note: nameNote } = splitBulkNameCell(row.name);
+  if (nameNote) row.nameNote = nameNote;
   const safeName = name && !normalizeBulkPhone(name) ? name : `Lead ${phone}`;
   const sourceText = normalizeBulkCellText(row.source).toUpperCase();
   const projectInterested = buildBulkLeadProjectSummary(row);
   const requirements = buildBulkLeadRequirements(row, sheetType);
-  const nextFollowUp = normalizeBulkDate(row.followUp);
+  // The latest dated follow-up column is the next one due.
+  const nextFollowUp = ["followUp3", "followUp2", "followUp1", "followUp"]
+    .map((key) => normalizeBulkDate(row[key]))
+    .find(Boolean) || "";
   const lastContactedAt = normalizeBulkDate(row.date);
 
   return {
@@ -366,22 +487,45 @@ const normalizeBulkLeadRow = ({ rawRow, mappedHeaders, sheetName = "", sheetType
     city: row.city || "",
     projectInterested,
     clientProfession: normalizeBulkCellText(row.workProfile).slice(0, 120),
+    company: normalizeBulkCellText(row.company).slice(0, 200),
     requirements,
     source: sourceText.includes("META") ? "META" : "MANUAL",
     status: resolveBulkLeadStatus({ sheetName, row }),
     nextFollowUp,
     lastContactedAt,
+    // Where the row came from, so the upload report can point at it.
+    sourceRow,
+    sheetName,
   };
 };
 
-const parseBulkLeadRowsFromMatrix = ({ matrix, sheetName = "", sheetType = DEFAULT_BULK_LEAD_SHEET_TYPE }) => {
+// The spreadsheet row number of a matrix row: SheetJS keeps it on each row as
+// __rowNum__ (0-based, blank rows included); otherwise its position + 1.
+const bulkSourceRowOf = (matrix, rowIndex) => {
+  const rowNum = matrix[rowIndex]?.__rowNum__;
+  return Number.isInteger(rowNum) ? rowNum + 1 : rowIndex + 1;
+};
+
+const parseBulkLeadRowsFromMatrix = ({ matrix, sheetName = "", sheetType = DEFAULT_BULK_LEAD_SHEET_TYPE, skipped = null }) => {
   const headerIndex = matrix.findIndex((rawRow) => {
     const mappedHeaders = rawRow.map((cell) => resolveLeadCsvHeaderKey(cell));
     const mappedCount = mappedHeaders.filter(Boolean).length;
     return mappedCount >= 2 && (mappedHeaders.includes("phone") || mappedHeaders.includes("name"));
   });
 
-  if (headerIndex < 0) return [];
+  if (headerIndex < 0) {
+    const hasContent = matrix.some((rawRow) => rawRow.some((cell) => normalizeBulkCellText(cell)));
+    if (skipped && hasContent) {
+      skipped.push({
+        sheetName,
+        sourceRow: null,
+        name: "",
+        phone: "",
+        reason: "No header row found (needs at least two known columns, including NAME or CONTACT / PHONE), so this sheet was not read",
+      });
+    }
+    return [];
+  }
 
   const mappedHeaders = matrix[headerIndex].map((header) => resolveLeadCsvHeaderKey(header));
   const hasName = mappedHeaders.includes("name");
@@ -393,6 +537,8 @@ const parseBulkLeadRowsFromMatrix = ({ matrix, sheetName = "", sheetType = DEFAU
       mappedHeaders,
       sheetName,
       sheetType,
+      sourceRow: bulkSourceRowOf(matrix, rowIndex),
+      skipped,
     });
     if (!row) continue;
     if (!hasName && !row.name) continue;
@@ -433,7 +579,7 @@ const parseCsvLine = (line) => {
   return values;
 };
 
-const parseBulkLeadCsvRows = (csvText, sheetType = DEFAULT_BULK_LEAD_SHEET_TYPE) => {
+const parseBulkLeadCsvRows = (csvText, sheetType = DEFAULT_BULK_LEAD_SHEET_TYPE, skipped = null) => {
   const normalizedText = String(csvText || "")
     .replace(/^\uFEFF/, "")
     .trim();
@@ -443,7 +589,10 @@ const parseBulkLeadCsvRows = (csvText, sheetType = DEFAULT_BULK_LEAD_SHEET_TYPE)
   }
 
   const rawLines = normalizedText.split(/\r?\n/);
-  const lines = rawLines.map((line) => String(line || "").trim()).filter(Boolean);
+  const numberedLines = rawLines
+    .map((line, lineIndex) => ({ text: String(line || "").trim(), lineIndex }))
+    .filter((line) => line.text);
+  const lines = numberedLines.map((line) => line.text);
 
   if (lines.length < 2) {
     throw new Error("CSV must include header and at least one data row");
@@ -457,25 +606,40 @@ const parseBulkLeadCsvRows = (csvText, sheetType = DEFAULT_BULK_LEAD_SHEET_TYPE)
   }
 
   const rows = parseBulkLeadRowsFromMatrix({
-    matrix: lines.map(parseCsvLine),
+    matrix: numberedLines.map((line) => {
+      const cells = parseCsvLine(line.text);
+      Object.defineProperty(cells, "__rowNum__", { value: line.lineIndex, enumerable: false });
+      return cells;
+    }),
     sheetName: "CSV",
     sheetType,
+    skipped,
   });
 
   if (!rows.length) {
-    throw new Error("No valid lead rows found in CSV");
+    throw new Error(
+      skipped?.length
+        ? `No lead rows could be read from the CSV: ${skipped.length} row${skipped.length === 1 ? " was" : "s were"} skipped. See the list below.`
+        : "No valid lead rows found in CSV",
+    );
   }
 
   return rows;
 };
 
-/* Rows from a 2-D array of cells (one sheet), or every sheet of a workbook already read into matrices. */
-export const parseMatrices = (sheets, sheetType = DEFAULT_BULK_LEAD_SHEET_TYPE) => {
+/*
+ * Rows from every sheet of a workbook already read into matrices. Pass an
+ * array as `skipped` to collect the rows and sheets that could not be used.
+ */
+export const parseMatrices = (sheets, sheetType = DEFAULT_BULK_LEAD_SHEET_TYPE, skipped: any[] | null = null) => {
   const rows = [];
   sheets.forEach(({ name, matrix }) => {
     const normalizedSheetName = normalizeCsvHeader(name);
-    if (normalizedSheetName.includes("performance") || normalizedSheetName.includes("perfomance") || ["broker", "owners", "dealclose"].includes(normalizedSheetName)) return;
-    rows.push(...parseBulkLeadRowsFromMatrix({ matrix, sheetName: name, sheetType }));
+    if (normalizedSheetName.includes("performance") || normalizedSheetName.includes("perfomance") || ["broker", "owners", "dealclose"].includes(normalizedSheetName)) {
+      skipped?.push({ sheetName: name, sourceRow: null, name: "", phone: "", reason: "Sheet not read: performance, broker, owner and deal-close sheets are not lead lists" });
+      return;
+    }
+    rows.push(...parseBulkLeadRowsFromMatrix({ matrix, sheetName: name, sheetType, skipped }));
   });
   return rows;
 };

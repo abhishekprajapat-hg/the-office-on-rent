@@ -51,6 +51,7 @@ import {
   getPropertySubtypeOptions,
 } from "../../../config/propertyRequirementConfig";
 import ContactPicker from "../../inventory/components/ContactPicker";
+import BulkUploadReport, { BulkUploadFileCheck, BulkUploadProgress } from "./BulkUploadReport";
 import FormWizard from "../../../components/ui/FormWizard";
 import { ChoiceCards, FormField, FormGroup, FormInput, FormLabel, PickChips, ReviewGroup } from "../../../components/ui/formKit";
 
@@ -93,7 +94,7 @@ const AddLeadSelectControl = ({ value, onChange, inputClass, isDark, children })
 
 const BULK_LEAD_SHEET_FORMATS = {
   RESIDENTIAL: {
-    label: "Residantial",
+    label: "Residential",
     columns:
       "NAME, CONTACT/NUMBER, COMMENT, BUDGET, LOCATION, VISIT, HANDLE, SOURCE, BHK, FLOOR, AMENITIES, LIFT, SECURITY, GYM, SWIMMING POOL, CLUBHOUSE, POWER BACKUP, PARKING",
   },
@@ -2110,8 +2111,27 @@ export const BulkLeadUploadModal = ({
   onClose,
   onUpload,
   uploading,
+  canChooseAssignment = false,
+  assignMode = "AUTO",
+  onAssignModeChange,
+  assignUserId = "",
+  onAssignUserChange,
+  assigneeOptions = [],
+  fileCheck = null,
+  report = null,
+  onUploadAnother,
+  uploadProgress = null,
+  onStopUpload,
 }) => {
   const activeFormat = BULK_LEAD_SHEET_FORMATS[sheetType] || BULK_LEAD_SHEET_FORMATS.COMMERCIAL;
+  const categoryLabel = activeFormat.label;
+  const roleLabel = (role) => String(role || "").replace(/_/g, " ").toLowerCase().replace(/\b\w/g, (letter) => letter.toUpperCase());
+  const labelClass = `mb-1 text-[11px] font-semibold uppercase tracking-[0.12em] ${isDark ? "text-slate-400" : "text-slate-500"}`;
+  const choiceClass = (active) => `flex flex-1 cursor-pointer items-start gap-2 rounded-lg border px-3 py-2 text-sm ${
+    active
+      ? (isDark ? "border-cyan-400/60 bg-cyan-500/10 text-slate-100" : "border-cyan-500 bg-cyan-50 text-slate-900")
+      : (isDark ? "border-slate-700 bg-slate-950 text-slate-300" : "border-slate-300 bg-white text-slate-700")
+  }`;
 
   return (
   <Motion.div
@@ -2126,22 +2146,33 @@ export const BulkLeadUploadModal = ({
       initial={{ scale: 0.96, y: 10 }}
       animate={{ scale: 1, y: 0 }}
       exit={{ scale: 0.96, y: 10 }}
-      className={`mobile-fullscreen-panel ui-soft-panel flex w-full max-w-2xl flex-col overflow-hidden rounded-2xl p-4 shadow-2xl sm:p-5 ${
+      className={`mobile-fullscreen-panel ui-soft-panel flex w-full ${report ? "max-w-5xl" : "max-w-2xl"} flex-col overflow-hidden rounded-2xl p-4 shadow-2xl sm:p-5 ${
         isDark ? "border-slate-700 bg-slate-900" : "border-slate-200 bg-white"
       }`}
     >
       <div className="mb-3 flex items-center justify-between">
         <h3 className={`text-lg font-bold ${isDark ? "text-slate-100" : "text-slate-900"}`}>
-          Bulk Lead Upload
+          {uploadProgress ? "Uploading Leads…" : report ? "Bulk Upload Report" : "Bulk Lead Upload"}
         </h3>
         <button
           onClick={onClose}
+          disabled={Boolean(uploadProgress)}
           className={`rounded p-1 ${isDark ? "text-slate-300 hover:bg-slate-800" : "text-slate-600 hover:bg-slate-100"}`}
         >
           <X size={16} />
         </button>
       </div>
 
+      {uploadProgress ? (
+        <div className="mobile-modal-scroll flex-1 overflow-y-auto">
+          <BulkUploadProgress isDark={isDark} progress={uploadProgress} onStop={onStopUpload} />
+        </div>
+      ) : report ? (
+        <div className="mobile-modal-scroll flex-1 overflow-y-auto">
+          <BulkUploadReport isDark={isDark} report={report} onUploadAnother={onUploadAnother} onClose={onClose} />
+        </div>
+      ) : (
+      <>
       <div className="mobile-modal-scroll flex-1 space-y-3">
         <div>
           <p className={`mb-1 text-[11px] font-semibold uppercase tracking-[0.12em] ${
@@ -2174,6 +2205,81 @@ export const BulkLeadUploadModal = ({
           </div>
         </div>
 
+        {canChooseAssignment ? (
+          <div>
+            <p className={labelClass}>Assign New Leads</p>
+            <div className="flex flex-col gap-2 sm:flex-row">
+              <label className={choiceClass(assignMode !== "USER")}>
+                <input
+                  type="radio"
+                  name="bulk-assign-mode"
+                  className="mt-0.5"
+                  checked={assignMode !== "USER"}
+                  onChange={() => onAssignModeChange?.("AUTO")}
+                />
+                <span>
+                  <span className="block font-semibold">Auto-assign</span>
+                  <span className={`block text-xs ${isDark ? "text-slate-400" : "text-slate-500"}`}>
+                    Spread across active {categoryLabel.toLowerCase()} executives by workload
+                  </span>
+                </span>
+              </label>
+              <label className={choiceClass(assignMode === "USER")}>
+                <input
+                  type="radio"
+                  name="bulk-assign-mode"
+                  className="mt-0.5"
+                  checked={assignMode === "USER"}
+                  onChange={() => onAssignModeChange?.("USER")}
+                />
+                <span>
+                  <span className="block font-semibold">Assign to one person</span>
+                  <span className={`block text-xs ${isDark ? "text-slate-400" : "text-slate-500"}`}>
+                    Every new lead goes to the person you pick
+                  </span>
+                </span>
+              </label>
+            </div>
+            {assignMode === "USER" ? (
+              <div className="relative mt-2">
+                <select
+                  value={assignUserId}
+                  onChange={(event) => onAssignUserChange?.(event.target.value)}
+                  className={`h-10 w-full appearance-none rounded-lg border px-3 pr-10 text-sm font-semibold ${
+                    isDark
+                      ? "border-slate-700 bg-slate-950 text-slate-200"
+                      : "border-slate-300 bg-white text-slate-700"
+                  }`}
+                >
+                  <option value="">
+                    {assigneeOptions.length ? "Choose a person" : `No active person works ${categoryLabel.toLowerCase()} leads`}
+                  </option>
+                  {assigneeOptions.map((user) => (
+                    <option key={user._id} value={user._id}>
+                      {user.name} - {roleLabel(user.role)}
+                    </option>
+                  ))}
+                </select>
+                <ChevronDown
+                  size={16}
+                  className={`pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 ${
+                    isDark ? "text-slate-400" : "text-slate-500"
+                  }`}
+                />
+              </div>
+            ) : null}
+            <p className={`mt-1 text-xs ${isDark ? "text-slate-400" : "text-slate-500"}`}>
+              Only people who work {categoryLabel.toLowerCase()} leads are listed. Rows for a lead that already exists keep its current owner.
+            </p>
+          </div>
+        ) : (
+          <p className={`rounded-lg border px-3 py-2 text-xs ${
+            isDark ? "border-slate-700 bg-slate-950 text-slate-300" : "border-slate-200 bg-slate-50 text-slate-600"
+          }`}>
+            New leads from this sheet will be assigned to you.
+          </p>
+        )}
+
         <label className={`flex cursor-pointer items-center justify-center gap-2 rounded-xl border border-dashed px-4 py-5 text-sm ${
           isDark
             ? "border-slate-600 bg-slate-950 text-slate-300 hover:border-cyan-400/45"
@@ -2190,6 +2296,15 @@ export const BulkLeadUploadModal = ({
             onChange={(event) => onFileSelect(event.target.files?.[0] || null)}
           />
         </label>
+
+        {fileCheck ? (
+          <BulkUploadFileCheck
+            isDark={isDark}
+            readyCount={fileCheck.readyCount}
+            skipped={fileCheck.skipped || []}
+            parseError={fileCheck.parseError || ""}
+          />
+        ) : null}
 
         <div>
           <p className={`mb-1 text-[11px] font-semibold uppercase tracking-[0.12em] ${
@@ -2228,7 +2343,7 @@ export const BulkLeadUploadModal = ({
         </button>
         <button
           onClick={onUpload}
-          disabled={uploading}
+          disabled={uploading || (canChooseAssignment && assignMode === "USER" && !assignUserId)}
           className={`h-10 flex-1 rounded-lg text-sm font-semibold text-white disabled:opacity-60 ${
             isDark ? "bg-cyan-600 hover:bg-cyan-500" : "bg-slate-900 hover:bg-cyan-600"
           }`}
@@ -2236,6 +2351,8 @@ export const BulkLeadUploadModal = ({
           {uploading ? "Uploading..." : "Upload Leads"}
         </button>
       </div>
+      </>
+      )}
     </Motion.div>
   </Motion.div>
   );

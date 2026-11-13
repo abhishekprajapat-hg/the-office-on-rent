@@ -185,6 +185,8 @@ const PROJECT_ALLOWED_FIELDS = [
   // Requirements 3 Nov 2026 (4.2-4.5).
   "startingRateDate",
   "currentRateDate",
+  "rentRateBareShell",
+  "rentRateFurnished",
   "sizeInventory",
   "plcOptions",
   "chargeItems",

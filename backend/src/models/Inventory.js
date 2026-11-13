@@ -280,6 +280,14 @@ const inventorySchema = new mongoose.Schema(
       default: null,
       min: 0,
     },
+    // Rent the property already earns from a tenant (Rs / month), e.g. a
+    // pre-leased unit being sold. Separate from `rent`, which is the asking
+    // rent of a listing that is up for rent.
+    currentRentalIncome: {
+      type: Number,
+      default: null,
+      min: 0,
+    },
     officeNumber: {
       type: String,
       trim: true,

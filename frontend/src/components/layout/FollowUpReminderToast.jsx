@@ -246,7 +246,7 @@ const FollowUpReminderToast = ({ enabled = true }) => {
   return (
     // Phones: a one-line strip under the header, so it never covers a page's
     // bottom buttons. Larger screens: the full card, bottom left.
-    <div className="follow-up-reminder-toast pointer-events-none fixed left-3 right-3 top-[calc(env(safe-area-inset-top,0px)+72px)] z-[113] sm:bottom-4 sm:left-4 sm:right-auto sm:top-auto sm:w-[min(92vw,25rem)]">
+    <div className="follow-up-reminder-toast pointer-events-none fixed left-3 right-3 top-[calc(env(safe-area-inset-top,0px)+72px)] z-[113] sm:bottom-4 sm:left-4 sm:right-auto sm:top-auto sm:w-[min(92vw,25rem)] md:left-16">
       <div
         className={`pointer-events-auto rounded-2xl border px-3 py-2 shadow-2xl sm:p-3 ${
           isDark

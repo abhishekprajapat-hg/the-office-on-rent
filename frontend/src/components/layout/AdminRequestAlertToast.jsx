@@ -230,7 +230,8 @@ const AdminRequestAlertToast = ({ userRole }) => {
   if (!activeAlert) return null;
 
   return (
-    <div className="pointer-events-none fixed bottom-4 right-4 z-[110] w-[min(92vw,26rem)]">
+    // Placed by the shared alert stack in App.jsx, not fixed to a corner itself.
+    <div className="pointer-events-none w-full">
       <div className={`pointer-events-auto rounded-2xl border p-4 shadow-2xl ${
         isDark
           ? "border-slate-700 bg-slate-900/95 text-slate-100"

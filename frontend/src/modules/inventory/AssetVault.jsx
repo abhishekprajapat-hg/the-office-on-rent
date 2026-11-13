@@ -308,6 +308,7 @@ const DEFAULT_FORM = {
   depositMonths: "",
   agreementYears: "",
   lockInYears: "",
+  currentRentalIncome: "",
   officeNumber: "",
   documentsAvailable: {
     registry: false,
@@ -801,6 +802,7 @@ const REQUEST_FIELD_LABELS = {
   depositMonths: "Security Deposit (Months)",
   agreementYears: "Agreement (Years)",
   lockInYears: "Lock-in (Years)",
+  currentRentalIncome: "Current Rental Income",
   officeNumber: "Office Number",
   ownerName: "Owner Name",
   ownerNumber: "Owner Number",
@@ -2119,6 +2121,8 @@ const AssetVault = () => {
       depositMonths: isInventoryRentRequired(formData.type) ? toNumberOrNull(formData.depositMonths) : null,
       agreementYears: isInventoryRentRequired(formData.type) ? toNumberOrNull(formData.agreementYears) : null,
       lockInYears: isInventoryRentRequired(formData.type) ? toNumberOrNull(formData.lockInYears) : null,
+      // Only a property that is for sale can come with a tenant already paying rent.
+      currentRentalIncome: isInventoryPriceRequired(formData.type) ? toNumberOrNull(formData.currentRentalIncome) : null,
       officeNumber: String(formData.officeNumber || "").trim(),
       documentsAvailable: {
         registry: Boolean(formData.documentsAvailable?.registry),
@@ -2449,6 +2453,7 @@ const AssetVault = () => {
       depositMonths: asset.depositMonths ?? "",
       agreementYears: asset.agreementYears ?? "",
       lockInYears: asset.lockInYears ?? "",
+      currentRentalIncome: asset.currentRentalIncome ?? "",
       officeNumber: asset.officeNumber || "",
       documentsAvailable: {
         registry: Boolean(asset.documentsAvailable?.registry),
@@ -4611,6 +4616,25 @@ const AssetVault = () => {
                         />
                       </div>
                     </>
+                  ) : null}
+
+                  {/* A property for sale may already have a tenant paying rent (pre-leased). */}
+                  {isInventoryPriceRequired(formData.type) ? (
+                    <div>
+                      <label className="text-[13px] font-medium text-[var(--g-mut)]">
+                        Current Rental Income (Rs / month)
+                      </label>
+                      <input
+                        type="number"
+                        min="0"
+                        step="any"
+                        placeholder="Leave empty if not rented"
+                        value={formData.currentRentalIncome}
+                        onChange={(e) => setFormData((prev) => ({ ...prev, currentRentalIncome: e.target.value }))}
+                        className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl text-sm font-mono text-slate-900 focus:outline-none focus:border-emerald-500 mt-1"
+                      />
+                      <p className="mt-1 text-[11.5px] text-slate-500">Rent a tenant is already paying for this property.</p>
+                    </div>
                   ) : null}
                 </div>
                 <div className={`${INVENTORY_MODAL_SECTION_CLASS} grid grid-cols-1 gap-3 sm:grid-cols-2 sm:gap-4`}>

@@ -50,6 +50,12 @@ export const getAllLeads = async (params = {}) => {
  * page, however many leads there are). Accepts the same filters as GET /leads,
  * e.g. { assignedTo }.
  */
+/* Per-employee lead counts across every page (Pipeline "My team" tab). */
+export const getLeadTeamSummary = async (params = {}) => {
+  const res = await api.get("/leads/team-summary", { params });
+  return res.data || null;
+};
+
 export const getLeadSummary = async (params = {}) => {
   const res = await api.get("/leads/summary", {
     params: { tzOffsetMinutes: new Date().getTimezoneOffset(), ...params },
@@ -72,8 +78,14 @@ export const createLead = async (payload) => {
   return res.data?.lead;
 };
 
-export const bulkUploadLeads = async (rows = []) => {
-  const res = await api.post("/leads/bulk", { rows }, { timeout: 120000 });
+/*
+ * assignment (Admin / Manager only; ignored for everyone else, whose uploads
+ * are always assigned to themselves):
+ *   { mode: "AUTO" }                 balanced auto assignment
+ *   { mode: "USER", userId: "..." }  every new lead to one person
+ */
+export const bulkUploadLeads = async (rows = [], assignment = null) => {
+  const res = await api.post("/leads/bulk", { rows, ...(assignment ? { assignment } : {}) }, { timeout: 120000 });
   return res.data || {};
 };
 

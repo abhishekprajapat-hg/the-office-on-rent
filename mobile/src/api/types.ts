@@ -16,6 +16,8 @@ export type User = {
   email: string;
   phone?: string;
   role: UserRole;
+  /* COMMERCIAL, RESIDENTIAL, COWORKING or BOTH (all categories). */
+  roleType?: string;
   profileImageUrl?: string;
   companyId?: string;
   parentId?: string | null;

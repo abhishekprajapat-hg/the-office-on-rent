@@ -222,6 +222,7 @@ exports.exportProject = async (req, res) => {
         startingRate: base.startingRate, currentRate: base.currentRate, otherCharges: base.otherCharges,
         // 3 Nov 2026 (4.3): rate dates, PLCs, charge rows, GST and stamp duty.
         startingRateDate: base.startingRateDate, currentRateDate: base.currentRateDate,
+        rentRateBareShell: base.rentRateBareShell ?? null, rentRateFurnished: base.rentRateFurnished ?? null,
         plcOptions: base.plcOptions || [], plcRule: base.plcRule || "NOT_SET", chargeItems: base.chargeItems || [],
         gstPercent: base.gstPercent ?? null, stampDutyPercent: base.stampDutyPercent ?? null,
       } : {}),

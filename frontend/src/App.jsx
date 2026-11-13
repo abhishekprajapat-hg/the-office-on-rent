@@ -1083,11 +1083,23 @@ export default function App() {
                     >
                       {appRoutes}
                     </WorkbenchShell>
-                    <ChatMessageAlertToast />
+                    {/*
+                      Pop-up notifications share one stack instead of each
+                      fixing itself to the same corner: chat and admin alerts
+                      used to sit exactly on top of each other and over the
+                      round messenger / back-to-top buttons on every page.
+                      The stack sits to the left of those buttons (they are a
+                      50px column 20px from the right edge); on phones it runs
+                      full width just above them. Newest-type order: chat at
+                      the bottom, admin alerts above it.
+                    */}
+                    <div className="app-alert-stack pointer-events-none fixed inset-x-3 bottom-[9rem] z-[110] flex flex-col-reverse gap-3 sm:inset-x-auto sm:bottom-5 sm:right-[5.25rem] sm:w-[min(calc(100vw-7rem),26rem)]">
+                      <ChatMessageAlertToast />
+                      {["ADMIN", "MANAGER"].includes(userRole) ? (
+                        <AdminRequestAlertToast userRole={userRole} />
+                      ) : null}
+                    </div>
                     <FollowUpReminderToast enabled={isLoggedIn && !isPublicPage} />
-                    {["ADMIN", "MANAGER"].includes(userRole) ? (
-                      <AdminRequestAlertToast userRole={userRole} />
-                    ) : null}
                   </>
                 )
               ) : (

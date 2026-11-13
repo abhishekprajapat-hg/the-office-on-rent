@@ -134,6 +134,29 @@ const DEFAULT_SHOWROOM = {
 
 const SOLD_LIKE_UNIT_STATUSES = new Set(["SOLD", "LEASED", "BOOKED"]);
 
+/*
+ * Summary of a commercial project in the form. The totals are the numbers the
+ * user typed (Total Offices/Shops/Showrooms), or the units added below when
+ * there are more of those. Units planned but not added yet count as available;
+ * an added unit counts by its own status.
+ */
+const getCommercialSummary = (formData) => {
+  const whole = (value) => Math.max(0, Math.floor(Number(value) || 0));
+  const floors = whole(formData.totalFloors);
+  const perFloor = whole(formData.officesPerFloor);
+  const byFloors = floors * perFloor;
+  const typedOffices = String(formData.totalOffices ?? "").trim() === "" ? byFloors : whole(formData.totalOffices);
+  const offices = Math.max(typedOffices, formData.offices.length);
+  const shops = Math.max(whole(formData.totalShops), formData.shops.length);
+  const showrooms = Math.max(whole(formData.totalShowrooms), formData.showrooms.length);
+  const added = [...formData.offices, ...formData.shops, ...formData.showrooms];
+  const sold = added.filter((unit) => SOLD_LIKE_UNIT_STATUSES.has(unit.status)).length;
+  const heldOther = added.filter((unit) => unit.status && unit.status !== "AVAILABLE" && !SOLD_LIKE_UNIT_STATUSES.has(unit.status)).length;
+  const available = Math.max(0, offices + shops + showrooms - sold - heldOther);
+  const floorMismatch = byFloors > 0 && offices > 0 && byFloors !== offices ? byFloors : 0;
+  return { floors, perFloor, offices, shops, showrooms, available, sold, floorMismatch };
+};
+
 const DEFAULT_BHK_CONFIG = {
   size: "",
   bedrooms: "",
@@ -298,6 +321,8 @@ const DEFAULT_FORM = {
   // Requirements 3 Nov 2026 (4.2-4.5).
   startingRateDate: "",
   currentRateDate: "",
+  rentRateBareShell: "",
+  rentRateFurnished: "",
   sizeInventory: [],
   plcOptions: [],
   chargeItems: [],
@@ -379,6 +404,8 @@ const toFormFromProject = (project = {}) => ({
   images: Array.isArray(project.images) ? project.images : [],
   startingRateDate: toDateInput(project.startingRateDate),
   currentRateDate: toDateInput(project.currentRateDate),
+  rentRateBareShell: project.rentRateBareShell ?? "",
+  rentRateFurnished: project.rentRateFurnished ?? "",
   sizeInventory: (project.sizeInventory || []).map((r) => ({ ...r, areaSqft: r.areaSqft ?? "" })),
   plcOptions: (project.plcOptions || []).map((r) => ({ ...r, value: r.value ?? "" })),
   chargeItems: (project.chargeItems || []).map((r) => ({ ...r, value: r.value ?? "" })),
@@ -439,6 +466,9 @@ const buildProjectPayload = (formData) => {
     images: Array.isArray(formData.images) ? formData.images : [],
     startingRateDate: formData.startingRateDate || null,
     currentRateDate: formData.currentRateDate || null,
+    // Office rents only apply to commercial projects.
+    rentRateBareShell: isCommercial ? numOrBlank(formData.rentRateBareShell) : null,
+    rentRateFurnished: isCommercial ? numOrBlank(formData.rentRateFurnished) : null,
     sizeInventory: isCoworking ? [] : stripRowKeys(formData.sizeInventory).map((r) => ({
       dimension: String(r.dimension || "").trim(), areaSqft: numOrBlank(r.areaSqft),
       total: numOrBlank(r.total) ?? 0, available: numOrBlank(r.available) ?? 0, sold: numOrBlank(r.sold) ?? 0,
@@ -1172,10 +1202,14 @@ const ProjectsPage = () => {
     );
   };
 
-  // Keep Total Offices synced to the office list length whenever it changes, while still
-  // letting the user manually override the number afterward (per "auto-calculated but editable").
+  // Total Offices follows the office list when the list grows past it, but a
+  // number the user typed (e.g. 1000 planned offices with only a few added) is
+  // never pulled back down to the list length.
   useEffect(() => {
-    setFormData((prev) => ({ ...prev, totalOffices: String(prev.offices.length) }));
+    setFormData((prev) => {
+      const typed = Number(prev.totalOffices) || 0;
+      return prev.offices.length > typed ? { ...prev, totalOffices: String(prev.offices.length) } : prev;
+    });
   }, [formData.offices.length]);
 
   const handleSubmit = async () => {
@@ -1718,14 +1752,18 @@ const ProjectsPage = () => {
               {isCommercialCategory(formData.projectCategory) && (
                 <div className={SECTION_CLASS}>
                   <div className={SECTION_HEADING_CLASS}>Summary</div>
+                  {(() => {
+                    const summary = getCommercialSummary(formData);
+                    return (
+                  <>
                   <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 md:grid-cols-6">
                     {[
-                      ["Total Floors", formData.totalFloors || 0],
-                      ["Total Offices", formData.offices.length],
-                      ["Total Shops", formData.shops.length],
-                      ["Total Showrooms", formData.showrooms.length],
-                      ["Available Units", [...formData.offices, ...formData.shops, ...formData.showrooms].filter((unit) => unit.status === "AVAILABLE").length],
-                      ["Sold / Leased Units", [...formData.offices, ...formData.shops, ...formData.showrooms].filter((unit) => SOLD_LIKE_UNIT_STATUSES.has(unit.status)).length],
+                      ["Total Floors", summary.floors],
+                      ["Total Offices", summary.offices],
+                      ["Total Shops", summary.shops],
+                      ["Total Showrooms", summary.showrooms],
+                      ["Available Units", summary.available],
+                      ["Sold / Leased Units", summary.sold],
                     ].map(([label, value]) => (
                       <div key={label} className="rounded-lg border border-slate-200 bg-white p-2.5 text-center">
                         <div className="text-lg font-extrabold text-slate-900">{value}</div>
@@ -1733,6 +1771,14 @@ const ProjectsPage = () => {
                       </div>
                     ))}
                   </div>
+                  {summary.floorMismatch ? (
+                    <p className="mt-2 text-[12px] text-amber-700">
+                      {summary.floors} floors x {summary.perFloor} offices per floor = {summary.floorMismatch} offices, but Total Offices is {summary.offices}. Please check one of them.
+                    </p>
+                  ) : null}
+                  </>
+                    );
+                  })()}
                 </div>
               )}
 
@@ -1940,6 +1986,16 @@ const ProjectsPage = () => {
                     <FormInput type="date" value={formData.currentRateDate || ""} onChange={(e) => setFormData((prev) => ({ ...prev, currentRateDate: e.target.value }))} />
                   </FormField>
                 </div>
+                {isCommercialForm ? (
+                  <div className="grid gap-3.5 [grid-template-columns:repeat(auto-fit,minmax(220px,1fr))]">
+                    <FormField label="Bare shell rent" hint="Monthly rent for an unfurnished (bare shell) office">
+                      <FormInput prefix="₹" suffix="/ sq ft / mo" type="number" min="0" inputMode="decimal" placeholder="60" value={formData.rentRateBareShell} onChange={(e) => setFormData((prev) => ({ ...prev, rentRateBareShell: e.target.value }))} />
+                    </FormField>
+                    <FormField label="Furnished rent" hint="Monthly rent for a furnished office">
+                      <FormInput prefix="₹" suffix="/ sq ft / mo" type="number" min="0" inputMode="decimal" placeholder="95" value={formData.rentRateFurnished} onChange={(e) => setFormData((prev) => ({ ...prev, rentRateFurnished: e.target.value }))} />
+                    </FormField>
+                  </div>
+                ) : null}
                 {isCoworkingForm && coworkingFields.length ? (
                   <CoworkingPricingFields fields={coworkingFields} specs={knowledgeDraft.specs || {}} setSpec={setSpecField} />
                 ) : null}
@@ -2353,6 +2409,10 @@ const ProjectsPage = () => {
                 <ReviewGroup title="Pricing" onEdit={() => goToStep(1)} rows={[
                   [isCoworkingForm ? "Starting price" : "Starting rate", formData.startingRate !== "" ? `₹${Number(formData.startingRate).toLocaleString("en-IN")} ${isCoworkingForm ? "/ seat / mo" : "/ sq ft"}` : ""],
                   [isCoworkingForm ? "Current price" : "Current rate", formData.currentRate !== "" ? `₹${Number(formData.currentRate).toLocaleString("en-IN")} ${isCoworkingForm ? "/ seat / mo" : "/ sq ft"}` : ""],
+                  ...(isCommercialForm ? [
+                    ["Bare shell rent", formData.rentRateBareShell !== "" ? `₹${Number(formData.rentRateBareShell).toLocaleString("en-IN")} / sq ft / mo` : ""],
+                    ["Furnished rent", formData.rentRateFurnished !== "" ? `₹${Number(formData.rentRateFurnished).toLocaleString("en-IN")} / sq ft / mo` : ""],
+                  ] : []),
                   ["Rate dates", [formData.startingRateDate && `from ${formData.startingRateDate}`, formData.currentRateDate && `current as of ${formData.currentRateDate}`].filter(Boolean).join(" · ")],
                   ...(isCoworkingForm ? [] : [["PLCs", formData.plcOptions.length ? formData.plcOptions.map((p) => p.name).filter(Boolean).join(", ") : (filledPlc ? `${filledPlc} earlier notes` : "")]]),
                   ["Charges", formData.chargeItems.length ? `${formData.chargeItems.length} rows` : ""],

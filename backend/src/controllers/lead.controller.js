@@ -22,6 +22,7 @@ const {
   EXECUTIVE_ROLES,
   LEAD_OWNER_ROLES,
   MANAGEMENT_ROLES,
+  MANUAL_LEAD_TRANSFER_TARGET_ROLES,
   isManagementRole,
 } = require("../constants/role.constants");
 const {
@@ -1764,7 +1765,18 @@ const getLeadViewById = async (leadId, companyId = null, user = null) => {
   if (companyId && isValidObjectId(companyId)) {
     query.companyId = companyId;
   }
-  addLeadRoleTypeScope(query, user);
+  if (user?._id && user.role !== USER_ROLES.ADMIN && getUserRoleType(user) !== "BOTH") {
+    // Same rule as the list: a lead assigned to this person is always theirs to see.
+    addLeadAndClause(query, {
+      $or: [
+        buildLeadTypeClause(getUserRoleType(user)),
+        { assignedTo: user._id },
+        { assignedFieldExecutive: user._id },
+      ],
+    });
+  } else {
+    addLeadRoleTypeScope(query, user);
+  }
   const row = await Lead.findOne(query).populate(LEAD_POPULATE_FIELDS).lean();
   return toLeadView(row);
 };
@@ -1797,21 +1809,28 @@ const buildLeadQueryForUser = async (user) => {
     return addLeadRoleTypeScope(companyScope, user);
   }
 
+  /*
+   * Executives see exactly the leads assigned to them, whatever the lead's
+   * category. The role-type filter decides which part of the pipeline a
+   * person may browse or file into (Managers, partners, custom roles below);
+   * it must not hide work an Admin or Manager has handed to someone. A
+   * Coworking executive given commercial leads used to see an empty list.
+   */
   if (user.role === USER_ROLES.FIELD_EXECUTIVE) {
-    return addLeadRoleTypeScope({
+    return {
       ...companyScope,
       $or: [
         { assignedTo: user._id },
         { assignedFieldExecutive: user._id },
       ],
-    }, user);
+    };
   }
 
   if (EXECUTIVE_ROLES.includes(user.role)) {
-    return addLeadRoleTypeScope({
+    return {
       ...companyScope,
       assignedTo: user._id,
-    }, user);
+    };
   }
 
   if (user.role === USER_ROLES.CHANNEL_PARTNER) {
@@ -2719,6 +2738,112 @@ const toLeadStatusRequestDealPayment = (saleMeta = {}) => {
   };
 };
 
+/*
+ * Bulk upload assignment (13 Nov 2026).
+ *
+ *   Admin / Manager  -> they choose: AUTO (balanced across eligible executives,
+ *                       a Manager's own team first) or USER (every new lead to
+ *                       one person they pick).
+ *   Everyone else    -> every new lead is assigned to the uploader, exactly as
+ *                       when they add a single lead.
+ *
+ * Only new leads are assigned. A row that updates an existing lead keeps that
+ * lead's current owner.
+ */
+// A database write error in words a person can act on.
+const friendlyBulkWriteError = (writeError, fallback) => {
+  const raw = String(writeError?.errmsg || writeError?.err?.errmsg || writeError?.message || "");
+  if (/E11000|duplicate key/i.test(raw)) return "A lead with this phone number already exists";
+  if (/validation failed/i.test(raw)) return `${fallback}: ${raw.replace(/^.*validation failed:\s*/i, "")}`;
+  return raw || fallback;
+};
+
+const BULK_ASSIGNMENT_MODES = Object.freeze(["AUTO", "USER"]);
+// The server and nginx both stop a request at 60 s. Auto assignment runs
+// inside the request up to this budget so the caller gets a real summary; any
+// remainder (only for very large sheets) carries on in the background.
+const BULK_AUTO_ASSIGN_SYNC_BUDGET_MS = 40000;
+const LEAD_CATEGORY_LABELS = { COMMERCIAL: "commercial", RESIDENTIAL: "residential", COWORKING: "coworking", BOTH: "all" };
+
+const canChooseBulkAssignment = (user) =>
+  user?.role === USER_ROLES.ADMIN || isManagementRole(user?.role);
+
+// Can this person be handed a lead of this category without it landing
+// outside the part of the pipeline they work?
+const userTakesLeadCategory = (user, leadCategory) =>
+  user?.role === USER_ROLES.ADMIN
+  || getUserRoleType(user) === "BOTH"
+  || getUserRoleType(user) === normalizeRoleType(leadCategory);
+
+const resolveBulkAssignmentPlan = async (req) => {
+  if (!canChooseBulkAssignment(req.user)) {
+    return { mode: "SELF", user: req.user };
+  }
+
+  const rawAssignment = req.body?.assignment && typeof req.body.assignment === "object"
+    ? req.body.assignment
+    : {};
+  const mode = String(rawAssignment.mode || "AUTO").trim().toUpperCase();
+  if (!BULK_ASSIGNMENT_MODES.includes(mode)) {
+    throw createHttpError(400, "Choose how to assign the leads: AUTO or USER");
+  }
+  if (mode === "AUTO") {
+    return { mode: "AUTO", user: null };
+  }
+
+  const userId = String(rawAssignment.userId || "").trim();
+  if (!isValidObjectId(userId)) {
+    throw createHttpError(400, "Choose the person to assign these leads to");
+  }
+  const target = await User.findOne({
+    _id: userId,
+    companyId: req.user.companyId,
+    isActive: true,
+  })
+    .select("_id name role roleType parentId companyId isActive")
+    .lean();
+  if (!target) {
+    throw createHttpError(400, "The selected person must be active and in your company");
+  }
+  if (!MANUAL_LEAD_TRANSFER_TARGET_ROLES.includes(target.role)) {
+    throw createHttpError(400, `${target.name} does not work sales leads, so leads cannot be assigned to them`);
+  }
+  return { mode: "USER", user: target };
+};
+
+// Ownership fields for a lead assigned to `target` at creation - the same
+// fields a manual transfer writes.
+const buildBulkTargetAssignment = async ({ target, actor }) => {
+  const topManager = await getAncestorByRoles({
+    user: target,
+    targetRoles: [USER_ROLES.MANAGER],
+    companyId: target.companyId || null,
+    select: "_id role parentId companyId isActive",
+  });
+  const isExecutive = target.role === USER_ROLES.EXECUTIVE || target.role === USER_ROLES.INSIDE_EXECUTIVE;
+  return {
+    assignedTo: target._id,
+    assignedManager: isManagementRole(target.role) ? target._id : (topManager?._id || target.parentId || null),
+    assignedExecutive: isExecutive ? target._id : null,
+    assignedFieldExecutive: target.role === USER_ROLES.FIELD_EXECUTIVE ? target._id : null,
+    assignmentHistory: [{
+      action: "BULK_ASSIGNED",
+      fromUser: null,
+      toUser: target._id,
+      reason: `Assigned from bulk upload by ${actor?.name || "a user"}`,
+      statusAtTransfer: "NEW",
+      createdAt: new Date(),
+      createdBy: actor?._id || null,
+    }],
+  };
+};
+
+const BULK_UNASSIGNED_REASONS = {
+  NO_ACTIVE_EXECUTIVE: "no active executive works this category",
+  EXECUTIVE_CAPACITY_REACHED: "every eligible executive is at their lead limit",
+  ERROR: "auto assignment failed",
+};
+
 exports.bulkUploadLeads = async (req, res) => {
   try {
     const access = await resolveAccessProfile(req.user);
@@ -2744,6 +2869,13 @@ exports.bulkUploadLeads = async (req, res) => {
       });
     }
 
+    const assignmentPlan = await resolveBulkAssignmentPlan(req);
+    const fixedAssignment = assignmentPlan.mode === "SELF"
+      ? await buildCreatorLeadAssignment(req.user)
+      : assignmentPlan.mode === "USER"
+        ? await buildBulkTargetAssignment({ target: assignmentPlan.user, actor: req.user })
+        : null;
+
     // Store every sheet phone in one canonical form so duplicates are caught
     // whatever the formatting; invalid numbers are rejected row by row below.
     rows.forEach((row) => {
@@ -2751,6 +2883,28 @@ exports.bulkUploadLeads = async (req, res) => {
       const storedRowPhone = toLeadStoragePhone(row.phone);
       if (storedRowPhone) row.phone = storedRowPhone;
     });
+
+    // One entry per sheet row, filled in as the row is processed, so the
+    // caller can show exactly what happened to every row and why.
+    const results = rows.map((row, index) => {
+      const safeRow = row && typeof row === "object" && !Array.isArray(row) ? row : {};
+      const sourceRow = Number.parseInt(safeRow.sourceRow, 10);
+      return {
+        row: index + 1,
+        sourceRow: Number.isInteger(sourceRow) && sourceRow > 0 ? sourceRow : null,
+        sheetName: String(safeRow.sheetName || "").trim().slice(0, 100),
+        name: String(safeRow.name || "").trim().slice(0, 120),
+        phone: String(safeRow.phone || "").trim(),
+        status: "FAILED",
+        leadStatus: "",
+        leadId: null,
+        assignedTo: "",
+        message: "",
+      };
+    });
+    const describeSheetRow = (result) => (result.sourceRow
+      ? `row ${result.sourceRow}${result.sheetName ? ` of "${result.sheetName}"` : ""}`
+      : `row ${result.row}`);
 
     const payloadPhones = [
       ...new Set(
@@ -2799,7 +2953,8 @@ exports.bulkUploadLeads = async (req, res) => {
             { phone: { $in: payloadPhoneMatchers } },
           ],
         })
-          .select("phone status dealPayment")
+          .select("phone status dealPayment assignedTo")
+          .populate("assignedTo", "name")
           .lean()
         : [],
       payloadInventoryIds.length
@@ -2830,7 +2985,7 @@ exports.bulkUploadLeads = async (req, res) => {
       accessibleExistingRows.map((row) => [toPhoneSetKey(row?.phone), row]),
     );
     const seenPhones = new Set(companyPhoneSet);
-    const uploadedPhoneSet = new Set();
+    const uploadedPhoneRows = new Map();
     const inventoryById = new Map(
       inventoryRows.map((row) => [String(row._id), row]),
     );
@@ -2898,8 +3053,8 @@ exports.bulkUploadLeads = async (req, res) => {
         if (!toLeadStoragePhone(phone)) {
           throw new Error(LEAD_PHONE_ERROR);
         }
-        if (uploadedPhoneSet.has(phone)) {
-          throw new Error("Duplicate phone in uploaded sheet");
+        if (uploadedPhoneRows.has(phone)) {
+          throw new Error(`Duplicate: same phone number as ${describeSheetRow(uploadedPhoneRows.get(phone))} in this file`);
         }
         const rowBroker = brokersByPhone.get(normalizePhone(phone));
         if (rowBroker) {
@@ -2981,6 +3136,7 @@ exports.bulkUploadLeads = async (req, res) => {
         if (roleTypeError) {
           throw new Error(roleTypeError);
         }
+        results[index].leadStatus = status;
 
         // A sheet can carry a date for a lead that is lost, invalid or missing;
         // it is dropped so the lead does not come back onto the follow-up list.
@@ -3019,7 +3175,7 @@ exports.bulkUploadLeads = async (req, res) => {
         }
 
         seenPhones.add(phone);
-        uploadedPhoneSet.add(phone);
+        uploadedPhoneRows.set(phone, results[index]);
         if (isExistingLead) {
           // Re-uploading a sheet must not wipe what the team already recorded:
           // only the columns this row actually fills are written onto the
@@ -3051,27 +3207,61 @@ exports.bulkUploadLeads = async (req, res) => {
           if (inventory) updatePayload.inventoryId = inventory._id;
           if (parsedSiteLocation.provided) updatePayload.siteLocation = writePayload.siteLocation;
 
+          const changed = [];
+          if (email) changed.push("email");
+          if (updatePayload.city) changed.push("location");
+          if (updatePayload.projectInterested) changed.push("requirement notes");
+          if (updatePayload.requirements) changed.push("requirements & budget");
+          if (updatePayload.source) changed.push("source");
+          if (updatePayload.status) changed.push(`status to ${String(updatePayload.status).replace(/_/g, " ").toLowerCase()}`);
+          if (updatePayload.nextFollowUp) changed.push("follow-up date");
+          if (dropFollowUp) changed.push("follow-up cleared");
+          if (updatePayload.lastContactedAt) changed.push("last contacted date");
+          if (inventory) changed.push("linked property");
+          results[index].status = "UPDATED";
+          results[index].leadStatus = updatePayload.status || existingStatus || "";
+          results[index].leadId = existingLead?._id ? String(existingLead._id) : null;
+          results[index].assignedTo = existingLead?.assignedTo?.name || "";
+          results[index].message = `Lead already existed - updated name${changed.length ? `, ${changed.join(", ")}` : ""}. Owner unchanged.`;
           pendingUpdates.push({
+            index,
             row: rowNumber,
             phone: storedPhoneByKey.get(phone) || phone,
             payload: updatePayload,
             addToSet: inventory ? { relatedInventoryIds: inventory._id } : null,
           });
         } else {
+          if (assignmentPlan.mode === "USER") {
+            const leadCategory = normalizeRoleType(writePayload.requirements?.inventoryType);
+            if (!userTakesLeadCategory(assignmentPlan.user, leadCategory)) {
+              const targetCategory = LEAD_CATEGORY_LABELS[getUserRoleType(assignmentPlan.user)] || "other";
+              throw new Error(
+                `${assignmentPlan.user.name} works ${targetCategory} leads, so this ${LEAD_CATEGORY_LABELS[leadCategory] || ""} lead was not assigned to them`,
+              );
+            }
+          }
+          if (fixedAssignment) {
+            // Each lead gets its own copy of the history entry.
+            Object.assign(writePayload, {
+              ...fixedAssignment,
+              assignmentHistory: fixedAssignment.assignmentHistory.map((entry) => ({ ...entry })),
+            });
+          }
+          results[index].status = "CREATED";
           pendingCreates.push({
+            index,
             row: rowNumber,
             payload: writePayload,
           });
         }
       } catch (rowError) {
-        failures.push({
-          row: rowNumber,
-          message: rowError.message || "Failed to process row",
-        });
+        results[index].status = "FAILED";
+        results[index].message = rowError.message || "Failed to process row";
       }
     }
 
     let createdLeads = [];
+    const resultIndexByLeadId = new Map();
     if (pendingCreates.length) {
       try {
         createdLeads = await Lead.insertMany(
@@ -3088,17 +3278,14 @@ exports.bulkUploadLeads = async (req, res) => {
           : [];
         writeErrors.forEach((writeError) => {
           const rowIndex = Number(writeError?.index);
-          const sourceRow = Number.isInteger(rowIndex)
-            ? pendingCreates[rowIndex]?.row
-            : null;
-          failures.push({
-            row: sourceRow || "unknown",
-            message:
-              writeError?.errmsg
-              || writeError?.err?.errmsg
-              || writeError?.message
-              || "Failed to insert lead",
-          });
+          const item = Number.isInteger(rowIndex) ? pendingCreates[rowIndex] : null;
+          const message = friendlyBulkWriteError(writeError, "The lead could not be saved");
+          if (item) {
+            results[item.index].status = "FAILED";
+            results[item.index].message = message;
+          } else {
+            failures.push({ row: "unknown", message });
+          }
         });
 
         if (!createdLeads.length && !writeErrors.length) {
@@ -3107,6 +3294,22 @@ exports.bulkUploadLeads = async (req, res) => {
       }
 
       createdIds.push(...createdLeads.map((lead) => lead._id));
+
+      // Match each saved lead back to its sheet row (phones are unique in an upload).
+      const createIndexByPhone = new Map(pendingCreates.map((item) => [String(item.payload.phone), item.index]));
+      createdLeads.forEach((lead) => {
+        const resultIndex = createIndexByPhone.get(String(lead?.phone || ""));
+        if (resultIndex === undefined) return;
+        results[resultIndex].leadId = String(lead._id);
+        resultIndexByLeadId.set(String(lead._id), resultIndex);
+      });
+      pendingCreates.forEach((item) => {
+        const result = results[item.index];
+        if (result.status === "CREATED" && !result.leadId) {
+          result.status = "FAILED";
+          result.message = result.message || "The lead could not be saved";
+        }
+      });
     }
 
     if (pendingUpdates.length) {
@@ -3142,17 +3345,14 @@ exports.bulkUploadLeads = async (req, res) => {
           : [];
         writeErrors.forEach((writeError) => {
           const rowIndex = Number(writeError?.index);
-          const sourceRow = Number.isInteger(rowIndex)
-            ? pendingUpdates[rowIndex]?.row
-            : null;
-          failures.push({
-            row: sourceRow || "unknown",
-            message:
-              writeError?.errmsg
-              || writeError?.err?.errmsg
-              || writeError?.message
-              || "Failed to update lead",
-          });
+          const item = Number.isInteger(rowIndex) ? pendingUpdates[rowIndex] : null;
+          const message = friendlyBulkWriteError(writeError, "The existing lead could not be updated");
+          if (item) {
+            results[item.index].status = "FAILED";
+            results[item.index].message = message;
+          } else {
+            failures.push({ row: "unknown", message });
+          }
         });
 
         if (!writeErrors.length) {
@@ -3161,31 +3361,115 @@ exports.bulkUploadLeads = async (req, res) => {
       }
     }
 
-    if (createdLeads.length) {
+    const assignmentSummary = {
+      mode: assignmentPlan.mode,
+      assignedCount: 0,
+      unassignedCount: 0,
+      pendingCount: 0,
+      byUser: [],
+      unassigned: [],
+    };
+    const assignedByUser = new Map();
+    const unassignedByReason = new Map();
+    const countAssigned = (user, count = 1) => {
+      const key = String(user?._id || "");
+      const current = assignedByUser.get(key) || { userId: key, name: user?.name || "Unknown", role: user?.role || "", count: 0 };
+      current.count += count;
+      assignedByUser.set(key, current);
+      assignmentSummary.assignedCount += count;
+    };
+
+    const setRowAssignment = (lead, assignedTo, message = "") => {
+      const resultIndex = resultIndexByLeadId.get(String(lead?._id || ""));
+      if (resultIndex === undefined) return;
+      if (assignedTo) results[resultIndex].assignedTo = assignedTo;
+      if (message) results[resultIndex].message = message;
+    };
+
+    if (createdLeads.length && fixedAssignment) {
+      const owner = assignmentPlan.user;
+      countAssigned(owner, createdLeads.length);
+      createdLeads.forEach((lead) => setRowAssignment(
+        lead,
+        owner.name,
+        assignmentPlan.mode === "SELF" ? "New lead, assigned to you" : `New lead, assigned to ${owner.name}`,
+      ));
+      try {
+        await Promise.all([
+          LeadActivity.insertMany(createdLeads.map((lead) => ({
+            lead: lead._id,
+            action: assignmentPlan.mode === "SELF"
+              ? "Lead created from bulk upload and assigned to creator"
+              : `Lead created from bulk upload and assigned to ${owner.name}`,
+            performedBy: req.user._id,
+          })), { ordered: false }),
+          User.updateOne({ _id: owner._id }, { $set: { lastAssignedAt: new Date() } }),
+        ]);
+      } catch (activityError) {
+        logger.error({ requestId: req.requestId || null, error: activityError.message, message: "Bulk lead assignment activity failed" });
+      }
+    }
+
+    if (createdLeads.length && assignmentPlan.mode === "AUTO") {
+      // The full user record: autoAssignLead needs isActive and roleType to
+      // prefer a Manager's own team.
       const requester = {
         _id: req.user._id,
+        name: req.user.name,
         role: req.user.role,
+        roleType: req.user.roleType,
+        isActive: req.user.isActive !== false,
         companyId: req.user.companyId,
+        parentId: req.user.parentId || null,
       };
-      setImmediate(async () => {
-        for (const lead of createdLeads) {
-          try {
-            await autoAssignLead({
-              lead,
-              requester,
-              performedBy: requester._id,
-            });
-          } catch (assignmentError) {
-            logger.error({
-              requestId: req.requestId || null,
-              leadId: lead?._id || null,
-              error: assignmentError.message,
-              message: "Bulk lead auto assignment failed",
-            });
-          }
+      const assignOne = async (lead) => {
+        try {
+          return await autoAssignLead({ lead, requester, performedBy: requester._id });
+        } catch (assignmentError) {
+          logger.error({
+            requestId: req.requestId || null,
+            leadId: lead?._id || null,
+            error: assignmentError.message,
+            message: "Bulk lead auto assignment failed",
+          });
+          return { assigned: false, reason: "ERROR" };
         }
-      });
+      };
+
+      const deadline = Date.now() + BULK_AUTO_ASSIGN_SYNC_BUDGET_MS;
+      let index = 0;
+      for (; index < createdLeads.length && Date.now() < deadline; index += 1) {
+        const lead = createdLeads[index];
+        const result = await assignOne(lead);
+        if (result?.assigned && result.executive) {
+          countAssigned(result.executive);
+          setRowAssignment(lead, result.executive.name, `New lead, auto-assigned to ${result.executive.name}`);
+        } else {
+          const reason = result?.reason || "ERROR";
+          unassignedByReason.set(reason, (unassignedByReason.get(reason) || 0) + 1);
+          assignmentSummary.unassignedCount += 1;
+          setRowAssignment(lead, "", `New lead, left unassigned: ${BULK_UNASSIGNED_REASONS[reason] || BULK_UNASSIGNED_REASONS.ERROR}`);
+        }
+      }
+
+      const remaining = createdLeads.slice(index);
+      if (remaining.length) {
+        assignmentSummary.pendingCount = remaining.length;
+        remaining.forEach((lead) => setRowAssignment(lead, "", "New lead, being auto-assigned in the background"));
+        setImmediate(async () => {
+          for (const lead of remaining) {
+            await assignOne(lead);
+          }
+        });
+      }
     }
+
+    assignmentSummary.byUser = [...assignedByUser.values()].sort((a, b) => b.count - a.count || a.name.localeCompare(b.name));
+    assignmentSummary.unassigned = [...unassignedByReason.entries()].map(([reason, count]) => ({
+      reason,
+      message: BULK_UNASSIGNED_REASONS[reason] || BULK_UNASSIGNED_REASONS.ERROR,
+      count,
+    }));
 
     try {
       await require("../services/crmContact.service").syncContactsForLeads({
@@ -3198,14 +3482,29 @@ exports.bulkUploadLeads = async (req, res) => {
       logger.error({ requestId: req.requestId || null, error: contactError.message, message: "Bulk lead owner/broker sync failed" });
     }
 
+    const rowFailures = results
+      .filter((result) => result.status === "FAILED")
+      .map((result) => ({
+        row: result.row,
+        sourceRow: result.sourceRow,
+        sheetName: result.sheetName,
+        name: result.name,
+        phone: result.phone,
+        message: result.message || "Failed to process row",
+      }));
+    const allFailures = [...rowFailures, ...failures];
+
     return res.status(201).json({
       message: "Bulk lead upload processed",
+      totalRows: rows.length,
       createdCount: createdIds.length,
       updatedCount: updatedPhones.length,
-      failedCount: failures.length,
+      failedCount: allFailures.length,
       createdIds,
       updatedPhones,
-      failures,
+      failures: allFailures,
+      results,
+      assignment: assignmentSummary,
     });
   } catch (error) {
     if (error?.statusCode === 400) {
@@ -3487,6 +3786,75 @@ exports.getLeadSummary = async (req, res) => {
       requestId: req.requestId || null,
       error: error.message,
       message: "getLeadSummary failed",
+    });
+    return res.status(error.statusCode || 500).json({ message: error.statusCode ? error.message : "Server error" });
+  }
+};
+
+/*
+ * GET /leads/team-summary - lead count and status split per assigned employee,
+ * across every lead in the caller's scope (same scope + filters as GET /).
+ * The Pipeline "My team" tab used to count the one page of leads the browser
+ * had loaded (100), so everyone outside that page looked like they had none.
+ */
+exports.getLeadTeamSummary = async (req, res) => {
+  try {
+    const query = await buildLeadQueryForUser(req.user);
+    if (!query) {
+      return res.status(403).json({ message: "Access denied" });
+    }
+    applyLeadListFilters(query, req.query || {});
+    const match = Lead.find(query).cast(Lead);
+
+    const rows = await Lead.aggregate([
+      { $match: match },
+      { $group: { _id: { assignedTo: "$assignedTo", status: "$status" }, count: { $sum: 1 } } },
+    ]);
+
+    const byUser = new Map();
+    let unassigned = 0;
+    let totalLeads = 0;
+    rows.forEach((row) => {
+      const count = Number(row.count || 0);
+      totalLeads += count;
+      const userId = row?._id?.assignedTo ? String(row._id.assignedTo) : "";
+      if (!userId) {
+        unassigned += count;
+        return;
+      }
+      const status = String(row?._id?.status || "NEW").toUpperCase();
+      const entry = byUser.get(userId) || { userId, total: 0, statuses: {} };
+      entry.total += count;
+      entry.statuses[status] = (entry.statuses[status] || 0) + count;
+      byUser.set(userId, entry);
+    });
+
+    const users = byUser.size
+      ? await User.find({ _id: { $in: [...byUser.keys()] }, companyId: req.user.companyId })
+        .select("_id name role profileImageUrl isActive")
+        .lean()
+      : [];
+    const userById = new Map(users.map((user) => [String(user._id), user]));
+
+    const members = [...byUser.values()]
+      .map((entry) => {
+        const user = userById.get(entry.userId);
+        return {
+          ...entry,
+          name: user?.name || "Former employee",
+          role: user?.role || "",
+          profileImageUrl: user?.profileImageUrl || "",
+          isActive: user ? user.isActive !== false : false,
+        };
+      })
+      .sort((a, b) => b.total - a.total || a.name.localeCompare(b.name));
+
+    return res.json({ members, unassigned, totalLeads });
+  } catch (error) {
+    logger.error({
+      requestId: req.requestId || null,
+      error: error.message,
+      message: "getLeadTeamSummary failed",
     });
     return res.status(error.statusCode || 500).json({ message: error.statusCode ? error.message : "Server error" });
   }
@@ -4348,7 +4716,11 @@ exports.updateLeadStatus = async (req, res) => {
         rawRequirements,
         inventory: selectedInventory,
       }) || {};
-      const roleTypeError = assertLeadTypeMatchesUser(normalizedRequirements, req.user);
+      // Only a change of category is checked against the user's role type, so
+      // an executive can update an assigned lead of another category.
+      const keepsLeadCategory = normalizeRoleType(normalizedRequirements.inventoryType)
+        === normalizeRoleType(lead?.requirements?.inventoryType);
+      const roleTypeError = keepsLeadCategory ? null : assertLeadTypeMatchesUser(normalizedRequirements, req.user);
       if (roleTypeError) {
         return res.status(403).json({ message: roleTypeError });
       }

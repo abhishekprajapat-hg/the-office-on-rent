@@ -24,7 +24,15 @@ const minutesBetween = (from, to) => {
   return Math.max(0, Math.floor((b - a) / 60000));
 };
 
-const touchState = (lead) => (lead?.firstTouchAt ? "TOUCHED" : "UNTOUCHED");
+/*
+ * A lead is untouched only while nobody has worked it: no touch logged AND it
+ * is still NEW. A lead moved to Contacted / Interested / Site visit / Lost etc.
+ * (by hand or from a bulk upload) has clearly been dealt with even if no call
+ * was logged, so it must not show as "waiting for a first call".
+ */
+const touchState = (lead) => (
+  lead?.firstTouchAt || (lead?.status && String(lead.status).toUpperCase() !== "NEW") ? "TOUCHED" : "UNTOUCHED"
+);
 
 /* "8 min", "2 h 5 min", "3 d 4 h" */
 const formatTouchTime = (minutes) => {
@@ -94,8 +102,8 @@ const toTouchView = (lead) => ({
 const touchFilterClauses = (query = {}) => {
   const clauses = [];
   const state = String(query.touchState || "").toUpperCase();
-  if (state === "UNTOUCHED") clauses.push({ firstTouchAt: null });
-  if (state === "TOUCHED") clauses.push({ firstTouchAt: { $ne: null } });
+  if (state === "UNTOUCHED") clauses.push({ firstTouchAt: null, status: "NEW" });
+  if (state === "TOUCHED") clauses.push({ $or: [{ firstTouchAt: { $ne: null } }, { status: { $ne: "NEW" } }] });
   const min = Number.parseInt(query.touchMinutesMin, 10);
   const max = Number.parseInt(query.touchMinutesMax, 10);
   if (Number.isFinite(min) || Number.isFinite(max)) {

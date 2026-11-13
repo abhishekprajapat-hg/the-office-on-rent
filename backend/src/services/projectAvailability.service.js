@@ -106,6 +106,8 @@ const sanitizeProjectExtras = (field, value) => {
   switch (field) {
     case "startingRateDate": return toDate(value, "Starting rate date");
     case "currentRateDate": return toDate(value, "Current rate date");
+    case "rentRateBareShell": return toNumber(value, "Bare shell rent");
+    case "rentRateFurnished": return toNumber(value, "Furnished rent");
     case "sizeInventory": return sanitizeSizeInventory(value);
     case "plcOptions": return sanitizePlcOptions(value);
     case "chargeItems": return sanitizeChargeItems(value);
@@ -120,7 +122,7 @@ const sanitizeProjectExtras = (field, value) => {
     default: return undefined;
   }
 };
-const EXTRA_FIELDS = ["startingRateDate", "currentRateDate", "sizeInventory", "plcOptions", "chargeItems", "gstPercent", "stampDutyPercent", "marketRates", "plcRule"];
+const EXTRA_FIELDS = ["startingRateDate", "currentRateDate", "rentRateBareShell", "rentRateFurnished", "sizeInventory", "plcOptions", "chargeItems", "gstPercent", "stampDutyPercent", "marketRates", "plcRule"];
 
 /* ---------------------------------------------------------- availability -- */
 

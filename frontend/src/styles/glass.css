@@ -951,3 +951,36 @@ html:root .gl-shell :is(.fixed.inset-0, [role="dialog"]) button:is(.bg-slate-900
   border-radius: 13px;
   box-shadow: 0 8px 20px var(--g-bglow, rgba(37, 73, 214, .3));
 }
+
+/* The outer content panel has sharp corners on every page (asked for). */
+.gl-shell .workspace-main-content,
+.gl-shell .workspace-main-content > .ui-page-shell {
+  border-radius: 0 !important;
+}
+/* The page canvas is transparent, so its glass shadow only showed up as a thin
+   white line along the top and a faint edge down the side. */
+html:root .gl-shell.gl-shell .workspace-main-content > .ui-page-shell.ui-page-shell[class] {
+  box-shadow: none !important;
+}
+
+/* Native <dialog> modals (e.g. Page & action access) sit in the browser's top
+   layer, so the overlay rules above never matched them and the glass "card"
+   rule turned their white panel see-through: the user list behind showed
+   through the checkboxes. Give them a solid panel like every other modal. */
+html:root .gl-shell dialog[open],
+html:root .gl-shell dialog[open].bg-white {
+  background-color: #fff !important;
+  -webkit-backdrop-filter: none !important;
+  backdrop-filter: none !important;
+  border-color: var(--g-line) !important;
+}
+html.theme-dark .gl-shell dialog[open],
+html.theme-dark .gl-shell dialog[open].bg-white {
+  background-color: #121728 !important;
+  color: #edf0f5 !important;
+}
+html:root .gl-shell dialog[open]::backdrop {
+  background: rgb(15 23 42 / 0.45);
+  -webkit-backdrop-filter: blur(3px);
+  backdrop-filter: blur(3px);
+}

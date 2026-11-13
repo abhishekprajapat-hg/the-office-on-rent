@@ -16,44 +16,59 @@ const titleCase = (value) => String(value || "")
 
 const employeeIdOf = (employee) => String(employee?._id || employee?.id || "").trim();
 
-const PipelineTeam = ({ leads = [], employees = [], loading = false, onOpenEmployee, className }) => {
+const toMember = (source = {}) => ({
+  id: employeeIdOf(source) || String(source?.userId || "").trim(),
+  name: source.name || source.fullName || "Unnamed employee",
+  role: source.role,
+  profileImageUrl: source.profileImageUrl || "",
+  count: 0,
+  statuses: new Map(),
+});
+
+/*
+ * One card per team member. Counts come from `summary` (GET /leads/team-summary,
+ * every lead in scope) when it is available; `leads` (the loaded page only) is
+ * a fallback if that request fails. Everyone on the team is listed, including
+ * people with no leads yet, so the tab shows the whole team.
+ */
+const PipelineTeam = ({ leads = [], summary = null, employees = [], search = "", loading = false, onOpenEmployee, className }) => {
   const team = useMemo(() => {
     const byId = new Map();
 
     employees.forEach((employee) => {
-      const id = employeeIdOf(employee);
-      if (id) byId.set(id, {
-        id,
-        name: employee.name || employee.fullName || "Unnamed employee",
-        role: employee.role,
-        profileImageUrl: employee.profileImageUrl || "",
-        count: 0,
-        statuses: new Map(),
+      const member = toMember(employee);
+      if (member.id) byId.set(member.id, member);
+    });
+
+    if (summary && Array.isArray(summary.members)) {
+      summary.members.forEach((row) => {
+        const id = String(row?.userId || "").trim();
+        if (!id) return;
+        const current = byId.get(id) || toMember({ ...row, _id: id });
+        current.count = Number(row.total || 0);
+        current.statuses = new Map(Object.entries(row.statuses || {}));
+        byId.set(id, current);
       });
-    });
+    } else {
+      leads.forEach((lead) => {
+        const assigned = lead?.assignedTo;
+        const id = String(assigned?._id || assigned?.id || assigned || "").trim();
+        if (!id) return;
+        const current = byId.get(id) || toMember({ ...(typeof assigned === "object" ? assigned : {}), _id: id });
+        current.count += 1;
+        const status = String(lead?.status || "NEW").toUpperCase();
+        current.statuses.set(status, (current.statuses.get(status) || 0) + 1);
+        byId.set(id, current);
+      });
+    }
 
-    leads.forEach((lead) => {
-      const assigned = lead?.assignedTo;
-      const id = String(assigned?._id || assigned?.id || assigned || "").trim();
-      if (!id) return;
-      const current = byId.get(id) || {
-        id,
-        name: assigned?.name || "Unnamed employee",
-        role: assigned?.role,
-        profileImageUrl: assigned?.profileImageUrl || "",
-        count: 0,
-        statuses: new Map(),
-      };
-      current.count += 1;
-      const status = String(lead?.status || "NEW").toUpperCase();
-      current.statuses.set(status, (current.statuses.get(status) || 0) + 1);
-      byId.set(id, current);
-    });
-
+    const needle = String(search || "").trim().toLowerCase();
     return [...byId.values()]
-      .filter((employee) => employee.count > 0)
+      .filter((employee) => !needle || employee.name.toLowerCase().includes(needle))
       .sort((a, b) => b.count - a.count || a.name.localeCompare(b.name));
-  }, [employees, leads]);
+  }, [employees, leads, summary, search]);
+
+  const unassigned = Number(summary?.unassigned || 0);
 
   if (loading) {
     return (
@@ -72,8 +87,8 @@ const PipelineTeam = ({ leads = [], employees = [], loading = false, onOpenEmplo
     return (
       <div className={cn("p-4", className)}>
         <EmptyState
-          title="No assigned leads yet"
-          description="Employees will appear here as soon as leads are assigned to them."
+          title={search ? "No team member matches your search" : "No team members yet"}
+          description={search ? "Try a different name." : "Employees who can be assigned leads will appear here."}
           icon={Users}
         />
       </div>
@@ -81,7 +96,13 @@ const PipelineTeam = ({ leads = [], employees = [], loading = false, onOpenEmplo
   }
 
   return (
-    <div className={cn("grid gap-3 p-4 sm:grid-cols-2 xl:grid-cols-3", className)}>
+    <div className={cn("p-4", className)}>
+      <p className="mb-3 text-[12px] text-slate-500 dark:text-slate-400">
+        {team.length} team member{team.length === 1 ? "" : "s"}
+        {unassigned ? ` · ${unassigned} unassigned lead${unassigned === 1 ? "" : "s"}` : ""}
+        {!summary ? ` · counts cover only the ${leads.length} lead${leads.length === 1 ? "" : "s"} loaded so far` : ""}
+      </p>
+      <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
       {team.map((employee) => {
         const topStatuses = [...employee.statuses.entries()]
           .sort((a, b) => b[1] - a[1])
@@ -112,6 +133,9 @@ const PipelineTeam = ({ leads = [], employees = [], loading = false, onOpenEmplo
                 <span className="mt-1 block text-[11.5px] text-slate-500 dark:text-slate-400">Assigned leads</span>
               </span>
               <span className="flex flex-wrap justify-end gap-1">
+                {!employee.count ? (
+                  <span className="rounded-full bg-slate-100 px-2 py-1 text-[10px] font-semibold text-slate-500 dark:bg-slate-800 dark:text-slate-400">No leads yet</span>
+                ) : null}
                 {topStatuses.map(([status, count]) => (
                   <span key={status} className="rounded-full bg-slate-100 px-2 py-1 text-[10px] font-semibold text-slate-600 dark:bg-slate-800 dark:text-slate-300">
                     {titleCase(status)} {count}
@@ -123,6 +147,7 @@ const PipelineTeam = ({ leads = [], employees = [], loading = false, onOpenEmplo
           </button>
         );
       })}
+      </div>
     </div>
   );
 };

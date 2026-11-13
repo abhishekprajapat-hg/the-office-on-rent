@@ -1468,6 +1468,7 @@ const sanitizeInventoryPayload = ({
       || field === "depositMonths"
       || field === "agreementYears"
       || field === "lockInYears"
+      || field === "currentRentalIncome"
     ) {
       safePayload[field] = sanitizeNonNegativeNumber(value, field);
       return;
@@ -2329,7 +2330,7 @@ const createInventoryUpdateRequest = async ({
     ...scope,
   })
     .select(
-      "_id projectName towerName unitNumber propertyId inventoryType price rent deposit depositMonths agreementYears lockInYears type category furnishingStatus status reservationReason reservationLeadId saleDetails location city area pincode buildingName floorNumber totalFloors totalArea carpetArea builtUpArea superBuiltUpArea length width height areaUnit maintenanceCharges priceBasis pricePerArea commercialDetails residentialDetails documentsAvailable siteLocation images documents floorPlans videoTours officeNumber ownerName ownerNumber ownerWhatsappNumber ownerContacts ownerType ownershipType businessModel enterpriseDetails keyManagerName keyManagerNumber brokerName brokerNumber developerName developerNumber dealType propertyDate gstApplicable",
+      "_id projectName towerName unitNumber propertyId inventoryType price rent deposit depositMonths agreementYears lockInYears currentRentalIncome type category furnishingStatus status reservationReason reservationLeadId saleDetails location city area pincode buildingName floorNumber totalFloors totalArea carpetArea builtUpArea superBuiltUpArea length width height areaUnit maintenanceCharges priceBasis pricePerArea commercialDetails residentialDetails documentsAvailable siteLocation images documents floorPlans videoTours officeNumber ownerName ownerNumber ownerWhatsappNumber ownerContacts ownerType ownershipType businessModel enterpriseDetails keyManagerName keyManagerNumber brokerName brokerNumber developerName developerNumber dealType propertyDate gstApplicable",
     )
     .lean();
 

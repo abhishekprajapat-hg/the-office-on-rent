@@ -5,6 +5,7 @@ import { EmptyState } from "../../components/ui";
 import { useLocation, useNavigate, useParams, useSearchParams } from "react-router-dom";
 import {
   getLeadPool,
+  getLeadTeamSummary,
   getLeadById,
   createLead,
   bulkUploadLeads,
@@ -33,6 +34,8 @@ import {
   LeadsMatrixAlerts,
 } from "./components/LeadsMatrixSections";
 import PipelineSelectionBar from "./components/PipelineSelectionBar";
+import BulkDeleteDialog from "./components/BulkDeleteDialog";
+import { runBulkUploadInBatches } from "./bulkUploadBatches";
 import PipelineCards from "./components/PipelineCards";
 import PipelineTable from "./components/PipelineTable";
 import PipelineTeam from "./components/PipelineTeam";
@@ -1062,6 +1065,26 @@ const getMapsHref = (city) => {
     : "";
 };
 
+/*
+ * Bulk delete and bulk transfer send one request per lead. If the server's
+ * per-user write limit is reached part way, wait the time it asks for
+ * (Retry-After) and carry on, instead of failing the rest of the selection.
+ */
+const waitMs = (ms) => new Promise((resolve) => { setTimeout(resolve, ms); });
+const runWithRateLimitRetry = async (action, onWait) => {
+  for (let attempt = 0; ; attempt += 1) {
+    try {
+      return await action();
+    } catch (requestError) {
+      if (requestError?.response?.status !== 429 || attempt >= 4) throw requestError;
+      const retryAfter = Number.parseInt(requestError.response.headers?.["retry-after"], 10);
+      const seconds = Math.min(Math.max(Number.isFinite(retryAfter) ? retryAfter : 15, 1), 60);
+      onWait?.(seconds);
+      await waitMs(seconds * 1000);
+    }
+  }
+};
+
 const normalizeCsvHeader = (value) =>
   String(value || "")
     .trim()
@@ -1491,7 +1514,7 @@ const buildBulkLeadRequirements = (row, sheetType = DEFAULT_BULK_LEAD_SHEET_TYPE
   return Object.keys(requirements).length ? requirements : undefined;
 };
 
-const normalizeBulkLeadRow = ({ rawRow, mappedHeaders, sheetName = "", sheetType = DEFAULT_BULK_LEAD_SHEET_TYPE }) => {
+const normalizeBulkLeadRow = ({ rawRow, mappedHeaders, sheetName = "", sheetType = DEFAULT_BULK_LEAD_SHEET_TYPE, sourceRow = null, skipped = null }) => {
   const row = {};
   const allCellValues = [];
 
@@ -1505,7 +1528,21 @@ const normalizeBulkLeadRow = ({ rawRow, mappedHeaders, sheetName = "", sheetType
   const phone = normalizeBulkPhone(row.phone)
     || allCellValues.map(normalizeBulkPhone).find(Boolean)
     || "";
-  if (!phone) return null;
+  if (!phone) {
+    // Rows that cannot become a lead are listed for the user, not dropped silently.
+    if (skipped && allCellValues.length) {
+      skipped.push({
+        sheetName,
+        sourceRow,
+        name: normalizeBulkCellText(row.name).slice(0, 120),
+        phone: normalizeBulkCellText(row.phone).slice(0, 40),
+        reason: row.phone
+          ? `"${normalizeBulkCellText(row.phone).slice(0, 40)}" is not a valid phone number (needs at least 10 digits)`
+          : "No phone number in this row",
+      });
+    }
+    return null;
+  }
 
   const { name, note: nameNote } = splitBulkNameCell(row.name);
   if (nameNote) row.nameNote = nameNote;
@@ -1532,17 +1569,39 @@ const normalizeBulkLeadRow = ({ rawRow, mappedHeaders, sheetName = "", sheetType
     status: resolveBulkLeadStatus({ sheetName, row }),
     nextFollowUp,
     lastContactedAt,
+    // Where the row came from, so the upload report can point at it.
+    sourceRow,
+    sheetName,
   };
 };
 
-const parseBulkLeadRowsFromMatrix = ({ matrix, sheetName = "", sheetType = DEFAULT_BULK_LEAD_SHEET_TYPE }) => {
+// The spreadsheet row number of a matrix row: SheetJS keeps it on each row as
+// __rowNum__ (0-based, blank rows included); otherwise its position + 1.
+const bulkSourceRowOf = (matrix, rowIndex) => {
+  const rowNum = matrix[rowIndex]?.__rowNum__;
+  return Number.isInteger(rowNum) ? rowNum + 1 : rowIndex + 1;
+};
+
+const parseBulkLeadRowsFromMatrix = ({ matrix, sheetName = "", sheetType = DEFAULT_BULK_LEAD_SHEET_TYPE, skipped = null }) => {
   const headerIndex = matrix.findIndex((rawRow) => {
     const mappedHeaders = rawRow.map((cell) => resolveLeadCsvHeaderKey(cell));
     const mappedCount = mappedHeaders.filter(Boolean).length;
     return mappedCount >= 2 && (mappedHeaders.includes("phone") || mappedHeaders.includes("name"));
   });
 
-  if (headerIndex < 0) return [];
+  if (headerIndex < 0) {
+    const hasContent = matrix.some((rawRow) => rawRow.some((cell) => normalizeBulkCellText(cell)));
+    if (skipped && hasContent) {
+      skipped.push({
+        sheetName,
+        sourceRow: null,
+        name: "",
+        phone: "",
+        reason: "No header row found (needs at least two known columns, including NAME or CONTACT / PHONE), so this sheet was not read",
+      });
+    }
+    return [];
+  }
 
   const mappedHeaders = matrix[headerIndex].map((header) => resolveLeadCsvHeaderKey(header));
   const hasName = mappedHeaders.includes("name");
@@ -1554,6 +1613,8 @@ const parseBulkLeadRowsFromMatrix = ({ matrix, sheetName = "", sheetType = DEFAU
       mappedHeaders,
       sheetName,
       sheetType,
+      sourceRow: bulkSourceRowOf(matrix, rowIndex),
+      skipped,
     });
     if (!row) continue;
     if (!hasName && !row.name) continue;
@@ -1594,7 +1655,7 @@ const parseCsvLine = (line) => {
   return values;
 };
 
-const parseBulkLeadCsvRows = (csvText, sheetType = DEFAULT_BULK_LEAD_SHEET_TYPE) => {
+const parseBulkLeadCsvRows = (csvText, sheetType = DEFAULT_BULK_LEAD_SHEET_TYPE, skipped = null) => {
   const normalizedText = String(csvText || "")
     .replace(/^\uFEFF/, "")
     .trim();
@@ -1604,7 +1665,10 @@ const parseBulkLeadCsvRows = (csvText, sheetType = DEFAULT_BULK_LEAD_SHEET_TYPE)
   }
 
   const rawLines = normalizedText.split(/\r?\n/);
-  const lines = rawLines.map((line) => String(line || "").trim()).filter(Boolean);
+  const numberedLines = rawLines
+    .map((line, lineIndex) => ({ text: String(line || "").trim(), lineIndex }))
+    .filter((line) => line.text);
+  const lines = numberedLines.map((line) => line.text);
 
   if (lines.length < 2) {
     throw new Error("CSV must include header and at least one data row");
@@ -1618,19 +1682,28 @@ const parseBulkLeadCsvRows = (csvText, sheetType = DEFAULT_BULK_LEAD_SHEET_TYPE)
   }
 
   const rows = parseBulkLeadRowsFromMatrix({
-    matrix: lines.map(parseCsvLine),
+    matrix: numberedLines.map((line) => {
+      const cells = parseCsvLine(line.text);
+      Object.defineProperty(cells, "__rowNum__", { value: line.lineIndex, enumerable: false });
+      return cells;
+    }),
     sheetName: "CSV",
     sheetType,
+    skipped,
   });
 
   if (!rows.length) {
-    throw new Error("No valid lead rows found in CSV");
+    throw new Error(
+      skipped?.length
+        ? `No lead rows could be read from the CSV: ${skipped.length} row${skipped.length === 1 ? " was" : "s were"} skipped. See the list below.`
+        : "No valid lead rows found in CSV",
+    );
   }
 
   return rows;
 };
 
-const parseBulkLeadWorkbookRows = async (file, sheetType = DEFAULT_BULK_LEAD_SHEET_TYPE) => {
+const parseBulkLeadWorkbookRows = async (file, sheetType = DEFAULT_BULK_LEAD_SHEET_TYPE, skipped = null) => {
   const XLSX = await import("xlsx");
   const buffer = await file.arrayBuffer();
   const workbook = XLSX.read(buffer, {
@@ -1646,19 +1719,40 @@ const parseBulkLeadWorkbookRows = async (file, sheetType = DEFAULT_BULK_LEAD_SHE
       normalizedSheetName.includes("performance")
       || normalizedSheetName.includes("perfomance")
       || ["broker", "owners", "dealclose"].includes(normalizedSheetName)
-    ) return;
+    ) {
+      skipped?.push({
+        sheetName,
+        sourceRow: null,
+        name: "",
+        phone: "",
+        reason: "Sheet not read: performance, broker, owner and deal-close sheets are not lead lists",
+      });
+      return;
+    }
     const worksheet = workbook.Sheets[sheetName];
+    // Blank rows are kept so each row's position maps to its spreadsheet row
+    // number (blank rows produce no lead and are not reported).
     const matrix = XLSX.utils.sheet_to_json(worksheet, {
       header: 1,
       defval: "",
-      blankrows: false,
+      blankrows: true,
       raw: false,
     });
-    rows.push(...parseBulkLeadRowsFromMatrix({ matrix, sheetName, sheetType }));
+    const firstRow = worksheet?.["!ref"] ? XLSX.utils.decode_range(worksheet["!ref"]).s.r : 0;
+    matrix.forEach((cells, index) => {
+      if (Array.isArray(cells) && !Number.isInteger(cells.__rowNum__)) {
+        Object.defineProperty(cells, "__rowNum__", { value: firstRow + index, enumerable: false });
+      }
+    });
+    rows.push(...parseBulkLeadRowsFromMatrix({ matrix, sheetName, sheetType, skipped }));
   });
 
   if (!rows.length) {
-    throw new Error("No valid lead rows found in workbook");
+    throw new Error(
+      skipped?.length
+        ? `No lead rows could be read from this file: ${skipped.length} row${skipped.length === 1 ? " or sheet was" : "s or sheets were"} skipped. See the list below.`
+        : "No lead rows found in this file. The sheet needs a header row with NAME and CONTACT / PHONE columns.",
+    );
   }
 
   return rows;
@@ -1703,6 +1797,19 @@ const LeadsMatrix = () => {
   const [bulkUploadParsedRows, setBulkUploadParsedRows] = useState(null);
   const [bulkUploadFileName, setBulkUploadFileName] = useState("");
   const [bulkUploadSheetType, setBulkUploadSheetType] = useState(DEFAULT_BULK_LEAD_SHEET_TYPE);
+  const [bulkAssignMode, setBulkAssignMode] = useState("AUTO");
+  // Rows the file reader could not use, a file that could not be read, and the
+  // report shown after an upload.
+  const [bulkUploadSkipped, setBulkUploadSkipped] = useState([]);
+  const [bulkUploadParseError, setBulkUploadParseError] = useState("");
+  const [bulkUploadReport, setBulkUploadReport] = useState(null);
+  const [bulkUploadProgress, setBulkUploadProgress] = useState(null);
+  const bulkUploadStopRef = useRef(false);
+  // Bulk delete runs in its own dialog: confirm, live progress, then every
+  // lead that was not deleted with the reason.
+  const [bulkDeleteRun, setBulkDeleteRun] = useState(null);
+  const bulkDeleteStopRef = useRef(false);
+  const [bulkAssignUserId, setBulkAssignUserId] = useState("");
   const [bulkUploading, setBulkUploading] = useState(false);
 
   const [searchParams, setSearchParams] = useSearchParams();
@@ -1920,6 +2027,11 @@ const LeadsMatrix = () => {
   const canManageLeadProperties = userRole !== "CHANNEL_PARTNER" && canEditLead;
   const canConfigureSiteLocation =
     userRole === "ADMIN" || MANAGEMENT_ROLES.includes(userRole);
+  // The "My team" tab is a management view; everyone else only has their own leads.
+  const canSeeTeam = userRole === "ADMIN" || MANAGEMENT_ROLES.includes(userRole);
+  // Bulk upload: Admin / Manager choose auto assignment or one person; anyone
+  // else's uploaded leads are assigned to themselves (enforced by the API).
+  const canChooseBulkAssignment = userRole === "ADMIN" || MANAGEMENT_ROLES.includes(userRole);
   const canReviewDealPayment = userRole === "ADMIN";
   const availableLeadInventoryTypes = useMemo(() => {
     const labels = { COMMERCIAL: "Commercial", RESIDENTIAL: "Residential", COWORKING: "Coworking" };
@@ -1969,6 +2081,25 @@ const LeadsMatrix = () => {
     return parsable.length ? parsable : [{ label: "Commercial", value: DEFAULT_BULK_LEAD_SHEET_TYPE }];
   }, [availableLeadInventoryTypes]);
   const defaultBulkUploadSheetType = availableBulkSheetTypes[0]?.value || DEFAULT_BULK_LEAD_SHEET_TYPE;
+  const bulkAssigneeOptions = useMemo(() => {
+    const targetRoles = ["ADMIN", "MANAGER", "INSIDE_EXECUTIVE", "EXECUTIVE", "FIELD_EXECUTIVE"];
+    return executives
+      .filter((user) => targetRoles.includes(String(user?.role || "").toUpperCase()))
+      .filter((user) => {
+        const role = String(user?.role || "").toUpperCase();
+        const roleType = String(user?.roleType || "COMMERCIAL").toUpperCase();
+        return role === "ADMIN" || roleType === "BOTH" || roleType === bulkUploadSheetType;
+      })
+      .sort((a, b) => String(a?.name || "").localeCompare(String(b?.name || "")));
+  }, [executives, bulkUploadSheetType]);
+
+  // A person picked for one category is cleared when the sheet type changes
+  // to a category they do not work.
+  useEffect(() => {
+    if (bulkAssignUserId && !bulkAssigneeOptions.some((user) => String(user._id) === bulkAssignUserId)) {
+      setBulkAssignUserId("");
+    }
+  }, [bulkAssigneeOptions, bulkAssignUserId]);
 
   useEffect(() => {
     const allowedSheetTypes = new Set(availableBulkSheetTypes.map((option) => option.value));
@@ -2106,6 +2237,42 @@ const LeadsMatrix = () => {
     setSelectedLeadKeys([]);
     return () => { leadRequestVersion.current += 1; };
   }, [fetchLeads]);
+
+  useEffect(() => {
+    if (!canSeeTeam && view === PIPELINE_VIEWS.TEAM) setView(PIPELINE_VIEWS.ALL);
+  }, [canSeeTeam, view]);
+
+  /*
+   * "My team" counts come from the server across every lead in scope, not
+   * from the page of leads loaded in the browser. Same filters as the list.
+   * Re-read whenever the loaded leads change (refresh, transfer, delete,
+   * status edit) so the cards stay in step with the list.
+   */
+  const [teamSummary, setTeamSummary] = useState(null);
+  const [teamSummaryLoading, setTeamSummaryLoading] = useState(false);
+  const teamSummaryRequestVersion = useRef(0);
+  useEffect(() => {
+    if (view !== PIPELINE_VIEWS.TEAM || !canSeeTeam) return undefined;
+    const requestVersion = ++teamSummaryRequestVersion.current;
+    setTeamSummaryLoading(true);
+    getLeadTeamSummary({
+      ...Object.fromEntries(Object.entries(advancedFilters).filter(([, value]) => value !== "")),
+      ...(statusFilter !== "ALL" ? { status: statusFilter } : {}),
+      ...(propertySubtypeFilter ? { subtype: propertySubtypeFilter } : {}),
+    })
+      .then((result) => {
+        if (requestVersion === teamSummaryRequestVersion.current) setTeamSummary(result);
+      })
+      .catch((summaryError) => {
+        if (requestVersion !== teamSummaryRequestVersion.current) return;
+        console.error(`Load team summary failed: ${toErrorMessage(summaryError, "Failed to load team")}`);
+        setTeamSummary(null);
+      })
+      .finally(() => {
+        if (requestVersion === teamSummaryRequestVersion.current) setTeamSummaryLoading(false);
+      });
+    return () => { teamSummaryRequestVersion.current += 1; };
+  }, [view, canSeeTeam, advancedFilters, statusFilter, propertySubtypeFilter, leads]);
 
   useEffect(() => {
     fetchExecutives();
@@ -2557,12 +2724,24 @@ const LeadsMatrix = () => {
     setView(PIPELINE_VIEWS.ALL);
   }, []);
 
+  // The "open the close-deal window" flag is used once, then cleared so a
+  // refresh or Back does not open the window again.
+  const handleCloseDealRequestHandled = useCallback(() => {
+    navigate(`${location.pathname}${location.search}`, { replace: true, state: null });
+  }, [location.pathname, location.search, navigate]);
+
   const handleInlineLeadStatusChange = useCallback(async (lead, nextStatus) => {
     if (!canEditLead) return;
     const leadId = String(lead?._id || "").trim();
     const status = String(nextStatus || "").trim().toUpperCase();
     const previousStatus = String(lead?.status || "NEW").trim().toUpperCase();
     if (!leadId || !LEAD_STATUSES.includes(status) || status === previousStatus) return;
+    // Closing needs a property, payment and brokerage, which the list cannot
+    // take: open the lead with its close-deal window instead.
+    if (["CLOSED", "REQUESTED"].includes(status)) {
+      navigate(`${currentLeadRouteBase}/${leadId}`, { state: { openCloseDeal: Date.now() } });
+      return;
+    }
 
     setUpdatingStatusId(leadId);
     setError("");
@@ -2588,7 +2767,7 @@ const LeadsMatrix = () => {
     } finally {
       setUpdatingStatusId("");
     }
-  }, [canEditLead]);
+  }, [canEditLead, currentLeadRouteBase, navigate]);
 
   // Everything both pipeline presentations need. Defined once: the card list
   // and the table are the same list, and a callback that exists on only one of
@@ -2626,7 +2805,25 @@ const LeadsMatrix = () => {
         setPropertySubtypeFilter("");
       }}
     />
-  ) : undefined;
+  ) : (() => {
+    if (view === PIPELINE_VIEWS.NEEDS_ACTION) {
+      return <EmptyState title="Nothing needs action" description="Every live lead here has a follow-up in the future. Switch to All leads to see the rest." />;
+    }
+    if (view === PIPELINE_VIEWS.CLOSED) {
+      return <EmptyState title="No closed deals yet" description="Leads appear here once their deal is closed." />;
+    }
+    if (view === PIPELINE_VIEWS.UNASSIGNED) {
+      return <EmptyState title="No unassigned leads" description="Every lead here has an owner." />;
+    }
+    return (
+      <EmptyState
+        title="No leads yet"
+        description={canSeeTeam
+          ? "Add a lead or import a sheet to get started."
+          : "Leads assigned to you will appear here."}
+      />
+    );
+  })();
 
   const handlePipelineLeadTransfer = async (lead, assignedTo, reason) => {
     if (!canAssignLead || !lead?._id) return false;
@@ -2667,17 +2864,22 @@ const LeadsMatrix = () => {
     setError("");
     const updatedById = new Map();
     const failures = [];
-    for (const lead of selectedLeads) {
+    const total = selectedLeads.length;
+    for (const [index, lead] of selectedLeads.entries()) {
       try {
-        const updated = await assignLead(lead._id, {
-          assignedTo: bulkTransferAssignee,
-          reason: bulkTransferReason.trim(),
-        });
+        const updated = await runWithRateLimitRetry(
+          () => assignLead(lead._id, {
+            assignedTo: bulkTransferAssignee,
+            reason: bulkTransferReason.trim(),
+          }),
+          (seconds) => setSuccess(`Transferred ${index} of ${total}. Waiting ${seconds}s for the server, then continuing...`),
+        );
         if (updated) updatedById.set(String(updated._id), updated);
       } catch (transferError) {
         failures.push(`${lead.name || "Lead"}: ${toErrorMessage(transferError, "Transfer failed")}`);
       }
     }
+    setSuccess("");
     if (updatedById.size) {
       setLeads((previous) => previous.map((lead) => updatedById.get(String(lead?._id || "")) || lead));
       setSelectedLeadKeys((previous) => previous.filter((id) => !updatedById.has(String(id))));
@@ -2690,47 +2892,128 @@ const LeadsMatrix = () => {
     setBulkActionBusy(false);
   };
 
-  const handleBulkDeleteLeads = async () => {
-    if (!canDeleteLead || !selectedLeads.length) return;
-    const count = selectedLeads.length;
-    const needsApproval = userRole === "MANAGER";
-    const confirmed = window.confirm(
-      needsApproval
-        ? `Ask an Admin to delete ${count} selected lead${count === 1 ? "" : "s"}? They will stay until approved.`
-        : `Delete ${count} selected lead${count === 1 ? "" : "s"} permanently? This cannot be undone.`,
-    );
-    if (!confirmed) return;
+  // Leads with a closed deal or deal payments are kept for finance and sale
+  // records (the server refuses them with 409); the ones the list can already
+  // see are skipped before starting.
+  const BULK_DELETE_LOCKED_REASON = "Has a closed deal, payments, a sold property or coworking invoices, so it is kept for finance records";
+  const bulkDeleteReason = (deleteError) => {
+    const status = deleteError?.response?.status;
+    if (status === 409) return BULK_DELETE_LOCKED_REASON;
+    if (status === 404) return "Already deleted, or no longer exists";
+    if (status === 429) return "The server was busy. Try this lead again in a minute";
+    return toErrorMessage(deleteError, "Delete failed");
+  };
 
+  const handleBulkDeleteLeads = () => {
+    if (!canDeleteLead || !selectedLeads.length) return;
+    const isLockedForDelete = (lead) =>
+      String(lead?.status || "").toUpperCase() === "CLOSED"
+      || ["PENDING", "APPROVED"].includes(String(lead?.dealPayment?.approvalStatus || "").toUpperCase());
+    setBulkDeleteRun({
+      phase: "confirm",
+      needsApproval: userRole === "MANAGER",
+      items: selectedLeads.map((lead) => {
+        const locked = isLockedForDelete(lead);
+        return {
+          id: String(lead._id),
+          name: lead.name || "",
+          phone: lead.phone || "",
+          status: locked ? "NOT_DELETED" : "PENDING",
+          message: locked ? BULK_DELETE_LOCKED_REASON : "",
+          preSkipped: locked,
+        };
+      }),
+      current: "",
+      waitSeconds: 0,
+      stopRequested: false,
+      stopped: false,
+    });
+  };
+
+  const updateBulkDeleteItem = (id, patch) => setBulkDeleteRun((previous) => (previous
+    ? { ...previous, items: previous.items.map((item) => (item.id === id ? { ...item, ...patch } : item)) }
+    : previous));
+
+  const startBulkDelete = async () => {
+    const run = bulkDeleteRun;
+    if (!run || run.phase !== "confirm") return;
+    const queue = run.items.filter((item) => !item.preSkipped);
+    if (!queue.length) return;
+
+    bulkDeleteStopRef.current = false;
     setBulkActionBusy(true);
     setError("");
+    setSuccess("");
+    setBulkDeleteRun((previous) => ({ ...previous, phase: "running" }));
+
+    const deletedIds = new Set();
+    // Leads that leave the selection: deleted, sent for approval, or locked for good.
+    const handledIds = new Set(run.items.filter((item) => item.preSkipped).map((item) => item.id));
     let deleted = 0;
     let approvals = 0;
-    const processedIds = new Set();
-    const deletedIds = new Set();
-    const failures = [];
-    for (const lead of selectedLeads) {
+    let stopped = false;
+
+    for (const item of queue) {
+      if (bulkDeleteStopRef.current) {
+        stopped = true;
+        break;
+      }
+      setBulkDeleteRun((previous) => ({ ...previous, current: item.name || item.phone || "Lead", waitSeconds: 0 }));
       try {
-        const result = await deleteLead(lead._id);
-        processedIds.add(String(lead._id));
-        if (isDeleteApprovalPending(result)) approvals += 1;
-        else {
+        const result = await runWithRateLimitRetry(
+          () => deleteLead(item.id),
+          (seconds) => setBulkDeleteRun((previous) => ({ ...previous, waitSeconds: seconds })),
+        );
+        handledIds.add(item.id);
+        if (isDeleteApprovalPending(result)) {
+          approvals += 1;
+          updateBulkDeleteItem(item.id, { status: "APPROVAL", message: result?.message || "Sent to an Admin for approval" });
+        } else {
           deleted += 1;
-          deletedIds.add(String(lead._id));
+          deletedIds.add(item.id);
+          updateBulkDeleteItem(item.id, { status: "DELETED", message: "Deleted" });
         }
       } catch (deleteError) {
-        failures.push(`${lead.name || "Lead"}: ${toErrorMessage(deleteError, "Delete failed")}`);
+        if (deleteError?.response?.status === 409 || deleteError?.response?.status === 404) handledIds.add(item.id);
+        updateBulkDeleteItem(item.id, { status: "NOT_DELETED", message: bulkDeleteReason(deleteError) });
       }
     }
-    if (deleted) setLeads((previous) => previous.filter((lead) => !deletedIds.has(String(lead?._id || ""))));
-    setSelectedLeadKeys((previous) => previous.filter((id) => !processedIds.has(String(id))));
-    if (deleted || approvals) {
-      const parts = [];
-      if (deleted) parts.push(`${deleted} deleted`);
-      if (approvals) parts.push(`${approvals} sent for Admin approval`);
-      setSuccess(parts.join("; "));
-    }
-    if (failures.length) setError(`Could not process ${failures.length} lead${failures.length === 1 ? "" : "s"}. ${failures.slice(0, 3).join("; ")}`);
+
+    setBulkDeleteRun((previous) => ({
+      ...previous,
+      phase: "done",
+      current: "",
+      waitSeconds: 0,
+      stopped,
+      items: stopped
+        ? previous.items.map((item) => (item.status === "PENDING"
+          ? { ...item, status: "STOPPED", message: "Not processed: you stopped the deletion" }
+          : item))
+        : previous.items,
+    }));
+    if (deletedIds.size) setLeads((previous) => previous.filter((lead) => !deletedIds.has(String(lead?._id || ""))));
+    // Leads that could be retried (network, permission, busy server) stay selected.
+    setSelectedLeadKeys((previous) => previous.filter((id) => !handledIds.has(String(id))));
+
+    const parts = [];
+    if (deleted) parts.push(`${deleted} deleted`);
+    if (approvals) parts.push(`${approvals} sent for Admin approval`);
+    // Everything selected that was neither deleted nor sent for approval
+    // (locked, failed, or not reached because the user pressed Stop).
+    const notDone = run.items.length - deleted - approvals;
+    if (notDone) parts.push(`${notDone} not deleted`);
+    if (parts.length) setSuccess(`${parts.join(" · ")}. Details are in the delete summary.`);
     setBulkActionBusy(false);
+  };
+
+  const stopBulkDelete = () => {
+    bulkDeleteStopRef.current = true;
+    setBulkDeleteRun((previous) => (previous ? { ...previous, stopRequested: true } : previous));
+  };
+
+  const closeBulkDelete = () => {
+    if (bulkDeleteRun?.phase === "running") return;
+    setBulkDeleteRun(null);
   };
 
   const pipelineListProps = {
@@ -3299,73 +3582,119 @@ const LeadsMatrix = () => {
     }
   };
 
+  // Clears the file, its check and any report; keeps sheet type and assignment choice.
+  const resetBulkUploadForm = () => {
+    setBulkUploadText("");
+    setBulkUploadParsedRows(null);
+    setBulkUploadFileName("");
+    setBulkUploadSkipped([]);
+    setBulkUploadParseError("");
+    setBulkUploadReport(null);
+  };
+
+  const closeBulkUploadModal = () => {
+    if (bulkUploading) return;
+    setIsBulkUploadModalOpen(false);
+    if (bulkUploadReport) resetBulkUploadForm();
+  };
+
   const handleBulkUploadFileSelect = async (file) => {
     if (!file) return;
+    const skipped = [];
+    setBulkUploadReport(null);
+    setBulkUploadFileName(String(file.name || ""));
 
     try {
       const extension = String(file.name || "").split(".").pop()?.toLowerCase();
       if (["xlsx", "xls"].includes(extension)) {
-        const rows = await parseBulkLeadWorkbookRows(file, bulkUploadSheetType);
+        const rows = await parseBulkLeadWorkbookRows(file, bulkUploadSheetType, skipped);
         setBulkUploadParsedRows(rows);
         setBulkUploadText(`Parsed ${rows.length} lead rows from ${file.name}`);
       } else {
-        const csvText = await file.text();
-        setBulkUploadParsedRows(null);
-        setBulkUploadText(String(csvText || ""));
+        const csvText = String((await file.text()) || "");
+        setBulkUploadText(csvText);
+        const rows = parseBulkLeadCsvRows(csvText, bulkUploadSheetType, skipped);
+        setBulkUploadParsedRows(rows);
       }
-      setBulkUploadFileName(String(file.name || ""));
+      setBulkUploadSkipped(skipped);
+      setBulkUploadParseError("");
       setError("");
-    } catch {
+    } catch (parseError) {
       setBulkUploadParsedRows(null);
-      setError("Unable to read selected bulk lead file");
+      setBulkUploadSkipped(skipped);
+      setBulkUploadParseError(toErrorMessage(parseError, "Unable to read the selected file"));
     }
   };
 
   const handleBulkUploadLeads = async () => {
     if (!canBulkUploadAllowed) return;
+    if (canChooseBulkAssignment && bulkAssignMode === "USER" && !bulkAssignUserId) {
+      setError("Choose the person to assign these leads to, or switch to auto-assign");
+      return;
+    }
 
     try {
       setBulkUploading(true);
       setError("");
+      setSuccess("");
 
-      const rows = Array.isArray(bulkUploadParsedRows)
-        ? bulkUploadParsedRows
-        : parseBulkLeadCsvRows(bulkUploadText, bulkUploadSheetType);
-      const result = await bulkUploadLeads(rows);
+      let rows = bulkUploadParsedRows;
+      let skipped = bulkUploadSkipped;
+      if (!Array.isArray(rows)) {
+        skipped = [];
+        try {
+          rows = parseBulkLeadCsvRows(bulkUploadText, bulkUploadSheetType, skipped);
+        } catch (parseError) {
+          setBulkUploadSkipped(skipped);
+          setBulkUploadParseError(toErrorMessage(parseError, "Unable to read the pasted CSV"));
+          return;
+        }
+      }
+      const assignment = canChooseBulkAssignment
+        ? (bulkAssignMode === "USER" ? { mode: "USER", userId: bulkAssignUserId } : { mode: "AUTO" })
+        : null;
+      // Sent in batches (see bulkUploadBatches.js) so the window shows real progress.
+      bulkUploadStopRef.current = false;
+      const { stoppedRows, ...merged } = await runBulkUploadInBatches({
+        rows,
+        assignment,
+        send: bulkUploadLeads,
+        retry: runWithRateLimitRetry,
+        onProgress: (patch) => setBulkUploadProgress((previous) => ({ stopRequested: false, ...(previous || {}), ...patch })),
+        shouldStop: () => bulkUploadStopRef.current,
+        describeError: (batchError) => toErrorMessage(batchError, "the server did not accept this batch"),
+      });
+      const totals = { created: merged.createdCount, updated: merged.updatedCount, failed: merged.failedCount };
+      const allSkipped = [...skipped, ...stoppedRows];
+
       await fetchLeads(true);
 
-      const createdCount = Number(result?.createdCount || 0);
-      const updatedCount = Number(result?.updatedCount || 0);
-      const failedCount = Number(result?.failedCount || 0);
+      const skippedRows = allSkipped.filter((row) => row.sourceRow).length;
+      // Every row's outcome is in the report that now opens in the modal.
+      setBulkUploadReport({
+        ...merged,
+        skipped: allSkipped,
+        stopped: stoppedRows.length > 0,
+        fileName: bulkUploadFileName,
+        sheetLabel: availableBulkSheetTypes.find((option) => option.value === bulkUploadSheetType)?.label || bulkUploadSheetType,
+        uploadedAt: new Date().toISOString(),
+      });
       setSuccess(
-        `Bulk upload complete: ${createdCount} created, ${updatedCount} updated, ${failedCount} failed`,
+        `${stoppedRows.length ? "Bulk upload stopped" : "Bulk upload complete"}: ${totals.created} created, ${totals.updated} updated, ${totals.failed} failed${skippedRows ? `, ${skippedRows} not uploaded` : ""}. See the report for every row.`,
       );
-
-      const failures = Array.isArray(result?.failures) ? result.failures : [];
-      if (failedCount > 0 && failures.length) {
-        const preview = failures
-          .slice(0, 5)
-          .map((failure) => `Row ${failure.row}: ${failure.message}`)
-          .join(" | ");
-        setError(
-          failures.length > 5
-            ? `Some rows failed. ${preview} | ...`
-            : `Some rows failed. ${preview}`,
-        );
-      } else {
-        setIsBulkUploadModalOpen(false);
-        setBulkUploadText("");
-        setBulkUploadParsedRows(null);
-        setBulkUploadFileName("");
-        setBulkUploadSheetType(defaultBulkUploadSheetType);
-      }
     } catch (uploadError) {
       const message = toErrorMessage(uploadError, "Failed to bulk upload leads");
       console.error(`Bulk upload leads failed: ${message}`);
       setError(message);
     } finally {
       setBulkUploading(false);
+      setBulkUploadProgress(null);
     }
+  };
+
+  const stopBulkUpload = () => {
+    bulkUploadStopRef.current = true;
+    setBulkUploadProgress((previous) => (previous ? { ...previous, stopRequested: true } : previous));
   };
 
   const handleUpdateLead = async () => {
@@ -3949,6 +4278,7 @@ const LeadsMatrix = () => {
               onViewChange={setView}
               needsActionCount={needsActionCount}
               canSeeUnassigned={canAssignLead}
+              canSeeTeam={canSeeTeam}
               query={query}
               onQueryChange={setQuery}
               refreshing={refreshing}
@@ -3989,12 +4319,14 @@ const LeadsMatrix = () => {
               onReset={resetAllLeadFilters}
             />
 
-            {view === PIPELINE_VIEWS.TEAM ? (
+            {view === PIPELINE_VIEWS.TEAM && canSeeTeam ? (
               <div className="rounded-xl border border-slate-200 bg-white dark:border-slate-700 dark:bg-slate-900">
                 <PipelineTeam
                   leads={filteredLeads}
+                  summary={teamSummary}
                   employees={executives}
-                  loading={loading}
+                  search={debouncedQuery}
+                  loading={loading || (teamSummaryLoading && !teamSummary)}
                   onOpenEmployee={handleOpenTeamEmployee}
                 />
               </div>
@@ -4106,6 +4438,8 @@ const LeadsMatrix = () => {
             onSheetTypeChange={(value) => {
               setBulkUploadSheetType(value);
               setBulkUploadParsedRows(null);
+              setBulkUploadSkipped([]);
+              setBulkUploadParseError("");
               if (bulkUploadFileName) {
                 setBulkUploadText("");
                 setBulkUploadFileName("");
@@ -4113,16 +4447,44 @@ const LeadsMatrix = () => {
             }}
             onCsvTextChange={(value) => {
               setBulkUploadParsedRows(null);
+              setBulkUploadSkipped([]);
+              setBulkUploadParseError("");
               setBulkUploadText(value);
             }}
             selectedFileName={bulkUploadFileName}
             onFileSelect={handleBulkUploadFileSelect}
-            onClose={() => setIsBulkUploadModalOpen(false)}
+            onClose={closeBulkUploadModal}
+            fileCheck={bulkUploadFileName || bulkUploadParseError || bulkUploadSkipped.length
+              ? {
+                readyCount: Array.isArray(bulkUploadParsedRows) ? bulkUploadParsedRows.length : null,
+                skipped: bulkUploadSkipped,
+                parseError: bulkUploadParseError,
+              }
+              : null}
+            report={bulkUploadReport}
+            onUploadAnother={resetBulkUploadForm}
+            uploadProgress={bulkUploadProgress}
+            onStopUpload={stopBulkUpload}
             onUpload={handleBulkUploadLeads}
+            canChooseAssignment={canChooseBulkAssignment}
+            assignMode={bulkAssignMode}
+            onAssignModeChange={setBulkAssignMode}
+            assignUserId={bulkAssignUserId}
+            onAssignUserChange={setBulkAssignUserId}
+            assigneeOptions={bulkAssigneeOptions}
             uploading={bulkUploading}
           />
         )}
       </AnimatePresence>
+
+      {bulkDeleteRun ? (
+        <BulkDeleteDialog
+          run={bulkDeleteRun}
+          onConfirm={startBulkDelete}
+          onStop={stopBulkDelete}
+          onClose={closeBulkDelete}
+        />
+      ) : null}
 
       <AnimatePresence>
         {isBulkTransferOpen ? (
@@ -4155,6 +4517,8 @@ const LeadsMatrix = () => {
               <LeadDetailsRebuilt
                 isDark={isDark}
                 selectedLead={selectedLead}
+                openCloseDealRequest={location.state?.openCloseDeal || null}
+                onCloseDealRequestHandled={handleCloseDealRequestHandled}
                 onClose={closeDetails}
             selectedLeadDialerHref={selectedLeadDialerHref}
             selectedLeadWhatsAppHref={selectedLeadWhatsAppHref}

@@ -658,6 +658,8 @@ const ProjectDetailsPage = () => {
                 rows={[
                   [`Starting rate ${rateUnit}`, money(startingRate) ? `${money(startingRate)}${project.startingRateDate ? ` · from ${formatDate(project.startingRateDate)}` : ""}` : ""],
                   [`Current rate ${rateUnit}`, money(currentRate) ? `${money(currentRate)}${project.currentRateDate ? ` · as of ${formatDate(project.currentRateDate)}` : ""}` : ""],
+                  ["Bare shell rent", money(project.rentRateBareShell) ? `${money(project.rentRateBareShell)} / sq ft / month` : ""],
+                  ["Furnished rent", money(project.rentRateFurnished) ? `${money(project.rentRateFurnished)} / sq ft / month` : ""],
                   ["Guideline / DLC rate", pricingDetails.guidelineRate ? `${money(pricingDetails.guidelineRate)}${pricingDetails.guidelineRateUnit ? ` ${pricingDetails.guidelineRateUnit}` : ""}${pricingDetails.guidelineRateDate ? ` · from ${formatDate(pricingDetails.guidelineRateDate)}` : ""}` : ""],
                   ["GST", project.gstPercent !== null && project.gstPercent !== undefined ? `${project.gstPercent}%` : ""],
                   ["Stamp duty / registration", project.stampDutyPercent !== null && project.stampDutyPercent !== undefined ? `${project.stampDutyPercent}%` : ""],

@@ -21,6 +21,10 @@ test("lead keeps first-touch fields; states are Untouched / Touched", () => {
   assert.deepEqual(Lead.schema.path("firstTouchSource").enumValues, ["MANUAL", "CRM_ACTION", "SYSTEM", ""]);
   assert.equal(touch.touchState({}), "UNTOUCHED");
   assert.equal(touch.touchState({ firstTouchAt: new Date() }), "TOUCHED");
+  // Worked without a logged call (status moved on) is not untouched.
+  assert.equal(touch.touchState({ status: "NEW" }), "UNTOUCHED");
+  assert.equal(touch.touchState({ status: "INTERESTED" }), "TOUCHED");
+  assert.equal(touch.touchState({ status: "LOST" }), "TOUCHED");
 });
 
 test("first touch is written only while empty, so reassignment or later touches never reset it", async () => {
@@ -50,8 +54,8 @@ test("bad channels and future times are refused; a touch before creation counts 
 });
 
 test("filters: untouched, touched and touched-within", () => {
-  assert.deepEqual(touch.touchFilterClauses({ touchState: "untouched" }), [{ firstTouchAt: null }]);
-  assert.deepEqual(touch.touchFilterClauses({ touchState: "TOUCHED", touchMinutesMax: "15" }), [{ firstTouchAt: { $ne: null } }, { touchMinutes: { $lte: 15 } }]);
+  assert.deepEqual(touch.touchFilterClauses({ touchState: "untouched" }), [{ firstTouchAt: null, status: "NEW" }]);
+  assert.deepEqual(touch.touchFilterClauses({ touchState: "TOUCHED", touchMinutesMax: "15" }), [{ $or: [{ firstTouchAt: { $ne: null } }, { status: { $ne: "NEW" } }] }, { touchMinutes: { $lte: 15 } }]);
 });
 
 test("report: per employee touched, untouched, average and median", () => {

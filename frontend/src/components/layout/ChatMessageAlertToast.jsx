@@ -127,7 +127,8 @@ const ChatMessageAlertToast = () => {
   const isTaskAlert = activeAlert.source === "task";
 
   return (
-    <div className="pointer-events-none fixed bottom-4 right-4 z-[112] w-[min(92vw,24rem)]">
+    // Placed by the shared alert stack in App.jsx, not fixed to a corner itself.
+    <div className="pointer-events-none w-full">
       <div
         className={`pointer-events-auto rounded-2xl border p-3 shadow-2xl ${
           isDark

@@ -6,6 +6,16 @@ import AvatarFace from "../ui/AvatarFace";
 import { getMyProfile } from "../../services/userService";
 import "./AppTopCommandBar.css";
 
+const PAGES_WITH_OWN_TITLE = [
+  /^\/inventory\/?$/,
+  /^\/database\/?$/,
+  /^\/projects\/?$/,
+  /^\/enterprise\/?$/,
+  /^\/admin\/notifications\/?$/,
+  /^\/coworking\/clients\/?$/,
+  /^\/coworking\/booking-board\/?$/,
+];
+
 const AppTopCommandBar = ({ pageHeader, theme, onToggleTheme, onMenuOpen, onLogout, actions, user, userRole, unreadAlerts = 0, unreadChats = 0 }) => {
   const location = useLocation();
   const navigate = useNavigate();
@@ -16,6 +26,10 @@ const AppTopCommandBar = ({ pageHeader, theme, onToggleTheme, onMenuOpen, onLogo
   const isInventory = location.pathname === "/inventory";
   const isPipeline = location.pathname === "/leads" || location.pathname === "/my-leads";
   const isLeadDetails = /^\/(?:leads|my-leads)\/[^/]+\/?$/.test(location.pathname);
+  // These pages print their own big title right under this bar. Showing the
+  // header title as well stacked two headings on top of each other (and on
+  // Notifications they even disagreed: "Alerts" vs "Notifications").
+  const pageOwnsTitle = PAGES_WITH_OWN_TITLE.some((pattern) => pattern.test(location.pathname));
   const role = userRole || user?.role;
   const isFieldHome = role === "FIELD_EXECUTIVE" && ["/", "/dashboard"].includes(location.pathname);
   const menuItems = getAllVisibleMenuGroups(role, user).flatMap((group) => group.items);
@@ -95,7 +109,8 @@ const AppTopCommandBar = ({ pageHeader, theme, onToggleTheme, onMenuOpen, onLogo
       <button type="button" className="app-header-menu app-header-icon" aria-label="Open navigation" onClick={onMenuOpen}><Menu size={20} /></button>
       {isPipeline && <div className="pipeline-mobile-title">Pipeline</div>}
       {isLeadDetails && <div className="lead-details-header-title">Lead details</div>}
-      {!isPipeline && !isLeadDetails && <div className="app-header-heading"><h1>{title}</h1><p>{isFieldHome ? "Here's what's happening with your pipeline today." : pageHeader?.subtitle || "Manage your workspace and daily activities."}</p></div>}
+      {!isPipeline && !isLeadDetails && pageOwnsTitle && <div className="app-header-heading" aria-hidden="true" />}
+      {!isPipeline && !isLeadDetails && !pageOwnsTitle && <div className="app-header-heading"><h1>{title}</h1><p>{isFieldHome ? "Here's what's happening with your pipeline today." : pageHeader?.subtitle || "Manage your workspace and daily activities."}</p></div>}
       <div className="app-header-search" onBlur={(event) => { if (!event.currentTarget.contains(event.relatedTarget)) setSearchOpen(false); }}>
         <Search size={18} />
         <input ref={searchRef} aria-label={isInventory ? "Search inventory" : "Search pages"} placeholder={isInventory ? "Search properties, projects, locations..." : isPipeline ? "Search pages, leads, projects..." : "Search pages..."} value={query} onChange={(event) => search(event.target.value)} onFocus={() => setSearchOpen(true)} />

@@ -2,11 +2,13 @@ import BrokerPhoneHint from "./BrokerPhoneHint";
 import CoworkingRequirementFields from "./CoworkingRequirementFields";
 import BillstackSection from '../../../components/billing/BillstackSection';
 import React from "react";
+import { createPortal } from "react-dom";
 import { motion as Motion } from "framer-motion";
 import { createInventoryShareLink } from "../../../services/inventoryService";
 import { uploadFile } from "../../../services/uploadService";
 import { logLeadTouch } from "../../../services/leadService";
 import LeadTouchStatus from "./LeadTouchStatus";
+import PropertyLinkPicker from "./PropertyLinkPicker";
 import {
   AlertCircle,
   ArrowLeft,
@@ -50,6 +52,11 @@ import {
   Trash2,
   User,
   Users,
+  X,
+  Handshake,
+  IndianRupee,
+  Wallet,
+  BadgeCheck,
 } from "lucide-react";
 import {
   getTasks as apiGetTasks,
@@ -170,6 +177,8 @@ const getAssignmentActionLabel = (action) => {
   const normalized = String(action || "").trim().toUpperCase();
   if (normalized === "LEAD_CREATED") return "Lead Created";
   if (normalized === "AUTO_ASSIGNED") return "Auto Assigned";
+  if (normalized === "BULK_ASSIGNED") return "Assigned from Bulk Upload";
+  if (normalized === "INITIAL_ASSIGNMENT") return "Assigned to Creator";
   if (normalized === "QUALIFIED") return "Qualified";
   if (normalized === "MANUAL_TRANSFER") return "Manual Transfer";
   if (normalized === "REASSIGNED") return "Reassigned";
@@ -353,6 +362,9 @@ const toDateTimeInputValue = (dateValue) => {
   const minutes = String(date.getMinutes()).padStart(2, "0");
   return `${year}-${month}-${day}T${hours}:${minutes}`;
 };
+
+// Statuses that carry a deal payment (the close-deal window opens for them).
+const DEAL_FLOW_STATUSES = ["CLOSED", "REQUESTED"];
 
 const buildDefaultCollectionFollowUp = () => {
   const date = new Date();
@@ -541,6 +553,8 @@ const LeadDetailsRebuiltContent = ({
   toInventoryApiStatus,
   toInventoryStatusLabel,
   onSelectRelatedProperty,
+  openCloseDealRequest = null,
+  onCloseDealRequestHandled,
   onOpenRelatedProperty,
   onRemoveRelatedProperty,
   availableRelatedInventoryOptions,
@@ -833,6 +847,96 @@ const LeadDetailsRebuiltContent = ({
   const [customNumberFields, setCustomNumberFields] = React.useState({});
   const [isManualBudgetRange, setIsManualBudgetRange] = React.useState(false);
   const [activeTab, setActiveTab] = React.useState("overview");
+
+  /*
+   * Close-deal window (13 Nov 2026). Picking Closed (or Requested) opens the
+   * deal payment, brokerage and documents in one window instead of a section
+   * further down the page. Cancel puts the status back; the window closes on
+   * its own once the save succeeds.
+   */
+  const [closeDealOpen, setCloseDealOpen] = React.useState(false);
+  const closeDealFromStatusRef = React.useRef("");
+  const closeDealSaveFromRef = React.useRef(null);
+  const savedLeadStatus = String(selectedLead?.status || "").toUpperCase();
+  // Everything the window can change, so Cancel can put it all back (choosing
+  // Partial payment, for one, fills in a follow-up date).
+  const closeDealSnapshotRef = React.useRef(null);
+  const takeCloseDealSnapshot = () => {
+    closeDealSnapshotRef.current = {
+      paymentModeDraft, paymentTypeDraft, paymentRemainingDraft, paymentReferenceDraft, paymentNoteDraft,
+      paymentApprovalStatusDraft, paymentApprovalNoteDraft, brokerageReceivedDraft, brokerageDistributedDraft,
+      brokerageExtraDraft, closureDocumentsDraft, followUpDraft,
+    };
+  };
+  // Latest version for the effect below, which should not re-run on every render.
+  const takeCloseDealSnapshotRef = React.useRef(takeCloseDealSnapshot);
+  takeCloseDealSnapshotRef.current = takeCloseDealSnapshot;
+  const openCloseDealWindow = () => {
+    takeCloseDealSnapshot();
+    closeDealFromStatusRef.current = DEAL_FLOW_STATUSES.includes(savedLeadStatus) ? "" : savedLeadStatus;
+    closeDealSaveFromRef.current = null;
+    setCloseDealOpen(true);
+  };
+  const pickLeadStatus = (status) => {
+    const next = String(status || "").toUpperCase();
+    setStatusDraft(status);
+    if (canEditLead && DEAL_FLOW_STATUSES.includes(next) && !DEAL_FLOW_STATUSES.includes(savedLeadStatus)) {
+      openCloseDealWindow();
+    }
+  };
+  const cancelCloseDeal = () => {
+    const snapshot = closeDealSnapshotRef.current;
+    if (snapshot) {
+      setPaymentModeDraft(snapshot.paymentModeDraft);
+      setPaymentTypeDraft(snapshot.paymentTypeDraft);
+      setPaymentRemainingDraft(snapshot.paymentRemainingDraft);
+      setPaymentReferenceDraft(snapshot.paymentReferenceDraft);
+      setPaymentNoteDraft(snapshot.paymentNoteDraft);
+      setPaymentApprovalStatusDraft(snapshot.paymentApprovalStatusDraft);
+      setPaymentApprovalNoteDraft(snapshot.paymentApprovalNoteDraft);
+      setBrokerageReceivedDraft(snapshot.brokerageReceivedDraft);
+      setBrokerageDistributedDraft(snapshot.brokerageDistributedDraft);
+      setBrokerageExtraDraft(snapshot.brokerageExtraDraft);
+      setClosureDocumentsDraft(snapshot.closureDocumentsDraft);
+      setFollowUpDraft(snapshot.followUpDraft);
+      closeDealSnapshotRef.current = null;
+    }
+    if (closeDealFromStatusRef.current) setStatusDraft(closeDealFromStatusRef.current);
+    closeDealSaveFromRef.current = null;
+    setCloseDealOpen(false);
+  };
+  // A successful save replaces the lead object; a failed one leaves it as it was.
+  React.useEffect(() => {
+    if (closeDealOpen && closeDealSaveFromRef.current && selectedLead !== closeDealSaveFromRef.current) {
+      closeDealSaveFromRef.current = null;
+      setCloseDealOpen(false);
+    }
+  }, [closeDealOpen, selectedLead]);
+  // "Closed" picked in the pipeline list opens this page with the window open.
+  const pendingCloseDealRequestRef = React.useRef(null);
+  React.useEffect(() => {
+    if (openCloseDealRequest) pendingCloseDealRequestRef.current = openCloseDealRequest;
+  }, [openCloseDealRequest]);
+  React.useEffect(() => {
+    if (!pendingCloseDealRequestRef.current || !selectedLead?._id) return;
+    if (!canEditLead || DEAL_FLOW_STATUSES.includes(savedLeadStatus)) {
+      pendingCloseDealRequestRef.current = null;
+      onCloseDealRequestHandled?.();
+      return;
+    }
+    // The page sets the status draft from the lead after it loads; wait for
+    // that, then switch the draft to Closed and open the window.
+    if (String(statusDraft || "").toUpperCase() !== "CLOSED") {
+      setStatusDraft("CLOSED");
+      return;
+    }
+    pendingCloseDealRequestRef.current = null;
+    takeCloseDealSnapshotRef.current();
+    closeDealFromStatusRef.current = savedLeadStatus;
+    closeDealSaveFromRef.current = null;
+    setCloseDealOpen(true);
+    onCloseDealRequestHandled?.();
+  }, [openCloseDealRequest, selectedLead?._id, statusDraft, savedLeadStatus, canEditLead, setStatusDraft, onCloseDealRequestHandled]);
   const [headerMenuOpen, setHeaderMenuOpen] = React.useState(false);
   const [mobileStatusOpen, setMobileStatusOpen] = React.useState(false);
   const [assigneeMenuOpen, setAssigneeMenuOpen] = React.useState(false);
@@ -1470,6 +1574,34 @@ const LeadDetailsRebuiltContent = ({
       toInventoryApiStatus,
     ],
   );
+  // One readable card per property for the searchable picker. The unit number
+  // often repeats the property ID and the office type often repeats the
+  // furnishing, so repeats are dropped.
+  const linkablePropertyItems = React.useMemo(() => {
+    const unique = (values) => values
+      .map((value) => String(value || "").trim())
+      .filter(Boolean)
+      .filter((value, index, all) => all.findIndex((other) => other.toLowerCase() === value.toLowerCase()) === index);
+    return sortedLinkableInventoryOptions.map((inventory) => {
+      const id = String(inventory?._id || "");
+      const propertyId = String(inventory?.propertyId || "").trim();
+      const name = unique([inventory?.projectName, inventory?.towerName, inventory?.unitNumber])
+        .filter((value) => value.toLowerCase() !== propertyId.toLowerCase())
+        .join(" - ")
+        || String(inventory?.title || "").trim()
+        || (propertyId ? "" : id);
+      return {
+        id,
+        propertyId,
+        name,
+        location: getInventoryLocationLabel(inventory),
+        details: unique(getInventoryQuickInfo(inventory).split(" | ")).join(" · "),
+        listing: getInventoryListingLabel(inventory),
+        price: formatInventoryAmountInr(inventory),
+      };
+    });
+  }, [sortedLinkableInventoryOptions]);
+  const linkDraftIsListed = linkablePropertyItems.some((item) => item.id === relatedInventoryDraft);
 
   React.useEffect(() => {
     if (!relatedInventoryDraft) return;
@@ -2605,6 +2737,272 @@ const LeadDetailsRebuiltContent = ({
     ? `https://www.google.com/maps/search/?api=1&query=${savedSiteLat},${savedSiteLng}`
     : selectedLeadMapsHref;
 
+  const closesDealDirectly = ["ADMIN", "MANAGER"].includes(String(userRole || "").toUpperCase());
+  const closingTarget = String(statusDraft || "").toUpperCase();
+  const dealAmountFor = (row) => (row?.inventory ? formatInventoryAmountInr(row.inventory) : "");
+  const brokerageReceivedValue = brokerageReceivedDraft !== ""
+    ? Number(brokerageReceivedDraft)
+    : Number(selectedLead?.brokerageReceived);
+  const closeDealChecklist = [
+    { key: "property", label: "Property for this deal", done: Boolean(activeRelatedPropertyRow) },
+    { key: "mode", label: "Payment mode", done: Boolean(paymentModeDraft) },
+    { key: "type", label: "Payment type", done: Boolean(paymentTypeDraft) },
+    ...(requiresPaymentReference
+      ? [{ key: "reference", label: "UTR / transaction / cheque number", done: Boolean(String(paymentReferenceDraft || "").trim()) }]
+      : []),
+    ...(showRemainingAmountField
+      ? [
+        { key: "remaining", label: "Remaining amount", done: Number(paymentRemainingDraft) > 0 },
+        { key: "followup", label: "Follow-up to collect the rest", done: hasFollowUpDraft },
+      ]
+      : []),
+    { key: "brokerage", label: "Brokerage received", done: Number.isFinite(brokerageReceivedValue) && brokerageReceivedValue >= 0 && (brokerageReceivedDraft !== "" || selectedLead?.brokerageReceived != null) },
+  ];
+  const closeDealDoneCount = closeDealChecklist.filter((item) => item.done).length;
+  const closeDealPrimaryLabel = closingTarget === "REQUESTED"
+    ? "Save as requested"
+    : closesDealDirectly ? "Close deal" : "Send for approval";
+  const choiceChip = (active) => `inline-flex h-9 items-center rounded-lg border px-3 text-[13px] font-semibold transition ${
+    active
+      ? isDark ? "border-emerald-500/60 bg-emerald-500/15 text-emerald-200" : "border-emerald-300 bg-emerald-50 text-emerald-700"
+      : isDark ? "border-slate-700 bg-slate-900 text-slate-300 hover:border-slate-600" : "border-slate-300 bg-white text-slate-600 hover:border-slate-400"
+  }`;
+  const stepTitle = (number, title, icon) => (
+    <div className="mb-3 flex items-center gap-2">
+      <span className={`flex h-6 w-6 items-center justify-center rounded-full text-[12px] font-bold ${isDark ? "bg-emerald-500/20 text-emerald-200" : "bg-emerald-100 text-emerald-700"}`}>{number}</span>
+      <span className={mutedText}>{icon}</span>
+      <h3 className={`text-[14px] font-semibold ${headingText}`}>{title}</h3>
+    </div>
+  );
+  const stepCard = `rounded-xl border p-4 ${isDark ? "border-slate-800 bg-slate-900/60" : "border-slate-200 bg-white"}`;
+
+  // Drawn on document.body: inside the animated page section the app's top
+  // bar sat above it and hid the header.
+  const closeDealModal = closeDealOpen ? createPortal(
+    <div className="fixed inset-0 z-[1000] flex items-center justify-center bg-slate-950/55 p-3 backdrop-blur-[2px] sm:p-6" role="presentation">
+      <div role="dialog" aria-modal="true" aria-label="Close deal" className={`flex max-h-[94vh] w-full max-w-3xl flex-col overflow-hidden rounded-2xl border shadow-2xl ${isDark ? "border-slate-700 bg-slate-950" : "border-slate-200 bg-slate-50"}`}>
+        <div className={`relative px-5 py-4 sm:px-6 ${isDark ? "bg-gradient-to-r from-emerald-900/50 to-slate-900" : "bg-gradient-to-r from-emerald-50 to-white"}`}>
+          <div className="flex items-start gap-3 pr-10">
+            <span className={`flex h-11 w-11 shrink-0 items-center justify-center rounded-xl ${isDark ? "bg-emerald-500/20 text-emerald-200" : "bg-emerald-600 text-white"}`}>
+              <Handshake size={22} />
+            </span>
+            <div className="min-w-0">
+              <h2 className={`text-lg font-bold ${headingText}`}>
+                {closingTarget === "REQUESTED" ? "Deal close request" : "Close deal"} · {leadDisplayName}
+              </h2>
+              <p className={`mt-0.5 text-[13px] ${mutedText}`}>
+                {closesDealDirectly
+                  ? "Fill the payment and brokerage details. The deal is closed when you save."
+                  : "Fill the payment and brokerage details. An Admin approves the payment before the deal is closed."}
+              </p>
+            </div>
+          </div>
+          <button type="button" onClick={cancelCloseDeal} aria-label="Cancel closing the deal" className={`absolute right-4 top-4 rounded-lg p-1.5 ${isDark ? "text-slate-400 hover:bg-slate-800" : "text-slate-500 hover:bg-white"}`}>
+            <X size={18} />
+          </button>
+          <div className="mt-3 flex items-center gap-3">
+            <div className={`h-1.5 flex-1 overflow-hidden rounded-full ${isDark ? "bg-slate-800" : "bg-emerald-100"}`}>
+              <div className="h-full rounded-full bg-emerald-500 transition-[width] duration-300" style={{ width: `${Math.round((closeDealDoneCount / closeDealChecklist.length) * 100)}%` }} />
+            </div>
+            <span className={`text-[12px] font-semibold ${mutedText}`}>{closeDealDoneCount} of {closeDealChecklist.length} ready</span>
+          </div>
+        </div>
+
+        <div className="flex-1 space-y-3 overflow-y-auto px-5 py-4 sm:px-6">
+          <div className={stepCard}>
+            {stepTitle(1, "Property", <Building2 size={15} />)}
+            {activeRelatedPropertyRow ? (
+              <div className={`flex flex-wrap items-center justify-between gap-3 rounded-lg border px-3 py-2.5 ${isDark ? "border-emerald-500/30 bg-emerald-500/10" : "border-emerald-200 bg-emerald-50/60"}`}>
+                <div className="min-w-0">
+                  <p className={`truncate text-[14px] font-semibold ${headingText}`}>{activeRelatedPropertyRow.label || "Property"}</p>
+                  <p className={`truncate text-[12px] ${mutedText}`}>{activeRelatedPropertyRow.location || "Location not set"}</p>
+                </div>
+                <div className="text-right">
+                  <p className={`text-[11px] ${mutedText}`}>Deal amount</p>
+                  <p className={`text-[14px] font-bold ${headingText}`}>{dealAmountFor(activeRelatedPropertyRow) || "-"}</p>
+                </div>
+              </div>
+            ) : (
+              <p className={`rounded-lg border px-3 py-2.5 text-[13px] ${isDark ? "border-amber-500/40 bg-amber-500/10 text-amber-100" : "border-amber-200 bg-amber-50 text-amber-800"}`}>
+                {relatedInventoryRows.length
+                  ? "Choose the property this deal is for."
+                  : "No property is linked to this lead. Cancel, link the property under Properties, then close the deal."}
+              </p>
+            )}
+            {relatedInventoryRows.length > 1 || (!activeRelatedPropertyRow && relatedInventoryRows.length) ? (
+              <div className="mt-2 flex flex-wrap gap-2">
+                {relatedInventoryRows.filter((row) => row.id).slice(0, 8).map((row) => (
+                  <button key={row.id} type="button" onClick={() => onSelectRelatedProperty(row.id)} className={choiceChip(row.id === normalizedActiveInventoryId)}>
+                    {row.id === normalizedActiveInventoryId ? <Check size={14} className="mr-1" /> : null}
+                    <span className="max-w-[16rem] truncate">{row.label || "Property"}</span>
+                  </button>
+                ))}
+              </div>
+            ) : null}
+          </div>
+
+          <div className={stepCard}>
+            {stepTitle(2, "Payment", <Wallet size={15} />)}
+            <span className={labelCls}>Payment mode <span className="text-rose-500">*</span></span>
+            <div className="flex flex-wrap gap-2">
+              {dealPaymentModes.map((mode) => (
+                <button key={mode.value} type="button" onClick={() => { setPaymentModeDraft(mode.value); if (mode.value === "CASH") setPaymentReferenceDraft(""); }} className={choiceChip(paymentModeDraft === mode.value)}>
+                  {mode.label}
+                </button>
+              ))}
+            </div>
+            <span className={`mt-3 ${labelCls}`}>Payment type <span className="text-rose-500">*</span></span>
+            <div className="flex flex-wrap gap-2">
+              {dealPaymentTypes.map((paymentType) => (
+                <button
+                  key={paymentType.value}
+                  type="button"
+                  onClick={() => {
+                    setPaymentTypeDraft(paymentType.value);
+                    if (paymentType.value === "PARTIAL" && !String(followUpDraft || "").trim()) {
+                      setFollowUpDraft(buildDefaultCollectionFollowUp());
+                    }
+                  }}
+                  className={choiceChip(paymentTypeDraft === paymentType.value)}
+                >
+                  {paymentType.label}
+                </button>
+              ))}
+            </div>
+            {requiresPaymentReference || showRemainingAmountField ? (
+              <div className="mt-3 grid grid-cols-1 gap-3 sm:grid-cols-2">
+                {requiresPaymentReference ? (
+                  <label className="block">
+                    <span className={labelCls}>UTR / transaction / cheque no. <span className="text-rose-500">*</span></span>
+                    <input type="text" value={paymentReferenceDraft} onChange={(event) => setPaymentReferenceDraft(event.target.value)} placeholder="e.g. 4521 8890 1123" className={fieldCls} />
+                  </label>
+                ) : null}
+                {showRemainingAmountField ? (
+                  <label className="block">
+                    <span className={labelCls}>Remaining amount (₹) <span className="text-rose-500">*</span></span>
+                    <input type="number" min="0" step="0.01" value={paymentRemainingDraft} onChange={(event) => setPaymentRemainingDraft(event.target.value)} placeholder="Still to be paid" className={fieldCls} />
+                  </label>
+                ) : null}
+                {showRemainingAmountField ? (
+                  <label className="block sm:col-span-2">
+                    <span className={labelCls}>Follow-up to collect the rest <span className="text-rose-500">*</span></span>
+                    <input type="datetime-local" value={followUpDraft || ""} onChange={(event) => setFollowUpDraft(event.target.value)} className={fieldCls} />
+                  </label>
+                ) : null}
+              </div>
+            ) : null}
+          </div>
+
+          <div className={stepCard}>
+            {stepTitle(3, "Brokerage", <IndianRupee size={15} />)}
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+              <label className="block">
+                <span className={labelCls}>Brokerage received (₹) <span className="text-rose-500">*</span></span>
+                <input type="number" min="0" step="0.01" value={brokerageReceivedDraft} onChange={(event) => setBrokerageReceivedDraft(event.target.value)} placeholder="Company brokerage received" className={fieldCls} />
+              </label>
+              <label className="block">
+                <span className={labelCls}>Brokerage distributed (₹)</span>
+                <input type="number" min="0" step="0.01" value={brokerageDistributedDraft} onChange={(event) => setBrokerageDistributedDraft(event.target.value)} placeholder="0" className={fieldCls} />
+              </label>
+              <label className="block">
+                <span className={labelCls}>Agreed brokerage (₹)</span>
+                <input type="number" min="0" step="0.01" value={brokerageExtraDraft.agreed} onChange={(event) => setBrokerageExtraDraft((prev) => ({ ...prev, agreed: event.target.value }))} placeholder="Total agreed" className={fieldCls} />
+              </label>
+              <label className="block">
+                <span className={labelCls}>Brokerage payment date</span>
+                <input type="date" value={brokerageExtraDraft.paymentDate} onChange={(event) => setBrokerageExtraDraft((prev) => ({ ...prev, paymentDate: event.target.value }))} className={fieldCls} />
+              </label>
+            </div>
+            <span className={`mt-3 ${labelCls}`}>Brokerage paid by</span>
+            <div className="flex flex-wrap gap-2">
+              {[{ value: "", label: "Not set" }, { value: "TENANT", label: "Tenant" }, { value: "OWNER", label: "Owner" }, { value: "BOTH", label: "Both" }].map((option) => (
+                <button key={option.value || "none"} type="button" onClick={() => setBrokerageExtraDraft((prev) => ({ ...prev, source: option.value }))} className={choiceChip(brokerageExtraDraft.source === option.value)}>
+                  {option.label}
+                </button>
+              ))}
+            </div>
+            {(() => {
+              const agreed = brokerageExtraDraft.agreed === "" ? null : Number(brokerageExtraDraft.agreed);
+              const received = Number(brokerageReceivedDraft) || 0;
+              const pending = agreed !== null && Number.isFinite(agreed) ? Math.max(0, agreed - received) : null;
+              return pending ? (
+                <p className={`mt-3 rounded-lg border px-3 py-2 text-[12px] ${isDark ? "border-amber-500/40 bg-amber-500/10 text-amber-100" : "border-amber-200 bg-amber-50 text-amber-800"}`}>
+                  Pending brokerage: {new Intl.NumberFormat("en-IN", { style: "currency", currency: "INR", maximumFractionDigits: 0 }).format(pending)}
+                </p>
+              ) : null;
+            })()}
+            <p className={`mt-3 text-[12px] ${mutedText}`}>Only Brokerage Received is counted as company revenue.</p>
+          </div>
+
+          <div className={stepCard}>
+            {stepTitle(4, "Closing documents", <FileText size={15} />)}
+            {closureDocumentsBlock}
+          </div>
+
+          <div className={stepCard}>
+            {stepTitle(5, "Notes & approval", <BadgeCheck size={15} />)}
+            <label className="block">
+              <span className={labelCls}>Payment note</span>
+              <textarea value={paymentNoteDraft} onChange={(event) => setPaymentNoteDraft(event.target.value)} placeholder="Anything the approver should know…" maxLength={1000} className={`min-h-[72px] resize-y ${areaCls}`} />
+            </label>
+            <p className={`mt-3 inline-flex rounded-full px-2.5 py-1 text-[12px] font-semibold ${
+              currentApprovalStatus === "APPROVED"
+                ? isDark ? "bg-emerald-500/15 text-emerald-200" : "bg-emerald-50 text-emerald-700"
+                : currentApprovalStatus === "REJECTED"
+                  ? isDark ? "bg-rose-500/15 text-rose-200" : "bg-rose-50 text-rose-700"
+                  : isDark ? "bg-amber-500/15 text-amber-200" : "bg-amber-50 text-amber-700"
+            }`}>
+              Payment approval: {approvalLabel(currentApprovalStatus)}
+            </p>
+            {canReviewDealPayment ? (
+              <div className="mt-3 grid grid-cols-1 gap-3 sm:grid-cols-2">
+                <label className="block">
+                  <span className={labelCls}>Admin decision</span>
+                  <select value={paymentApprovalStatusDraft} onChange={(event) => setPaymentApprovalStatusDraft(event.target.value)} className={fieldCls}>
+                    <option value="">Keep current status</option>
+                    {dealPaymentAdminDecisions.map((decision) => <option key={decision.value} value={decision.value}>{decision.label}</option>)}
+                  </select>
+                </label>
+                <label className="block">
+                  <span className={labelCls}>Admin note</span>
+                  <textarea value={paymentApprovalNoteDraft} onChange={(event) => setPaymentApprovalNoteDraft(event.target.value)} placeholder="Admin note…" maxLength={1000} className={`min-h-[40px] resize-y ${areaCls}`} />
+                </label>
+              </div>
+            ) : null}
+          </div>
+        </div>
+
+        <div className={`border-t px-5 py-3 sm:px-6 ${isDark ? "border-slate-800 bg-slate-900" : "border-slate-200 bg-white"}`}>
+          {closeDealDoneCount < closeDealChecklist.length ? (
+            <p className={`mb-2 text-[12px] ${isDark ? "text-amber-200" : "text-amber-700"}`}>
+              Still needed: {closeDealChecklist.filter((item) => !item.done).map((item) => item.label).join(", ")}
+            </p>
+          ) : (
+            <p className={`mb-2 flex items-center gap-1.5 text-[12px] ${isDark ? "text-emerald-200" : "text-emerald-700"}`}>
+              <CheckCircle2 size={14} /> Everything needed is filled in.
+            </p>
+          )}
+          <div className="flex flex-wrap justify-end gap-2">
+            <button type="button" onClick={cancelCloseDeal} disabled={savingUpdates} className={ghostBtn}>Cancel</button>
+            <button
+              type="button"
+              onClick={() => {
+                closeDealSaveFromRef.current = selectedLead;
+                onUpdateLead();
+              }}
+              disabled={savingUpdates}
+              className={`inline-flex h-10 items-center gap-2 rounded-lg px-5 text-[14px] font-semibold text-white shadow-sm transition disabled:opacity-60 ${isDark ? "bg-emerald-600 hover:bg-emerald-500" : "bg-emerald-600 hover:bg-emerald-700"}`}
+            >
+              {savingUpdates ? <Loader size={15} className="animate-spin" /> : <Handshake size={15} />}
+              {savingUpdates ? "Saving…" : closeDealPrimaryLabel}
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>,
+    document.body,
+  ) : null;
+
   const requirementSummaryRows = [
     { label: "Inventory type", value: toTitleCaseLabel(normalizedRequirementInventoryType), Icon: Building2 },
     {
@@ -2734,7 +3132,7 @@ const LeadDetailsRebuiltContent = ({
               <ChevronDown size={17} />
             </button>
             {mobileStatusOpen ? <div className={`lead-details-mobile-status-menu ${shellSurface}`}>
-              {leadStatuses.map((status) => <button key={status} type="button" disabled={!canReviewDealPayment && status === "REQUESTED"} onClick={() => { setStatusDraft(status); setMobileStatusOpen(false); }} className={status === statusDraft ? "is-selected" : ""}>{statusLabel(status)}</button>)}
+              {leadStatuses.map((status) => <button key={status} type="button" disabled={!canReviewDealPayment && status === "REQUESTED"} onClick={() => { pickLeadStatus(status); setMobileStatusOpen(false); }} className={status === statusDraft ? "is-selected" : ""}>{statusLabel(status)}</button>)}
             </div> : null}
           </div>
           <div className="lead-details-mobile-assignee-picker">
@@ -2814,7 +3212,7 @@ const LeadDetailsRebuiltContent = ({
                     <select
                       value={statusDraft}
                       disabled={!canEditLead}
-                      onChange={(event) => setStatusDraft(event.target.value)}
+                      onChange={(event) => pickLeadStatus(event.target.value)}
                       className={`h-9 w-auto appearance-none pl-8 pr-8 text-[13px] font-semibold ${fieldCls}`}
                     >
                       {leadStatuses.map((status) => (
@@ -3413,9 +3811,21 @@ const LeadDetailsRebuiltContent = ({
               )}
             </section>
 
-            {isClosedDealFlow ? <section className={`${shellCard} p-4 sm:p-5`}>{dealPaymentBlock}</section> : null}
+            {isClosedDealFlow && !closeDealOpen ? (
+              <section className={`${shellCard} p-4 sm:p-5`}>
+                {canEditLead ? (
+                  <div className="flex justify-end">
+                    <button type="button" onClick={openCloseDealWindow} className={ghostBtn}>
+                      <Handshake size={15} />
+                      Open deal window
+                    </button>
+                  </div>
+                ) : null}
+                {dealPaymentBlock}
+              </section>
+            ) : null}
 
-            {isClosedStatusSelected ? (
+            {isClosedStatusSelected && !closeDealOpen ? (
               <section className={`${shellCard} p-4 sm:p-5`}>{closureDocumentsBlock}</section>
             ) : null}
           </div>
@@ -4099,42 +4509,19 @@ const LeadDetailsRebuiltContent = ({
                     ))}
                   </div>
                   <div className="mt-3 flex flex-wrap items-center gap-2">
-                    <select
-                      value={relatedInventoryDraft}
-                      onChange={(event) => setRelatedInventoryDraft(String(event.target.value || ""))}
-                      className={`${fieldCls} min-w-0 flex-1`}
-                    >
-                      <option value="">
-                        {sortedLinkableInventoryOptions.length ? "Select property to link" : "No properties found"}
-                      </option>
-                      {sortedLinkableInventoryOptions.map((inventory) => {
-                        const inventoryId = String(inventory?._id || "");
-                        const inventoryLabel =
-                          getInventoryLeadLabel(inventory) || String(inventory?.title || "").trim() || inventoryId;
-                        const inventoryLocation = getInventoryLocationLabel(inventory);
-                        const inventoryQuickInfo = getInventoryQuickInfo(inventory);
-                        const inventoryPriceLabel = formatInventoryAmountInr(inventory);
-                        const inventoryAmountLabel = getInventoryAmountLabel(inventory);
-                        const inventoryTypeLabel = getInventoryListingLabel(inventory);
-                        return (
-                          <option key={inventoryId} value={inventoryId}>
-                            {[
-                              inventoryLabel,
-                              inventoryLocation ? `(${inventoryLocation})` : "",
-                              inventoryQuickInfo,
-                              `Type: ${inventoryTypeLabel}`,
-                              `${inventoryAmountLabel}: ${inventoryPriceLabel}`,
-                            ]
-                              .filter(Boolean)
-                              .join(" ")}
-                          </option>
-                        );
-                      })}
-                    </select>
+                    <PropertyLinkPicker
+                      items={linkablePropertyItems}
+                      value={linkDraftIsListed ? relatedInventoryDraft : ""}
+                      onChange={(inventoryId) => setRelatedInventoryDraft(String(inventoryId || ""))}
+                      isDark={isDark}
+                      disabled={linkingProperty}
+                      emptyLabel="No available properties match this filter"
+                      className="min-w-0 flex-1"
+                    />
                     <button
                       type="button"
                       onClick={() => onLinkPropertyToLead(relatedInventoryDraft)}
-                      disabled={!relatedInventoryDraft || linkingProperty}
+                      disabled={!relatedInventoryDraft || !linkDraftIsListed || linkingProperty}
                       className={blueBtn}
                     >
                       {linkingProperty ? <Loader size={15} className="animate-spin" /> : <Plus size={15} />}
@@ -5424,6 +5811,8 @@ const LeadDetailsRebuiltContent = ({
           </div>
         </div>
       ) : null}
+
+      {closeDealModal}
 
       {canEditLead && (activeTab === "requirements" || hasPendingLeadEdits) ? (
         <div

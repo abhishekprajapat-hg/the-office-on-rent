@@ -94,8 +94,14 @@ const HomeStatusStrip = () => {
     chips.push(<Chip key="k" to="/performance" icon={Gauge} tone="info" label="This month's score" value={`${s.score.score}/100${target ? ` · target ${target.score}%` : ""}`} />);
   }
   if (s.team) {
+    // The API also counts people who haven't checked in yet; leaving them out
+    // made a team of nine read "0 in · 0 missing · 0 still working".
     const missing = (s.team.MISSING || 0);
-    chips.push(<Chip key="t" to="/daily-reports" icon={Users} tone={missing ? "warn" : "info"} label="Team reports today" value={`${s.team.SUBMITTED || 0} in · ${missing} missing · ${s.team.PENDING || 0} still working`} />);
+    const notIn = (s.team.NOT_CHECKED_IN || 0);
+    const parts = [`${s.team.SUBMITTED || 0} in`, `${missing} missing`];
+    if (s.team.PENDING) parts.push(`${s.team.PENDING} working`);
+    if (notIn) parts.push(`${notIn} not checked in`);
+    chips.push(<Chip key="t" to="/daily-reports" icon={Users} tone={missing ? "warn" : "info"} label="Team reports today" value={parts.join(" · ")} />);
   }
   if (typeof s.meta === "number" && s.meta > 0) {
     chips.push(<Chip key="m" to="/admin/meta-ads" icon={Megaphone} tone="bad" label="Meta leads failed" value={`${s.meta} need reconciling`} />);

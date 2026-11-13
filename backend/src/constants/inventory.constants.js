@@ -28,6 +28,7 @@ const INVENTORY_ALLOWED_FIELDS = [
   "depositMonths",
   "agreementYears",
   "lockInYears",
+  "currentRentalIncome",
   "type",
   "category",
   "furnishingStatus",

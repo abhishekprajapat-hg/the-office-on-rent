@@ -636,6 +636,10 @@ const projectSchema = new mongoose.Schema(
      */
     startingRateDate: { type: Date, default: null },
     currentRateDate: { type: Date, default: null },
+    // Commercial projects: monthly rent per sq ft for a bare shell office and
+    // for a furnished office.
+    rentRateBareShell: { type: Number, min: 0, default: null },
+    rentRateFurnished: { type: Number, min: 0, default: null },
     sizeInventory: {
       type: [{
         dimension: { type: String, trim: true, maxlength: 40, default: "" },

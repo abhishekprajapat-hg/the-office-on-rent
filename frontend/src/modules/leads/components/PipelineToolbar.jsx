@@ -10,7 +10,7 @@ const statuses = ["NEW", "CONTACTED", "FOLLOW_UP_1", "FOLLOW_UP_2", "FOLLOW_UP_3
 const Dropdown = ({ open, children, className = "" }) => open ? <div className={cn("absolute left-0 top-full z-40 mt-2 max-h-72 min-w-44 overflow-y-auto rounded-xl border border-slate-200 bg-white p-1.5 shadow-xl dark:border-slate-700 dark:bg-slate-800", className)}>{children}</div> : null;
 
 const PipelineToolbar = ({
-  view, onViewChange, needsActionCount = 0, canSeeUnassigned = false,
+  view, onViewChange, needsActionCount = 0, canSeeUnassigned = false, canSeeTeam = false,
   query = "", onQueryChange, refreshing = false, onRefresh,
   onOpenAddModal, onOpenBulkUploadModal, canAddLead = true, canBulkUploadLeads = true,
   filterState = {}, onFilterChange, onOpenFiltersFlyout,
@@ -27,7 +27,7 @@ const PipelineToolbar = ({
   const activeFilterCount = [filterState.status && filterState.status !== "ALL", filterState.assignedTo, filterState.inventoryType, filterState.source, filterState.propertyType, filterState.budgetRange, filterState.followUpDate, filterState.createdDate].filter(Boolean).length;
   const visibleViews = [
     { key: PIPELINE_VIEWS.ALL, label: "All leads", count: metrics.total },
-    { key: PIPELINE_VIEWS.TEAM, label: "My team" },
+    ...(canSeeTeam ? [{ key: PIPELINE_VIEWS.TEAM, label: "My team" }] : []),
     ...(canSeeUnassigned ? [{ key: PIPELINE_VIEWS.UNASSIGNED, label: "Unassigned", count: metrics.unassigned, alert: true }] : []),
     { key: PIPELINE_VIEWS.CLOSED, label: "Closed" },
     { key: PIPELINE_VIEWS.NEEDS_ACTION, label: "Needs action", count: needsActionCount, danger: true },

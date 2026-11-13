@@ -84,6 +84,13 @@ router.get(
   leadController.getLeadSummary
 );
 
+// Per-employee lead counts for the Pipeline "My team" tab (same scope + filters as GET /).
+router.get(
+  "/team-summary",
+  authMiddleware.protect,
+  leadController.getLeadTeamSummary
+);
+
 // ======================================
 // TODAY FOLLOW UPS  ⚠️ MUST BE ABOVE :leadId routes
 // ======================================

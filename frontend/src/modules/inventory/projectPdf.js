@@ -139,6 +139,8 @@ export const downloadProjectPdf = async (data, catalogue, { sections = null } = 
     heading("Pricing");
     if (p.startingRate) row("Starting rate", `${money(p.startingRate)}${p.startingRateDate ? ` (from ${dateText(p.startingRateDate)})` : ""}`);
     if (p.currentRate) row("Current rate", `${money(p.currentRate)}${p.currentRateDate ? ` (as of ${dateText(p.currentRateDate)})` : ""}`);
+    if (p.rentRateBareShell) row("Bare shell rent", `${money(p.rentRateBareShell)} / sq ft / month`);
+    if (p.rentRateFurnished) row("Furnished rent", `${money(p.rentRateFurnished)} / sq ft / month`);
     (p.plcOptions || []).forEach((plc) => row(`PLC · ${plc.name}`, [basisText(plc.basis, plc.value), plc.condition].filter(Boolean).join(" · ")));
     if ((p.plcOptions || []).length && p.plcRule && p.plcRule !== "NOT_SET") row("Several PLCs on a plot", p.plcRule === "HIGHEST_ONLY" ? "Only the highest applies" : "All are added together");
     (p.chargeItems || []).forEach((c) => row(c.label, [basisText(c.basis, c.value), c.note].filter(Boolean).join(" · ")));
