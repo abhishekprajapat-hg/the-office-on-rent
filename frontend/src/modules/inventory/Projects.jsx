@@ -768,7 +768,13 @@ const ProjectCard = ({ project, canManage, canDelete, onView, onEdit, onDelete }
               </p>
             </div>
             <div className="shrink-0 text-right">
-              <div className="text-sm font-extrabold text-slate-950">{formatCurrency(project.currentRate)}</div>
+              {/* The big figure is the rate, not the project price - say so (14 Nov 2026 video). */}
+              <div className="text-sm font-extrabold text-slate-950">
+                {formatCurrency(project.currentRate)}
+                {Number.isFinite(Number(project.currentRate)) && project.currentRate !== "" && project.currentRate !== null ? (
+                  <span className="ml-0.5 text-[10px] font-semibold text-slate-400">{String(project.projectCategory || "").toUpperCase() === "COWORKING" ? "/seat/mo" : "/sq ft"}</span>
+                ) : null}
+              </div>
               <div className="mt-0.5 font-mono text-[10px] text-slate-400">{project.projectId}</div>
             </div>
           </div>
@@ -840,7 +846,9 @@ const ProjectsPage = () => {
   const [projects, setProjects] = useState([]);
   const [pagination, setPagination] = useState(null);
   const [page, setPage] = useState(1);
-  const [loading, setLoading] = useState(false);
+  // Start in the loading state so the first paint shows the skeleton,
+  // not a blank page or a false "No projects found" (14 Nov 2026 video).
+  const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [success, setSuccess] = useState("");
 
@@ -1645,6 +1653,18 @@ const ProjectsPage = () => {
                           placeholder="Auto-calculated from Office Inventory"
                           className={`${INPUT_CLASS} mt-1`}
                         />
+                        {(() => {
+                          /* 14 Nov 2026 video: 8 floors x 29 per floor = 232, but 240 typed.
+                             A soft hint, not a block - towers aren't always uniform. */
+                          const floors = Number(formData.totalFloors) || 0;
+                          const perFloor = Number(formData.officesPerFloor) || 0;
+                          const typed = String(formData.totalOffices ?? "").trim();
+                          return floors > 0 && perFloor > 0 && typed !== "" && Number(typed) !== floors * perFloor ? (
+                            <p className="mt-1 text-[11.5px] font-medium text-amber-600">
+                              {floors} floors x {perFloor} per floor = {floors * perFloor}, but {typed} is typed - check which is right.
+                            </p>
+                          ) : null;
+                        })()}
                       </div>
                       <div>
                         <label className={FIELD_TITLE_CLASS}>Total Shops</label>

@@ -1145,6 +1145,10 @@ const applyLeadListFilters = (query, rawQuery = {}) => {
         { name: { $regex: safeSearch, $options: "i" } },
         { phone: { $regex: safeSearch, $options: "i" } },
         ...phoneSearch,
+        // Lead owner's name ("Ashmit"), resolved to ids by the list handler.
+        ...(Array.isArray(rawQuery._searchAssigneeIds) && rawQuery._searchAssigneeIds.length
+          ? [{ assignedTo: { $in: rawQuery._searchAssigneeIds } }]
+          : []),
         { email: { $regex: safeSearch, $options: "i" } },
         { city: { $regex: safeSearch, $options: "i" } },
         { projectInterested: { $regex: safeSearch, $options: "i" } },
@@ -2263,6 +2267,11 @@ const validateLeadContact = ({ name, phone, email }) => {
   const trimmedPhone = phone.trim();
 
   if (!trimmedName) return "Name is required";
+  // A real name has at least one letter: "55440" typed into the name box is
+  // not a lead name (seen in the 14 Nov 2026 walkthrough video).
+  if (!/\p{L}/u.test(trimmedName)) {
+    return "Name must contain letters - it can't be only numbers or symbols";
+  }
   if (trimmedName.length > MAX_LEAD_NAME_LENGTH) {
     return `Name must be at most ${MAX_LEAD_NAME_LENGTH} characters`;
   }
@@ -3535,13 +3544,25 @@ exports.bulkUploadLeads = async (req, res) => {
   }
 };
 
+// People whose name matches the search box, so "search by owner" works on the server.
+const findSearchAssigneeIds = async (companyId, rawQuery = {}) => {
+  const search = String(rawQuery.search || rawQuery.q || "").trim();
+  if (search.length < 2 || /^[\d\s().+-]+$/.test(search)) return [];
+  const users = await User.find({ companyId, name: { $regex: escapeRegex(search).slice(0, 80), $options: "i" } })
+    .select("_id").limit(50).lean();
+  return users.map((user) => user._id);
+};
+
 exports.getAllLeads = async (req, res) => {
   try {
     const query = await buildLeadQueryForUser(req.user);
     if (!query) {
       return res.status(403).json({ message: "Access denied" });
     }
-    applyLeadListFilters(query, req.query || {});
+    const rawListQuery = { ...(req.query || {}) };
+    delete rawListQuery._searchAssigneeIds;
+    rawListQuery._searchAssigneeIds = await findSearchAssigneeIds(req.user?.companyId, rawListQuery);
+    applyLeadListFilters(query, rawListQuery);
 
     const pagination = parsePagination(req.query, {
       defaultLimit: Number.parseInt(process.env.LEADS_PAGE_LIMIT, 10) || 50,

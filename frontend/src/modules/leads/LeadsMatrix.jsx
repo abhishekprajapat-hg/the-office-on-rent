@@ -2144,6 +2144,10 @@ const LeadsMatrix = () => {
         ...Object.fromEntries(Object.entries(advancedFilters).filter(([, value]) => value !== "")),
         ...(statusFilter !== "ALL" ? { status: statusFilter } : {}),
         ...(propertySubtypeFilter ? { subtype: propertySubtypeFilter } : {}),
+        // Search runs on the server across every lead. Filtering only the
+        // pages already loaded meant a lead on page 4 showed "no leads" until
+        // "Load more" had been pressed a few times.
+        ...(debouncedQuery.trim() ? { q: debouncedQuery.trim() } : {}),
       });
       if (requestVersion !== leadRequestVersion.current) return;
       const list = Array.isArray(response?.leads) ? response.leads : [];
@@ -2173,7 +2177,7 @@ const LeadsMatrix = () => {
         setLoadingMoreLeads(false);
       }
     }
-  }, [advancedFilters, statusFilter, propertySubtypeFilter]);
+  }, [advancedFilters, statusFilter, propertySubtypeFilter, debouncedQuery]);
 
   const fetchExecutives = useCallback(async () => {
     if (!canAssignLead) return;
@@ -2446,8 +2450,13 @@ const LeadsMatrix = () => {
         .map((inventory) => getInventoryLeadSearchText(inventory))
         .join(" ");
 
+      // The server already searched every lead (name, phone in any format,
+      // email, city, project, owner), so its rows are trusted as they come.
+      // This browser-side check is only the fallback when the list did not
+      // come back paginated from the server.
       const searchMatch =
         !normalized ||
+        Boolean(leadPagination) ||
         [
           lead.name,
           lead.phone,
@@ -2491,7 +2500,7 @@ const LeadsMatrix = () => {
       return bMs - aMs;
     });
     return sorted;
-  }, [debouncedQuery, leads, nowMs, propertySubtypeFilter, sortBy, statusFilter, view]);
+  }, [debouncedQuery, leadPagination, leads, nowMs, propertySubtypeFilter, sortBy, statusFilter, view]);
 
   const needsActionCount = useMemo(() => countNeedsAction(leads, nowMs), [leads, nowMs]);
   const pipelineMetrics = useMemo(() => {

@@ -1717,13 +1717,18 @@ export const AddLeadModal = ({
   };
 
   /* ---- step wizard (CRM Web Glass form design) ---- */
-  const nameMissing = !String(formData.name || "").trim();
+  const trimmedLeadName = String(formData.name || "").trim();
+  const nameMissing = !trimmedLeadName;
+  // "55440" typed as a name went through (14 Nov 2026 video) - a name needs letters.
+  const nameInvalid = !nameMissing && !/\p{L}/u.test(trimmedLeadName);
+  const nameFieldError = nameMissing ? "Name is required"
+    : nameInvalid ? "Enter a valid name - it can't be only numbers or symbols" : "";
   const phoneMissing = !String(formData.phone || "").trim();
   const phoneFieldError = phoneMissing
     ? "Phone is required"
     : !isLeadPhoneLike(formData.phone) ? "Enter a valid phone number: a 10-digit mobile, or country code + number" : "";
   const contactIssue = nameMissing && phoneMissing ? "Name and phone are required"
-    : nameMissing ? "Name is required" : phoneFieldError;
+    : nameFieldError || phoneFieldError;
   const locationIssue = (() => {
     const lat = String(formData.siteLat ?? "").trim();
     const lng = String(formData.siteLng ?? "").trim();
@@ -1821,8 +1826,8 @@ export const AddLeadModal = ({
       {wizardStep === 0 && (
         <>
           <div className="grid grid-cols-1 gap-3.5 md:grid-cols-2">
-            <FormField label="Full name" required error={wizardTried[0] && nameMissing ? "Name is required" : ""}>
-              <FormInput icon={UserRound} big placeholder="e.g. Rahul Sharma" value={formData.name} onChange={(event) => updateField("name", event.target.value)} error={wizardTried[0] && nameMissing} autoFocus />
+            <FormField label="Full name" required error={wizardTried[0] ? nameFieldError : ""}>
+              <FormInput icon={UserRound} big placeholder="e.g. Rahul Sharma" value={formData.name} onChange={(event) => updateField("name", event.target.value)} error={wizardTried[0] && Boolean(nameFieldError)} autoFocus />
             </FormField>
             <FormField label="Phone" required error={wizardTried[0] ? phoneFieldError : ""}>
               <FormInput icon={Phone} big inputMode="tel" placeholder="10-digit mobile" value={formData.phone} onChange={(event) => updateField("phone", event.target.value)} error={wizardTried[0] && Boolean(phoneFieldError)} />

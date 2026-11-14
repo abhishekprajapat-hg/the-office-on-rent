@@ -715,6 +715,14 @@ const formatCurrency = (value) => {
   return `Rs ${parsed.toLocaleString("en-IN")}`;
 };
 
+/* A raw figure like 10710000 is hard to read while typing (14 Nov 2026 video).
+   Shown under the amount inputs as "Rs 1,07,10,000". */
+const AmountHint = ({ value, suffix = "" }) => {
+  const parsed = Number(value);
+  if (value === "" || value === null || value === undefined || !Number.isFinite(parsed) || parsed <= 0) return null;
+  return <p className="mt-1 text-[11.5px] font-medium text-emerald-700">= Rs {parsed.toLocaleString("en-IN")}{suffix}</p>;
+};
+
 const formatSoldPaymentModeLabel = (value) => {
   const normalized = String(value || "").trim().toUpperCase();
   if (!normalized) return "-";
@@ -4513,6 +4521,7 @@ const AssetVault = () => {
                         onChange={(e) => setFormData((prev) => ({ ...prev, price: e.target.value }))}
                         className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl text-sm font-mono text-slate-900 focus:outline-none focus:border-emerald-500 mt-1"
                       />
+                      <AmountHint value={formData.price} />
                     </div>
                   ) : null}
 
@@ -4529,6 +4538,7 @@ const AssetVault = () => {
                         onChange={(e) => setFormData((prev) => ({ ...prev, rent: e.target.value }))}
                         className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl text-sm font-mono text-slate-900 focus:outline-none focus:border-emerald-500 mt-1"
                       />
+                      <AmountHint value={formData.rent} suffix=" / month" />
                     </div>
                   ) : null}
 
@@ -4545,6 +4555,7 @@ const AssetVault = () => {
                         onChange={(e) => setFormData((prev) => ({ ...prev, deposit: e.target.value }))}
                         className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl text-sm font-mono text-slate-900 focus:outline-none focus:border-emerald-500 mt-1"
                       />
+                      <AmountHint value={formData.deposit} />
                     </div>
                   ) : null}
 
@@ -4633,6 +4644,7 @@ const AssetVault = () => {
                         onChange={(e) => setFormData((prev) => ({ ...prev, currentRentalIncome: e.target.value }))}
                         className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl text-sm font-mono text-slate-900 focus:outline-none focus:border-emerald-500 mt-1"
                       />
+                      <AmountHint value={formData.currentRentalIncome} suffix=" / month" />
                       <p className="mt-1 text-[11.5px] text-slate-500">Rent a tenant is already paying for this property.</p>
                     </div>
                   ) : null}

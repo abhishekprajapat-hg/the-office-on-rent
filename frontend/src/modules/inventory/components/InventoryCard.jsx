@@ -52,6 +52,18 @@ const InventoryCard = React.memo(({ asset, priceLabel, onView, onEdit, onShare, 
   const imageCount = Array.isArray(asset?.images) ? asset.images.length : 0;
   // Plots, warehouses etc. have no furnishing; show a dash instead of guessing.
   const furnishing = formatEnum(asset?.furnishingStatus) || "-";
+  // The card cell is narrow, so "Fully Furnished" was cut to "Fully Furnishe..."
+  // (14 Nov 2026 video). Short label on the card, full label in the tooltip.
+  const SHORT_FURNISHING = {
+    FULLY_FURNISHED: "Furnished",
+    SEMI_FURNISHED: "Semi-furnished",
+    UNFURNISHED: "Unfurnished",
+    BARE_SHELL: "Bare shell",
+    WARM_SHELL: "Warm shell",
+    MANAGED_OFFICE: "Managed",
+    COWORKING: "Coworking",
+  };
+  const furnishingShort = SHORT_FURNISHING[String(asset?.furnishingStatus || "").toUpperCase()] || furnishing;
 
   return (
     <article className="group flex min-h-[420px] flex-col overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-[0_6px_24px_rgba(15,23,42,0.06)] transition hover:-translate-y-0.5 hover:shadow-[0_14px_34px_rgba(37,99,235,0.14)]">
@@ -78,7 +90,7 @@ const InventoryCard = React.memo(({ asset, priceLabel, onView, onEdit, onShare, 
 
         <div className="mt-5 grid grid-cols-3 gap-2 border-t border-slate-100 pt-4 text-[13px] text-slate-600">
           <span className="inline-flex items-center gap-1.5 truncate"><Ruler size={16} className="shrink-0 text-slate-700" />{areaOf(asset)}</span>
-          <span className="inline-flex items-center gap-1.5 truncate"><Armchair size={16} className="shrink-0 text-slate-700" />{furnishing}</span>
+          <span className="inline-flex items-center gap-1.5 truncate" title={furnishing}><Armchair size={16} className="shrink-0 text-slate-700" />{furnishingShort}</span>
           <span className="inline-flex items-center gap-1.5 truncate"><Building2 size={16} className="shrink-0 text-slate-700" />{floorOf(asset)}</span>
         </div>
 
