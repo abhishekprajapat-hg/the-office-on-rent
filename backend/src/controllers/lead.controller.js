@@ -1132,10 +1132,19 @@ const applyLeadListFilters = (query, rawQuery = {}) => {
   const search = String(rawQuery.search || rawQuery.q || "").trim();
   if (search) {
     const safeSearch = escapeRegex(search).slice(0, 80);
+    // A number typed as "9584030311" must also find a lead stored as
+    // "95840 30311", "+91-9584030311" or "(958) 403-0311". The duplicate check
+    // on create already ignores these separators; the search did not, so a lead
+    // could be "already existing" yet impossible to find.
+    const searchDigits = search.replace(/[\s().+-]/g, "");
+    const phoneSearch = /^\d{4,15}$/.test(searchDigits)
+      ? [{ phone: { $regex: searchDigits.split("").join("[\\s().+-]*") } }]
+      : [];
     addLeadAndClause(query, {
       $or: [
         { name: { $regex: safeSearch, $options: "i" } },
         { phone: { $regex: safeSearch, $options: "i" } },
+        ...phoneSearch,
         { email: { $regex: safeSearch, $options: "i" } },
         { city: { $regex: safeSearch, $options: "i" } },
         { projectInterested: { $regex: safeSearch, $options: "i" } },
@@ -2306,9 +2315,16 @@ exports.createLead = async (req, res) => {
 
     // "+91 98765 43210", "098765-43210" and "9876543210" are the same lead.
     const storedPhone = toLeadStoragePhone(phone);
-    const existing = await Lead.findOne({ phone: buildLeadPhoneRegex(storedPhone), companyId }).select("_id").lean();
+    const existing = await Lead.findOne({ phone: buildLeadPhoneRegex(storedPhone), companyId })
+      .select("_id name phone status")
+      .lean();
     if (existing) {
-      return res.status(400).json({ message: "A lead with this phone number already exists" });
+      // Say which lead it is, so the person can find it instead of guessing.
+      const who = [existing.name, existing.phone].filter(Boolean).join(", ");
+      return res.status(400).json({
+        message: `A lead with this phone number already exists${who ? ` (${who}${existing.status ? `, ${existing.status}` : ""})` : ""}`,
+        existingLeadId: existing._id,
+      });
     }
 
     // A number in the Broker Database is a broker, not an enquiry. Refuse it
