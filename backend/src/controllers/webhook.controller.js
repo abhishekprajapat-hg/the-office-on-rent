@@ -1,8 +1,10 @@
 const axios = require("axios");
 const Lead = require("../models/Lead");
 const Company = require("../models/Company");
+const LeadActivity = require("../models/leadActivity.model");
 const { autoAssignLead } = require("../services/leadAssignment.service");
 const { findBrokerByPhone, recordBlockedLead } = require("../services/crmContact.service");
+const { detectMetaLeadType, parseFormTypes } = require("../services/leadType.service");
 const logger = require("../config/logger");
 
 // Meta lead failures kept for reconciliation (requirements 16 Oct 2026, section 08).
@@ -27,7 +29,8 @@ const toPositiveInt = (value, fallback) => {
   return Number.isFinite(parsed) && parsed > 0 ? parsed : fallback;
 };
 const META_GRAPH_TIMEOUT_MS = toPositiveInt(process.env.META_GRAPH_TIMEOUT_MS, 10_000);
-const META_GRAPH_LEAD_FIELDS = "id,created_time,field_data,form_id,ad_id,campaign_id";
+// The ad, ad set and campaign names help tell a commercial lead from a residential one.
+const META_GRAPH_LEAD_FIELDS = "id,created_time,field_data,form_id,ad_id,ad_name,adset_name,campaign_id,campaign_name";
 const META_DEDUPE_BY_PHONE = String(process.env.META_DEDUPE_BY_PHONE || "false")
   .trim()
   .toLowerCase() === "true";
@@ -274,6 +277,27 @@ const normalizeFieldData = (rows = []) => {
   };
 };
 
+/** The owner's form-to-type settings: META_FORM_INVENTORY_TYPES plus the company's own. */
+const loadFormTypes = async (companyId) => {
+  const company = companyId
+    ? await Company.findById(companyId).select("metadata").lean().catch(() => null)
+    : null;
+  return parseFormTypes(
+    process.env.META_FORM_INVENTORY_TYPES,
+    company?.metadata?.metaFormInventoryTypes,
+    company?.metadata?.meta?.formInventoryTypes,
+  );
+};
+
+/** Notes on the lead how its type was worked out, so the team can see why it went to whom. */
+const recordDetectedType = async (lead, detected) => {
+  if (!lead?._id) return;
+  const action = detected.type
+    ? `Lead type ${detected.type.toLowerCase()} (from ${detected.from})`
+    : "Lead type not known from the form or ad: treated as commercial";
+  await LeadActivity.create({ lead: lead._id, action, performedBy: null }).catch(() => undefined);
+};
+
 const extractLeadEvents = (body = {}) => {
   if (body?.object !== "page") return [];
 
@@ -368,6 +392,7 @@ const captureFallbackMetaLead = async ({
   requester = null,
   reason = "",
   graphError = null,
+  formTypes = new Map(),
 } = {}) => {
   const existing = await Lead.findOne({
     metaLeadId: event.leadId,
@@ -384,6 +409,8 @@ const captureFallbackMetaLead = async ({
   }
 
   const fallbackPhone = buildFallbackMetaPhone(event.leadId);
+  // Meta refused the details: only the owner's form setting (or the default) can give the type.
+  const detected = detectMetaLeadType({ formId: event.formId, formTypes });
   const fallbackProject = reason ? `META_${String(reason).toUpperCase()}` : "META_INTAKE";
 
   const lead = await Lead.create({
@@ -393,6 +420,7 @@ const captureFallbackMetaLead = async ({
     city: "",
     projectInterested: fallbackProject,
     companyId,
+    requirements: { inventoryType: detected.type },
     metaLeadId: event.leadId,
     metaPageId: event.pageId,
     metaFormId: event.formId,
@@ -402,6 +430,7 @@ const captureFallbackMetaLead = async ({
     createdBy: null,
   });
 
+  await recordDetectedType(lead, detected);
   const assignment = await autoAssignLead({
     lead,
     requester,
@@ -493,6 +522,7 @@ exports.handleWebhook = async (req, res) => {
       const accessToken = group.accessToken;
       const scopedLeadEvents = Array.isArray(group.events) ? group.events : [];
       const assignmentRequester = { companyId: tenantCompanyId };
+      const formTypes = await loadFormTypes(tenantCompanyId);
 
       for (const event of scopedLeadEvents) {
         const processKey = `${tenantCompanyId}:${event.leadId}`;
@@ -583,13 +613,21 @@ exports.handleWebhook = async (req, res) => {
             }
           }
 
+          const detected = detectMetaLeadType({
+            formId: event.formId || leadData.form_id,
+            fieldRows: leadData.field_data || [],
+            names: { ad: leadData.ad_name, adset: leadData.adset_name, campaign: leadData.campaign_name },
+            formTypes,
+          });
+
           const lead = await Lead.create({
             name: normalized.name || "Unknown",
             phone: fallbackPhone,
             email: normalized.email,
             city: normalized.city,
-            projectInterested: normalized.projectInterested,
+            projectInterested: normalized.projectInterested || String(leadData.campaign_name || "").trim(),
             companyId: tenantCompanyId,
+            requirements: { inventoryType: detected.type },
             metaLeadId: event.leadId,
             metaPageId: event.pageId,
             metaFormId: event.formId,
@@ -599,6 +637,7 @@ exports.handleWebhook = async (req, res) => {
             createdBy: null,
           });
 
+          await recordDetectedType(lead, detected);
           const assignment = await autoAssignLead({
             lead,
             requester: assignmentRequester,
@@ -613,6 +652,8 @@ exports.handleWebhook = async (req, res) => {
           logger.info({
             companyId: tenantCompanyId,
             leadId: lead._id,
+            inventoryType: detected.type || null,
+            typeFrom: detected.from || null,
             assigned: assignment.assigned,
             mode: assignment.mode || null,
             executiveId: assignment.executive?._id || null,
@@ -639,6 +680,7 @@ exports.handleWebhook = async (req, res) => {
                 requester: assignmentRequester,
                 reason: "permission_denied",
                 graphError: leadError,
+                formTypes,
               });
               if (fallback.created) {
                 createdCount += 1;
@@ -722,3 +764,6 @@ exports.handleWebhook = async (req, res) => {
     return res.sendStatus(500);
   }
 };
+
+// For tests.
+exports._internals = { normalizeFieldData, extractLeadEvents, loadFormTypes };

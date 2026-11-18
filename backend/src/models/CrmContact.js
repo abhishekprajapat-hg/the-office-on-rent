@@ -9,7 +9,7 @@ const D = require("../constants/database.constants");
 const blockedLeadSchema = new mongoose.Schema({
  name: { type: String, default: "", maxlength: 200 },
  phone: { type: String, default: "", maxlength: 20 },
- origin: { type: String, enum: ["MANUAL", "META", "BULK"], default: "MANUAL" },
+ origin: { type: String, enum: ["MANUAL", "META", "BULK", "WHATSAPP"], default: "MANUAL" },
  attemptedBy: { type: mongoose.Schema.Types.ObjectId, ref: "User", default: null },
  at: { type: Date, default: Date.now },
 }, { _id: false });

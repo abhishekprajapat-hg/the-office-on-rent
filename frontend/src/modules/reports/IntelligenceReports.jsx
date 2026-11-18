@@ -343,7 +343,7 @@ const IntelligenceReports = () => {
     const rows = new Map();
     scopedLeads.forEach((lead) => {
       const source = String(lead.source || "OTHER").trim().toUpperCase();
-      const label = source === "META" ? "Meta ads" : source === "MANUAL" ? "Manual entry" : source || "Other";
+      const label = source === "META" ? "Meta ads" : source === "MANUAL" ? "Manual entry" : source === "WHATSAPP" ? "WhatsApp" : source || "Other";
       rows.set(label, (rows.get(label) || 0) + 1);
     });
 

@@ -13,6 +13,7 @@ const {
   getAncestorByRoles,
   getDescendantExecutiveIds,
 } = require("./hierarchy.service");
+const { notifyLeadAssigned } = require("./whatsappDashboard.service");
 
 const PIPELINE_STATUSES = [
   "NEW",
@@ -451,154 +452,174 @@ const autoAssignLead = async ({ lead, requester = null, performedBy = null }) =>
   };
 };
 
+// A rebalance moves only leads nobody has worked yet (or whose customer is not answering: NPC 1-3,
+// which replaced "Not picking calls"). Leads in conversation or follow-up, with a visit booked or done,
+// stay with the person handling them.
+const REBALANCE_MOVABLE_STATUSES = Object.freeze([
+  "NEW",
+  "NPC_1",
+  "NPC_2",
+  "NPC_3",
+  "MISSING_IN_ACTION",
+]);
+const REBALANCE_REASON = "Team rebalance";
+
+const canTakeLeadType = (executive, leadRoleType) =>
+  [leadRoleType, "BOTH"].includes(getUserRoleType(executive));
+
+const compareByLoad = (loadOf) => (left, right) => {
+  const leftLoad = loadOf(left);
+  const rightLoad = loadOf(right);
+  if (leftLoad !== rightLoad) return leftLoad - rightLoad;
+  const leftAssignedAt = toTimestamp(left.lastAssignedAt);
+  const rightAssignedAt = toTimestamp(right.lastAssignedAt);
+  if (leftAssignedAt !== rightAssignedAt) return leftAssignedAt - rightAssignedAt;
+  const leftCreatedAt = toTimestamp(left.createdAt);
+  const rightCreatedAt = toTimestamp(right.createdAt);
+  if (leftCreatedAt !== rightCreatedAt) return leftCreatedAt - rightCreatedAt;
+  return toId(left._id).localeCompare(toId(right._id));
+};
+
+/**
+ * Evens out open (pipeline) leads across the lead owners, with as few changes of hands as possible:
+ * 1. Every lead stays with its owner while the owner is active and handles its type.
+ * 2. Unassigned leads, leads of people who were deactivated, and leads whose owner no longer handles
+ *    their type go to the least loaded executive of the right type (COMMERCIAL / RESIDENTIAL / BOTH),
+ *    never above the open-leads cap.
+ * 3. Then, while someone has 2+ more open leads than a colleague who can take them, their newest
+ *    untouched lead (REBALANCE_MOVABLE_STATUSES) moves across.
+ * Each move is written to the lead's assignment history and activity, and a lead linked to a WhatsApp
+ * chat has the chat follow it in the WhatsApp dashboard.
+ */
 const redistributePipelineLeads = async ({
   executiveIds = null,
   companyId = null,
   includeUnassigned = false,
+  performedBy = null,
 } = {}) => {
   const query = {
     role: { $in: LEAD_OWNER_ROLES },
     isActive: true,
   };
-
-  if (companyId) {
-    query.companyId = companyId;
-  }
-
-  if (Array.isArray(executiveIds) && executiveIds.length) {
-    query._id = { $in: executiveIds };
-  }
+  if (companyId) query.companyId = companyId;
+  if (Array.isArray(executiveIds) && executiveIds.length) query._id = { $in: executiveIds };
 
   const executives = await User.find(query)
-    .select("_id role roleType parentId createdAt lastAssignedAt")
+    .select("_id name email role roleType parentId createdAt lastAssignedAt")
     .sort({ createdAt: 1 })
     .lean();
 
-  if (!executives.length) {
-    return {
-      updated: 0,
-      totalLeads: 0,
-      executiveCount: 0,
-    };
-  }
+  const empty = { updated: 0, moved: 0, totalLeads: 0, executiveCount: executives.length, unassignable: 0 };
+  if (!executives.length) return empty;
 
+  const executiveById = new Map(executives.map((executive) => [toId(executive._id), executive]));
   const executiveObjectIds = executives.map((executive) => executive._id);
-  const pipelineLeadQuery = {
-    status: { $in: PIPELINE_STATUSES },
-  };
-  if (companyId) {
-    pipelineLeadQuery.companyId = companyId;
-  }
 
+  const ownerClauses = [{ assignedTo: { $in: executiveObjectIds } }];
   if (includeUnassigned) {
-    pipelineLeadQuery.$or = [
-      { assignedTo: { $in: executiveObjectIds } },
-      { assignedTo: null },
-      { assignedTo: { $exists: false } },
-    ];
-  } else {
-    pipelineLeadQuery.assignedTo = { $in: executiveObjectIds };
+    const formerOwners = await User.find({ ...(companyId ? { companyId } : {}), isActive: false })
+      .select("_id")
+      .lean();
+    ownerClauses.push({ assignedTo: null }, { assignedTo: { $exists: false } });
+    if (formerOwners.length) ownerClauses.push({ assignedTo: { $in: formerOwners.map((user) => user._id) } });
   }
 
-  const pipelineLeads = await Lead.find(pipelineLeadQuery)
-    .select(
-      "_id requirements assignedTo assignedManager assignedExecutive assignedFieldExecutive createdAt",
-    )
-    .sort({ createdAt: 1 })
+  const pipelineLeads = await Lead.find({
+    status: { $in: PIPELINE_STATUSES },
+    ...(companyId ? { companyId } : {}),
+    $or: ownerClauses,
+  })
+    .select("_id status phone whatsapp requirements assignedTo assignedManager assignedExecutive assignedFieldExecutive createdAt")
+    .sort({ createdAt: 1, _id: 1 })
     .lean();
 
-  if (!pipelineLeads.length) {
-    return {
-      updated: 0,
-      totalLeads: 0,
-      executiveCount: executives.length,
-    };
+  if (!pipelineLeads.length) return empty;
+
+  const load = new Map(executives.map((executive) => [toId(executive._id), 0]));
+  const loadOf = (executive) => load.get(toId(executive._id)) || 0;
+  const byLoad = compareByLoad(loadOf);
+  const movable = new Map();
+  const pool = [];
+
+  pipelineLeads.forEach((lead) => {
+    const leadRoleType = getLeadRoleType(lead);
+    const owner = executiveById.get(toId(lead.assignedTo));
+    if (owner && canTakeLeadType(owner, leadRoleType)) {
+      load.set(toId(owner._id), loadOf(owner) + 1);
+      if (REBALANCE_MOVABLE_STATUSES.includes(lead.status)) {
+        const buckets = movable.get(toId(owner._id)) || {};
+        (buckets[leadRoleType] ||= []).push(lead);
+        movable.set(toId(owner._id), buckets);
+      }
+    } else {
+      pool.push(lead);
+    }
+  });
+
+  const plan = new Map();
+  let unassignable = 0;
+
+  // 2. Leads without a (suitable, active) owner.
+  pool.forEach((lead) => {
+    const leadRoleType = getLeadRoleType(lead);
+    const receiver = executives
+      .filter((executive) => canTakeLeadType(executive, leadRoleType) && loadOf(executive) < MAX_ACTIVE_LEADS_PER_EXECUTIVE)
+      .sort(byLoad)[0];
+    if (!receiver) {
+      unassignable += 1;
+      return;
+    }
+    plan.set(toId(lead._id), { lead, to: receiver });
+    load.set(toId(receiver._id), loadOf(receiver) + 1);
+  });
+
+  // 3. Even out, newest untouched leads first.
+  const typesFor = (executive) =>
+    getUserRoleType(executive) === "BOTH" ? ["COMMERCIAL", "RESIDENTIAL", "COWORKING"] : [getUserRoleType(executive)];
+  for (let guard = pipelineLeads.length; guard > 0; guard -= 1) {
+    const ascending = [...executives].sort(byLoad);
+    const descending = [...ascending].reverse();
+    let movedOne = false;
+    for (const donor of descending) {
+      const buckets = movable.get(toId(donor._id));
+      if (!buckets || !Object.values(buckets).some((list) => list.length)) continue;
+      for (const receiver of ascending) {
+        if (loadOf(donor) - loadOf(receiver) <= 1) break;
+        if (loadOf(receiver) >= MAX_ACTIVE_LEADS_PER_EXECUTIVE) continue;
+        const type = typesFor(receiver).find((leadRoleType) => buckets[leadRoleType]?.length);
+        if (!type) continue;
+        const lead = buckets[type].pop();
+        plan.set(toId(lead._id), { lead, to: receiver });
+        load.set(toId(donor._id), loadOf(donor) - 1);
+        load.set(toId(receiver._id), loadOf(receiver) + 1);
+        movedOne = true;
+        break;
+      }
+      if (movedOne) break;
+    }
+    if (!movedOne) break;
   }
 
-  // Start with non-pipeline ownership so redistribution balances active work
-  // while keeping historical closed/lost ownership weighted.
-  const totalLoadRows = await Lead.aggregate([
-    {
-      $match: {
-        assignedTo: { $in: executiveObjectIds },
-        status: { $nin: PIPELINE_STATUSES },
-        ...(companyId ? { companyId } : {}),
-      },
-    },
-    {
-      $group: {
-        _id: "$assignedTo",
-        count: { $sum: 1 },
-      },
-    },
-  ]);
-
-  const totalLoadMap = buildCountMap(totalLoadRows);
-
-  const compareByCurrentLoad = (left, right) => {
-    const leftLoad = totalLoadMap.get(toId(left._id)) || 0;
-    const rightLoad = totalLoadMap.get(toId(right._id)) || 0;
-
-    if (leftLoad !== rightLoad) {
-      return leftLoad - rightLoad;
-    }
-
-    const leftAssignedAt = toTimestamp(left.lastAssignedAt);
-    const rightAssignedAt = toTimestamp(right.lastAssignedAt);
-    if (leftAssignedAt !== rightAssignedAt) {
-      return leftAssignedAt - rightAssignedAt;
-    }
-
-    const leftCreatedAt = toTimestamp(left.createdAt);
-    const rightCreatedAt = toTimestamp(right.createdAt);
-    if (leftCreatedAt !== rightCreatedAt) {
-      return leftCreatedAt - rightCreatedAt;
-    }
-
-    return toId(left._id).localeCompare(toId(right._id));
-  };
-
-  const orderedExecutives = [...executives].sort(compareByCurrentLoad);
-  const executiveById = new Map(
-    executives.map((executive) => [toId(executive._id), executive]),
-  );
-  const parentUserIds = [
-    ...new Set(
-      executives
-        .map((executive) => toId(executive.parentId))
-        .filter(Boolean),
-    ),
-  ];
-
+  // Managers: the nearest MANAGER above the executive (or the direct parent).
+  const parentUserIds = [...new Set(executives.map((executive) => toId(executive.parentId)).filter(Boolean))];
   const parentUsers = parentUserIds.length
-    ? await User.find({
-      _id: { $in: parentUserIds },
-      isActive: true,
-      ...(companyId ? { companyId } : {}),
-    })
+    ? await User.find({ _id: { $in: parentUserIds }, isActive: true, ...(companyId ? { companyId } : {}) })
       .select("_id role parentId")
       .lean()
     : [];
-
   const parentById = new Map(parentUsers.map((user) => [toId(user._id), user]));
   const managerIdByExecutiveId = new Map();
-
   const resolveManagerId = (executive) => {
     const executiveId = toId(executive?._id);
     if (!executiveId) return null;
-    if (managerIdByExecutiveId.has(executiveId)) {
-      return managerIdByExecutiveId.get(executiveId);
-    }
-
+    if (managerIdByExecutiveId.has(executiveId)) return managerIdByExecutiveId.get(executiveId);
     const visited = new Set();
     let cursor = executive;
     let managerId = null;
-
     while (cursor?.parentId) {
       const parentId = toId(cursor.parentId);
       if (!parentId || visited.has(parentId)) break;
       visited.add(parentId);
-
       const parent = parentById.get(parentId) || executiveById.get(parentId) || null;
       if (!parent) break;
       if (parent.role === USER_ROLES.MANAGER) {
@@ -607,81 +628,92 @@ const redistributePipelineLeads = async ({
       }
       cursor = parent;
     }
-
-    if (!managerId) {
-      managerId = executive.parentId || null;
-    }
-
+    if (!managerId) managerId = executive.parentId || null;
     managerIdByExecutiveId.set(executiveId, managerId);
     return managerId;
   };
 
-  const leadUpdates = [];
+  const ownerFields = (executive) => {
+    const isExecutive = executive.role === USER_ROLES.EXECUTIVE || INSIDE_EXECUTIVE_ROLES.includes(executive.role);
+    const isFieldExecutive = executive.role === USER_ROLES.FIELD_EXECUTIVE;
+    return {
+      assignedTo: executive._id,
+      assignedManager: resolveManagerId(executive),
+      assignedExecutive: isExecutive ? executive._id : null,
+      assignedFieldExecutive: isFieldExecutive ? executive._id : null,
+    };
+  };
+
   const now = new Date();
+  const leadUpdates = [];
+  const activities = [];
   const touchedExecutiveIds = new Set();
 
   pipelineLeads.forEach((lead) => {
-    const leadRoleType = getLeadRoleType(lead);
-    const selectedExecutive =
-      orderedExecutives.find((executive) => [leadRoleType, "BOTH"].includes(getUserRoleType(executive)))
-      || null;
-    if (!selectedExecutive) return;
-    const selectedExecutiveId = toId(selectedExecutive._id);
-    const currentAssignee = toId(lead.assignedTo);
-    const managerId = resolveManagerId(selectedExecutive);
-    const managerIdStr = toId(managerId);
-    const isExecutive =
-      selectedExecutive.role === USER_ROLES.EXECUTIVE
-      || INSIDE_EXECUTIVE_ROLES.includes(selectedExecutive.role);
-    const isFieldExecutive = selectedExecutive.role === USER_ROLES.FIELD_EXECUTIVE;
-    const assignedExecutiveId = isExecutive ? selectedExecutiveId : "";
-    const assignedFieldExecutiveId = isFieldExecutive ? selectedExecutiveId : "";
-
-    const shouldUpdate =
-      currentAssignee !== selectedExecutiveId
-      || toId(lead.assignedManager) !== managerIdStr
-      || toId(lead.assignedExecutive) !== assignedExecutiveId
-      || toId(lead.assignedFieldExecutive) !== assignedFieldExecutiveId;
-
-    if (shouldUpdate) {
+    const move = plan.get(toId(lead._id));
+    if (move) {
       leadUpdates.push({
         updateOne: {
           filter: { _id: lead._id },
           update: {
-            $set: {
-              assignedTo: selectedExecutive._id,
-              assignedManager: managerId,
-              assignedExecutive: isExecutive ? selectedExecutive._id : null,
-              assignedFieldExecutive: isFieldExecutive ? selectedExecutive._id : null,
+            $set: ownerFields(move.to),
+            $push: {
+              assignmentHistory: {
+                action: lead.assignedTo ? "REBALANCED" : "AUTO_ASSIGNED",
+                fromUser: lead.assignedTo || null,
+                toUser: move.to._id,
+                reason: REBALANCE_REASON,
+                statusAtTransfer: String(lead.status || ""),
+                createdAt: now,
+                createdBy: performedBy || null,
+              },
             },
           },
         },
       });
-      touchedExecutiveIds.add(selectedExecutiveId);
+      activities.push({
+        lead: lead._id,
+        action: lead.assignedTo ? `Moved to ${move.to.name} (team rebalance)` : `Assigned to ${move.to.name} (team rebalance)`,
+        performedBy: performedBy || null,
+      });
+      touchedExecutiveIds.add(toId(move.to._id));
+      return;
     }
 
-    totalLoadMap.set(
-      selectedExecutiveId,
-      (totalLoadMap.get(selectedExecutiveId) || 0) + 1,
-    );
-
-    orderedExecutives.sort(compareByCurrentLoad);
+    // Kept: only the manager / executive fields are brought in line (the team may have been re-parented).
+    const owner = executiveById.get(toId(lead.assignedTo));
+    if (!owner) return;
+    const fields = ownerFields(owner);
+    const stale =
+      toId(lead.assignedManager) !== toId(fields.assignedManager)
+      || toId(lead.assignedExecutive) !== toId(fields.assignedExecutive)
+      || toId(lead.assignedFieldExecutive) !== toId(fields.assignedFieldExecutive);
+    if (stale) leadUpdates.push({ updateOne: { filter: { _id: lead._id }, update: { $set: fields } } });
   });
 
-  if (leadUpdates.length) {
-    await Lead.bulkWrite(leadUpdates);
-    if (touchedExecutiveIds.size) {
-      await User.updateMany(
-        { _id: { $in: [...touchedExecutiveIds] } },
-        { $set: { lastAssignedAt: now } },
-      );
-    }
+  if (leadUpdates.length) await Lead.bulkWrite(leadUpdates);
+  if (activities.length) await LeadActivity.insertMany(activities);
+  if (touchedExecutiveIds.size) {
+    await User.updateMany({ _id: { $in: [...touchedExecutiveIds] } }, { $set: { lastAssignedAt: now } });
+  }
+
+  // WhatsApp chats follow their leads; in the background, one at a time.
+  const linkedMoves = [...plan.values()].filter(({ lead }) => lead.whatsapp?.linkedAt);
+  if (linkedMoves.length) {
+    (async () => {
+      for (const { lead, to } of linkedMoves) {
+        // eslint-disable-next-line no-await-in-loop
+        await notifyLeadAssigned({ lead, assignee: { name: to.name, email: to.email } });
+      }
+    })().catch(() => undefined);
   }
 
   return {
     updated: leadUpdates.length,
+    moved: plan.size,
     totalLeads: pipelineLeads.length,
     executiveCount: executives.length,
+    unassignable,
   };
 };
 
@@ -689,6 +721,7 @@ module.exports = {
   EXECUTIVE_ROLES,
   PIPELINE_STATUSES,
   MAX_ACTIVE_LEADS_PER_EXECUTIVE,
+  REBALANCE_MOVABLE_STATUSES,
   autoAssignLead,
   redistributePipelineLeads,
 };

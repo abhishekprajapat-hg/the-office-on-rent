@@ -2439,12 +2439,13 @@ exports.rebalanceExecutives = async (req, res) => {
       await User.bulkWrite(bulkOps);
     }
 
-    // Rebalance active pipeline leads (including currently unassigned leads)
-    // with the same load-aware strategy used during auto-assignment.
+    // Hand out unassigned leads and those of people who left, then even out untouched leads by type
+    // and load; leads already being worked stay with their owner (see redistributePipelineLeads).
     const leadRebalance = await redistributePipelineLeads({
       executiveIds: leadOwners.map((executive) => executive._id),
       companyId: req.user.companyId,
       includeUnassigned: true,
+      performedBy: req.user._id,
     });
 
     const distribution = await User.aggregate([
@@ -2521,6 +2522,8 @@ exports.rebalanceExecutives = async (req, res) => {
       message: "Executives and leads rebalanced successfully across managers",
       updated: bulkOps.length,
       leadsUpdated: leadRebalance.updated,
+      leadsMoved: leadRebalance.moved,
+      leadsWithoutExecutive: leadRebalance.unassignable,
       distribution: distributionByManager,
       leadDistribution: leadDistributionByExecutive,
     });

@@ -17,6 +17,7 @@ const { isDeepStrictEqual } = require("util");
 const {
   autoAssignLead,
 } = require("../services/leadAssignment.service");
+const { notifyLeadAssigned } = require("../services/whatsappDashboard.service");
 const {
   USER_ROLES,
   EXECUTIVE_ROLES,
@@ -4077,6 +4078,9 @@ exports.assignLead = async (req, res) => {
       action: `Manually transferred to ${targetUser.name}`,
       performedBy: req.user._id,
     });
+
+    // A lead from WhatsApp: its chat moves to the new owner in the WhatsApp dashboard too.
+    notifyLeadAssigned({ lead, assignee: targetUser }).catch(() => undefined);
 
     const populatedLead = await getLeadViewById(lead._id, req.user.companyId, req.user);
 

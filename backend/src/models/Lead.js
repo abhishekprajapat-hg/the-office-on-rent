@@ -244,7 +244,7 @@ const leadSchema = new mongoose.Schema(
 
     source: {
       type: String,
-      enum: ["META", "MANUAL"],
+      enum: ["META", "MANUAL", "WHATSAPP"],
       required: true
     },
 
@@ -264,6 +264,17 @@ const leadSchema = new mongoose.Schema(
       ],
       default: "",
       trim: true,
+    },
+
+    // Set when the company's WhatsApp dashboard sends or links this lead: its chat follows the lead's
+    // owner (see services/whatsappDashboard.service.js).
+    whatsapp: {
+      chatId: { type: String, default: "", trim: true },
+      linkedAt: { type: Date, default: null },
+      adId: { type: String, default: "", trim: true },
+      adHeadline: { type: String, default: "", trim: true },
+      adUrl: { type: String, default: "", trim: true },
+      firstMessage: { type: String, default: "", trim: true },
     },
 
     status: {

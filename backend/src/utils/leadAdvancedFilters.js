@@ -5,7 +5,7 @@ const mongoose = require("mongoose");
 const applyLeadAdvancedFilters = (query, values = {}) => {
   const clauses = [];
   const text = (key) => typeof values[key] === "string" ? values[key].trim() : "";
-  if (text("source") && !["META", "MANUAL"].includes(text("source").toUpperCase())) throw createHttpError(400, "Invalid source filter");
+  if (text("source") && !["META", "MANUAL", "WHATSAPP"].includes(text("source").toUpperCase())) throw createHttpError(400, "Invalid source filter");
   if (text("assignedTo") && text("assignedTo") !== "UNASSIGNED" && !mongoose.Types.ObjectId.isValid(text("assignedTo"))) throw createHttpError(400, "Invalid assigned employee filter");
   for (const [key, field] of [["city", "city"], ["project", "projectInterested"]]) {
     const value = text(key);
