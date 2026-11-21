@@ -79,6 +79,9 @@ const payrollPolicySchema = new mongoose.Schema(
     manualLeaveIsPaid: { type: Boolean, default: DEFAULT_PAYROLL_POLICY.manualLeaveIsPaid },
     // Named deductions everybody with a salary pays.
     customDeductions: { type: [customDeductionSchema], default: [] },
+    // KPI-linked incentive added when a month is finalised (services/payrollRun.calc.js).
+    // Off until the company switches it on.
+    kpiIncentive: { type: mongoose.Schema.Types.Mixed, default: null },
     updatedBy: { type: mongoose.Schema.Types.ObjectId, ref: "User", default: null },
     updatedByName: { type: String, trim: true, default: "" },
   },

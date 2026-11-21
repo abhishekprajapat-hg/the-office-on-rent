@@ -1,6 +1,7 @@
 const express = require("express");
 
 const salaryController = require("../controllers/salary.controller");
+const payrollRunController = require("../controllers/payrollRun.controller");
 const { protect } = require("../middleware/auth.middleware");
 const { writeLimiter } = require("../middleware/rateLimit.middleware");
 const { requirePageAccess } = require("../middleware/pageAccess.middleware");
@@ -22,6 +23,19 @@ router.get("/policy", salaryController.getPayrollPolicy);
 router.patch("/policy", writeLimiter, salaryController.updatePayrollPolicy);
 router.get("/users/:userId", salaryController.getUserSalary);
 router.put("/users/:userId", writeLimiter, salaryController.setUserSalary);
+
+/*
+ * Payroll: an admin finalises a month (frozen, versioned) and it is sent to BillStack's
+ * books. The KPI incentive is set here too. Admin only - checked in the controller.
+ */
+router.get("/runs", payrollRunController.listRuns);
+router.post("/runs/preview", payrollRunController.preview);
+router.post("/runs", writeLimiter, payrollRunController.finalise);
+router.get("/runs/:runId", payrollRunController.getRun);
+router.post("/runs/:runId/send", writeLimiter, payrollRunController.resend);
+router.post("/runs/:runId/reopen", writeLimiter, payrollRunController.reopen);
+router.get("/kpi-incentive", payrollRunController.getKpiIncentive);
+router.put("/kpi-incentive", writeLimiter, payrollRunController.setKpiIncentive);
 
 /*
  * Named deductions. Removing one follows the company rule for every delete: an

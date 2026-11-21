@@ -444,3 +444,5 @@ exports.updateIncrementReview = async (req, res) => {
     return handleError(req, res, error, "updateIncrementReview failed");
   }
 };
+
+exports.buildPerformanceRows = buildPerformanceRows;

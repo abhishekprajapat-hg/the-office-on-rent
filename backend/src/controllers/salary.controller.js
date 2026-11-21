@@ -161,7 +161,17 @@ const loadUnapprovedLeaveDates = async ({ companyId, userIds, range }) => {
  * loaded for people who have a salary in force that month - nobody else has
  * anything to deduct from.
  */
-const buildSalaryRows = async ({ companyId, users, monthKey, rules, companyDeductions = [] }) => {
+// salaryOverrides (payroll only): Map userId -> the monthly salary the admin set for this
+// month on the payroll sheet; the attendance deductions are worked out on that figure.
+const buildSalaryRows = async ({ companyId, users, monthKey, rules, companyDeductions = [], salaryOverrides = null }) => {
+  const salaryFor = (userId, revisions) => {
+    const override = salaryOverrides?.get(String(userId));
+    const regular = resolveSalaryForMonth(revisions, monthKey);
+    if (override !== undefined && override !== null) {
+      return { monthlySalary: override, effectiveFrom: monthKey, setOnPayroll: true, regularMonthlySalary: regular ? Number(regular.monthlySalary) : null };
+    }
+    return regular;
+  };
   const range = monthRange(monthKey);
   const attendancePolicy = await resolvePolicyForCompany(companyId);
   const timezone = attendancePolicy.timezone;
@@ -173,7 +183,7 @@ const buildSalaryRows = async ({ companyId, users, monthKey, rules, companyDeduc
   const salaryByUser = new Map(salaryDocs.map((doc) => [String(doc.userId), doc]));
 
   const paidUsers = users.filter((user) =>
-    resolveSalaryForMonth(salaryByUser.get(String(user._id))?.revisions, monthKey));
+    salaryFor(user._id, salaryByUser.get(String(user._id))?.revisions));
 
   const [daysByUser, unapprovedByUser] = paidUsers.length
     ? await Promise.all([
@@ -186,7 +196,7 @@ const buildSalaryRows = async ({ companyId, users, monthKey, rules, companyDeduc
     const key = String(user._id);
     const doc = salaryByUser.get(key);
     const revisions = sortRevisionsNewestFirst(doc?.revisions || []);
-    const inForce = resolveSalaryForMonth(revisions, monthKey);
+    const inForce = salaryFor(user._id, revisions);
     // A manager may have set this person's own amounts ("₹1,000 per absent day").
     const effectiveRules = mergeEmployeeRules(rules, doc?.deductionRules);
     const calculation = inForce
@@ -213,6 +223,8 @@ const buildSalaryRows = async ({ companyId, users, monthKey, rules, companyDeduc
       user: toUserView(user),
       salary: calculation,
       salaryEffectiveFrom: inForce?.effectiveFrom || null,
+      salarySetOnPayroll: Boolean(inForce?.setOnPayroll),
+      regularMonthlySalary: inForce?.setOnPayroll ? inForce.regularMonthlySalary : inForce ? Number(inForce.monthlySalary) : null,
       latestMonthlySalary: revisions.length ? Number(revisions[0].monthlySalary) : null,
       revisions,
       deductions: doc?.deductions || [],
@@ -1011,4 +1023,7 @@ exports.describeEmployeeDeduction = async ({ id, companyId }) => {
 };
 
 module.exports.validatePolicyUpdate = validatePolicyUpdate;
+module.exports.buildSalaryRows = buildSalaryRows;
+module.exports.loadPayrollPolicy = loadPayrollPolicy;
+module.exports.USER_FIELDS = USER_FIELDS;
 module.exports.validateCustomDeduction = validateCustomDeduction;

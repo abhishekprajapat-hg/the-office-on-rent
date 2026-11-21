@@ -71,3 +71,40 @@ export const setEmployeeRules = async (userId, payload) => {
   const res = await api.put(`/salary/users/${userId}/rules`, payload);
   return res.data;
 };
+
+// Payroll runs (admin): finalise a month, send it to BillStack, reopen to correct it.
+
+export const listPayrollRuns = async () => {
+  const res = await api.get("/salary/runs");
+  return res.data;
+};
+
+export const previewPayrollRun = async (payload) => {
+  const res = await api.post("/salary/runs/preview", payload);
+  return res.data;
+};
+
+export const finalisePayrollRun = async (payload) => {
+  const res = await api.post("/salary/runs", payload);
+  return res.data;
+};
+
+export const resendPayrollRun = async (runId) => {
+  const res = await api.post(`/salary/runs/${runId}/send`);
+  return res.data;
+};
+
+export const reopenPayrollRun = async (runId, reason) => {
+  const res = await api.post(`/salary/runs/${runId}/reopen`, { reason });
+  return res.data;
+};
+
+export const getKpiIncentive = async () => {
+  const res = await api.get("/salary/kpi-incentive");
+  return res.data;
+};
+
+export const setKpiIncentive = async (payload) => {
+  const res = await api.put("/salary/kpi-incentive", payload);
+  return res.data;
+};

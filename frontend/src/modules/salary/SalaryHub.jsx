@@ -10,6 +10,7 @@ import { TabButton, Tabs } from "../../components/ui/Tabs";
 import SalaryBreakdown from "./SalaryBreakdown";
 import EmployeeSalaryDialog from "./EmployeeSalaryDialog";
 import DeductionRulesPanel from "./DeductionRulesPanel";
+import PayrollRunPanel from "./PayrollRunPanel";
 import { cardClass, fieldClass, primaryButtonClass, secondaryButtonClass, SectionHeader, StatCard } from "./salaryUi";
 import {
   avatarTone,
@@ -331,7 +332,7 @@ export default function SalaryHub() {
   const canManage = role === "ADMIN" || role === "MANAGER";
 
   const tabs = useMemo(() => {
-    if (role === "ADMIN") return [{ id: "team", label: "Team salaries" }, { id: "rules", label: "Deduction rules" }];
+    if (role === "ADMIN") return [{ id: "team", label: "Team salaries" }, { id: "payroll", label: "Payroll" }, { id: "rules", label: "Deduction rules" }];
     if (role === "MANAGER") return [{ id: "team", label: "Team salaries" }, { id: "mine", label: "My salary" }, { id: "rules", label: "Deduction rules" }];
     return [{ id: "mine", label: "My salary" }];
   }, [role]);
@@ -376,6 +377,7 @@ export default function SalaryHub() {
 
       {tab === "team" ? <TeamSalaries month={month} setMonth={setMonth} onError={showError} onSuccess={showSuccess} /> : null}
       {tab === "mine" ? <MySalary month={month} setMonth={setMonth} onError={showError} /> : null}
+      {tab === "payroll" ? <PayrollRunPanel onError={showError} onSuccess={showSuccess} /> : null}
       {tab === "rules" ? <DeductionRulesPanel onSaved={showSuccess} /> : null}
     </div>
   );
