@@ -667,24 +667,36 @@ test('unverified candidate can be corrected without trusting browser verificatio
   assert.equal(saved.client.billingBindingConflict, false);
 });
 
-test('conflicting canonical contact edits do not mutate either customer', async () => {
+// Since 8 Oct 2026 a shared phone never proves two companies are one (PURPLETREE / Abhishek Tomar):
+// a client may take a number another customer also uses. Only the edited customer changes.
+test('a contact edit to a number another company uses changes only the edited customer', async () => {
   const h = boardHarness([cabin()]); await h.service.bridgeSavedBoard(h.row);
   const id = h.row.state.cabins[0].client.canonicalClientId;
   h.clients.set(actorId, { _id: actorId, companyId, companyName: 'Other', phone: '9123456789' });
   h.row.state.cabins[0].client.phone = '9123456789';
   await h.service.bridgeSavedBoard(h.row);
-  assert.equal(h.clients.get(id).phone, '9876543210');
+  assert.equal(h.clients.get(id).phone, '9123456789');
+  assert.equal(h.clients.get(actorId).companyName, 'Other');
+  assert.equal(h.clients.get(actorId).phone, '9123456789');
   assert.equal(h.row.state.cabins[0].client.canonicalClientId, id);
-  assert.equal(h.row.state.cabins[0].client.billingIdentityVerified, false);
 });
 
 test('conflicting multi-cabin snapshots fail before creating or updating a customer', async () => {
-  const first = cabin('A1'), second = cabin('A2'); second.client.email = 'different@example.test';
+  // Both cabins carry an email and they differ (a blank on one cabin is filled from the other).
+  const first = cabin('A1'), second = cabin('A2'); first.client.email = 'customer@example.test'; second.client.email = 'different@example.test';
   const h = boardHarness([first, second]); await h.service.bridgeSavedBoard(h.row);
   assert.equal(h.clients.size, 0); assert.equal(h.scheduled.length, 0);
   assert.ok(h.row.state.cabins.every(c => c.client.billingIdentityError));
   await assert.rejects(h.service.resolveBookedCustomer(companyId, first.code, actorId), /Conflicting customer details/);
   assert.equal(h.clients.size, 0);
+});
+
+test('an email on one cabin and a blank on another is not a conflict: one customer, email kept', async () => {
+  const first = cabin('A1'), second = cabin('A2'); second.client.email = 'accounts@example.test';
+  const h = boardHarness([first, second]); await h.service.bridgeSavedBoard(h.row);
+  assert.equal(h.clients.size, 1); assert.equal(h.scheduled.length, 1);
+  assert.ok(h.row.state.cabins.every(c => !c.client.billingIdentityError));
+  assert.equal([...h.clients.values()][0].email, 'accounts@example.test');
 });
 
 test('permanent provider errors stop automatic retry and allow an explicit retry', async () => {

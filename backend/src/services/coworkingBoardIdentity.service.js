@@ -19,7 +19,9 @@ function preserveBindings(cabins, previous = [], companyId) {
     if (same) {
       client.identityKey = old.client.identityKey || client.identityKey;
       if (old.client.canonicalClientId && (old.client.billingBindingEstablished === true || old.client.billingIdentityVerified === true)) {
-        client.billingBindingConflict = false;
+        // The server's link always wins; a browser that sent another one is flagged, not trusted.
+        client.billingBindingConflict = Boolean(cabin.client.canonicalClientId)
+          && String(cabin.client.canonicalClientId) !== String(old.client.canonicalClientId);
         client.canonicalClientId = old.client.canonicalClientId;
         client.billingBindingEstablished = old.client.billingBindingEstablished === true || old.client.billingIdentityVerified === true;
       }
@@ -32,6 +34,15 @@ function preserveBindings(cabins, previous = [], companyId) {
   });
 }
 
+// A 10-digit mobile number (country code and spacing removed), or '' when there is none.
+function phoneKey(value) {
+  let phone = String(value || '').replace(/\D/g, '');
+  if (phone.length === 12 && phone.startsWith('91')) phone = phone.slice(2);
+  if (!/^\d{10}$/.test(phone)) phone = phone.length >= 10 ? phone.slice(-10) : '';
+  return phone;
+}
+const emailKey = value => String(value || '').trim().toLowerCase();
+
 function identityData(cabin) {
   const c = cabin?.client || {};
   // Priority: Company name first; if absent, use client name or contact person
@@ -39,13 +50,8 @@ function identityData(cabin) {
   const individualName = String(c.name || c.contactPerson || '').trim();
   const displayName = companyName || individualName || ('Client ' + (cabin.code || 'Booking'));
 
-  let phone = String(c.phone || '').replace(/\D/g, '');
-  if (phone.length === 12 && phone.startsWith('91')) phone = phone.slice(2);
-  if (!/^\d{10}$/.test(phone)) {
-    phone = phone.length >= 10 ? phone.slice(-10) : '';
-  }
-
-  const email = String(c.email || '').trim().toLowerCase();
+  const phone = phoneKey(c.phone);
+  const email = emailKey(c.email);
   const contactPerson = String(c.contactPerson || (companyName ? c.name : '') || '').trim();
   const gstRaw = String(c.gstin || c.gstNumber || '').trim().toUpperCase();
   const gstNumber = /^[0-9]{2}[A-Z]{5}[0-9]{4}[A-Z]{1}[1-9A-Z]{1}Z[0-9A-Z]{1}$/.test(gstRaw) ? gstRaw : '';
@@ -77,20 +83,53 @@ function sameParty(a, b) {
   return x === y || (Math.min(x.length, y.length) >= 4 && (x.includes(y) || y.includes(x)));
 }
 
+// The contact details agree: at least one phone / email present on both sides and equal, and
+// none present on both sides and different. A name alone never makes two records compatible.
 function compatible(client, data) {
-  if (client?.phone && data?.phone) return client.phone === data.phone;
-  if (client?.email && data?.email) return client.email.toLowerCase() === data.email.toLowerCase();
-  return true;
+  let agreed = false;
+  for (const [a, b] of [[phoneKey(client?.phone), phoneKey(data?.phone)], [emailKey(client?.email), emailKey(data?.email)]]) {
+    if (!a || !b) continue;
+    if (a !== b) return false;
+    agreed = true;
+  }
+  return agreed;
+}
+
+// Cabins of one client (same board client id, else same identity key) must not disagree on a
+// phone, email or GSTIN that both of them carry; a blank on one side is filled from the other.
+function cabinGroupKey(cabin) {
+  const c = cabin?.client || {};
+  return c.id ? 'id:' + c.id : c.identityKey ? 'key:' + c.identityKey : '';
+}
+function conflictingCabins(cabin, boardCabins = []) {
+  const key = cabinGroupKey(cabin);
+  if (!key) return null;
+  const group = boardCabins.filter(other => validBookedCabin(other) && cabinGroupKey(other) === key);
+  const fields = [];
+  for (const field of ['phone', 'email', 'gstNumber']) {
+    const values = new Set(group.map(other => identityData(other)[field]).filter(Boolean));
+    if (values.size > 1) fields.push(field === 'gstNumber' ? 'GSTIN' : field);
+  }
+  return fields.length ? { codes: group.map(other => other.code), fields } : null;
 }
 
 async function resolveClient(companyId, cabin, actorId, version = 0, syncDetails = true, boardCabins = []) {
   if (!validBookedCabin(cabin)) throw createHttpError(409, 'Only booked customers are eligible');
+  const conflict = conflictingCabins(cabin, boardCabins);
+  if (conflict) {
+    throw createHttpError(409, `Conflicting customer details in cabins ${conflict.codes.join(', ')} (${conflict.fields.join(', ')}): make them the same before billing`);
+  }
   const bound = /^[a-f\d]{24}$/i.test(String(cabin.client?.canonicalClientId))
     ? await Client.findOne({ _id: cabin.client.canonicalClientId, companyId }) : null;
 
   const data = identityData(!syncDetails && bound && cabin.client?.billingBindingEstablished
     ? { ...cabin, client: { ...cabin.client, phone: cabin.client.phone || bound.phone, email: cabin.client.email || bound.email } }
     : cabin);
+  // Without a phone or email the customer can't be told apart from another of the same name, and
+  // BillStack has nowhere to send the invoice.
+  if (!data.phone && !data.email) {
+    throw createHttpError(409, "Add the client's phone number or email before billing");
+  }
 
   const resolved = async (found) => {
     if (syncDetails) return updateBoundClient(found, data, companyId, actorId, version, cabin.client?.billingBindingEstablished === true);
@@ -119,10 +158,22 @@ async function resolveClient(companyId, cabin, actorId, version = 0, syncDetails
   if (data.companyName) identifiers.push({ companyName: data.companyName });
 
   const candidates = identifiers.length > 0 ? await Client.find({ companyId, $or: identifiers }).limit(25) : [];
-  const matches = [
+  const byId = new Map();
+  for (const row of [
     ...candidates.filter(row => nameKey(row.companyName) === nameKey(data.companyName)),
     ...candidates.filter(row => sameParty(row.companyName, data.companyName)),
-  ];
+  ]) byId.set(String(row._id), row);
+  let matches = [...byId.values()];
+  // Several customers fit the name: keep those whose phone / email agree. If that still leaves more
+  // than one, refuse rather than guess which customer to bill.
+  if (matches.length > 1) {
+    const agreeing = matches.filter(row => compatible(row, data));
+    if (agreeing.length === 1) matches = agreeing;
+    else {
+      const names = (agreeing.length ? agreeing : matches).slice(0, 3).map(row => row.clientCode || String(row._id));
+      throw createHttpError(409, `This client fits multiple customers (${names.join(', ')}): merge them or correct the phone / email`);
+    }
+  }
   if (matches.length > 0) {
     return resolved(matches[0]);
   }
@@ -183,6 +234,11 @@ async function resolveBookedCustomer(companyId, cabinCode, actorId) {
 
 async function updateBoundClient(found, data, companyId, actorId, version, allowClear = true) {
   const sourceHash = createHash('sha256').update(JSON.stringify(data)).digest('hex');
+  // A newer board save has already written this customer: an older one (a delayed retry) must not
+  // put back the details it replaced.
+  if (Number(found.billstack?.boardVersion) > Number(version)) {
+    throw createHttpError(409, 'A newer save of the board already updated this customer; save the board again');
+  }
   if (found.billstack?.boardSourceHash === sourceHash) {
     await Client.updateOne({ _id: found._id, companyId }, { $set: { 'billstack.boardVersion': version } }, { timestamps: false });
     return found;
@@ -206,6 +262,12 @@ async function bridgeSavedBoard(row) {
 
   for (const cabin of state.cabins || []) {
     if (!validBookedCabin(cabin)) continue;
+    if (cabin.client.billingBindingConflict) {
+      // Keep the server's link, but don't certify or sync it until someone confirms it from Billing.
+      cabin.client.billingIdentityVerified = false;
+      cabin.client.billingIdentityError = 'The customer link was changed outside the server; open Billing for this cabin to confirm it';
+      continue;
+    }
     try {
       const client = await resolveClient(row.companyId, cabin, row.updatedBy, row.version, true, state.cabins);
       cabin.client.canonicalClientId = String(client._id);
