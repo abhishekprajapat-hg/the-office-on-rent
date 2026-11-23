@@ -223,6 +223,27 @@ const startAttendanceViolationSweep = () => {
  const sweep = async () => { if (running) return; running = true; try { await require("./services/attendanceViolation.service").runViolationSweep(); } catch (error) { logger.error({ error: error.message, message: "Attendance violation sweep failed" }); } finally { running = false; } };
  const timer = setInterval(sweep, 60 * 60 * 1000); timer.unref(); sweep();
 };
+// Payroll (client answers 23 Nov 2026, D24): last month's payroll is due by the 5th; admins and
+// the people named to finalise it get a push on the 3rd, the 5th and the day after until it is.
+const startPayrollReminderSweep = () => {
+  if (String(process.env.PAYROLL_REMINDER_SWEEP_ENABLED || "true").toLowerCase() === "false") return;
+  let running = false;
+  const sweep = async () => {
+    if (running) return;
+    running = true;
+    try {
+      const { sent } = await require("./services/payrollRun.service").runPayrollReminders();
+      if (sent.length) logger.info({ sent: sent.map((s) => s.key), message: "Payroll reminders sent" });
+    } catch (error) {
+      logger.error({ error: error.message, message: "Payroll reminder sweep failed" });
+    } finally {
+      running = false;
+    }
+  };
+  const timer = setInterval(sweep, 60 * 60 * 1000);
+  if (typeof timer.unref === "function") timer.unref();
+  sweep();
+};
 // Enterprise leasing (Oct 2026): lease, notice, escalation and payment reminders.
 const startEnterpriseReminderSweep = () => {
   if (String(process.env.ENTERPRISE_REMINDER_SWEEP_ENABLED || "true").toLowerCase() === "false") return;
@@ -280,6 +301,7 @@ const bootstrap = async () => {
   startAttendanceAutoCheckoutSweep();
   startAttendanceViolationSweep();
   startEnterpriseReminderSweep();
+  startPayrollReminderSweep();
   startBookingExpirySweep();
   startContractLifecycleSweep();
   startInvoiceOverdueSweep();

@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useState } from "react";
-import { AlertTriangle, BadgeCheck, CalendarCheck, Gauge, Loader2, Plus, RotateCcw, Send, SlidersHorizontal, Trash2, Wallet, X } from "lucide-react";
+import { AlertTriangle, BadgeCheck, Building2, CalendarCheck, Gauge, Loader2, Plus, RotateCcw, Send, SlidersHorizontal, Trash2, UserCheck, Wallet, X } from "lucide-react";
 import {
   finalisePayrollRun,
   getKpiIncentive,
@@ -8,17 +8,20 @@ import {
   reopenPayrollRun,
   resendPayrollRun,
   setKpiIncentive,
+  setPayingCompany,
+  setPayrollAccess,
 } from "../../services/salaryService";
 import { toErrorMessage } from "../../utils/errorMessage";
 import { cardClass, fieldClass, primaryButtonClass, secondaryButtonClass, SectionHeader, StatCard } from "./salaryUi";
 import { formatMonthLabel, formatRupees } from "./salaryFormat";
 
 /*
- * Payroll (admin): finalise a finished month. The sheet starts from the Salary page's
- * figures - attendance, late marks, leave, named deductions - and the KPI incentive; the
- * admin can type over each person's salary, KPI score and incentive for the month, and
- * enter PF / ESI / professional tax / TDS (optional: blank = none) and other additions or
- * deductions. Frozen as a version and sent to BillStack's books.
+ * Payroll (an admin, or someone an admin named - client answers D24): finalise a finished
+ * month. The sheet starts from the Salary page's figures - attendance, late marks, leave,
+ * named deductions - and the KPI incentive; each person's salary, KPI score and incentive can
+ * be typed over for the month, with PF / ESI / professional tax / TDS (optional: blank = none)
+ * and other additions or deductions. Frozen as a version and sent to BillStack's books: each
+ * person's pay to The Office on Rent's or Goldhawk's (D25).
  */
 
 const previousMonthKey = (now = new Date()) => {
@@ -32,6 +35,9 @@ const num = "whitespace-nowrap text-right font-mono tabular-nums";
 const dash = <span className="text-slate-300">–</span>;
 const show = (value) => (value ? value : dash);
 const money = (value) => (Number(value) ? formatRupees(value) : dash);
+
+const COMPANY_NAME = { TOOR: "The Office on Rent", GOLDHAWK: "Goldhawk" };
+const PAID_BY_HINT = { SET: "Set here", TEAM: "Residential team: Goldhawk until set", DEFAULT: "The Office on Rent until set" };
 
 const BILLSTACK_TEXT = {
   SENT: { label: "In BillStack", tone: "text-emerald-700 bg-emerald-50" },
@@ -214,9 +220,54 @@ const KpiIncentiveCard = ({ onSaved, onError }) => {
   );
 };
 
+/* ------------------------------------------------- who finalises, when -- */
+
+const PayrollAccessCard = ({ access, onSaved, onError }) => {
+  const [chosen, setChosen] = useState(() => new Set(access.finaliserIds || []));
+  const [days, setDays] = useState({ reminderDay: access.due?.reminderDay ?? 3, dueDay: access.due?.dueDay ?? 5 });
+  const [saving, setSaving] = useState(false);
+  const toggle = (id) => setChosen((set) => { const next = new Set(set); if (next.has(id)) next.delete(id); else next.add(id); return next; });
+  const save = async () => {
+    setSaving(true);
+    try {
+      onSaved(await setPayrollAccess({ finaliserIds: [...chosen], reminderDay: Number(days.reminderDay), dueDay: Number(days.dueDay) }));
+    } catch (error) {
+      onError(toErrorMessage(error, "Failed to save who finalises payroll"));
+    } finally {
+      setSaving(false);
+    }
+  };
+  return (
+    <section className={cardClass}>
+      <SectionHeader icon={UserCheck} tone="blue" title="Who finalises payroll" subtitle="Admins always can. The people ticked here can open this tab and finalise, send or reopen a month" />
+      <div className="space-y-3 px-5 py-4 text-[13px] text-slate-700">
+        <div className="flex max-h-56 flex-wrap gap-x-5 gap-y-2 overflow-y-auto">
+          {(access.people || []).map((person) => (
+            <label key={person.id} className="inline-flex items-center gap-2">
+              <input type="checkbox" checked={chosen.has(person.id)} onChange={() => toggle(person.id)} />
+              <span>{person.name}</span>
+              <span className="text-[12px] text-slate-400">{[person.role, person.department].filter(Boolean).join(" · ")}</span>
+            </label>
+          ))}
+        </div>
+        <div className="flex flex-wrap items-center gap-2">
+          <span>Last month is due by day</span>
+          <input value={days.dueDay} onChange={(e) => setDays((d) => ({ ...d, dueDay: e.target.value }))} inputMode="numeric" className={`${fieldClass} w-16 text-right font-mono`} aria-label="Due day" />
+          <span>; remind them (and admins) on day</span>
+          <input value={days.reminderDay} onChange={(e) => setDays((d) => ({ ...d, reminderDay: e.target.value }))} inputMode="numeric" className={`${fieldClass} w-16 text-right font-mono`} aria-label="Reminder day" />
+          <span>, again on the due day and the day after if it is still not done.</span>
+        </div>
+        <p className="text-[12.5px] text-slate-500">They see everyone's pay on this sheet. The KPI incentive and this list stay with admins.</p>
+        <button type="button" className={primaryButtonClass} onClick={save} disabled={saving}>{saving ? <Loader2 size={14} className="animate-spin" /> : null} Save</button>
+      </div>
+    </section>
+  );
+};
+
 /* ---------------------------------------------------------------- page -- */
 
-export default function PayrollRunPanel({ onError, onSuccess }) {
+export default function PayrollRunPanel({ access = null, onAccessChange = () => {}, onError, onSuccess }) {
+  const isAdmin = access ? Boolean(access.isAdmin) : true;
   const [month, setMonth] = useState(previousMonthKey());
   const [sheet, setSheet] = useState(null);
   const [edits, setEdits] = useState({});
@@ -273,8 +324,19 @@ export default function PayrollRunPanel({ onError, onSuccess }) {
     if (!(await loadSheet(next))) setEdits(before);
   };
 
+  // Whose books the person's pay goes to; kept for the coming months too.
+  const changePaidBy = async (row, company) => {
+    try {
+      await setPayingCompany(row.userId, company);
+      await loadSheet(edits);
+    } catch (error) {
+      onError(toErrorMessage(error, "Failed to change who pays them"));
+    }
+  };
+
   const finalise = async () => {
-    if (!window.confirm(`Finalise ${formatMonthLabel(month)} for ${sheet.totals.employees} people, net ${formatRupees(sheet.totals.net)}? It is frozen and sent to BillStack.`)) return;
+    const split = (sheet.byCompany || []).length > 1 ? ` (${sheet.byCompany.map((p) => `${p.label}: ${p.employees}, ${formatRupees(p.net)}`).join("; ")})` : "";
+    if (!window.confirm(`Finalise ${formatMonthLabel(month)} for ${sheet.totals.employees} people, net ${formatRupees(sheet.totals.net)}${split}? It is frozen and sent to BillStack.`)) return;
     setBusy("finalise");
     try {
       const { run } = await finalisePayrollRun({ month, edits: toPayload(edits) });
@@ -328,6 +390,13 @@ export default function PayrollRunPanel({ onError, onSuccess }) {
         <StatCard icon={Gauge} tone="violet" label="Incentives and additions" value={formatRupees(totals.additions)} hint={sheet?.kpiIncentive?.enabled ? "KPI incentive is on" : "KPI incentive is off"} />
         <StatCard icon={BadgeCheck} tone="green" label="Net pay" value={formatRupees(totals.net)} hint={`after ${formatRupees(totals.deductions)} deductions`} />
       </div>
+
+      {access?.due && !access.due.finalised ? (
+        <p className={`flex items-center gap-2 rounded-lg px-3 py-2 text-[13px] ${access.due.late ? "bg-rose-50 text-rose-800" : "bg-blue-50 text-blue-800"}`}>
+          <CalendarCheck size={15} className="shrink-0" />
+          {access.due.monthLabel} {access.due.late ? "was due" : "is due"} by {access.due.dueOn}.
+        </p>
+      ) : null}
 
       <section className={cardClass}>
         <SectionHeader icon={CalendarCheck} tone="blue" title="Finalise a month" subtitle="Filled in from the Salary and Performance pages - type over a salary, KPI score or incentive to change it for this month">
@@ -384,6 +453,20 @@ export default function PayrollRunPanel({ onError, onSuccess }) {
                       <td className={td}>
                         <p className="font-semibold text-slate-800">{row.name}</p>
                         <p className="text-[12px] text-slate-500">{[row.department, row.email].filter(Boolean).join(" · ")}</p>
+                        <label className="mt-1 inline-flex items-center gap-1 whitespace-nowrap text-[12px] text-slate-500" title={PAID_BY_HINT[row.companySource] || ""}>
+                          <Building2 size={12} /> Paid by
+                          <select
+                            value={row.company || "TOOR"}
+                            onChange={(e) => changePaidBy(row, e.target.value)}
+                            disabled={locked || loading}
+                            aria-label={`Who pays ${row.name}`}
+                            className={`rounded-md border px-1 py-0.5 text-[12px] ${row.company === "GOLDHAWK" ? "border-amber-300 bg-amber-50 text-amber-800" : "border-slate-200 bg-white text-slate-700"}`}
+                          >
+                            <option value="TOOR">TOOR</option>
+                            <option value="GOLDHAWK">Goldhawk</option>
+                          </select>
+                          {row.companySource !== "SET" ? <span className="text-slate-400">(default)</span> : null}
+                        </label>
                       </td>
                       <td className={`${td} text-right`}>
                         <EditCell
@@ -449,6 +532,13 @@ export default function PayrollRunPanel({ onError, onSuccess }) {
             </div>
           </div>
         ) : null}
+        {(sheet?.byCompany || []).length ? (
+          <p className="flex flex-wrap gap-x-5 gap-y-1 border-t border-slate-100 px-5 pt-3 text-[13px] text-slate-600">
+            {sheet.byCompany.map((part) => (
+              <span key={part.company}><Building2 size={13} className="mr-1 inline" /><b>{part.label}</b>: {part.employees} {part.employees === 1 ? "person" : "people"}, net {formatRupees(part.net)}</span>
+            ))}
+          </p>
+        ) : null}
         <div className="flex flex-wrap items-center gap-3 border-t border-slate-100 px-5 py-3">
           <button type="button" className={primaryButtonClass} onClick={finalise} disabled={!canFinalise}>
             {busy === "finalise" ? <Loader2 size={14} className="animate-spin" /> : <Send size={14} />}
@@ -484,8 +574,25 @@ export default function PayrollRunPanel({ onError, onSuccess }) {
                     <td className={`${td} ${num}`}>{run.totals?.employees}</td>
                     <td className={`${td} ${num}`}>{formatRupees(run.totals?.net)}</td>
                     <td className={td}>
-                      <span className={`rounded-md px-2 py-0.5 text-[12px] font-semibold ${bs.tone}`}>{bs.label}</span>
-                      {run.billstack?.lastError ? <p className="mt-1 max-w-xs text-[12px] text-rose-700">{run.billstack.lastError}</p> : null}
+                      {(run.billstackParts || []).length ? (
+                        <ul className="space-y-1">
+                          {run.billstackParts.map((part) => {
+                            const ps = BILLSTACK_TEXT[part.status] || BILLSTACK_TEXT.NOT_SENT;
+                            return (
+                              <li key={part.company}>
+                                <span className="text-[12px] text-slate-600">{COMPANY_NAME[part.company] || part.company}{part.withdraw ? " (nobody now - taken out)" : ` · ${part.employees}`}: </span>
+                                <span className={`rounded-md px-2 py-0.5 text-[12px] font-semibold ${ps.tone}`}>{part.status === "SENT" && part.withdraw ? "Taken out" : ps.label}</span>
+                                {part.lastError ? <p className="mt-0.5 max-w-xs text-[12px] text-rose-700">{part.lastError}</p> : null}
+                              </li>
+                            );
+                          })}
+                        </ul>
+                      ) : (
+                        <>
+                          <span className={`rounded-md px-2 py-0.5 text-[12px] font-semibold ${bs.tone}`}>{bs.label}</span>
+                          {run.billstack?.lastError ? <p className="mt-1 max-w-xs text-[12px] text-rose-700">{run.billstack.lastError}</p> : null}
+                        </>
+                      )}
                     </td>
                     <td className={`${td} space-x-2 whitespace-nowrap text-right`}>
                       {run.status === "FINALISED" && runs.billstackEnabled && run.billstack?.status !== "SENT" ? (
@@ -503,7 +610,10 @@ export default function PayrollRunPanel({ onError, onSuccess }) {
         </div>
       </section>
 
-      <KpiIncentiveCard onSaved={(m) => { onSuccess(m); loadSheet(edits); }} onError={onError} />
+      {isAdmin ? <KpiIncentiveCard onSaved={(m) => { onSuccess(m); loadSheet(edits); }} onError={onError} /> : null}
+      {isAdmin && access?.people ? (
+        <PayrollAccessCard access={access} onSaved={(next) => { onAccessChange(next); onSuccess("Saved who finalises payroll"); }} onError={onError} />
+      ) : null}
     </div>
   );
 }

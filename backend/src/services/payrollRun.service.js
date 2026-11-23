@@ -10,7 +10,8 @@
  *               and can be sent again; finalising never fails because BillStack is down)
  *   reopen    - only while BillStack has paid nothing of it; the next finalise is N+1
  *
- * Admins only: this is the company's payroll, not a team view.
+ * Admins, and the people an admin names (client answers D24: Aashi ma'am finalises by the 5th).
+ * Each person's pay goes to TOOR's or Goldhawk's books (D25), each with that company's key.
  */
 const PayrollRun = require("../models/PayrollRun");
 const PayrollPolicy = require("../models/PayrollPolicy");
@@ -36,7 +37,12 @@ const usersForMonth = async (companyId, monthKey) => {
     companyId,
     role: { $ne: USER_ROLES.ADMIN },
     $or: [{ isActive: true }, { isActive: false, updatedAt: { $gte: from } }],
-  }).select(`${USER_FIELDS} updatedAt`).sort({ name: 1 }).lean();
+  }).select(`${USER_FIELDS} updatedAt roleType`).sort({ name: 1 }).lean();
+};
+
+const loadPayingCompanies = async (companyId) => {
+  const stored = await PayrollPolicy.findOne({ companyId }).select("payingCompanies").lean();
+  return stored?.payingCompanies && typeof stored.payingCompanies === "object" ? stored.payingCompanies : {};
 };
 
 const loadIncentivePolicy = async (companyId) => {
@@ -52,6 +58,7 @@ const buildSheet = async ({ companyId, monthKey, edits = {} }) => {
   const users = await usersForMonth(companyId, monthKey);
   const policy = await loadPayrollPolicy(companyId);
   const incentivePolicy = await loadIncentivePolicy(companyId);
+  const payingCompanies = await loadPayingCompanies(companyId);
   const userIds = new Set(users.map((user) => String(user._id)));
   const unknown = Object.keys(edits).find((id) => !userIds.has(id));
   if (unknown) throw httpError(400, "A change names someone who is not on this month's sheet; refresh");
@@ -64,10 +71,12 @@ const buildSheet = async ({ companyId, monthKey, edits = {} }) => {
     (await buildPerformanceRows({ companyId, users: paidUsers, monthKey })).forEach((row) => performanceByUser.set(String(row.user._id), row.performance));
   }
   const inactive = new Set(users.filter((user) => !user.isActive).map((user) => String(user._id)));
+  const userById = new Map(users.map((user) => [String(user._id), user]));
   const rows = withSalary.map((salaryRow) => {
     const id = String(salaryRow.user._id);
     const row = calc.buildRunRow({ salaryRow, performance: performanceByUser.get(id) || null, incentivePolicy, edit: edits[id] || {} });
     if (inactive.has(id)) row.warnings.push("Switched off in the CRM - check their final settlement");
+    Object.assign(row, calc.payingCompanyFor(userById.get(id) || salaryRow.user, payingCompanies[id]));
     return row;
   });
   return {
@@ -76,16 +85,25 @@ const buildSheet = async ({ companyId, monthKey, edits = {} }) => {
     monthComplete,
     rows,
     totals: calc.runTotals(rows),
+    byCompany: calc.totalsByCompany(rows),
     withoutSalary: salaryRows.filter((row) => !row.salary).map((row) => ({ userId: String(row.user._id), name: row.user.name })),
     kpiIncentive: incentivePolicy,
   };
 };
 
-const runView = (run) => ({ ...run, monthLabel: monthLabel(run.month) });
+const runView = (run) => ({ ...run, monthLabel: monthLabel(run.month), byCompany: calc.totalsByCompany(run.rows || []) });
 
 const listRuns = async ({ companyId }) => {
-  const runs = await PayrollRun.find({ companyId }).select("-rows").sort({ month: -1, version: -1 }).limit(48).lean();
-  return { billstackEnabled: isBillstackEnabled(companyId), runs: runs.map(runView) };
+  // only who and how much per company is read from the rows here
+  const runs = await PayrollRun.find({ companyId }).select("-rows.attendanceLines -rows.additions -rows.deductions -rows.kpi -rows.edits -rows.computed -rows.attendance -rows.warnings").sort({ month: -1, version: -1 }).limit(48).lean();
+  return {
+    billstackEnabled: isBillstackEnabled(companyId),
+    runs: runs.map((run) => {
+      const view = runView(run);
+      delete view.rows;
+      return view;
+    }),
+  };
 };
 
 const getRun = async ({ companyId, runId }) => {
@@ -106,21 +124,49 @@ const preview = async ({ companyId, monthKey, edits }) => {
   return { ...sheet, finalised: current || null, lastVersion: last?.version || null, lastEdits, billstackEnabled: isBillstackEnabled(companyId) };
 };
 
+// Each company's part goes with its own key (D25). A part already in BillStack is not sent
+// again; a failed part is kept with BillStack's reason and can be sent again.
 const send = async (run) => {
   if (!isBillstackEnabled(run.companyId)) {
     await PayrollRun.updateOne({ _id: run._id }, { $set: { "billstack.status": "OFF", "billstack.lastError": "" } });
     return PayrollRun.findById(run._id).lean();
   }
-  try {
-    const result = await remote.sendPayrollRun(run.companyId, calc.toBillstackPayload(run));
-    await PayrollRun.updateOne({ _id: run._id }, {
-      $set: { "billstack.status": "SENT", "billstack.outcome": result.outcome, "billstack.remoteRunId": result.remoteRunId, "billstack.remoteStatus": result.remoteStatus, "billstack.lastError": "", "billstack.sentAt": new Date() },
-      $inc: { "billstack.attempts": 1 },
-    });
-  } catch (error) {
-    const message = error.statusCode ? String(error.message).slice(0, 300) : "Could not reach BillStack; send again shortly";
-    await PayrollRun.updateOne({ _id: run._id }, { $set: { "billstack.status": "FAILED", "billstack.lastError": message }, $inc: { "billstack.attempts": 1 } });
+  const earlier = await PayrollRun.find({ companyId: run.companyId, month: run.month, version: { $lt: run.version } }).select("billstack billstackParts").lean();
+  const previous = new Map((run.billstackParts || []).map((part) => [part.company, part]));
+  const parts = [];
+  for (const job of calc.billstackJobs(run, earlier)) {
+    const before = previous.get(job.company);
+    if (before?.status === "SENT" && before.withdraw === job.withdraw) {
+      parts.push(before);
+      continue;
+    }
+    const part = {
+      company: job.company, withdraw: job.withdraw, runId: job.runId, employees: job.employees, net: job.net,
+      status: "NOT_SENT", outcome: "", remoteRunId: "", remoteStatus: "", lastError: "", sentAt: null, attempts: (before?.attempts || 0) + 1,
+    };
+    try {
+      // eslint-disable-next-line no-await-in-loop
+      const result = await remote.sendPayrollRun(run.companyId, job.payload, { payrollCompany: job.company });
+      Object.assign(part, { status: "SENT", outcome: result.outcome, remoteRunId: result.remoteRunId, remoteStatus: result.remoteStatus, sentAt: new Date() });
+    } catch (error) {
+      Object.assign(part, { status: "FAILED", lastError: error.statusCode ? String(error.message).slice(0, 300) : "Could not reach BillStack; send again shortly" });
+    }
+    parts.push(part);
   }
+  const summary = calc.summariseParts(parts);
+  const toor = parts.find((part) => part.company === "TOOR" && !part.withdraw);
+  await PayrollRun.updateOne({ _id: run._id }, {
+    $set: {
+      billstackParts: parts,
+      "billstack.status": summary.status,
+      "billstack.lastError": summary.lastError,
+      "billstack.outcome": toor?.outcome || "",
+      "billstack.remoteRunId": toor?.remoteRunId || "",
+      "billstack.remoteStatus": toor?.remoteStatus || "",
+      ...(summary.status === "SENT" ? { "billstack.sentAt": new Date() } : {}),
+    },
+    $inc: { "billstack.attempts": 1 },
+  });
   return PayrollRun.findById(run._id).lean();
 };
 
@@ -162,14 +208,22 @@ const reopen = async ({ companyId, runId, actor, reason }) => {
   const why = String(reason || "").trim().slice(0, 300);
   if (!why) throw httpError(400, "Say what needs correcting");
   // Once BillStack has paid any of it, the correction goes into next month's sheet.
-  if (run.billstack?.status === "SENT" && isBillstackEnabled(companyId)) {
-    let state;
-    try {
-      state = await remote.getPayrollRunStatus(companyId, String(run._id));
-    } catch (error) {
-      if (!/not received/i.test(error.message)) throw httpError(502, "Could not check BillStack; try again shortly");
+  if (isBillstackEnabled(companyId)) {
+    // every company's part that is in the books (runs from before the split: TOOR's)
+    const inBooks = (run.billstackParts || []).length
+      ? run.billstackParts.filter((part) => part.status === "SENT" && !part.withdraw)
+      : run.billstack?.status === "SENT" ? [{ company: "TOOR", runId: String(run._id) }] : [];
+    for (const part of inBooks) {
+      const company = calc.COMPANY_LABEL[part.company] || part.company;
+      let state;
+      try {
+        // eslint-disable-next-line no-await-in-loop
+        state = await remote.getPayrollRunStatus(companyId, part.runId || calc.partRunId(run, part.company), { payrollCompany: part.company });
+      } catch (error) {
+        if (!/not received/i.test(error.message)) throw httpError(502, `Could not check ${company}'s BillStack; try again shortly`);
+      }
+      if (state?.locked) throw httpError(409, `BillStack has already paid salaries or dues for ${monthLabel(run.month)} v${run.version} (${company}). Put the correction in next month's sheet.`);
     }
-    if (state?.locked) throw httpError(409, `BillStack has already paid salaries or dues for ${monthLabel(run.month)} v${run.version}. Put the correction in next month's sheet.`);
   }
   await PayrollRun.updateOne({ _id: run._id, status: "FINALISED" }, {
     $set: { status: "REOPENED", reopenedBy: actor._id, reopenedByName: actor.name || "", reopenedAt: new Date(), reopenReason: why },
@@ -186,4 +240,124 @@ const setKpiIncentive = async ({ companyId, body, actor }) => {
   return loadIncentivePolicy(companyId);
 };
 
-module.exports = { finalise, getKpiIncentive, getRun, listRuns, preview, reopen, resend, setKpiIncentive };
+// ------------------------------------------------------------------ who, whose books, when
+
+const isAdmin = (user) => user?.role === USER_ROLES.ADMIN;
+const OBJECT_ID = /^[a-f\d]{24}$/i;
+const istDateKey = (now) => new Date(now.getTime() + 330 * 60000).toISOString().slice(0, 10);
+
+// D24: an admin, or an active person the admin named.
+const canFinalise = async ({ companyId, user }) => {
+  if (isAdmin(user)) return true;
+  if (!user?._id || user.isActive === false) return false;
+  return Boolean(await PayrollPolicy.exists({ companyId, payrollFinaliserIds: user._id }));
+};
+
+// Last month: when it is due and whether it is finalised.
+const dueOf = async ({ companyId, policy, now = new Date() }) => {
+  const schedule = calc.scheduleOf(policy || {});
+  const todayKey = istDateKey(now);
+  const month = calc.previousMonthKey(todayKey);
+  const finalised = await PayrollRun.exists({ companyId, month, status: "FINALISED" });
+  const thisMonth = new Date(`${todayKey.slice(0, 7)}-01T00:00:00Z`).toLocaleString("en-IN", { month: "long", timeZone: "UTC" });
+  return { month, monthLabel: monthLabel(month), dueOn: `${schedule.dueDay} ${thisMonth}`, finalised: Boolean(finalised), late: !finalised && Number(todayKey.slice(8, 10)) > schedule.dueDay, ...schedule };
+};
+
+const getAccess = async ({ companyId, user }) => {
+  const policy = await PayrollPolicy.findOne({ companyId }).select("payrollFinaliserIds payrollReminderDay payrollDueDay").lean();
+  const allowed = await canFinalise({ companyId, user });
+  const out = { canFinalise: allowed, isAdmin: isAdmin(user), due: allowed ? await dueOf({ companyId, policy }) : null };
+  if (!isAdmin(user)) return out;
+  const people = await User.find({ companyId, role: { $ne: USER_ROLES.ADMIN }, isActive: true }).select("_id name role department").sort({ name: 1 }).lean();
+  return {
+    ...out,
+    finaliserIds: (policy?.payrollFinaliserIds || []).map(String),
+    people: people.map((p) => ({ id: String(p._id), name: p.name, role: p.role, department: p.department || "" })),
+  };
+};
+
+const setAccess = async ({ companyId, actor, body = {} }) => {
+  if (!isAdmin(actor)) throw httpError(403, "Only an admin can choose who finalises payroll");
+  const ids = Array.isArray(body.finaliserIds) ? [...new Set(body.finaliserIds.map(String))] : [];
+  if (ids.length > 20 || ids.some((id) => !OBJECT_ID.test(id))) throw httpError(400, "Pick people from the list");
+  const found = await User.countDocuments({ _id: { $in: ids }, companyId, role: { $ne: USER_ROLES.ADMIN }, isActive: true });
+  if (found !== ids.length) throw httpError(400, "Someone picked is not an active member of this company");
+  const day = (value, label) => {
+    const n = Number(value);
+    if (!Number.isInteger(n) || n < 1 || n > 28) throw httpError(400, `${label} must be a day from 1 to 28`);
+    return n;
+  };
+  const dueDay = day(body.dueDay ?? calc.DEFAULT_PAYROLL_SCHEDULE.dueDay, "Due day");
+  const reminderDay = day(body.reminderDay ?? calc.DEFAULT_PAYROLL_SCHEDULE.reminderDay, "Reminder day");
+  if (reminderDay > dueDay) throw httpError(400, "The reminder must come on or before the due day");
+  await PayrollPolicy.updateOne(
+    { companyId },
+    { $set: { payrollFinaliserIds: ids, payrollDueDay: dueDay, payrollReminderDay: reminderDay, updatedBy: actor._id, updatedByName: actor.name || "" } },
+    { upsert: true },
+  );
+  return getAccess({ companyId, user: actor });
+};
+
+// D25: whose books a person's pay goes to; "" goes back to the team default.
+const setPayingCompany = async ({ companyId, userId, company }) => {
+  if (!OBJECT_ID.test(String(userId || ""))) throw httpError(400, "Pick a person");
+  const value = String(company || "").toUpperCase();
+  if (value && !calc.PAYING_COMPANIES.includes(value)) throw httpError(400, "Paid by must be The Office on Rent or Goldhawk");
+  const user = await User.findOne({ _id: userId, companyId }).select("_id name roleType").lean();
+  if (!user) throw httpError(404, "Person not found");
+  const path = `payingCompanies.${String(user._id)}`;
+  await PayrollPolicy.updateOne({ companyId }, value ? { $set: { [path]: value } } : { $unset: { [path]: "" } }, { upsert: true });
+  return { userId: String(user._id), name: user.name, ...calc.payingCompanyFor(user, value) };
+};
+
+/*
+ * D24 reminder: on the reminder day (3rd), the due day (5th) and the day after, while last
+ * month is not finalised, admins and the named finalisers get a push. Each is sent once.
+ */
+const runPayrollReminders = async ({ now = new Date(), sendPush = null } = {}) => {
+  const push = sendPush || require("./push.service").sendToUsers;
+  const todayKey = istDateKey(now);
+  const month = calc.previousMonthKey(todayKey);
+  const companies = await User.distinct("companyId", { role: USER_ROLES.ADMIN, isActive: { $ne: false } });
+  const sent = [];
+  for (const companyId of companies) {
+    if (!companyId) continue;
+    // eslint-disable-next-line no-await-in-loop
+    const policy = await PayrollPolicy.findOne({ companyId }).select("payrollFinaliserIds payrollReminderDay payrollDueDay payrollReminders").lean();
+    // a company that has never set up payroll is not reminded
+    // eslint-disable-next-line no-await-in-loop
+    if (!policy && !(await PayrollRun.exists({ companyId }))) continue;
+    // eslint-disable-next-line no-await-in-loop
+    const finalised = await PayrollRun.exists({ companyId, month, status: "FINALISED" });
+    const reminder = calc.payrollReminderFor({ todayKey, schedule: calc.scheduleOf(policy || {}), finalised: Boolean(finalised) });
+    if (!reminder || (policy?.payrollReminders || []).includes(reminder.key)) continue;
+    // claimed first, so two servers never both send it
+    let claimed;
+    try {
+      // eslint-disable-next-line no-await-in-loop
+      claimed = await PayrollPolicy.updateOne(
+        { companyId, payrollReminders: { $ne: reminder.key } },
+        { $push: { payrollReminders: { $each: [reminder.key], $slice: -24 } } },
+        { upsert: true },
+      );
+    } catch (error) {
+      if (error?.code === 11000) continue; // sent already (the policy holds the key)
+      throw error;
+    }
+    if (!claimed.modifiedCount && !claimed.upsertedCount) continue;
+    // eslint-disable-next-line no-await-in-loop
+    const people = await User.find({
+      companyId, isActive: { $ne: false },
+      $or: [{ role: USER_ROLES.ADMIN }, { _id: { $in: policy?.payrollFinaliserIds || [] } }],
+    }).select("_id").lean();
+    const to = people.map((u) => String(u._id));
+    Promise.resolve(push(to, { title: reminder.title, body: reminder.body, url: "/salary?tab=payroll", tag: `payroll-${reminder.key}` })).catch(() => {});
+    sent.push({ companyId: String(companyId), key: reminder.key, to });
+  }
+  return { sent };
+};
+
+module.exports = {
+  canFinalise, finalise, getAccess, getKpiIncentive, getRun, listRuns, preview, reopen, resend,
+  runPayrollReminders, setAccess, setKpiIncentive, setPayingCompany,
+};

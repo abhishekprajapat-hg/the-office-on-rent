@@ -18,8 +18,8 @@ const remoteReason = (error) => {
   const text = error?.response?.data?.message;
   return typeof text === 'string' && text.length <= 300 && !/[<>\r\n]/.test(text) ? text.trim() : '';
 };
-async function post(companyId, path, payload, { method = 'post', what = 'customer' } = {}) {
-  const config = getBillstackConfig(companyId);
+async function post(companyId, path, payload, { method = 'post', what = 'customer', payrollCompany = 'TOOR' } = {}) {
+  const config = getBillstackConfig(companyId, { payrollCompany });
   try {
     const options = {
       headers: { 'X-Billstack-Api-Key': config.apiKey }, timeout: 15000,
@@ -64,14 +64,15 @@ async function createInvoiceHandoff(companyId, customerId, billingContext = null
   return url.href;
 }
 // A finalised month's salary sheet (payroll run). BillStack checks every figure adds up.
-async function sendPayrollRun(companyId, payload) {
-  const body = await post(companyId, '/api/integrations/payroll/runs', payload, { what: 'payroll' });
+// payrollCompany picks the key: TOOR's people go to TOOR's books, Goldhawk's to Goldhawk's.
+async function sendPayrollRun(companyId, payload, { payrollCompany = 'TOOR' } = {}) {
+  const body = await post(companyId, '/api/integrations/payroll/runs', payload, { what: 'payroll', payrollCompany });
   const data = body?.data || body || {};
   return { outcome: String(data.outcome || ''), remoteRunId: String(data.runId || ''), remoteStatus: String(data.status || '') };
 }
 // Is the run in BillStack's books, and is anything of it paid?
-async function getPayrollRunStatus(companyId, runId) {
-  const body = await post(companyId, `/api/integrations/payroll/runs/${encodeURIComponent(runId)}`, null, { method: 'get', what: 'payroll' });
+async function getPayrollRunStatus(companyId, runId, { payrollCompany = 'TOOR' } = {}) {
+  const body = await post(companyId, `/api/integrations/payroll/runs/${encodeURIComponent(runId)}`, null, { method: 'get', what: 'payroll', payrollCompany });
   const data = body?.data || body || {};
   return { status: String(data.status || ''), paid: Number(data.paid || 0), duesPaid: Number(data.duesPaid || 0), locked: Boolean(data.locked) };
 }

@@ -2,7 +2,7 @@ import React, { useCallback, useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { Banknote, Loader2, RefreshCw, Search, TrendingDown, UserX, Users, Wallet } from "lucide-react";
 import { usePermissions } from "../../context/usePermissions";
-import { getMySalary, getTeamSalaries } from "../../services/salaryService";
+import { getMySalary, getPayrollAccess, getTeamSalaries } from "../../services/salaryService";
 import { toErrorMessage } from "../../utils/errorMessage";
 import ToastNotice from "../../components/ui/ToastNotice";
 import AvatarFace from "../../components/ui/AvatarFace";
@@ -329,15 +329,26 @@ const TeamSalaries = ({ month, setMonth, onError, onSuccess }) => {
 export default function SalaryHub() {
   const { role: contextRole } = usePermissions();
   const role = String(contextRole || readStoredRole()).toUpperCase();
-  const canManage = role === "ADMIN" || role === "MANAGER";
+  // Payroll is an admin's, or someone an admin named to finalise it (client answers D24).
+  const [payrollAccess, setPayrollAccess] = useState(null);
+  useEffect(() => {
+    let live = true;
+    getPayrollAccess().then((data) => { if (live) setPayrollAccess(data); }).catch(() => { if (live) setPayrollAccess(null); });
+    return () => { live = false; };
+  }, []);
+  const canPayroll = role === "ADMIN" || Boolean(payrollAccess?.canFinalise);
 
   const tabs = useMemo(() => {
     if (role === "ADMIN") return [{ id: "team", label: "Team salaries" }, { id: "payroll", label: "Payroll" }, { id: "rules", label: "Deduction rules" }];
-    if (role === "MANAGER") return [{ id: "team", label: "Team salaries" }, { id: "mine", label: "My salary" }, { id: "rules", label: "Deduction rules" }];
-    return [{ id: "mine", label: "My salary" }];
-  }, [role]);
+    const payroll = canPayroll ? [{ id: "payroll", label: "Payroll" }] : [];
+    if (role === "MANAGER") return [{ id: "team", label: "Team salaries" }, { id: "mine", label: "My salary" }, ...payroll, { id: "rules", label: "Deduction rules" }];
+    return [{ id: "mine", label: "My salary" }, ...payroll];
+  }, [role, canPayroll]);
 
-  const [selectedTab, setSelectedTab] = useState("");
+  // the payroll reminder opens /salary?tab=payroll
+  const [selectedTab, setSelectedTab] = useState(() => {
+    try { return new URLSearchParams(window.location.search).get("tab") || ""; } catch { return ""; }
+  });
   const tab = tabs.some((entry) => entry.id === selectedTab) ? selectedTab : tabs[0].id;
   const [month, setMonth] = useState(currentMonthKey());
   const [error, setError] = useState("");
@@ -365,7 +376,7 @@ export default function SalaryHub() {
       <ToastNotice message={error} type="error" />
       <ToastNotice message={success} type="success" />
 
-      {canManage ? (
+      {tabs.length > 1 ? (
         <Tabs>
           {tabs.map((entry) => (
             <TabButton key={entry.id} active={tab === entry.id} onClick={() => setSelectedTab(entry.id)}>
@@ -377,7 +388,7 @@ export default function SalaryHub() {
 
       {tab === "team" ? <TeamSalaries month={month} setMonth={setMonth} onError={showError} onSuccess={showSuccess} /> : null}
       {tab === "mine" ? <MySalary month={month} setMonth={setMonth} onError={showError} /> : null}
-      {tab === "payroll" ? <PayrollRunPanel onError={showError} onSuccess={showSuccess} /> : null}
+      {tab === "payroll" ? <PayrollRunPanel access={payrollAccess} onAccessChange={setPayrollAccess} onError={showError} onSuccess={showSuccess} /> : null}
       {tab === "rules" ? <DeductionRulesPanel onSaved={showSuccess} /> : null}
     </div>
   );

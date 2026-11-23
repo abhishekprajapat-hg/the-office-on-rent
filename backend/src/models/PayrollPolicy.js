@@ -82,6 +82,15 @@ const payrollPolicySchema = new mongoose.Schema(
     // KPI-linked incentive added when a month is finalised (services/payrollRun.calc.js).
     // Off until the company switches it on.
     kpiIncentive: { type: mongoose.Schema.Types.Mixed, default: null },
+    // Client answers 23 Nov 2026. D25: whose books each person's pay goes to, by user id
+    // ("TOOR" / "GOLDHAWK"); unset = residential team to Goldhawk, others to TOOR.
+    payingCompanies: { type: mongoose.Schema.Types.Mixed, default: {} },
+    // D24: besides admins, who may finalise payroll (Aashi ma'am), by when, and the reminder.
+    payrollFinaliserIds: { type: [{ type: mongoose.Schema.Types.ObjectId, ref: "User" }], default: [] },
+    payrollReminderDay: { type: Number, min: 1, max: 28, default: 3 },
+    payrollDueDay: { type: Number, min: 1, max: 28, default: 5 },
+    // reminders already sent, "YYYY-MM:remind|due|late" (the last 24 kept)
+    payrollReminders: { type: [String], default: [] },
     updatedBy: { type: mongoose.Schema.Types.ObjectId, ref: "User", default: null },
     updatedByName: { type: String, trim: true, default: "" },
   },

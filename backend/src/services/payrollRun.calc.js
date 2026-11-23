@@ -280,14 +280,107 @@ const runTotals = (rows) => ({
 });
 
 // What BillStack is sent: the rows without the CRM-only warnings / edits / computed figures.
-const toBillstackPayload = (run) => ({
-  runId: String(run._id),
+const toBillstackPayload = (run, rows = run.rows, runId = String(run._id)) => ({
+  runId,
   month: run.month,
   version: run.version,
   finalisedBy: run.finalisedByName || "",
   finalisedAt: run.finalisedAt ? new Date(run.finalisedAt).toISOString() : null,
-  rows: (run.rows || []).map(({ warnings, edits, computed, _id, ...row }) => row),
+  rows: (rows || []).map(({ warnings, edits, computed, _id, company, companySource, ...row }) => row),
 });
+
+/*
+ * Who pays whom (client answers 23 Nov 2026, D25): Goldhawk's people are paid by Goldhawk,
+ * so each person is TOOR's or Goldhawk's. It is set per person on the payroll sheet; until
+ * then the residential team is taken as Goldhawk's (Goldhawk is the residential business) and
+ * everyone else as TOOR's.
+ */
+const PAYING_COMPANIES = Object.freeze(["TOOR", "GOLDHAWK"]);
+const COMPANY_LABEL = Object.freeze({ TOOR: "The Office on Rent", GOLDHAWK: "Goldhawk" });
+const payingCompanyFor = (user = {}, chosen = "") => {
+  if (PAYING_COMPANIES.includes(chosen)) return { company: chosen, companySource: "SET" };
+  if (String(user.roleType || "").toUpperCase() === "RESIDENTIAL") return { company: "GOLDHAWK", companySource: "TEAM" };
+  return { company: "TOOR", companySource: "DEFAULT" };
+};
+const rowCompany = (row) => (PAYING_COMPANIES.includes(row?.company) ? row.company : "TOOR");
+
+// Each company's part of a run has its own id in BillStack; TOOR keeps the run's own id, so
+// runs sent before the split are still found.
+const partRunId = (run, company) => (company === "TOOR" ? String(run._id) : `${run._id}:${company}`);
+
+const totalsByCompany = (rows = []) => PAYING_COMPANIES.map((company) => {
+  const mine = rows.filter((row) => rowCompany(row) === company);
+  return { company, label: COMPANY_LABEL[company], employees: mine.length, net: roundMoney(mine.reduce((total, row) => total + row.net, 0)) };
+}).filter((part) => part.employees);
+
+// Companies an earlier version of the month put in BillStack's books. Runs from before the
+// split have no parts: a sent one was TOOR's.
+const companiesInBooks = (earlierRuns = []) => {
+  const found = new Set();
+  for (const run of earlierRuns) {
+    const parts = Array.isArray(run.billstackParts) ? run.billstackParts : [];
+    if (parts.length) parts.filter((part) => part.status === "SENT" && !part.withdraw).forEach((part) => found.add(part.company));
+    else if (run.billstack?.status === "SENT") found.add("TOOR");
+  }
+  return found;
+};
+
+/*
+ * What to send for a run: each company's people with that company's key, and a withdrawal
+ * for a company an earlier version put in the books but this one has nobody for (someone
+ * moved to the other company), so the month is not left in its books twice.
+ */
+const billstackJobs = (run, earlierRuns = []) => {
+  const jobs = [];
+  for (const company of PAYING_COMPANIES) {
+    const rows = (run.rows || []).filter((row) => rowCompany(row) === company);
+    const runId = partRunId(run, company);
+    if (rows.length) {
+      jobs.push({ company, withdraw: false, runId, employees: rows.length, net: roundMoney(rows.reduce((total, row) => total + row.net, 0)), payload: toBillstackPayload(run, rows, runId) });
+    } else if (companiesInBooks(earlierRuns).has(company)) {
+      jobs.push({ company, withdraw: true, runId, employees: 0, net: 0, payload: { withdraw: true, runId, month: run.month, version: run.version } });
+    }
+  }
+  return jobs;
+};
+
+// The run's overall BillStack state from its parts.
+const summariseParts = (parts = []) => {
+  const failed = parts.filter((part) => part.status === "FAILED");
+  if (!parts.length) return { status: "NOT_SENT", lastError: "" };
+  if (failed.length) return { status: "FAILED", lastError: failed.map((part) => `${COMPANY_LABEL[part.company] || part.company}: ${part.lastError}`).join(" | ").slice(0, 600) };
+  if (parts.every((part) => part.status === "SENT")) return { status: "SENT", lastError: "" };
+  return { status: "NOT_SENT", lastError: "" };
+};
+
+/*
+ * Who finalises payroll, and when (client answers D24): an admin, or someone the admin names
+ * (Aashi ma'am), by the due day of the next month; a reminder goes out on the reminder day.
+ */
+const DEFAULT_PAYROLL_SCHEDULE = Object.freeze({ reminderDay: 3, dueDay: 5 });
+const scheduleOf = (policy = {}) => {
+  const day = (v, fallback) => (Number.isInteger(Number(v)) && Number(v) >= 1 && Number(v) <= 28 ? Number(v) : fallback);
+  const dueDay = day(policy.payrollDueDay, DEFAULT_PAYROLL_SCHEDULE.dueDay);
+  return { reminderDay: Math.min(day(policy.payrollReminderDay, DEFAULT_PAYROLL_SCHEDULE.reminderDay), dueDay), dueDay };
+};
+const previousMonthKey = (dateKey) => {
+  const [y, m] = dateKey.split("-").map(Number);
+  return m === 1 ? `${y - 1}-12` : `${y}-${String(m - 1).padStart(2, "0")}`;
+};
+const monthName = (monthKey) => new Date(`${monthKey}-01T00:00:00Z`).toLocaleString("en-IN", { month: "long", year: "numeric", timeZone: "UTC" });
+
+// Which reminder is due today (IST date key "YYYY-MM-DD"), if any: one on the reminder day,
+// one on the due day, one the day after if it is still not done. Each is sent once.
+const payrollReminderFor = ({ todayKey, schedule, finalised }) => {
+  if (finalised) return null;
+  const day = Number(todayKey.slice(8, 10));
+  const month = previousMonthKey(todayKey);
+  const due = `${schedule.dueDay} ${new Date(`${todayKey.slice(0, 7)}-01T00:00:00Z`).toLocaleString("en-IN", { month: "long", timeZone: "UTC" })}`;
+  if (day > schedule.dueDay) return { key: `${month}:late`, month, title: `Payroll for ${monthName(month)} is late`, body: `It was due on ${due}. Finalise it on Salary > Payroll.` };
+  if (day === schedule.dueDay) return { key: `${month}:due`, month, title: `Payroll for ${monthName(month)} is due today`, body: "Finalise it on Salary > Payroll so it reaches the books." };
+  if (day >= schedule.reminderDay) return { key: `${month}:remind`, month, title: `Payroll for ${monthName(month)} is due by ${due}`, body: "Check attendance and leave, then finalise it on Salary > Payroll." };
+  return null;
+};
 
 module.exports = {
   DEFAULT_KPI_INCENTIVE,
@@ -299,6 +392,19 @@ module.exports = {
   kpiIncentiveFor,
   runTotals,
   toBillstackPayload,
+  PAYING_COMPANIES,
+  COMPANY_LABEL,
+  payingCompanyFor,
+  rowCompany,
+  partRunId,
+  totalsByCompany,
+  companiesInBooks,
+  billstackJobs,
+  summariseParts,
+  DEFAULT_PAYROLL_SCHEDULE,
+  scheduleOf,
+  previousMonthKey,
+  payrollReminderFor,
   toKpiIncentiveView,
   validateKpiIncentive,
 };

@@ -1,8 +1,18 @@
 const { createHttpError } = require('../utils/httpError');
 
-function getBillstackConfig(companyId) {
+/*
+ * One CRM, two companies in BillStack (client answers 23 Nov 2026, D25): Goldhawk's people
+ * are paid by Goldhawk, so their salary sheet goes with Goldhawk's own integration key
+ * (BILLSTACK_GOLDHAWK_API_KEY, made in BillStack with Goldhawk as the active company).
+ * Everything else - customers, invoices, TOOR's salaries - uses BILLSTACK_API_KEY.
+ */
+const PAYROLL_KEYS = { TOOR: 'BILLSTACK_API_KEY', GOLDHAWK: 'BILLSTACK_GOLDHAWK_API_KEY' };
+function getBillstackConfig(companyId, { payrollCompany = 'TOOR' } = {}) {
   const base = String(process.env.BILLSTACK_BASE_URL || '').trim();
-  const apiKey = String(process.env.BILLSTACK_API_KEY || '').trim();
+  const keyName = PAYROLL_KEYS[payrollCompany];
+  if (!keyName) throw createHttpError(400, 'Unknown company for BillStack');
+  const apiKey = String(process.env[keyName] || '').trim();
+  if (payrollCompany !== 'TOOR' && !apiKey) throw createHttpError(503, "Goldhawk's BillStack key is not set on the CRM server (BILLSTACK_GOLDHAWK_API_KEY)");
   const boundCompany = String(process.env.BILLSTACK_COMPANY_ID || '').trim();
   if (!/^[a-f\d]{24}$/i.test(boundCompany)) throw createHttpError(503, 'BillStack requires an explicit company binding');
   if (!companyId || boundCompany.toLowerCase() !== String(companyId).toLowerCase()) {

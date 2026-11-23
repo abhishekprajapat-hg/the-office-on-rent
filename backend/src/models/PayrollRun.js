@@ -23,6 +23,10 @@ const rowSchema = new mongoose.Schema(
     email: { type: String, default: "" },
     department: { type: String, default: "" },
     role: { type: String, default: "" },
+    // Whose books the person's pay goes to (client answers D25): TOOR or GOLDHAWK; SET on the
+    // payroll sheet, or TEAM (residential = Goldhawk) / DEFAULT (TOOR) until someone sets it.
+    company: { type: String, enum: ["TOOR", "GOLDHAWK"], default: "TOOR" },
+    companySource: { type: String, enum: ["SET", "TEAM", "DEFAULT"], default: "DEFAULT" },
     monthlySalary: { type: Number, required: true, min: 0 },
     perDayRate: { type: Number, default: 0 },
     attendance: {
@@ -94,6 +98,27 @@ const payrollRunSchema = new mongoose.Schema(
       lastError: { type: String, default: "" },
       sentAt: { type: Date, default: null },
       attempts: { type: Number, default: 0 },
+    },
+    // One part per company (client answers D25), each sent with that company's key; billstack
+    // above is their summary. A withdrawal takes an earlier version's month out of a company's
+    // books when this version has nobody for it.
+    billstackParts: {
+      type: [{
+        _id: false,
+        company: { type: String, enum: ["TOOR", "GOLDHAWK"], required: true },
+        withdraw: { type: Boolean, default: false },
+        runId: { type: String, default: "" },
+        employees: { type: Number, default: 0 },
+        net: { type: Number, default: 0 },
+        status: { type: String, enum: ["NOT_SENT", "SENT", "FAILED"], default: "NOT_SENT" },
+        outcome: { type: String, default: "" },
+        remoteRunId: { type: String, default: "" },
+        remoteStatus: { type: String, default: "" },
+        lastError: { type: String, default: "" },
+        sentAt: { type: Date, default: null },
+        attempts: { type: Number, default: 0 },
+      }],
+      default: [],
     },
   },
   { timestamps: true },

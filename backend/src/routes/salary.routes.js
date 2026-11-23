@@ -25,9 +25,13 @@ router.get("/users/:userId", salaryController.getUserSalary);
 router.put("/users/:userId", writeLimiter, salaryController.setUserSalary);
 
 /*
- * Payroll: an admin finalises a month (frozen, versioned) and it is sent to BillStack's
- * books. The KPI incentive is set here too. Admin only - checked in the controller.
+ * Payroll: an admin, or someone an admin named, finalises a month (frozen, versioned) and it
+ * is sent to BillStack's books - each person's pay to TOOR's or Goldhawk's. The KPI incentive
+ * and who may finalise are the admin's. Checked in the controller.
  */
+router.get("/runs/access", payrollRunController.getAccess);
+router.put("/runs/access", writeLimiter, payrollRunController.setAccess);
+router.put("/runs/paid-by", writeLimiter, payrollRunController.setPayingCompany);
 router.get("/runs", payrollRunController.listRuns);
 router.post("/runs/preview", payrollRunController.preview);
 router.post("/runs", writeLimiter, payrollRunController.finalise);

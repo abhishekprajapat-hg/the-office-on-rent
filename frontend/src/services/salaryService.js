@@ -108,3 +108,20 @@ export const setKpiIncentive = async (payload) => {
   const res = await api.put("/salary/kpi-incentive", payload);
   return res.data;
 };
+
+// Who may finalise payroll besides admins, and when it is due (client answers D24).
+export const getPayrollAccess = async () => {
+  const res = await api.get("/salary/runs/access");
+  return res.data;
+};
+
+export const setPayrollAccess = async (payload) => {
+  const res = await api.put("/salary/runs/access", payload);
+  return res.data;
+};
+
+// Whose books a person's pay goes to: TOOR or GOLDHAWK, "" for the team default (D25).
+export const setPayingCompany = async (userId, company) => {
+  const res = await api.put("/salary/runs/paid-by", { userId, company });
+  return res.data;
+};
