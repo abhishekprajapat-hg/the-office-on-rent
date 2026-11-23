@@ -1082,7 +1082,7 @@ const applyLeadListFilters = (query, rawQuery = {}) => {
   }
 
   const source = normalizeEnumValue(rawQuery.source);
-  if (["META", "MANUAL"].includes(source)) {
+  if (["META", "MANUAL", "WHATSAPP", "WEBSITE"].includes(source)) {
     query.source = source;
   }
 

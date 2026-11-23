@@ -244,7 +244,7 @@ const leadSchema = new mongoose.Schema(
 
     source: {
       type: String,
-      enum: ["META", "MANUAL", "WHATSAPP"],
+      enum: ["META", "MANUAL", "WHATSAPP", "WEBSITE"],
       required: true
     },
 
@@ -275,6 +275,23 @@ const leadSchema = new mongoose.Schema(
       adHeadline: { type: String, default: "", trim: true },
       adUrl: { type: String, default: "", trim: true },
       firstMessage: { type: String, default: "", trim: true },
+    },
+
+    // Set when the company's website sends an enquiry for this number: the latest enquiry's details,
+    // and the ids already received so a retried send is not counted twice.
+    website: {
+      name: { type: String, default: "", trim: true },
+      email: { type: String, default: "", trim: true },
+      workspaceType: { type: String, default: "", trim: true },
+      teamSize: { type: String, default: "", trim: true },
+      timeline: { type: String, default: "", trim: true },
+      message: { type: String, default: "", trim: true },
+      page: { type: String, default: "", trim: true },
+      property: { type: String, default: "", trim: true },
+      enquiryIds: { type: [String], default: undefined },
+      enquiries: { type: Number, default: 0 },
+      firstEnquiryAt: { type: Date, default: null },
+      lastEnquiryAt: { type: Date, default: null },
     },
 
     status: {

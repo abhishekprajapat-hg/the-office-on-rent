@@ -82,6 +82,7 @@ app.use(httpLogger);
 app.use(httpMetricsMiddleware);
 // Signed by the WhatsApp dashboard over the raw body, so it is mounted before the JSON parser.
 app.use("/api/integrations/whatsapp", require("./routes/whatsappIntegration.routes"));
+app.use("/api/integrations/website", require("./routes/websiteIntegration.routes"));
 app.use(express.json({ limit: jsonBodyLimit }));
 app.use(express.urlencoded({ extended: false, limit: urlencodedBodyLimit }));
 app.use(resolveTenantContext);

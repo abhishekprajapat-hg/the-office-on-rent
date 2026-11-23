@@ -24,7 +24,7 @@ export default function LeadAdvancedFilters({ filters, status, subtype, statuses
       <div className="space-y-3 p-4">
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
           {select("status", "Status", statuses)}
-          {select("source", "Lead source", [{ value: "META", label: "Meta Ads" }, { value: "MANUAL", label: "Manual / Import" }, { value: "WHATSAPP", label: "WhatsApp" }])}
+          {select("source", "Lead source", [{ value: "META", label: "Meta Ads" }, { value: "MANUAL", label: "Manual / Import" }, { value: "WHATSAPP", label: "WhatsApp" }, { value: "WEBSITE", label: "Website" }])}
           {select("assignedTo", "Assigned employee", [{ value: "UNASSIGNED", label: "Unassigned" }, ...employees.map((user) => ({ value: String(user._id), label: user.name }))])}
           {select("inventoryType", "Business category", categories)}
           {select("subtype", "Property type", subtypes)}
