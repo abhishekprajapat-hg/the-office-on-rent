@@ -8,6 +8,7 @@ import { createInventoryShareLink } from "../../../services/inventoryService";
 import { uploadFile } from "../../../services/uploadService";
 import { logLeadTouch } from "../../../services/leadService";
 import LeadTouchStatus from "./LeadTouchStatus";
+import LeadWhatsAppPanel from "./LeadWhatsAppPanel";
 import PropertyLinkPicker from "./PropertyLinkPicker";
 import {
   AlertCircle,
@@ -5707,6 +5708,7 @@ const LeadDetailsRebuiltContent = ({
               </div>
 
               <LeadTouchStatus lead={leadWithTouch} isDark={isDark} onLogged={(touch) => setTouchOverride({ leadId: selectedLead?._id, ...touch })} />
+              <LeadWhatsAppPanel leadId={selectedLead?._id} isDark={isDark} />
               {canAssignLead && transferPanelOpen ? (
                 <div
                   id="lead-transfer-panel"

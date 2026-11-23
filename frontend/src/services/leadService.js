@@ -176,3 +176,8 @@ export const logLeadTouch = async (leadId, payload) => (await api.post(`/leads/$
 export const getLeadTouchReport = async (params = {}) => (await api.get("/leads/touch-report", { params })).data;
 export const getMetaLeadFailures = async (params = {}) => (await api.get("/leads/meta-failures", { params })).data;
 export const resolveMetaLeadFailure = async (id, note) => (await api.patch(`/leads/meta-failures/${id}`, { note })).data;
+
+// The lead's WhatsApp (the company's WhatsApp app): chat, messages from the CRM, follow-up, agreement.
+export const getLeadWhatsApp = async (leadId) => (await api.get(`/leads/${leadId}/whatsapp`)).data;
+export const sendLeadWhatsApp = async (leadId, purpose) => (await api.post(`/leads/${leadId}/whatsapp/send`, { purpose })).data;
+export const setLeadWhatsAppConsent = async (leadId, given) => (await api.post(`/leads/${leadId}/whatsapp/consent`, { given })).data;

@@ -277,6 +277,8 @@ const bootstrap = async () => {
   tidyStoredLeads();
   ensureDatabaseIndexes();
   require('./services/billstackSync.service').startWorker();
+  // WhatsApp messages to customers, handed to the company's WhatsApp app (retried while it is down).
+  require('./services/customerMessages.service').startWorker();
   startAttendanceAutoCheckoutSweep();
   startAttendanceViolationSweep();
   startEnterpriseReminderSweep();

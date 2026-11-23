@@ -18,6 +18,7 @@ const {
   autoAssignLead,
 } = require("../services/leadAssignment.service");
 const { notifyLeadAssigned } = require("../services/whatsappDashboard.service");
+const customerMessages = require("../services/customerMessages.service");
 const {
   USER_ROLES,
   EXECUTIVE_ROLES,
@@ -4625,6 +4626,8 @@ exports.updateLeadStatus = async (req, res) => {
       return res.status(404).json({ message: "Lead not found" });
     }
     const previousLeadStatus = normalizeEnumValue(lead.status);
+    // For the site-visit WhatsApp messages: a visit moved or cancelled stops its reminders.
+    const previousVisitAt = lead.nextFollowUp ? new Date(lead.nextFollowUp) : null;
     const previousPaymentType = normalizeEnumValue(lead?.dealPayment?.paymentType);
     const previousRemainingAmount = toFiniteNumber(lead?.dealPayment?.remainingAmount);
 
@@ -5343,6 +5346,10 @@ exports.updateLeadStatus = async (req, res) => {
         })),
     );
 
+    // Site visit scheduled (or moved, or no longer scheduled): the customer's WhatsApp confirmation
+    // and reminders. Never fails the status change.
+    await customerMessages.syncSiteVisitMessages({ lead, previousStatus: previousLeadStatus, previousVisitAt, user: req.user });
+
     const populatedLead = await getLeadViewById(lead._id, req.user.companyId, req.user);
 
     return res.json({
@@ -5380,6 +5387,7 @@ exports.completeLeadFollowUp = async (req, res) => {
       return res.json({ message: "Follow-up already completed", lead: await getLeadViewById(leadId, req.user.companyId, req.user) });
     }
 
+    const previousVisitAt = lead.nextFollowUp ? new Date(lead.nextFollowUp) : null;
     lead.nextFollowUp = null;
     await lead.save();
     await LeadActivity.create({
@@ -5387,6 +5395,8 @@ exports.completeLeadFollowUp = async (req, res) => {
       action: "Follow-up completed",
       performedBy: req.user._id,
     });
+    // A site visit marked done: its reminders not sent yet are stopped.
+    await customerMessages.syncSiteVisitMessages({ lead, previousStatus: normalizeEnumValue(lead.status), previousVisitAt, user: req.user });
     return res.json({
       message: "Follow-up completed",
       lead: await getLeadViewById(leadId, req.user.companyId, req.user),
@@ -5648,6 +5658,7 @@ exports.approveLeadStatusRequest = async (req, res) => {
     }
 
     const previousLeadStatus = normalizeEnumValue(lead.status);
+    const previousVisitAt = lead.nextFollowUp ? new Date(lead.nextFollowUp) : null;
     lead.status = request.proposedStatus;
     if (
       previousLeadStatus !== QUALIFIED_LEAD_STATUS
@@ -5799,6 +5810,8 @@ exports.approveLeadStatusRequest = async (req, res) => {
         companyId: req.user?.companyId || null,
       });
     }
+
+    await customerMessages.syncSiteVisitMessages({ lead, previousStatus: previousLeadStatus, previousVisitAt, user: req.user });
 
     const populatedLead = await getLeadViewById(lead._id, req.user.companyId, req.user);
     const populatedRequest = await LeadStatusRequest.findById(request._id)

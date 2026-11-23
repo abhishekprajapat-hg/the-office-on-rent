@@ -73,6 +73,8 @@ exports.upsertWhatsAppLead = async (req, res) => {
     adHeadline: text(ad?.headline, 200),
     adUrl: text(ad?.url, 500),
     firstMessage: text(body?.firstMessage, 1000),
+    websitePage: text(body?.website?.page, 200),
+    websiteProperty: text(body?.website?.property, 160),
   };
 
   try {
@@ -92,6 +94,10 @@ exports.upsertWhatsAppLead = async (req, res) => {
         lead.set("requirements.inventoryType", inventoryType);
         changes.push(`type set to ${inventoryType}`);
       }
+      if (whatsapp.websiteProperty && !lead.projectInterested) {
+        lead.projectInterested = whatsapp.websiteProperty;
+        changes.push(`property "${whatsapp.websiteProperty}" from the website`);
+      }
       await lead.save();
       if (changes.length) {
         await LeadActivity.create({ lead: lead._id, action: `WhatsApp: ${changes.join(", ")}`, performedBy: null });
@@ -109,7 +115,7 @@ exports.upsertWhatsAppLead = async (req, res) => {
         name: text(body?.name, 120) || "WhatsApp lead",
         phone: storedPhone(waId),
         companyId,
-        projectInterested: whatsapp.adHeadline,
+        projectInterested: whatsapp.websiteProperty || whatsapp.adHeadline,
         requirements: { inventoryType },
         whatsapp,
         source: "WHATSAPP",
@@ -120,7 +126,7 @@ exports.upsertWhatsAppLead = async (req, res) => {
       created = true;
       await LeadActivity.create({
         lead: lead._id,
-        action: `Lead created from WhatsApp${body?.departmentName ? ` (${text(body.departmentName, 60)})` : ""}${whatsapp.adHeadline ? ` - ad "${whatsapp.adHeadline}"` : ""}`,
+        action: `Lead created from WhatsApp${body?.departmentName ? ` (${text(body.departmentName, 60)})` : ""}${whatsapp.adHeadline ? ` - ad "${whatsapp.adHeadline}"` : ""}${whatsapp.websitePage ? ` - the website's WhatsApp button on ${whatsapp.websitePage}${whatsapp.websiteProperty ? ` (${whatsapp.websiteProperty})` : ""}` : ""}`,
         performedBy: null,
       });
     }
@@ -155,6 +161,114 @@ exports.upsertWhatsAppLead = async (req, res) => {
     });
   } catch (error) {
     logger.error({ error: error.message, message: "WhatsApp lead failed" });
+    return res.status(500).json({ message: "Server error" });
+  }
+};
+
+// ---- Events from the WhatsApp app ---------------------------------------------------------------
+
+const leadTouch = require("../services/leadTouch.service");
+const customerMessages = require("../services/customerMessages.service");
+
+/** Checks the WhatsApp app's signature and reads the JSON body; answers the error itself when it fails. */
+const readSigned = (req, res) => {
+  const raw = Buffer.isBuffer(req.body) ? req.body.toString("utf8") : "";
+  const secret = dashboardSecret();
+  if (!secret) {
+    res.status(503).json({ message: "WhatsApp integration is not set up (WHATSAPP_DASHBOARD_SECRET)" });
+    return null;
+  }
+  if (!verifySignature(secret, req.get("x-oor-timestamp"), raw, req.get("x-oor-signature"))) {
+    logger.warn({ ip: req.ip, path: req.path, message: "WhatsApp call refused: bad signature" });
+    res.status(401).json({ message: "Bad signature" });
+    return null;
+  }
+  try {
+    const body = JSON.parse(raw);
+    if (!body || typeof body !== "object") throw new Error("not an object");
+    return body;
+  } catch (_error) {
+    res.status(400).json({ message: "Body must be JSON" });
+    return null;
+  }
+};
+
+const minutesText = (minutes) => {
+  const value = Math.max(0, Math.round(Number(minutes) || 0));
+  if (value < 60) return `${value} min`;
+  const hours = Math.floor(value / 60);
+  return value % 60 ? `${hours} h ${value % 60} min` : `${hours} h`;
+};
+
+/**
+ * What happens in a customer's WhatsApp chat, for the lead's history:
+ * - customer.message: the customer wrote after a quiet spell (6 hours), or for the first time;
+ * - agent.reply: the first reply by a person after the customer's message. It is a verified WhatsApp
+ *   touch for that person (matched by e-mail), so the lead's touch time counts it;
+ * - chat.closed: someone closed the chat in the WhatsApp app.
+ * A number that is no lead (a broker, or not sent to the CRM) is answered { ignored } with 200.
+ */
+exports.receiveChatEvent = async (req, res) => {
+  const body = readSigned(req, res);
+  if (!body) return undefined;
+  const type = String(body.type || "");
+  if (!["customer.message", "agent.reply", "chat.closed"].includes(type)) return res.status(400).json({ message: "Unknown event type" });
+  const waId = toWaId(body.phone);
+  if (!waId) return res.status(400).json({ message: "phone must be a WhatsApp number with country code" });
+  const at = body.at && !Number.isNaN(new Date(body.at).getTime()) ? new Date(body.at) : new Date();
+
+  try {
+    const companyId = await resolveCompanyId();
+    if (!companyId) return res.status(503).json({ message: "Set WHATSAPP_COMPANY_ID: the CRM has more than one company (or none active)" });
+    const lead = await Lead.findOne({ companyId, phone: { $in: phoneVariants(waId) } }).sort({ createdAt: -1 });
+    if (!lead) return res.status(200).json({ ignored: "no_lead" });
+
+    const email = String(body.by?.email || "").trim().toLowerCase();
+    const person = email ? await User.findOne({ companyId, email, isActive: true }).select("_id name email") : null;
+    const byName = person?.name || text(body.by?.name, 80);
+    const preview = text(body.preview, 160);
+
+    if (type === "customer.message") {
+      await LeadActivity.create({
+        lead: lead._id,
+        action: `WhatsApp: ${body.firstEver ? "the customer's first message" : "the customer wrote again"}${preview ? ` - "${preview}"` : ""}`,
+        performedBy: null,
+      });
+      return res.status(200).json({ ok: true, leadId: String(lead._id) });
+    }
+
+    if (type === "chat.closed") {
+      await LeadActivity.create({ lead: lead._id, action: `WhatsApp chat closed${byName ? ` by ${byName}` : ""}`, performedBy: person?._id || null });
+      return res.status(200).json({ ok: true, leadId: String(lead._id) });
+    }
+
+    // agent.reply
+    const after = Number.isFinite(Number(body.responseMinutes)) ? ` (${minutesText(body.responseMinutes)} after the customer wrote)` : "";
+    if (person) {
+      await leadTouch.recordTouch({ lead, user: person, channel: "WHATSAPP", source: "SYSTEM", at: at > new Date() ? new Date() : at, note: `replied on WhatsApp${after}` });
+    } else {
+      await LeadActivity.create({ lead: lead._id, action: `WhatsApp reply${byName ? ` by ${byName}` : ""}${after} (not a CRM user, so no touch recorded)`, performedBy: null });
+    }
+    return res.status(200).json({ ok: true, leadId: String(lead._id), touch: Boolean(person) });
+  } catch (error) {
+    if (error instanceof leadTouch.TouchError) return res.status(200).json({ ignored: error.message });
+    logger.error({ error: error.message, type, message: "WhatsApp chat event failed" });
+    return res.status(500).json({ message: "Server error" });
+  }
+};
+
+/** The WhatsApp app reports how a message the CRM asked for went (sent, delivered, read, failed, skipped). */
+exports.receiveMessageStatus = async (req, res) => {
+  const body = readSigned(req, res);
+  if (!body) return undefined;
+  const key = text(body.key, 120);
+  if (!key) return res.status(400).json({ message: "key is required" });
+  try {
+    const companyId = await resolveCompanyId();
+    const result = await customerMessages.applyStatus({ companyId, key, status: String(body.status || ""), reason: text(body.reason, 300), at: body.at });
+    return res.status(200).json({ ok: true, ...result });
+  } catch (error) {
+    logger.error({ error: error.message, key, message: "WhatsApp message status failed" });
     return res.status(500).json({ message: "Server error" });
   }
 };

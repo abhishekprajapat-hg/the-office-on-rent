@@ -134,6 +134,12 @@ router.get("/meta-failures", authMiddleware.protect, leadController.getMetaLeadF
 router.patch("/meta-failures/:failureId", writeLimiter, authMiddleware.protect, leadController.resolveMetaLeadFailure);
 router.post("/:leadId/touch", writeLimiter, authMiddleware.protect, leadController.logLeadTouch);
 
+// The lead's WhatsApp: the chat in the company's WhatsApp app, follow-ups, the customer's agreement.
+const leadWhatsApp = require("../controllers/leadWhatsApp.controller");
+router.get("/:leadId/whatsapp", authMiddleware.protect, leadWhatsApp.getLeadWhatsApp);
+router.post("/:leadId/whatsapp/send", writeLimiter, authMiddleware.protect, leadWhatsApp.sendLeadWhatsApp);
+router.post("/:leadId/whatsapp/consent", writeLimiter, authMiddleware.protect, leadWhatsApp.setLeadWhatsAppConsent);
+
 router.get(
   "/:leadId",
   authMiddleware.protect,

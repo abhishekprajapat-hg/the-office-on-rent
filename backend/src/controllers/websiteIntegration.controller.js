@@ -6,7 +6,12 @@ const LeadActivity = require("../models/leadActivity.model");
 const { autoAssignLead } = require("../services/leadAssignment.service");
 const { findBrokerByPhone, recordBlockedLead } = require("../services/crmContact.service");
 const { verifySignature, toWaId, phoneVariants, storedPhone } = require("../services/whatsappDashboard.service");
+const CustomerMessage = require("../models/CustomerMessage");
+const customerMessages = require("../services/customerMessages.service");
 const logger = require("../config/logger");
+
+// One WhatsApp acknowledgement a day per lead, however many times the form is sent.
+const ACK_GAP_MS = 24 * 60 * 60 * 1000;
 
 // The company's website (its own app on the company's server) sends every enquiry form here,
 // signed like the WhatsApp dashboard: HMAC-SHA256 of "<timestamp>.<raw body>" with
@@ -85,6 +90,9 @@ exports.receiveWebsiteLead = async (req, res) => {
     property: text(body?.property, 160),
   };
 
+  // The form's "send me updates on WhatsApp" tick: unticked by default, so true means the customer agreed.
+  const whatsappConsent = body?.whatsappConsent === true;
+
   try {
     const companyId = await resolveCompanyId();
     if (!companyId) {
@@ -155,6 +163,32 @@ exports.receiveWebsiteLead = async (req, res) => {
       if (assignment.assigned) assignee = { name: assignment.executive.name };
     }
 
+    if (whatsappConsent && !lead.whatsappConsent?.given) {
+      lead.set("whatsappConsent", { given: true, at: new Date(), source: `website form${enquiry.page ? ` (${enquiry.page})` : ""}`, by: null });
+      await Lead.updateOne({ _id: lead._id }, { $set: { whatsappConsent: lead.whatsappConsent } });
+      await LeadActivity.create({ lead: lead._id, action: "Agreed to WhatsApp messages (website form)", performedBy: null });
+    }
+    // An instant WhatsApp "we got it", naming the executive, sent by the WhatsApp app from the company number.
+    let whatsappAck = "";
+    if (whatsappConsent && customerMessages.isConfigured()) {
+      const recent = await CustomerMessage.exists({
+        lead: lead._id,
+        purpose: "enquiry_received",
+        createdAt: { $gte: new Date(Date.now() - ACK_GAP_MS) },
+        status: { $nin: ["skipped", "failed", "cancelled"] },
+      });
+      if (recent) whatsappAck = "already_sent_today";
+      else {
+        const queued = await customerMessages.queueMessage({
+          lead,
+          purpose: "enquiry_received",
+          key: `enq:${enquiryId}`,
+          variables: { name: enquiry.name || lead.name || "", executive: assignee?.name || "", property: enquiry.property || enquiry.workspaceType || lead.projectInterested || "" },
+        });
+        whatsappAck = queued ? "queued" : "";
+      }
+    }
+
     logger.info({
       companyId,
       leadId: String(lead._id),
@@ -170,6 +204,7 @@ exports.receiveWebsiteLead = async (req, res) => {
       created,
       duplicate: false,
       assignee,
+      whatsappAck,
       unassignedReason: assignee ? null : assignment?.reason || "NOT_ASSIGNED",
     });
   } catch (error) {

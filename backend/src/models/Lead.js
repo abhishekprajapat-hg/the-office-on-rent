@@ -275,6 +275,18 @@ const leadSchema = new mongoose.Schema(
       adHeadline: { type: String, default: "", trim: true },
       adUrl: { type: String, default: "", trim: true },
       firstMessage: { type: String, default: "", trim: true },
+      // A chat started from the website's WhatsApp button: the page, and the property on it.
+      websitePage: { type: String, default: "", trim: true },
+      websiteProperty: { type: String, default: "", trim: true },
+    },
+
+    // The customer's agreement to WhatsApp messages from the company (the website form's tick, or an
+    // executive recording that the customer agreed). Automatic WhatsApp messages need it.
+    whatsappConsent: {
+      given: { type: Boolean, default: false },
+      at: { type: Date, default: null },
+      source: { type: String, default: "", trim: true },
+      by: { type: mongoose.Schema.Types.ObjectId, ref: "User", default: null },
     },
 
     // Set when the company's website sends an enquiry for this number: the latest enquiry's details,

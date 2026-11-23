@@ -13,4 +13,8 @@ router.post(
   controller.upsertWhatsAppLead,
 );
 
+// What happens in customers' chats (for the lead history) and how the CRM's messages went.
+router.post("/events", webhookLimiter, express.raw({ type: () => true, limit: "64kb" }), controller.receiveChatEvent);
+router.post("/message-status", webhookLimiter, express.raw({ type: () => true, limit: "64kb" }), controller.receiveMessageStatus);
+
 module.exports = router;
