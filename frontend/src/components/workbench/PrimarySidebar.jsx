@@ -2,7 +2,7 @@ import { memo, useCallback, useLayoutEffect, useMemo, useState } from "react";
 import { NavLink, useLocation } from "react-router-dom";
 import { ChevronRight, X } from "lucide-react";
 import { IconButton, cn } from "../ui";
-import { getVisibleSidebarGroups } from "./workbenchNavigation";
+import { getVisibleSidebarGroups, roleCanSeeItem } from "./workbenchNavigation";
 
 const pathMatchesItem = (pathname, itemPath) => {
   if (itemPath === "/dashboard") return pathname === "/" || pathname === "/dashboard";
@@ -24,12 +24,18 @@ const PrimarySidebar = ({
   onMobileClose,
 }) => {
   const location = useLocation();
-  const groups = useMemo(() => getVisibleSidebarGroups(userRole, user).map((group) => ({ ...group, items: group.items.filter((item) => !["/admin/notifications", "/profile", "/chat"].includes(item.path)) })).filter((group) => group.items.length), [userRole, user]);
+  const groups = useMemo(() => getVisibleSidebarGroups(userRole, user).map((group) => ({
+    ...group,
+    items: group.items.filter((item) => !["/admin/notifications", "/profile", "/chat"].includes(item.path)).map((item) => ({
+      ...item,
+      children: item.children?.filter((child) => !["/admin/notifications", "/profile", "/chat"].includes(child.path) && roleCanSeeItem(child, userRole, user)),
+    })),
+  })).filter((group) => group.items.length), [userRole, user]);
 
   // A parent entry like /inventory must not stay lit while a child page such as
   // /inventory/owners is open, or two rows read as active at once.
   const exactMatchPaths = useMemo(() => {
-    const paths = groups.flatMap((group) => group.items.map((item) => item.path));
+    const paths = groups.flatMap((group) => group.items.flatMap((item) => [item.path, ...(item.children || []).map((child) => child.path)]));
     return new Set(paths.filter((path) => paths.some((other) => other !== path && other.startsWith(`${path}/`))));
   }, [groups]);
 
@@ -41,7 +47,7 @@ const PrimarySidebar = ({
   }, [exactMatchPaths, location.pathname]);
 
   const activeGroupName = useMemo(() => {
-    const activeGroup = groups.find((group) => group.items.some((item) => isItemActive(item.path)));
+    const activeGroup = groups.find((group) => group.items.some((item) => isItemActive(item.path) || item.children?.some((child) => isItemActive(child.path))));
     return activeGroup?.group || "SALES";
   }, [groups, isItemActive]);
 
@@ -55,6 +61,7 @@ const PrimarySidebar = ({
   }
 
   const [indicator, setIndicator] = useState({ top: 0, h: 38, show: false });
+  const [expandedItemPaths, setExpandedItemPaths] = useState(() => location.pathname.startsWith("/enterprise") ? ["/enterprise"] : []);
 
   const measure = useCallback(() => {
     const nav = document.querySelector(mobileOpen ? ".gl-sidebar-mobile .gl-nav" : ".gl-sidebar:not(.gl-sidebar-mobile) .gl-nav");
@@ -76,6 +83,9 @@ const PrimarySidebar = ({
 
   const toggleGroup = (name) => setExpandedGroupNames((current) => (
     current.includes(name) ? current.filter((n) => n !== name) : [...current, name]
+  ));
+  const toggleItem = (path) => setExpandedItemPaths((current) => (
+    current.includes(path) ? current.filter((itemPath) => itemPath !== path) : [...current, path]
   ));
 
   const renderNav = () => (
@@ -106,6 +116,28 @@ const PrimarySidebar = ({
             {isExpanded ? group.items.map((item) => {
               const Icon = item.icon;
               const active = isItemActive(item.path);
+              if (item.children?.length) {
+                const itemExpanded = expandedItemPaths.includes(item.path);
+                return (
+                  <div key={`${group.group}-${item.path}`} className="gl-nav-parent">
+                    <button type="button" className="gl-nav-item gl-nav-parent-toggle" aria-expanded={itemExpanded} onClick={() => toggleItem(item.path)}>
+                      {Icon ? <Icon aria-hidden="true" size={18} strokeWidth={1.9} /> : null}
+                      <span>{item.label}</span>
+                      <ChevronRight aria-hidden="true" size={14} className={itemExpanded ? "is-expanded" : ""} />
+                    </button>
+                    {itemExpanded ? <div className="gl-nav-subitems">{item.children.map((child) => {
+                      const ChildIcon = child.icon;
+                      const childActive = isItemActive(child.path);
+                      return (
+                        <NavLink key={`${group.group}-${child.path}`} to={child.path} end={exactMatchPaths.has(child.path)} onClick={onMobileClose} data-active={childActive ? "1" : "0"} aria-current={childActive ? "page" : undefined} className="gl-nav-item gl-nav-subitem">
+                          {ChildIcon ? <ChildIcon aria-hidden="true" size={16} strokeWidth={childActive ? 2.2 : 1.8} /> : null}
+                          <span>{child.label}</span>
+                        </NavLink>
+                      );
+                    })}</div> : null}
+                  </div>
+                );
+              }
               return (
                 <NavLink
                   key={`${group.group}-${item.path}`}

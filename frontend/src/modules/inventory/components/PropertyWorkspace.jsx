@@ -55,7 +55,8 @@ const toNumberOrNull = (value) => {
 };
 
 const getAreaLabel = (asset) => {
-  const area = toNumberOrNull(asset?.totalArea ?? asset?.carpetArea ?? asset?.builtUpArea);
+  // Super built-up area first, same as the grid card; older units fall back.
+  const area = toNumberOrNull(asset?.superBuiltUpArea ?? asset?.totalArea ?? asset?.carpetArea ?? asset?.builtUpArea);
   if (area === null) return "-";
   const unit = String(asset?.areaUnit || "").toUpperCase() === "SQ_M" ? "sq m" : "sq ft";
   return `${area.toLocaleString("en-IN")} ${unit}`;

@@ -1,8 +1,8 @@
 import React, { useEffect, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
-import { AlertTriangle, BellRing, ClipboardList, Download, Landmark, Plus, Trash2, Wallet } from "lucide-react";
+import { AlertTriangle, BellRing, ClipboardList, Landmark, Plus, Trash2, Wallet } from "lucide-react";
 import { toErrorMessage } from "../../utils/errorMessage";
-import { getEnterpriseDashboard, getEnterpriseReport, listChecklists, listEnterpriseReminders, listOffices, runEnterpriseReminders, saveChecklist } from "../../services/enterpriseService";
+import { getEnterpriseDashboard, listChecklists, listEnterpriseReminders, listOffices, runEnterpriseReminders, saveChecklist } from "../../services/enterpriseService";
 import { ReminderList } from "./enterpriseWidgets";
 import { FNT, MUT, field } from "../inventory/components/contactGlassTokens";
 import { Btn, Check, ErrorLine, Input, Modal, Panel, Select, Stat, Table, Tag } from "../database/dbUi";
@@ -28,31 +28,14 @@ const EnterpriseDashboard = () => {
     try { await runEnterpriseReminders(); reload(); } catch (e) { setError(toErrorMessage(e, "Could not check reminders")); }
   };
   const [dialog, setDialog] = useState("");
-  const [range, setRange] = useState({ from: "", to: "" });
-
-  const exportExcel = async () => {
-    try {
-      const [XLSX, rep] = await Promise.all([import("xlsx"), getEnterpriseReport(range)]);
-      const wb = XLSX.utils.book_new();
-      const d = (v) => (v ? new Date(v).toISOString().slice(0, 10) : "");
-      const sheet = (name, rows) => XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(rows.length ? rows : [{ "": "No rows" }]), name);
-      sheet("Offices", rep.offices.map((o) => ({ Office: o.office, Status: titleCase(o.status), Tenant: o.tenant, "Owner rent / month": o.ownerRent, "Tenant rent / month": o.tenantRent, "Contribution / month (estimate)": o.contribution, "Fit-out budget": o.fitOutBudget, "Fit-out actual": o.fitOutActual, "Payback months (estimate)": o.paybackMonths, "Payable overdue": o.payableOverdue, "Receivable overdue": o.receivableOverdue })));
-      sheet("Payables & receivables", rep.obligations.map((o) => ({ Office: o.office, Side: o.side === "PAYABLE" ? "Pay landlord" : "Collect from tenant", Type: titleCase(o.type), Item: o.label, Due: d(o.dueDate), Amount: o.gross, Tax: o.tax, "TDS expected": o.tdsExpected, "Cash settled": o.cashSettled, "TDS settled": o.tdsSettled, Adjusted: o.adjusted, Balance: o.balance, Status: titleCase(o.status), "Days overdue": o.daysOverdue })));
-      sheet("Payments", rep.transactions.map((t) => ({ Office: t.office, Side: t.direction === "PAYABLE" ? "Paid to landlord" : "Received from tenant", Date: d(t.date), Cash: t.amount, TDS: t.tdsAmount, Mode: titleCase(t.mode), Reference: t.reference, "Bank ref": t.bankReference, "Unallocated cash": t.unallocatedCash, "Unallocated TDS": t.unallocatedTds })));
-      sheet("Deposits", rep.deposits.map((x) => ({ Office: x.office, Side: x.side === "OWNER" ? "With landlord" : "From tenant", Required: x.required, "Paid / collected": x.paidOrCollected, Refunded: x.refunded, Deducted: x.deducted, Adjusted: x.adjusted, Outstanding: x.outstanding, "Expected settlement": d(x.expectedSettlementDate) })));
-      sheet("Fit-out", rep.fitOut.map((x) => ({ Office: x.office, Date: d(x.date), Category: titleCase(x.category), Vendor: x.vendor, Amount: x.amount, Paid: x.paid, Status: titleCase(x.status) })));
-      sheet("Maintenance", rep.maintenance.map((x) => ({ Office: x.office, "Owner billed": x.ownerBilled, "Owner paid": x.ownerPaid, "Tenant billed": x.tenantBilled, "Tenant collected": x.tenantCollected, "Variance (tenant - owner)": x.variance })));
-      sheet("Deadlines", rep.deadlines.map((x) => ({ Office: x.officeName, Type: titleCase(x.type), What: x.message, Date: d(x.date) })));
-      XLSX.writeFile(wb, `enterprise-leasing-${new Date().toISOString().slice(0, 10)}.xlsx`);
-    } catch (e) { setError(toErrorMessage(e, "Could not export")); }
-  };
 
   return (
-    <div className="mx-auto flex w-full max-w-[1250px] flex-col gap-4 p-3 sm:p-5" style={{ color: "var(--g-ink)" }}>
+    <div className="custom-scrollbar h-full min-h-0 w-full overflow-y-auto overscroll-contain p-3 sm:p-4 lg:p-5" style={{ color: "var(--g-ink)" }}>
+      <div className="flex w-full flex-col gap-4">
       <div className="flex flex-wrap items-end gap-2">
         <div className="min-w-0 flex-1">
-          <h1 className="text-[22px] font-semibold">Enterprise Leasing</h1>
-          <p className="text-[13px]" style={MUT}>Offices the company leases from owners and gives to enterprise tenants. Landlord payables and tenant receivables are kept apart.</p>
+          <h1 className="text-[22px] font-semibold">Enterprise Offices</h1>
+          <p className="text-[13px]" style={MUT}>Manage offices the company leases from owners and rents to tenants, across every location.</p>
         </div>
         {meta?.isAdmin ? <Btn onClick={() => setDialog("checklists")}><ClipboardList size={15} /> Document checklists</Btn> : null}
         <Btn tone="primary" onClick={() => setDialog("office")}><Plus size={15} /> Add office</Btn>
@@ -104,26 +87,13 @@ const EnterpriseDashboard = () => {
         </>
       ) : null}
 
-      <Panel title={`Offices · ${offices.length}`} icon={Landmark} action={(
-        <span className="flex flex-wrap items-center gap-1.5">
-          <Input type="date" aria-label="From" value={range.from} onChange={(e) => setRange((r) => ({ ...r, from: e.target.value }))} />
-          <Input type="date" aria-label="To" value={range.to} onChange={(e) => setRange((r) => ({ ...r, to: e.target.value }))} />
-          <Btn onClick={exportExcel}><Download size={14} /> Excel report</Btn>
-        </span>
-      )}>
-        <Table rows={offices} onRow={(o) => navigate(`/enterprise/offices/${o._id}`)} empty="No Enterprise office yet" columns={[
-          { key: "n", label: "Office", render: (o) => <span><b>{o.name}</b><div className="text-[11.5px]" style={FNT}>{o.officeCode}{o.floor ? ` · floor ${o.floor}` : ""}{o.unit ? ` · ${o.unit}` : ""}</div></span> },
-          { key: "s", label: "Status", render: (o) => <Tag tone={STATUS_TONE[o.operationalStatus] || "mute"}>{titleCase(o.operationalStatus)}</Tag> },
-          { key: "t", label: "Tenant", render: (o) => o.tenantName || <span style={FNT}>None</span> },
-          { key: "p", label: "Owe landlord", right: true, render: (o) => money(o.financial.payableOutstanding) },
-          { key: "r", label: "Tenant owes", right: true, render: (o) => money(o.financial.receivableOutstanding) },
-          { key: "f", label: "Fit-out", right: true, render: (o) => <span style={o.fitOut.overBudget ? { color: "var(--g-bad)" } : undefined}>{money(o.fitOut.actual)}{o.fitOut.budget != null ? ` / ${money(o.fitOut.budget)}` : ""}</span> },
-          { key: "a", label: "Alerts", right: true, render: (o) => (o.alertCount ? <Tag tone={o.highAlerts ? "bad" : "warn"}>{o.alertCount}</Tag> : "–") },
-        ]} />
+      <Panel title={`Office register · ${offices.length}`} icon={Landmark} action={<Btn onClick={() => navigate("/enterprise/offices")}>Open offices</Btn>}>
+        <p className="text-[13px]" style={MUT}>View each office address, rental status, current tenant, and both sides of its rent on the Offices page.</p>
       </Panel>
 
       {dialog === "office" ? <OfficeDialog onClose={() => setDialog("")} onSaved={(o) => navigate(`/enterprise/offices/${o._id}`)} /> : null}
       {dialog === "checklists" ? <ChecklistAdmin onClose={() => setDialog("")} /> : null}
+      </div>
     </div>
   );
 };
@@ -134,18 +104,20 @@ const ChecklistAdmin = ({ onClose }) => {
   const [type, setType] = useState("COMPANY");
   const [items, setItems] = useState([]);
   const [note, setNote] = useState("");
+  const [sourceVersion, setSourceVersion] = useState("");
+  const [sourceConfirmed, setSourceConfirmed] = useState(false);
   const [error, setError] = useState("");
   const [saved, setSaved] = useState("");
   const choose = (t, ls) => {
     const c = ls.find((l) => l.entityType === t);
-    setType(t); setItems(c ? c.items.map((i) => ({ ...i })) : []); setNote(c?.sourceNote || ""); setSaved("");
+    setType(t); setItems(c ? c.items.map((i) => ({ ...i })) : []); setNote(c?.sourceNote || ""); setSourceVersion(c?.sourceVersion || ""); setSourceConfirmed(c?.sourceConfirmed === true); setSaved("");
   };
   useEffect(() => {
     listChecklists().then((d) => { setLists(d.checklists || []); choose("COMPANY", d.checklists || []); }).catch((e) => setError(toErrorMessage(e)));
   }, []);
   const save = async () => {
     try {
-      const out = await saveChecklist(type, { items, sourceNote: note });
+      const out = await saveChecklist(type, { items, sourceNote: note, sourceVersion, sourceConfirmed });
       setLists((ls) => ls.map((l) => (l.entityType === type ? { ...l, items: out.checklist.items, custom: true } : l))); setSaved("Saved"); setError("");
     } catch (e) { setError(toErrorMessage(e, "Could not save")); }
   };
@@ -161,7 +133,8 @@ const ChecklistAdmin = ({ onClose }) => {
             </button>
           ))}
         </div>
-        <p className="text-[12.5px]" style={FNT}>{current?.custom ? `Company list${current.updatedByName ? `, last changed by ${current.updatedByName}` : ""}.` : "Default from the company documents handout (Sept 2026)."} Signatory items are asked once per signing authority.</p>
+        {current?.sourceNeedsConfirmation ? <p className="rounded-xl px-3 py-2 text-[12.5px]" style={{ color: "var(--g-warn)", background: "var(--g-warn-bg, #fff7ed)" }}>Confirm this list against the latest entity-wise checklist before relying on it for tenant onboarding.</p> : null}
+        <p className="text-[12.5px]" style={FNT}>{current?.custom ? `Company list${current.updatedByName ? `, last changed by ${current.updatedByName}` : ""}.` : "Starting list from existing company onboarding records."} Signatory items are asked once per signing authority.</p>
         {items.map((it, i) => (
           <div key={i} className="grid grid-cols-2 items-center gap-2 sm:grid-cols-[2fr_1fr_1.5fr_auto_auto]" style={{ ...field, borderRadius: 12, padding: 8 }}>
             <Input placeholder="Document" value={it.label} onChange={(e) => upd(i, "label", e.target.value)} />
@@ -173,6 +146,8 @@ const ChecklistAdmin = ({ onClose }) => {
         ))}
         <Btn onClick={() => setItems((xs) => [...xs, { label: "", scope: "ENTITY", required: true, hint: "" }])}><Plus size={14} /> Add document</Btn>
         <Input label="Where this list comes from" value={note} onChange={(e) => setNote(e.target.value)} />
+        <Input label="Checklist version / effective date" value={sourceVersion} onChange={(e) => setSourceVersion(e.target.value)} placeholder="e.g. Entity checklist v3, 18 Nov 2026" />
+        <Check label="I confirmed these items against the approved company checklist" checked={sourceConfirmed} onChange={setSourceConfirmed} />
         <ErrorLine message={error} />
       </div>
     </Modal>

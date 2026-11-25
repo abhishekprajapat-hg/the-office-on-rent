@@ -34,6 +34,7 @@ const enterpriseTenantSchema = new mongoose.Schema(
     tan: { type: String, trim: true, uppercase: true, maxlength: 20, default: "" },
     contacts: { type: [tenantContactSchema], default: [] },
     notes: { type: String, trim: true, maxlength: 3000, default: "" },
+    history: { type: [{ at: { type: Date, default: Date.now }, by: { type: mongoose.Schema.Types.ObjectId, ref: "User" }, before: mongoose.Schema.Types.Mixed, _id: false }], default: [] },
     createdBy: { type: mongoose.Schema.Types.ObjectId, ref: "User", default: null },
   },
   { timestamps: true },

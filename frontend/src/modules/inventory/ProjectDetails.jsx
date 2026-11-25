@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import {
   ArrowLeft, BookOpen, Building2, Car, ChevronDown, ChevronRight, ChevronUp, FileText, Flame, Image as ImageIcon, IndianRupee,
@@ -65,6 +65,8 @@ const STATUS_TONE = {
   UNDER_CONSTRUCTION: "warn", READY_TO_MOVE: "ok", RESALE: "mute",
 };
 const UNIT_TONE = { AVAILABLE: "ok", BOOKED: "warn", RESERVED: "vio", LEASED: "info", SOLD: "bad" };
+// How many inventory units the overview previews before sending you to the tab.
+const UNIT_PREVIEW_COUNT = 6;
 const CATEGORY_TONE = { COMMERCIAL: "info", RESIDENTIAL: "a", COWORKING: "vio" };
 const AMENITY_ICON = { PARKING: Car, VISITOR_PARKING: Car, RESERVED_PARKING: Car, SECURITY_24X7: Users, FIRE_SAFETY_SYSTEM: Flame };
 
@@ -74,6 +76,67 @@ const money = (value) => {
   return `₹${amount.toLocaleString("en-IN")}`;
 };
 const num = (value) => (value === null || value === undefined || value === "" ? null : Number(value));
+
+/*
+ * 14 Nov 2026: the overview previews the units that live in Inventory, so the
+ * same unit reads the same way here as it does on an inventory card - super
+ * built-up area first, then the older area fields for units saved without it.
+ */
+const UNIT_AREA_FIELDS = ["superBuiltUpArea", "totalArea", "carpetArea", "builtUpArea"];
+
+const unitAreaLabel = (unit) => {
+  for (const areaField of UNIT_AREA_FIELDS) {
+    const value = num(unit?.[areaField]);
+    if (value !== null && Number.isFinite(value)) {
+      return `${value.toLocaleString("en-IN")} ${String(unit?.areaUnit || "").toUpperCase() === "SQ_M" ? "sq m" : "sq ft"}`;
+    }
+  }
+  return "";
+};
+
+const unitFloorLabel = (unit) => {
+  const floor = num(unit?.floorNumber);
+  if (floor === null || !Number.isFinite(floor)) return "";
+  if (floor === 0) return "Ground floor";
+  if (floor < 0) return `Basement ${Math.abs(floor)}`;
+  return `Floor ${floor}`;
+};
+
+const unitPriceLabel = (unit) => {
+  if (unit?.type === "Rent") return `${inrRounded(unit.rent ?? unit.price)}/mo`;
+  if (unit?.type === "Both" && Number(unit?.rent) > 0) return `${inrRounded(unit.price)} · ${inrRounded(unit.rent)}/mo`;
+  return inrRounded(unit?.price);
+};
+
+const inventoryStatusTone = (status) =>
+  (status === "Available" ? "ok" : status === "Sold" ? "bad" : status === "Unavailable" ? "mute" : "warn");
+
+/* One line of the overview's inventory preview. */
+const UnitPreviewRow = ({ unit, first }) => {
+  const thumb = Array.isArray(unit?.images) && unit.images.length ? unit.images[0] : "";
+  const price = unitPriceLabel(unit);
+  const meta = [unitAreaLabel(unit), unitFloorLabel(unit), unit?.furnishingStatus ? humanizeKey(unit.furnishingStatus) : "", unit?.category ? humanizeKey(unit.category) : ""]
+    .filter(Boolean).join(" · ");
+  return (
+    <Link
+      to={`/inventory/${unit._id}`}
+      className="flex items-center gap-3 py-2.5 transition hover:opacity-80"
+      style={first ? undefined : { borderTop: "1px solid var(--g-div)" }}
+    >
+      <span className="grid h-[46px] w-[62px] shrink-0 place-items-center overflow-hidden rounded-[12px]" style={{ background: "var(--g-track)" }}>
+        {thumb ? <FittedImage src={thumb} alt="" /> : <ImageIcon size={16} style={MUT} />}
+      </span>
+      <span className="flex min-w-0 flex-1 flex-col">
+        <span className="truncate text-[13.5px] font-semibold" style={{ color: "var(--g-b)" }}>
+          {unit?.propertyId || "Unit"}{unit?.unitNumber && unit.unitNumber !== unit.propertyId ? ` · ${unit.unitNumber}` : ""}
+        </span>
+        <span className="truncate text-[11.5px]" style={MUT}>{meta || "Details not added"}</span>
+      </span>
+      {price && price !== "—" ? <span className="shrink-0 text-[13px] font-semibold tabular-nums">{price}</span> : null}
+      <Pill tone={inventoryStatusTone(unit?.status)}>{unit?.status === "Blocked" ? "On hold" : unit?.status || "—"}</Pill>
+    </Link>
+  );
+};
 
 /* A card of one headline number. */
 const Fact = ({ icon: Icon, value, label }) => (
@@ -144,6 +207,21 @@ const ProjectDetailsPage = () => {
   const [confirmingDelete, setConfirmingDelete] = useState(false);
   const [notice, setNotice] = useState("");
   const [tab, setTab] = useState("overview");
+  // 14 Nov 2026 video: switching tabs made the page jump - a short tab (Documents)
+  // collapsed the page, the scroll was clamped, and the next tab opened somewhere
+  // else on screen. The tab bar now sticks, the tab area keeps a minimum height,
+  // and a switch made while scrolled down starts the new tab right under the bar.
+  const tabsAnchorRef = useRef(null);
+  const selectTab = (key) => {
+    if (key === tab) return;
+    const anchor = tabsAnchorRef.current;
+    const shell = anchor?.closest(".ui-page-shell");
+    const offset = anchor && shell ? anchor.getBoundingClientRect().top - shell.getBoundingClientRect().top : 0;
+    setTab(key);
+    if (shell && offset < 0) {
+      requestAnimationFrame(() => { shell.scrollTop += offset; });
+    }
+  };
   const [unitFilter, setUnitFilter] = useState("all");
   const [area, setArea] = useState(1000);
   const [pdfBusy, setPdfBusy] = useState(false);
@@ -488,30 +566,36 @@ const ProjectDetailsPage = () => {
         </div>
       </div>
 
-      {/* tabs */}
-      <div className="custom-scrollbar flex gap-1 overflow-x-auto rounded-2xl p-1.5" style={glassCard}>
+      {/* tabs - sticky so the switcher stays in reach on long tabs */}
+      <div ref={tabsAnchorRef} aria-hidden="true" className="-mb-4 h-0" />
+      {/* data-no-glass-motion: the global sliding-ghost (utils/glassMotion.js) hid the
+          new tab's highlight for ~half a second and blurred the incoming tab in. */}
+      <div data-no-glass-motion="" className="custom-scrollbar sticky top-0 z-20 flex gap-1 overflow-x-auto rounded-2xl p-1.5" style={{ ...glassCard, background: "var(--g-modal, var(--g-glassHi))" }}>
         {tabs.map((item) => {
           const on = tab === item.key;
           return (
             <button
               key={item.key}
               type="button"
-              onClick={() => setTab(item.key)}
+              onClick={() => selectTab(item.key)}
               aria-current={on ? "page" : undefined}
-              className="flex h-[38px] shrink-0 items-center gap-1.5 whitespace-nowrap rounded-xl px-3.5 text-[13.5px] transition"
+              // 14 Nov 2026: no fade on the selected state - the 0.25s background
+              // fade left the new tab looking unselected for a moment after a click.
+              className="flex h-[38px] shrink-0 items-center gap-1.5 whitespace-nowrap rounded-xl px-3.5 text-[13.5px] hover:opacity-80"
               style={on
-                ? { background: "var(--g-bs)", color: "var(--g-b)", fontWeight: 600 }
-                : { color: "var(--g-mut)", fontWeight: 500 }}
+                ? { background: "var(--g-bs)", color: "var(--g-b)", fontWeight: 600, boxShadow: "inset 0 0 0 1px var(--g-bs)", transition: "none" }
+                : { color: "var(--g-mut)", fontWeight: 500, transition: "none" }}
             >
               {React.createElement(item.icon, { size: 16 })}
               {item.label}
-              {item.count ? <span className="rounded-full px-1.5 py-px text-[11px]" style={{ background: on ? "var(--g-glassHi)" : "var(--g-track)" }}>{item.count}</span> : null}
+              {/* The active count used a white chip, which vanished on the white sticky bar. */}
+              {item.count ? <span className="rounded-full px-1.5 py-px text-[11px]" style={on ? { background: "var(--g-b)", color: "#fff" } : { background: "var(--g-track)" }}>{item.count}</span> : null}
             </button>
           );
         })}
       </div>
 
-      <div key={tab} className="gl-step-in flex flex-col gap-4">
+      <div key={tab} className="gl-tab-in flex flex-col gap-4 pb-20" style={{ minHeight: "calc(100vh - 160px)" }}>
         {tab === "overview" ? (
           <>
             <div className="grid gap-2.5" style={{ gridTemplateColumns: "repeat(auto-fit,minmax(150px,1fr))" }}>
@@ -523,6 +607,47 @@ const ProjectDetailsPage = () => {
                 <SizeAvailabilityTable availability={availability} />
               </Panel>
             ) : null}
+
+            {/* 14 Nov 2026: the units themselves, previewed here instead of only on the Units tab. */}
+            <Panel
+              title={`${plotBased ? "Plots" : "Units"} in Inventory`}
+              aside={linkedUnits.length ? (
+                <button type="button" onClick={() => selectTab("units")} className="inline-flex items-center gap-1 font-medium" style={{ color: "var(--g-b)" }}>
+                  View all {linkedUnits.length}<ChevronRight size={14} />
+                </button>
+              ) : null}
+            >
+              {linkedUnits.length ? (
+                <div className="flex flex-col">
+                  {linkedUnits.slice(0, UNIT_PREVIEW_COUNT).map((unit, index) => (
+                    <UnitPreviewRow key={unit._id} unit={unit} first={index === 0} />
+                  ))}
+                  {linkedUnits.length > UNIT_PREVIEW_COUNT ? (
+                    <button
+                      type="button"
+                      onClick={() => selectTab("units")}
+                      className="py-2.5 text-left text-[12.5px] font-medium"
+                      style={{ borderTop: "1px solid var(--g-div)", color: "var(--g-b)" }}
+                    >
+                      {linkedUnits.length - UNIT_PREVIEW_COUNT} more {plotBased ? "plots" : "units"} on the {plotBased ? "Plots" : "Units"} tab
+                    </button>
+                  ) : null}
+                </div>
+              ) : (
+                <div className="flex flex-col items-center gap-2 py-6 text-center">
+                  <IconTile icon={Building2} size={38} radius={12} iconSize={18} />
+                  <span className="text-[13px] font-medium">No {plotBased ? "plots" : "units"} linked yet</span>
+                  <span className="text-[12.5px]" style={MUT}>
+                    {plotBased ? "Plots" : "Units"} added in Inventory with this project selected show up here.
+                  </span>
+                  {canManage || role !== "CHANNEL_PARTNER" ? (
+                    <Link to={`/inventory?addToProject=${project._id}`} className="inline-flex items-center gap-1 text-[12.5px] font-medium" style={{ color: "var(--g-b)" }}>
+                      <Plus size={14} />Add {plotBased ? "plot" : "unit"}
+                    </Link>
+                  ) : null}
+                </div>
+              )}
+            </Panel>
 
             <DetailGroup title="Approvals, authority & dates" rows={approvalRows} />
 
@@ -634,14 +759,14 @@ const ProjectDetailsPage = () => {
                 <div className="flex flex-col gap-1.5">
                   <div className="flex justify-between">
                     <span className="text-[12.5px]" style={MUT}>{plotBased ? "Plot size" : "Area"}</span>
-                    <span className="font-mono text-[13px] font-semibold">{area.toLocaleString("en-IN")} sq ft</span>
+                    <span className="text-[13px] font-semibold tabular-nums">{area.toLocaleString("en-IN")} sq ft</span>
                   </div>
                   <input type="range" min="200" max="10000" step="100" value={area} onChange={(event) => setArea(Number(event.target.value))} style={{ accentColor: "var(--g-b)" }} />
                 </div>
                 {[["At the current rate", money(estimate)], ["At the launch rate", money(launchEstimate)]].map(([label, value]) => (
                   <div key={label} className="flex justify-between gap-2.5 text-[13px]">
                     <span style={MUT}>{label}</span>
-                    <span className="font-mono font-medium" style={value ? undefined : FNT}>{value || "—"}</span>
+                    <span className="font-medium tabular-nums" style={value ? undefined : FNT}>{value || "—"}</span>
                   </div>
                 ))}
                 <div className="flex items-baseline justify-between pt-3" style={{ borderTop: "1px solid var(--g-div)" }}>
@@ -688,13 +813,13 @@ const ProjectDetailsPage = () => {
                   {breakdown.base ? (
                     <div className="flex items-baseline gap-3 py-2" style={{ borderTop: "1px solid var(--g-div)" }}>
                       <span className="flex-1 text-[13.5px]" style={MUT}>Base price (current rate × area)</span>
-                      <span className="font-mono text-[13.5px] font-medium">{breakdown.money(breakdown.base)}</span>
+                      <span className="text-[13.5px] font-medium tabular-nums">{breakdown.money(breakdown.base)}</span>
                     </div>
                   ) : null}
                   {breakdown.lines.map((l, i) => (
                     <div key={`${l.label}-${i}`} className="flex items-baseline gap-3 py-2" style={{ borderTop: "1px solid var(--g-div)" }}>
                       <span className="flex-1 text-[13.5px]">{l.label} <span style={MUT}>· {l.rate}</span>{l.note ? <span className="block text-[11.5px]" style={MUT}>{l.note}</span> : null}</span>
-                      <span className="font-mono text-[13.5px] font-medium">{breakdown.money(l.amount)}</span>
+                      <span className="text-[13.5px] font-medium tabular-nums">{breakdown.money(l.amount)}</span>
                     </div>
                   ))}
                   {breakdown.total !== null ? (
@@ -804,21 +929,32 @@ const ProjectDetailsPage = () => {
                   {shownLinked.map((u) => {
                     const sub = u.residentialDetails?.subtypeData || {};
                     const brokers = (u.sourceLinks || []).map((l) => l.contactId?.name).filter(Boolean);
+                    const thumb = Array.isArray(u.images) && u.images.length ? u.images[0] : "";
+                    const price = unitPriceLabel(u);
+                    // 14 Nov 2026: same details as the overview preview, plus the plot extras.
+                    const size = sub.plotArea || (sub.plotLength && sub.plotWidth)
+                      ? sizeLabel({ dimension: sub.plotLength && sub.plotWidth ? `${sub.plotLength}x${sub.plotWidth}` : "", areaSqft: sub.plotArea || null })
+                      : unitAreaLabel(u);
+                    const meta = [size, unitFloorLabel(u), u.furnishingStatus ? humanizeKey(u.furnishingStatus) : "", u.category ? humanizeKey(u.category) : "", sub.facing ? `${sub.facing} facing` : ""]
+                      .filter(Boolean).join(" · ");
+                    const source = u.sourceType === "BROKER" || brokers.length ? `Broker${brokers.length ? `: ${brokers.join(", ")}` : ""}` : u.sourceType ? humanizeKey(u.sourceType) : "Direct";
+                    const plc = (u.appliedPlcs || []).length
+                      ? `PLC: ${u.appliedPlcs.join(" + ")}${project.plcRule && project.plcRule !== "NOT_SET" ? ` · ${inrRounded(plcCharge({ plcOptions: project.plcOptions, selected: u.appliedPlcs, rule: project.plcRule, ...plotBasis(u, project) }).total)}` : ""}`
+                      : "";
                     return (
-                      <Link key={u._id} to={`/inventory/${u._id}`} className="flex flex-wrap items-center gap-x-3 gap-y-1 py-2.5 hover:opacity-80" style={{ borderTop: "1px solid var(--g-div)" }}>
-                        <span className="min-w-0 flex-[1_1_180px] truncate text-[13.5px] font-semibold" style={{ color: "var(--g-b)" }}>
-                          {u.propertyId}{sub.plotNumber ? ` · Plot ${sub.plotNumber}` : u.unitNumber && u.unitNumber !== u.propertyId ? ` · ${u.unitNumber}` : ""}
+                      <Link key={u._id} to={`/inventory/${u._id}`} className="flex items-center gap-3 py-3 transition hover:opacity-80" style={{ borderTop: "1px solid var(--g-div)" }}>
+                        <span className="grid h-[56px] w-[76px] shrink-0 place-items-center overflow-hidden rounded-[12px]" style={{ background: "var(--g-track)" }}>
+                          {thumb ? <FittedImage src={thumb} alt="" /> : <ImageIcon size={18} style={MUT} />}
                         </span>
-                        <span className="text-[12.5px]" style={MUT}>{sizeLabel({ dimension: sub.plotLength && sub.plotWidth ? `${sub.plotLength}x${sub.plotWidth}` : "", areaSqft: sub.plotArea || u.totalArea || u.carpetArea || null })}</span>
-                        {sub.facing ? <span className="text-[12.5px]" style={MUT}>{sub.facing} facing</span> : null}
-                        {(u.appliedPlcs || []).length ? (
-                          <span className="text-[12px]" style={MUT}>
-                            PLC: {u.appliedPlcs.join(" + ")}
-                            {project.plcRule && project.plcRule !== "NOT_SET" ? ` · ${inrRounded(plcCharge({ plcOptions: project.plcOptions, selected: u.appliedPlcs, rule: project.plcRule, ...plotBasis(u, project) }).total)}` : ""}
+                        <span className="flex min-w-0 flex-1 flex-col gap-0.5">
+                          <span className="truncate text-[13.5px] font-semibold" style={{ color: "var(--g-b)" }}>
+                            {u.propertyId}{sub.plotNumber ? ` · Plot ${sub.plotNumber}` : u.unitNumber && u.unitNumber !== u.propertyId ? ` · ${u.unitNumber}` : ""}{u.towerName ? ` · ${u.towerName}` : ""}
                           </span>
-                        ) : null}
-                        <span className="text-[12px]" style={MUT}>{u.sourceType === "BROKER" || brokers.length ? `Broker${brokers.length ? `: ${brokers.join(", ")}` : ""}` : u.sourceType ? humanizeKey(u.sourceType) : "Direct"}</span>
-                        <Pill tone={u.status === "Available" ? "ok" : u.status === "Sold" ? "bad" : u.status === "Unavailable" ? "mute" : "warn"}>{u.status === "Blocked" ? "On hold" : u.status}</Pill>
+                          <span className="truncate text-[12px]" style={MUT}>{meta || "Details not added"}</span>
+                          <span className="truncate text-[11.5px]" style={FNT}>{[source, plc].filter(Boolean).join(" · ")}</span>
+                        </span>
+                        {price && price !== "—" ? <span className="hidden shrink-0 text-[13px] font-semibold tabular-nums sm:inline">{price}</span> : null}
+                        <Pill tone={inventoryStatusTone(u.status)}>{u.status === "Blocked" ? "On hold" : u.status}</Pill>
                       </Link>
                     );
                   })}

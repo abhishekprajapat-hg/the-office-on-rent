@@ -14,6 +14,7 @@ const escalationSchema = new mongoose.Schema({
   method: { type: String, enum: E.ESCALATION_METHODS, required: true },
   // PERCENT: % on the rent in force; AMOUNT: added to it; NEW_RENT: replaces it.
   value: { type: Number, required: true, min: 0 },
+  base: { type: String, enum: ["CURRENT_RENT", "BASE_RENT"], default: "CURRENT_RENT" },
   note: { type: String, trim: true, maxlength: 300, default: "" },
 });
 
@@ -35,8 +36,8 @@ const enterpriseAgreementSchema = new mongoose.Schema(
     // As written in the executed document (lease deed, leave and licence, ...).
     agreementType: { type: String, trim: true, maxlength: 120, default: "" },
     status: { type: String, enum: E.AGREEMENT_STATUSES, default: "DRAFT" },
-    // Owner side: the landlord in the Owner Database, plus other relevant contacts.
-    landlordContactId: { type: mongoose.Schema.Types.ObjectId, ref: "CrmContact", default: null },
+    // Owner side: kept in the Enterprise Owner directory, separate from CRM contacts.
+    enterpriseOwnerId: { type: mongoose.Schema.Types.ObjectId, ref: "EnterpriseOwner", default: null },
     otherContactIds: { type: [{ type: mongoose.Schema.Types.ObjectId, ref: "CrmContact" }], default: [] },
     // Tenant side.
     tenantId: { type: mongoose.Schema.Types.ObjectId, ref: "EnterpriseTenant", default: null },
@@ -46,13 +47,20 @@ const enterpriseAgreementSchema = new mongoose.Schema(
     commencementDate: { type: Date, default: null },
     rentCommencementDate: { type: Date, default: null },
     endDate: { type: Date, default: null },
+    billingEndDate: { type: Date, default: null },
+    noticeDeadlineDate: { type: Date, default: null },
+    renewalDecisionDate: { type: Date, default: null },
     lockInMonths: { type: Number, min: 0, default: null },
     lockInEndDate: { type: Date, default: null },
     noticePeriodMonths: { type: Number, min: 0, default: null },
 
     baseRent: { type: Number, min: 0, default: 0 },
-    // Day of the month rent falls due (1-28); blank = the first day of each period.
-    rentDueDay: { type: Number, min: 1, max: 28, default: null },
+    // Short months use their last calendar day for due days 29-31.
+    rentDueDay: { type: Number, min: 1, max: 31, default: null },
+    proration: { type: String, enum: ["DAILY", "FULL_PERIOD"], default: "DAILY" },
+    escalationTiming: { type: String, enum: ["EFFECTIVE_DATE", "PERIOD_START"], default: "EFFECTIVE_DATE" },
+    rentFreePeriods: { type: [{ startDate: { type: Date, required: true }, endDate: { type: Date, required: true }, note: String, _id: false }], default: [] },
+    recoverableChargeTypes: { type: [{ type: String, enum: ["PARKING", "UTILITIES", "REPAIRS", "OTHER"] }], default: [] },
     escalations: { type: [escalationSchema], default: [] },
     maintenance: {
       method: { type: String, enum: E.MAINTENANCE_METHODS, default: "INCLUDED" },
@@ -66,8 +74,11 @@ const enterpriseAgreementSchema = new mongoose.Schema(
     // confirms them (2.6). GST is added on top; TDS is the expected withholding.
     gstPercent: { type: Number, min: 0, max: 100, default: null },
     tdsPercent: { type: Number, min: 0, max: 100, default: null },
+    taxConfirmed: { type: Boolean, default: false },
+    taxApprovalRef: { type: String, maxlength: 300, default: "" },
     depositRequired: { type: Number, min: 0, default: null },
     depositExpectedSettlementDate: { type: Date, default: null },
+    depositConditions: { type: String, maxlength: 3000, default: "" },
     renewalTerms: { type: String, trim: true, maxlength: 3000, default: "" },
     terminationTerms: { type: String, trim: true, maxlength: 3000, default: "" },
     // Exit / handover (2.3).
@@ -78,7 +89,7 @@ const enterpriseAgreementSchema = new mongoose.Schema(
     notes: { type: String, trim: true, maxlength: 3000, default: "" },
     // Amendments: what changed, kept with the agreement.
     amendments: {
-      type: [{ at: { type: Date, default: Date.now }, by: { type: mongoose.Schema.Types.ObjectId, ref: "User" }, byName: String, note: String, changes: [String], _id: false }],
+      type: [{ at: { type: Date, default: Date.now }, by: { type: mongoose.Schema.Types.ObjectId, ref: "User" }, byName: String, note: String, changes: [String], before: mongoose.Schema.Types.Mixed, after: mongoose.Schema.Types.Mixed, _id: false }],
       default: [],
     },
     createdBy: { type: mongoose.Schema.Types.ObjectId, ref: "User", default: null },

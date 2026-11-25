@@ -141,6 +141,9 @@ export function initGlassMotion() {
       if (!target || !target.closest(".gl-shell")) return;
       const group = target.parentElement;
       if (!group) return;
+      // A tab row can opt out (data-no-glass-motion) when it runs its own
+      // switch: the ghost hides the new tab's real highlight while it travels.
+      if (group.closest("[data-no-glass-motion]")) return;
       const items = tabItems(group);
       if (items.length < 2 || items.length > 16 || !items.includes(target)) return;
 

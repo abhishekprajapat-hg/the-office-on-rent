@@ -28,6 +28,10 @@ exports.uploadFile = async (req, res) => {
    * environments and same-origin wherever the app is served.
    */
   const publicUrl = `/api/uploads/files/${category}/${req.file.filename}`;
+  if (category === "enterprise-documents") {
+    if (!req.user?.companyId) return res.status(403).json({ message: "A company account is required" });
+    await require("../models/EnterpriseUpload").create({ companyId: req.user.companyId, uploadedBy: req.user._id, url: publicUrl });
+  }
 
   return res.status(201).json({
     url: publicUrl,

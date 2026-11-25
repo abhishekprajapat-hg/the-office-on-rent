@@ -14,6 +14,8 @@
     "start": "node src/server.js",
     "seed:admin": "node src/seeder/createAdmin.cjs",
     "seed:finance-demo": "node src/seeder/seedFinanceReportsTargets.cjs",
+    "seed:enterprise-demo": "node src/seeder/seedEnterpriseDemo.cjs",
+    "migrate:enterprise-owners": "node src/seeder/migrateEnterpriseOwners.cjs",
     "seed:local-demo": "node src/seeder/feedLocalDemoData.cjs",
     "reset:local-demo": "node src/seeder/resetLocalDemoData.cjs && node src/seeder/feedLocalDemoData.cjs",
     "seed:companies:backfill": "node src/seeder/backfillCompanies.cjs",

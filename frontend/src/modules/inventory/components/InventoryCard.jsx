@@ -23,10 +23,25 @@ const subtitleOf = (asset) =>
     .filter(Boolean)
     .join(" · ");
 
-const areaOf = (asset) => {
-  const area = toNumber(asset?.totalArea ?? asset?.carpetArea ?? asset?.builtUpArea);
-  if (area === null) return "-";
-  return `${area.toLocaleString("en-IN")} ${String(asset?.areaUnit || "").toUpperCase() === "SQ_M" ? "sq m" : "sq ft"}`;
+// The card shows super built-up area first - that is the number brokers and
+// clients quote (14 Nov 2026 feedback). Older units that were saved without it
+// still fall back to the previous chain instead of showing a dash.
+const AREA_FIELDS = [
+  ["superBuiltUpArea", "Super built-up area"],
+  ["totalArea", "Total area"],
+  ["carpetArea", "Carpet area"],
+  ["builtUpArea", "Built-up area"],
+];
+
+const areaInfoOf = (asset) => {
+  for (const [field, label] of AREA_FIELDS) {
+    const area = toNumber(asset?.[field]);
+    if (area !== null) {
+      const unit = String(asset?.areaUnit || "").toUpperCase() === "SQ_M" ? "sq m" : "sq ft";
+      return { text: `${area.toLocaleString("en-IN")} ${unit}`, label: `${label}: ${area.toLocaleString("en-IN")} ${unit}` };
+    }
+  }
+  return { text: "-", label: "Area not added" };
 };
 
 const floorOf = (asset) => {
@@ -64,6 +79,7 @@ const InventoryCard = React.memo(({ asset, priceLabel, onView, onEdit, onShare, 
     COWORKING: "Coworking",
   };
   const furnishingShort = SHORT_FURNISHING[String(asset?.furnishingStatus || "").toUpperCase()] || furnishing;
+  const areaInfo = areaInfoOf(asset);
 
   return (
     <article className="group flex min-h-[420px] flex-col overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-[0_6px_24px_rgba(15,23,42,0.06)] transition hover:-translate-y-0.5 hover:shadow-[0_14px_34px_rgba(37,99,235,0.14)]">
@@ -89,7 +105,7 @@ const InventoryCard = React.memo(({ asset, priceLabel, onView, onEdit, onShare, 
         ) : null}
 
         <div className="mt-5 grid grid-cols-3 gap-2 border-t border-slate-100 pt-4 text-[13px] text-slate-600">
-          <span className="inline-flex items-center gap-1.5 truncate"><Ruler size={16} className="shrink-0 text-slate-700" />{areaOf(asset)}</span>
+          <span className="inline-flex items-center gap-1.5 truncate" title={areaInfo.label}><Ruler size={16} className="shrink-0 text-slate-700" />{areaInfo.text}</span>
           <span className="inline-flex items-center gap-1.5 truncate" title={furnishing}><Armchair size={16} className="shrink-0 text-slate-700" />{furnishingShort}</span>
           <span className="inline-flex items-center gap-1.5 truncate"><Building2 size={16} className="shrink-0 text-slate-700" />{floorOf(asset)}</span>
         </div>

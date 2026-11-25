@@ -32,6 +32,7 @@ const enterpriseTransactionSchema = new mongoose.Schema(
     },
     enteredBy: { type: mongoose.Schema.Types.ObjectId, ref: "User", default: null },
     enteredByName: { type: String, default: "" },
+    history: { type: [{ at: { type: Date, default: Date.now }, by: { type: mongoose.Schema.Types.ObjectId, ref: "User" }, byName: String, change: String, _id: false }], default: [] },
   },
   { timestamps: true },
 );

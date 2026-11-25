@@ -70,7 +70,7 @@ const DatabasePage = () => {
   const current = TABS.find((t) => t.key === tab);
 
   return (
-    <div className="mx-auto flex w-full max-w-[1200px] flex-col gap-4 p-3 sm:p-5" style={{ color: "var(--g-ink)" }}>
+    <div className="flex w-full min-w-0 flex-col gap-4 p-3 sm:p-5" style={{ color: "var(--g-ink)" }}>
       <div className="flex flex-wrap items-end gap-3">
         <div className="min-w-0 flex-1">
           <h1 className="text-[22px] font-semibold">Database</h1>

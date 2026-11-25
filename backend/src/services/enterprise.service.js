@@ -9,6 +9,7 @@ const mongoose = require("mongoose");
 const Office = require("../models/EnterpriseOffice");
 const Agreement = require("../models/EnterpriseAgreement");
 const Tenant = require("../models/EnterpriseTenant");
+const EnterpriseOwner = require("../models/EnterpriseOwner");
 const Obligation = require("../models/EnterpriseObligation");
 const Transaction = require("../models/EnterpriseTransaction");
 const Ledger = require("../models/EnterpriseLedgerEntry");
@@ -19,6 +20,7 @@ const DbCounter = require("../models/DbCounter");
 const Contact = require("../models/CrmContact");
 const E = require("../constants/enterprise.constants");
 const F = require("./enterpriseFinance.service");
+const Files = require("./enterpriseFile.service");
 
 class EnterpriseError extends Error {
   constructor(statusCode, message) { super(message); this.statusCode = statusCode; }
@@ -78,12 +80,13 @@ const sanitizeOffice = (body = {}, { partial = false } = {}) => {
   const take = (k) => !partial || has(body, k);
   if (take("name")) { out.name = text(body.name, 200); if (!out.name) throw new EnterpriseError(400, "Give the office a name"); }
   ["address", "floor", "unit", "areaBasis", "ownerConsentRef", "notes"].forEach((k) => { if (take(k)) out[k] = text(body[k], k === "notes" ? 3000 : k === "address" ? 500 : 300); });
+  if (!partial && !out.address) throw new EnterpriseError(400, "Enter the office address");
   if (take("area")) out.area = money(body.area, "Area");
   if (take("fitOutBudget")) out.fitOutBudget = money(body.fitOutBudget, "Fit-out budget");
   if (take("fitOutStatus")) out.fitOutStatus = enumOf(body.fitOutStatus, E.FIT_OUT_STATUSES, "Fit-out status", E.FIT_OUT_STATUSES[0]);
   if (take("operationalStatus")) out.operationalStatus = enumOf(body.operationalStatus, E.OPERATIONAL_STATUSES, "Operational status", E.OPERATIONAL_STATUSES[0]);
   ["fitOutStartDate", "fitOutExpectedEndDate", "fitOutActualEndDate"].forEach((k) => { if (take(k)) out[k] = dateOf(body[k], k); });
-  ["buildingId", "inventoryId", "assignedTo"].forEach((k) => {
+  ["inventoryId", "assignedTo"].forEach((k) => {
     if (!take(k)) return;
     if (body[k] && !isId(body[k])) throw new EnterpriseError(400, `${k} is invalid`);
     out[k] = body[k] || null;
@@ -93,7 +96,6 @@ const sanitizeOffice = (body = {}, { partial = false } = {}) => {
 
 const checkOfficeLinks = async (companyId, clean, excludeId = null) => {
   if (clean.assignedTo && !(await require("../models/User").exists({ _id: clean.assignedTo, companyId }))) throw new EnterpriseError(400, "That employee isn't in this company");
-  if (clean.buildingId && !(await require("../models/Building").exists({ _id: clean.buildingId, companyId }))) throw new EnterpriseError(400, "That building isn't in the Database");
   if (clean.inventoryId) {
     if (!(await require("../models/Inventory").exists({ _id: clean.inventoryId, companyId }))) throw new EnterpriseError(400, "That inventory unit doesn't exist");
     const taken = await Office.findOne({ companyId, inventoryId: clean.inventoryId, ...(excludeId ? { _id: { $ne: excludeId } } : {}) }).select("officeCode name").lean();
@@ -117,7 +119,7 @@ const updateOffice = async ({ user, id, body }) => {
   await checkOfficeLinks(user.companyId, clean, office._id);
   const changes = Object.entries(clean).filter(([k, v]) => String(office[k] ?? "") !== String(v ?? "")).map(([k, v]) => `${k}: ${office[k] ?? "-"} -> ${v ?? "-"}`);
   Object.assign(office, clean);
-  if (changes.length) office.history = [...(office.history || []), { ...by(user), change: changes.join("; ").slice(0, 500) }].slice(-200);
+  if (changes.length) office.history = [...(office.history || []), { ...by(user), change: changes.join("; ") }];
   await office.save();
   return office;
 };
@@ -129,21 +131,33 @@ const sanitizeAgreement = (body = {}, { partial = false, side } = {}) => {
   const take = (k) => !partial || has(body, k);
   if (take("agreementType")) out.agreementType = text(body.agreementType, 120);
   if (take("status")) out.status = enumOf(body.status, E.AGREEMENT_STATUSES, "Agreement status", "DRAFT");
-  ["signingDate", "possessionDate", "commencementDate", "rentCommencementDate", "endDate", "lockInEndDate", "depositExpectedSettlementDate", "noticeReceivedDate", "noticeExpiryDate", "vacatingDate"]
+  ["signingDate", "possessionDate", "commencementDate", "rentCommencementDate", "endDate", "billingEndDate", "noticeDeadlineDate", "renewalDecisionDate", "lockInEndDate", "depositExpectedSettlementDate", "noticeReceivedDate", "noticeExpiryDate", "vacatingDate"]
     .forEach((k) => { if (take(k)) out[k] = dateOf(body[k], k.replace(/([A-Z])/g, " $1").toLowerCase()); });
   if (take("lockInMonths")) out.lockInMonths = intOf(body.lockInMonths, "Lock-in months");
   if (take("noticePeriodMonths")) out.noticePeriodMonths = intOf(body.noticePeriodMonths, "Notice period months");
   if (take("baseRent")) out.baseRent = money(body.baseRent, "Base rent", { allowNull: false });
-  if (take("rentDueDay")) { const d = intOf(body.rentDueDay, "Rent due day", 28); if (d === 0) throw new EnterpriseError(400, "Rent due day is 1-28"); out.rentDueDay = d; }
+  if (take("rentDueDay")) { const d = intOf(body.rentDueDay, "Rent due day", 31); if (d === 0) throw new EnterpriseError(400, "Rent due day is 1-31"); out.rentDueDay = d; }
+  if (take("proration")) out.proration = enumOf(body.proration, ["DAILY", "FULL_PERIOD"], "Proration", "DAILY");
+  if (take("escalationTiming")) out.escalationTiming = enumOf(body.escalationTiming, ["EFFECTIVE_DATE", "PERIOD_START"], "Escalation timing", "EFFECTIVE_DATE");
+  if (take("rentFreePeriods")) out.rentFreePeriods = (body.rentFreePeriods || []).map((r) => {
+    const startDate = dateOf(r.startDate, "Rent-free start", { required: true });
+    const endDate = dateOf(r.endDate, "Rent-free end", { required: true });
+    if (endDate < startDate) throw new EnterpriseError(400, "Rent-free end must follow its start");
+    return { startDate, endDate, note: text(r.note) };
+  });
+  if (take("recoverableChargeTypes")) out.recoverableChargeTypes = [...new Set((body.recoverableChargeTypes || []).map((v) => enumOf(v, ["PARKING", "UTILITIES", "REPAIRS", "OTHER"], "Recoverable charge")))];
+  if (take("taxConfirmed")) out.taxConfirmed = body.taxConfirmed === true;
+  if (take("taxApprovalRef")) out.taxApprovalRef = text(body.taxApprovalRef);
   if (take("gstPercent")) out.gstPercent = pct(body.gstPercent, "GST %");
   if (take("tdsPercent")) out.tdsPercent = pct(body.tdsPercent, "TDS %");
   if (take("depositRequired")) out.depositRequired = money(body.depositRequired, "Deposit required");
-  ["renewalTerms", "terminationTerms", "closeOutNotes", "notes"].forEach((k) => { if (take(k)) out[k] = text(body[k], 3000); });
+  ["renewalTerms", "terminationTerms", "closeOutNotes", "notes", "depositConditions"].forEach((k) => { if (take(k)) out[k] = text(body[k], 3000); });
   if (take("escalations")) {
     out.escalations = (Array.isArray(body.escalations) ? body.escalations : []).slice(0, 60).map((e, i) => ({
       effectiveDate: dateOf(e.effectiveDate, `Escalation ${i + 1} date`, { required: true }),
       method: enumOf(e.method, E.ESCALATION_METHODS, `Escalation ${i + 1} method`),
       value: money(e.value, `Escalation ${i + 1} value`, { allowNull: false }),
+      base: enumOf(e.base, ["CURRENT_RENT", "BASE_RENT"], "Escalation base", "CURRENT_RENT"),
       note: text(e.note, 300),
     }));
   }
@@ -171,7 +185,7 @@ const sanitizeAgreement = (body = {}, { partial = false, side } = {}) => {
       };
     });
   }
-  if (take("landlordContactId")) out.landlordContactId = body.landlordContactId || null;
+  if (take("enterpriseOwnerId")) out.enterpriseOwnerId = body.enterpriseOwnerId || null;
   if (take("otherContactIds")) out.otherContactIds = (Array.isArray(body.otherContactIds) ? body.otherContactIds : []).filter(isId).slice(0, 20);
   if (take("tenantId")) out.tenantId = body.tenantId || null;
   // Dates that only make sense in order.
@@ -180,12 +194,27 @@ const sanitizeAgreement = (body = {}, { partial = false, side } = {}) => {
   return out;
 };
 
+const validateAgreement = (agreement) => {
+  const start = agreement.commencementDate || agreement.rentCommencementDate;
+  for (const key of ["signingDate", "commencementDate", "rentCommencementDate"]) {
+    if (agreement[key] && agreement.endDate && new Date(agreement[key]) > new Date(agreement.endDate)) throw new EnterpriseError(400, `${key} is after the end date`);
+  }
+  if (start && agreement.billingEndDate && new Date(agreement.billingEndDate) < new Date(start)) throw new EnterpriseError(400, "Billing end precedes commencement");
+  if (agreement.noticeReceivedDate && agreement.noticeExpiryDate && new Date(agreement.noticeReceivedDate) > new Date(agreement.noticeExpiryDate)) throw new EnterpriseError(400, "Notice expiry precedes receipt");
+  if (["ACTIVE", "NOTICE"].includes(agreement.status)) {
+    if (!start) throw new EnterpriseError(400, "An active agreement needs a commencement date");
+    if (agreement.side === "OWNER" && !agreement.enterpriseOwnerId) throw new EnterpriseError(400, "An active master lease needs its Enterprise Owner");
+    if (agreement.side === "TENANT" && !agreement.tenantId) throw new EnterpriseError(400, "An active agreement needs its tenant");
+    if ((agreement.gstPercent > 0 || agreement.tdsPercent > 0) && (!agreement.taxConfirmed || !agreement.taxApprovalRef)) throw new EnterpriseError(400, "Confirm the accountant-approved tax treatment and enter its approval reference");
+  }
+  if (agreement.status === "TERMINATED" && !agreement.billingEndDate) throw new EnterpriseError(400, "Enter the agreed billing end date when terminating an agreement");
+  const chargeKeys = (agreement.otherCharges || []).map((c) => `${c.chargeType}:${c.label}:${c.frequency}`);
+  if (new Set(chargeKeys).size !== chargeKeys.length) throw new EnterpriseError(400, "Give recurring charges distinct names");
+};
+
 const checkAgreementParties = async (companyId, side, clean) => {
-  if (side === "OWNER" && clean.landlordContactId) {
-    if (!isId(clean.landlordContactId)) throw new EnterpriseError(400, "Landlord is invalid");
-    const landlord = await Contact.findOne({ _id: clean.landlordContactId, companyId }).select("kind").lean();
-    if (!landlord) throw new EnterpriseError(400, "Landlord not found");
-    if (landlord.kind !== "OWNER") throw new EnterpriseError(400, "Pick the landlord from the Owner Database");
+  if (side === "OWNER" && clean.enterpriseOwnerId) {
+    if (!isId(clean.enterpriseOwnerId) || !(await EnterpriseOwner.exists({ _id: clean.enterpriseOwnerId, companyId }))) throw new EnterpriseError(400, "Enterprise Owner not found");
   }
   if (clean.otherContactIds?.length) {
     const found = await Contact.countDocuments({ _id: { $in: clean.otherContactIds }, companyId });
@@ -200,6 +229,7 @@ const createAgreement = async ({ user, officeId, body }) => {
   const office = await loadOffice(user.companyId, officeId);
   const side = enumOf(body.side, E.AGREEMENT_SIDES, "Side");
   const clean = sanitizeAgreement(body, { side });
+  validateAgreement({ ...clean, side });
   await checkAgreementParties(user.companyId, side, clean);
   if (side === "TENANT" && !clean.tenantId) throw new EnterpriseError(400, "Choose or add the tenant first");
   const agreement = new Agreement({ ...clean, side, officeId: office._id, companyId: user.companyId, createdBy: user._id });
@@ -219,10 +249,16 @@ const updateAgreement = async ({ user, id, body }) => {
   const agreement = await Agreement.findOne({ _id: id, companyId: user.companyId });
   if (!agreement) throw new EnterpriseError(404, "Agreement not found");
   const clean = sanitizeAgreement(body, { partial: true, side: agreement.side });
+  const previous = agreement.toObject();
+  validateAgreement({ ...previous, ...clean });
+  if (["commencementDate", "rentCommencementDate"].some((k) => has(clean, k) && String(clean[k]) !== String(agreement[k]))) {
+    const rows = await Obligation.find({ companyId: user.companyId, agreementId: agreement._id, generated: true }).lean();
+    if (rows.some((o) => F.isLocked(o))) throw new EnterpriseError(400, "Billing has begun; retain the commencement dates and record a dated amendment or adjustment");
+  }
   await checkAgreementParties(user.companyId, agreement.side, clean);
   const changes = Object.entries(clean).filter(([k, v]) => JSON.stringify(agreement[k] ?? null) !== JSON.stringify(v ?? null)).map(([k]) => k);
   Object.assign(agreement, clean);
-  if (changes.length) agreement.amendments.push({ ...by(user), note: text(body.amendmentNote, 500), changes });
+  if (changes.length) agreement.amendments.push({ ...by(user), note: text(body.amendmentNote, 500), changes, before: Object.fromEntries(changes.map((k) => [k, previous[k]])), after: clean });
   await agreement.save();
   const schedule = await regenerateSchedule({ user, agreement });
   return { agreement, schedule, changes };
@@ -284,11 +320,51 @@ const createTenant = async ({ user, body }) => {
   return tenant;
 };
 
+const sanitizeEnterpriseOwner = (body = {}) => {
+  const name = text(body.name, 200);
+  if (!name) throw new EnterpriseError(400, "Give the Enterprise Owner a name");
+  return {
+    name, entityName: text(body.entityName, 240), phone: text(body.phone, 30), email: text(body.email, 200),
+    address: text(body.address, 500), pan: text(body.pan, 20).toUpperCase(), gstin: text(body.gstin, 20).toUpperCase(),
+    notes: text(body.notes, 3000), active: body.active !== false,
+    contacts: (Array.isArray(body.contacts) ? body.contacts : []).slice(0, 20).map((c) => ({
+      ...(isId(c?._id) ? { _id: c._id } : {}),
+      role: E.OWNER_CONTACT_ROLES.includes(String(c?.role || "").toUpperCase()) ? String(c.role).toUpperCase() : "OTHER",
+      name: text(c?.name, 200), designation: text(c?.designation, 120), phone: text(c?.phone, 30), email: text(c?.email, 200),
+      notes: text(c?.notes, 500), active: c?.active !== false,
+    })).filter((c) => c.name),
+  };
+};
+const createEnterpriseOwner = async ({ user, body }) => {
+  const owner = new EnterpriseOwner({ ...sanitizeEnterpriseOwner(body), companyId: user.companyId, createdBy: user._id });
+  owner.ownerCode = await DbCounter.nextCode(user.companyId, "EOW", 4);
+  await owner.save();
+  return owner;
+};
+const updateEnterpriseOwner = async ({ user, id, body }) => {
+  if (!isId(id)) throw new EnterpriseError(400, "Invalid Enterprise Owner");
+  const owner = await EnterpriseOwner.findOne({ _id: id, companyId: user.companyId });
+  if (!owner) throw new EnterpriseError(404, "Enterprise Owner not found");
+  Object.assign(owner, sanitizeEnterpriseOwner({ ...owner.toObject(), ...body }));
+  await owner.save();
+  return owner;
+};
+
 const updateTenant = async ({ user, id, body }) => {
   if (!isId(id)) throw new EnterpriseError(400, "Invalid tenant");
   const tenant = await Tenant.findOne({ _id: id, companyId: user.companyId });
   if (!tenant) throw new EnterpriseError(404, "Tenant not found");
-  Object.assign(tenant, sanitizeTenant(body, { partial: true }));
+  const clean = sanitizeTenant(body, { partial: true });
+  const before = tenant.toObject();
+  delete before.history;
+  if (clean.contacts) {
+    const ids = clean.contacts.filter((c) => c._id).map((c) => String(c._id));
+    if (new Set(ids).size !== ids.length) throw new EnterpriseError(400, "A contact is listed twice");
+    // Removed contacts remain addressable by old documents and agreements.
+    clean.contacts.push(...tenant.contacts.filter((c) => !ids.includes(String(c._id))).map((c) => ({ ...c.toObject(), active: false })));
+  }
+  tenant.history.push({ by: user._id, before });
+  Object.assign(tenant, clean);
   await tenant.save();
   return tenant;
 };
@@ -297,7 +373,8 @@ const updateTenant = async ({ user, id, body }) => {
 
 const checklistFor = async (companyId, entityType) => {
   const saved = await Checklist.findOne({ companyId, entityType }).lean();
-  return { entityType, items: saved ? saved.items : (E.DEFAULT_CHECKLISTS[entityType] || []), custom: Boolean(saved), sourceNote: saved?.sourceNote || "Company documents handout (Sept 2026)", updatedByName: saved?.updatedByName || "", updatedAt: saved?.updatedAt || null };
+  const hasDefault = Boolean((E.DEFAULT_CHECKLISTS[entityType] || []).length);
+  return { entityType, items: saved ? saved.items : (E.DEFAULT_CHECKLISTS[entityType] || []), custom: Boolean(saved), sourceNote: saved?.sourceNote || "Existing onboarding reference; confirm against the latest company checklist", sourceVersion: saved?.sourceVersion || "", sourceConfirmed: saved?.sourceConfirmed === true, sourceNeedsConfirmation: hasDefault && saved?.sourceConfirmed !== true, updatedByName: saved?.updatedByName || "", updatedAt: saved?.updatedAt || null };
 };
 
 const saveChecklist = async ({ user, entityType, body }) => {
@@ -313,7 +390,13 @@ const saveChecklist = async ({ user, entityType, body }) => {
     keys.add(unique);
     return { key, label, scope: enumOf(it.scope, ["ENTITY", "SIGNATORY", "AGREEMENT"], "Scope"), required: it.required !== false, hint: text(it.hint, 200) };
   });
-  return Checklist.findOneAndUpdate({ companyId: user.companyId, entityType: type }, { $set: { items, sourceNote: text(body.sourceNote, 300), updatedBy: user._id, updatedByName: user.name || "" } }, { upsert: true, returnDocument: "after" }).lean();
+  if (body.sourceConfirmed === true && (!text(body.sourceNote) || !text(body.sourceVersion))) throw new EnterpriseError(400, "Enter the approved checklist source and version before confirming it");
+  const existing = await Checklist.findOne({ companyId: user.companyId, entityType: type });
+  const checklist = existing || new Checklist({ companyId: user.companyId, entityType: type });
+  if (existing) { const before = existing.toObject(); delete before.history; checklist.history.push({ by: user._id, before }); }
+  Object.assign(checklist, { items, sourceNote: text(body.sourceNote), sourceVersion: text(body.sourceVersion, 120), sourceConfirmed: body.sourceConfirmed === true, updatedBy: user._id, updatedByName: user.name || "" });
+  await checklist.save();
+  return checklist.toObject();
 };
 
 /*
@@ -322,11 +405,12 @@ const saveChecklist = async ({ user, entityType, body }) => {
  * the tenant agreement. Each row carries its document record, if any.
  */
 const tenantChecklist = async ({ companyId, tenant, agreementId = null }) => {
-  const { items } = await checklistFor(companyId, tenant.entityType);
+  const config = await checklistFor(companyId, tenant.entityType);
+  const { items } = config;
   const docs = await Doc.find({ companyId, tenantId: tenant._id }).lean();
   const signatories = (tenant.contacts || []).filter((c) => c.role === "SIGNATORY" && c.active !== false);
   const rows = [];
-  const find = (key, extra) => docs.find((d) => d.checklistKey === key && String(d.signatoryId || "") === String(extra.signatoryId || "") && (extra.scope !== "AGREEMENT" || String(d.agreementId || "") === String(extra.agreementId || "")));
+  const find = (key, extra) => docs.find((d) => d.checklistKey === key && d.scope === extra.scope && String(d.signatoryId || "") === String(extra.signatoryId || "") && (extra.scope !== "AGREEMENT" || String(d.agreementId || "") === String(extra.agreementId || "")));
   items.forEach((it) => {
     if (it.scope === "SIGNATORY") {
       (signatories.length ? signatories : [null]).forEach((s) => {
@@ -342,6 +426,7 @@ const tenantChecklist = async ({ companyId, tenant, agreementId = null }) => {
   const required = rows.filter((r) => r.required);
   return {
     rows,
+    sourceConfirmed: config.sourceConfirmed, sourceNote: config.sourceNote, sourceVersion: config.sourceVersion,
     required: required.length,
     verified: required.filter((r) => ["VERIFIED", "NOT_APPLICABLE"].includes(status(r))).length,
     missing: required.filter((r) => ["PENDING", "REJECTED"].includes(status(r))).length,
@@ -354,7 +439,7 @@ const PROTECTED_DOC_PREFIX = "/api/uploads/files/enterprise-documents/";
 /* Receipts / bills / proof on a payment, deposit entry or fit-out expense (2.5, 2.8, 2.9). */
 const sanitizeAttachments = (list, user) => (Array.isArray(list) ? list : []).slice(0, 10).map((a) => {
   const url = text(a?.url, 1000);
-  if (!url.startsWith(PROTECTED_DOC_PREFIX)) throw new EnterpriseError(400, "Upload the file to the protected Enterprise documents folder");
+  if (!url.startsWith(PROTECTED_DOC_PREFIX) || !Files.validUrl(url)) throw new EnterpriseError(400, "Upload the file to the protected Enterprise documents folder");
   return { url, name: text(a.name, 200), uploadedAt: new Date(), uploadedByName: user?.name || "" };
 });
 
@@ -365,34 +450,65 @@ const addAttachment = async ({ user, target, id, body }) => {
   const row = await Model.findOne({ _id: id, companyId: user.companyId });
   if (!row) throw new EnterpriseError(404, "Record not found");
   const files = sanitizeAttachments([body], user);
+  await Files.assertFiles(user, files);
   if ((row.attachments || []).length >= 20) throw new EnterpriseError(400, "This record already has 20 files");
   row.attachments.push(...files);
   await row.save();
   return row;
 };
 
+const documentContext = async (user, body) => {
+  const scope = enumOf(body.scope, E.DOCUMENT_SCOPES, "Scope");
+  const query = { companyId: user.companyId, scope, checklistKey: text(body.checklistKey, 60) };
+  for (const k of ["officeId", "tenantId", "agreementId", "signatoryId"]) {
+    if (body[k] && !isId(body[k])) throw new EnterpriseError(400, `Invalid ${k}`);
+    query[k] = body[k] || null;
+  }
+  if (scope === "OFFICE" && !query.officeId) throw new EnterpriseError(400, "Choose the office for this document");
+  if (scope === "AGREEMENT" && !query.agreementId) throw new EnterpriseError(400, "Choose the agreement for this document");
+  if (["ENTITY", "SIGNATORY"].includes(scope) && !query.tenantId) throw new EnterpriseError(400, "Choose the tenant for this document");
+  if (scope === "SIGNATORY" && !query.signatoryId) throw new EnterpriseError(400, "Choose the signing authority for this document");
+  if (query.officeId && !(await Office.exists({ _id: query.officeId, companyId: user.companyId }))) throw new EnterpriseError(404, "Office not found");
+  if (query.agreementId) {
+    const a = await Agreement.findOne({ _id: query.agreementId, companyId: user.companyId }).lean();
+    if (!a) throw new EnterpriseError(404, "Agreement not found");
+    if (query.officeId && String(a.officeId) !== String(query.officeId)) throw new EnterpriseError(400, "Agreement belongs to another office");
+    if (query.tenantId && String(a.tenantId || "") !== String(query.tenantId)) throw new EnterpriseError(400, "Agreement belongs to another tenant");
+    query.officeId = a.officeId;
+    query.tenantId = a.tenantId || null;
+  }
+  if (query.tenantId) {
+    const tenant = await Tenant.findOne({ _id: query.tenantId, companyId: user.companyId }).lean();
+    if (!tenant) throw new EnterpriseError(404, "Tenant not found");
+    if (scope === "SIGNATORY" && !tenant.contacts.some((c) => String(c._id) === String(query.signatoryId) && c.role === "SIGNATORY")) throw new EnterpriseError(400, "That signing authority does not belong to this tenant");
+    if (query.checklistKey) {
+      const checklist = await Checklist.findOne({ companyId: user.companyId, entityType: tenant.entityType }).lean();
+      const items = checklist ? checklist.items : (E.DEFAULT_CHECKLISTS[tenant.entityType] || []);
+      if (!items.some((it) => it.key === query.checklistKey && it.scope === scope)) throw new EnterpriseError(400, "This checklist item is not configured for this tenant and document scope");
+    }
+  }
+  if (["ENTITY", "SIGNATORY"].includes(scope)) { query.officeId = null; query.agreementId = null; }
+  if (scope !== "SIGNATORY") query.signatoryId = null;
+  return query;
+};
+
 /* Add a file (a new version) to a checklist row or a free document. */
 const uploadDocument = async ({ user, body }) => {
   const url = text(body.url, 1000);
-  if (!url.startsWith(PROTECTED_DOC_PREFIX)) throw new EnterpriseError(400, "Upload the file to the protected Enterprise documents folder");
-  const scope = enumOf(body.scope, E.DOCUMENT_SCOPES, "Scope");
-  const query = { companyId: user.companyId, scope, checklistKey: text(body.checklistKey, 60) };
-  ["officeId", "tenantId", "agreementId", "signatoryId"].forEach((k) => { query[k] = isId(body[k]) ? body[k] : null; });
-  if (!query.officeId && !query.tenantId && !query.agreementId) throw new EnterpriseError(400, "Say which office, tenant or agreement this belongs to");
-  if (scope === "SIGNATORY" && !query.signatoryId) throw new EnterpriseError(400, "A signatory's document must be filed against that person");
-  if (query.tenantId) {
-    const tenant = await Tenant.findOne({ _id: query.tenantId, companyId: user.companyId }).select("contacts").lean();
-    if (!tenant) throw new EnterpriseError(404, "Tenant not found");
-    if (query.signatoryId && !(tenant.contacts || []).some((c) => String(c._id) === String(query.signatoryId) && c.role === "SIGNATORY")) throw new EnterpriseError(400, "That person isn't a signing authority of this tenant");
-  }
-  if (query.officeId && !(await Office.exists({ _id: query.officeId, companyId: user.companyId }))) throw new EnterpriseError(404, "Office not found");
-  if (query.agreementId && !(await Agreement.exists({ _id: query.agreementId, companyId: user.companyId }))) throw new EnterpriseError(404, "Agreement not found");
+  if (!Files.validUrl(url)) throw new EnterpriseError(400, "Upload the file to the protected Enterprise documents folder");
+  await Files.assertFiles(user, [{ url }]);
   let doc = null;
-  if (isId(body.documentId)) {
+  if (body.documentId) {
+    if (!isId(body.documentId)) throw new EnterpriseError(400, "Invalid document");
     // A replacement for an office / agreement paper: a new version of the same record.
     doc = await Doc.findOne({ _id: body.documentId, companyId: user.companyId });
     if (!doc) throw new EnterpriseError(404, "Document not found");
-  } else if (query.checklistKey) doc = await Doc.findOne(query);
+  }
+  const query = await documentContext(user, doc ? doc.toObject() : body);
+  if (!doc && query.checklistKey) {
+    const { officeId, ...identity } = query;
+    doc = await Doc.findOne(["ENTITY", "SIGNATORY"].includes(query.scope) ? identity : query);
+  }
   if (!doc) {
     const label = text(body.label, 200);
     if (!query.checklistKey && !label) throw new EnterpriseError(400, "Name the document (e.g. Lease deed, Electricity bill Oct)");
@@ -414,11 +530,19 @@ const reviewDocument = async ({ user, id, body, rowContext = null }) => {
   if (id && isId(id)) doc = await Doc.findOne({ _id: id, companyId: user.companyId });
   else if (rowContext) {
     // Marking a checklist row Not applicable before any file exists.
-    const query = { companyId: user.companyId, scope: enumOf(rowContext.scope, E.DOCUMENT_SCOPES, "Scope"), checklistKey: text(rowContext.checklistKey, 60) };
-    ["officeId", "tenantId", "agreementId", "signatoryId"].forEach((k) => { query[k] = isId(rowContext[k]) ? rowContext[k] : null; });
+    if (status !== "NOT_APPLICABLE") throw new EnterpriseError(400, "Upload a document before reviewing it");
+    const query = await documentContext(user, rowContext);
     doc = await Doc.findOne(query) || new Doc({ ...query, label: text(rowContext.label, 200) || "Document" });
   }
   if (!doc) throw new EnterpriseError(404, "Document not found");
+  if (doc.officeId && !(await Office.exists({ _id: doc.officeId, companyId: user.companyId }))) throw new EnterpriseError(404, "Office not found");
+  if (doc.tenantId && !(await Tenant.exists({ _id: doc.tenantId, companyId: user.companyId }))) throw new EnterpriseError(404, "Tenant not found");
+  if (doc.agreementId && !(await Agreement.exists({ _id: doc.agreementId, companyId: user.companyId }))) throw new EnterpriseError(404, "Agreement not found");
+  if (doc.scope === "SIGNATORY" && doc.tenantId) {
+    const tenant = await Tenant.findOne({ _id: doc.tenantId, companyId: user.companyId }).select("contacts").lean();
+    if (!tenant?.contacts.some((c) => String(c._id) === String(doc.signatoryId) && c.role === "SIGNATORY")) throw new EnterpriseError(400, "This signing authority does not belong to the document tenant");
+  }
+  if (["REJECTED", "NOT_APPLICABLE"].includes(status) && !text(body.notes)) throw new EnterpriseError(400, "Enter a reason for rejecting or waiving this document");
   if (status === "VERIFIED" && !doc.versions.length) throw new EnterpriseError(400, "Nothing to verify yet: no file has been uploaded");
   doc.status = status;
   doc.notes = has(body, "notes") ? text(body.notes, 1000) : doc.notes;
@@ -467,9 +591,11 @@ const recoverFromTenant = async ({ user, obligationId, body = {} }) => {
   if (!source) throw new EnterpriseError(404, "Landlord item not found");
   const office = await Office.findOne({ _id: source.officeId, companyId: user.companyId }).select("tenantAgreementId").lean();
   const ta = office?.tenantAgreementId ? await Agreement.findOne({ _id: office.tenantAgreementId, companyId: user.companyId }).lean() : null;
-  if (!ta || !["ACTIVE", "NOTICE"].includes(ta.status)) throw new EnterpriseError(400, "There is no active tenant agreement to recover this from");
-  const allowed = ta.maintenance?.method === "ACTUAL" || ta.maintenance?.passThroughAllowed === true;
-  if (!allowed) throw new EnterpriseError(400, "The tenant agreement doesn't allow passing this cost on (its maintenance is not actual-cost and pass-through is not allowed)");
+  if (!F.agreementEffective(ta)) throw new EnterpriseError(400, "There is no effective tenant agreement to recover this from");
+  const maintenanceAllowed = source.chargeType === "MAINTENANCE" && (ta.maintenance?.method === "ACTUAL" || ta.maintenance?.passThroughAllowed === true);
+  const otherAllowed = ["PARKING", "UTILITIES", "REPAIRS", "OTHER"].includes(source.chargeType)
+    && ((ta.recoverableChargeTypes || []).includes(source.chargeType) || (ta.otherCharges || []).some((c) => c.chargeType === source.chargeType && c.label === source.label));
+  if (!maintenanceAllowed && !otherAllowed) throw new EnterpriseError(400, "This charge type is not recoverable under the active tenant agreement");
   const amount = has(body, "amount") ? money(body.amount, "Amount", { allowNull: false }) : source.gross;
   return createObligation({ user, officeId: source.officeId, body: {
     direction: "RECEIVABLE", agreementId: ta._id, chargeType: source.chargeType, label: `${source.label || source.chargeType} (recovered)`,
@@ -559,6 +685,7 @@ const recordTransaction = async ({ user, officeId, body }) => {
     enteredBy: user._id, enteredByName: user.name || "",
   });
   if (tx.amount + tx.tdsAmount <= 0) throw new EnterpriseError(400, "Enter the amount paid");
+  await Files.assertFiles(user, tx.attachments);
   const allocations = sanitizeAllocations(body.allocations);
   // Validate before saving anything, so a bad allocation leaves no half payment.
   if (allocations.length) {
@@ -567,6 +694,10 @@ const recordTransaction = async ({ user, officeId, body }) => {
   }
   await tx.save();
   await applyAllocations({ user, tx, allocations });
+  if (allocations.length) {
+    tx.history.push({ ...by(user), change: `Allocated ${allocations.length} obligation(s) at payment entry` });
+    await tx.save();
+  }
   return F.transactionView(tx.toObject());
 };
 
@@ -574,7 +705,12 @@ const allocateTransaction = async ({ user, id, body }) => {
   if (!isId(id)) throw new EnterpriseError(400, "Invalid payment");
   const tx = await Transaction.findOne({ _id: id, companyId: user.companyId });
   if (!tx) throw new EnterpriseError(404, "Payment not found");
-  await applyAllocations({ user, tx, allocations: sanitizeAllocations(body.allocations) });
+  const allocations = sanitizeAllocations(body.allocations);
+  await applyAllocations({ user, tx, allocations });
+  if (allocations.length) {
+    tx.history.push({ ...by(user), change: `Allocated ${allocations.length} additional obligation(s)` });
+    await tx.save();
+  }
   return F.transactionView(tx.toObject());
 };
 
@@ -591,19 +727,25 @@ const addLedgerEntry = async ({ user, officeId, body }) => {
     attachments: sanitizeAttachments(body.attachments, user),
     enteredBy: user._id, enteredByName: user.name || "",
   };
+  await Files.assertFiles(user, [...base.attachments, ...(base.proofUrl ? [{ url: base.proofUrl }] : [])]);
   if (kind === "DEPOSIT") {
     const side = enumOf(body.side, E.AGREEMENT_SIDES, "Side");
+    const agreementId = body.agreementId || (side === "OWNER" ? office.ownerAgreementId : office.tenantAgreementId);
+    const agreement = agreementId ? await Agreement.findOne({ _id: agreementId, companyId: user.companyId, officeId: office._id, side }).select("depositRequired").lean() : null;
+    if (agreementId && !agreement) throw new EnterpriseError(400, "Choose an agreement on this office and deposit side");
     const entryType = enumOf(body.entryType, E.DEPOSIT_ENTRY_TYPES, "Entry type");
+    if (["PAID", "COLLECTED"].includes(entryType) && !agreement) throw new EnterpriseError(400, "Link this deposit to its agreement");
     if (side === "OWNER" && entryType === "COLLECTED") throw new EnterpriseError(400, "On the owner side the company pays the deposit (Paid), it doesn't collect it");
     if (side === "TENANT" && entryType === "PAID") throw new EnterpriseError(400, "On the tenant side the company collects the deposit (Collected)");
     const reason = text(body.reason, 500);
     if (["DEDUCTION", "ADJUSTMENT"].includes(entryType) && !reason) throw new EnterpriseError(400, "Give a reason for the deduction or adjustment");
     if (["REFUND", "DEDUCTION", "ADJUSTMENT"].includes(entryType)) {
       const entries = await Ledger.find({ companyId: user.companyId, officeId: office._id, kind: "DEPOSIT" }).lean();
-      const ledger = F.depositLedger(entries, side);
+      const ledger = F.depositLedger(entries, side, null, agreementId);
       if (base.amount > ledger.outstanding + 0.009) throw new EnterpriseError(400, `Only ${ledger.outstanding} of this deposit is still held`);
     }
-    return Ledger.create({ ...base, side, entryType, reason, agreementId: isId(body.agreementId) ? body.agreementId : null, expectedSettlementDate: dateOf(body.expectedSettlementDate, "Expected settlement date") });
+    const history = [{ ...by(user), byName: user.name || "", before: null, after: { side, entryType, amount: base.amount, agreementId } }];
+    return Ledger.create({ ...base, side, entryType, reason, agreementId, history, expectedSettlementDate: dateOf(body.expectedSettlementDate, "Expected settlement date") });
   }
   const amountPaid = money(body.amountPaid, "Amount paid") || 0;
   if (amountPaid > base.amount) throw new EnterpriseError(400, "Paid can't be more than the bill");
@@ -613,6 +755,9 @@ const addLedgerEntry = async ({ user, officeId, body }) => {
     vendor: text(body.vendor, 200), amountPaid,
     paymentStatus: amountPaid >= base.amount ? "PAID" : amountPaid > 0 ? "PARTIALLY_PAID" : "OUTSTANDING",
     warrantyUntil: dateOf(body.warrantyUntil, "Warranty until"),
+    equipmentDetails: text(body.equipmentDetails, 1000),
+    maintenanceUntil: dateOf(body.maintenanceUntil, "Maintenance until"),
+    history: [{ ...by(user), before: null, after: { amount: base.amount, amountPaid, category: body.category, vendor: text(body.vendor, 200) } }],
   });
 };
 
@@ -620,13 +765,16 @@ const updateExpense = async ({ user, id, body }) => {
   if (!isId(id)) throw new EnterpriseError(400, "Invalid entry");
   const row = await Ledger.findOne({ _id: id, companyId: user.companyId, kind: "EXPENSE" });
   if (!row) throw new EnterpriseError(404, "Expense not found");
+  const before = row.toObject();
   if (has(body, "amountPaid")) {
     const paid = money(body.amountPaid, "Amount paid") || 0;
     if (paid > row.amount) throw new EnterpriseError(400, "Paid can't be more than the bill");
     row.amountPaid = paid;
     row.paymentStatus = paid >= row.amount ? "PAID" : paid > 0 ? "PARTIALLY_PAID" : "OUTSTANDING";
   }
-  ["vendor", "notes", "reference", "proofUrl"].forEach((k) => { if (has(body, k)) row[k] = text(body[k], k === "proofUrl" ? 1000 : 500); });
+  ["vendor", "notes", "reference", "proofUrl", "equipmentDetails"].forEach((k) => { if (has(body, k)) row[k] = text(body[k], ["proofUrl", "equipmentDetails"].includes(k) ? 1000 : 500); });
+  if (has(body, "maintenanceUntil")) row.maintenanceUntil = dateOf(body.maintenanceUntil, "Maintenance until");
+  row.history.push({ ...by(user), before, after: { amount: row.amount, amountPaid: row.amountPaid, vendor: row.vendor, notes: row.notes, reference: row.reference, proofUrl: row.proofUrl, equipmentDetails: row.equipmentDetails, maintenanceUntil: row.maintenanceUntil } });
   await row.save();
   return row;
 };
@@ -652,8 +800,8 @@ const summarizeOffice = async ({ companyId, office, bundle, today = new Date(), 
   const obligations = bundle.obligations.filter((o) => String(o.officeId) === String(office._id)).map((o) => F.obligationView(o, today));
   const ledger = bundle.ledger.filter((l) => String(l.officeId) === String(office._id));
   const deposits = {
-    OWNER: F.depositLedger(ledger.filter((l) => l.kind === "DEPOSIT"), "OWNER", ownerAgreement?.depositRequired ?? null),
-    TENANT: F.depositLedger(ledger.filter((l) => l.kind === "DEPOSIT"), "TENANT", tenantAgreement?.depositRequired ?? null),
+    OWNER: F.depositLedger(ledger.filter((l) => l.kind === "DEPOSIT"), "OWNER", ownerAgreement?.depositRequired ?? null, ownerAgreement?._id),
+    TENANT: F.depositLedger(ledger.filter((l) => l.kind === "DEPOSIT"), "TENANT", tenantAgreement?.depositRequired ?? null, tenantAgreement?._id),
   };
   if (ownerAgreement?.depositExpectedSettlementDate && !deposits.OWNER.expectedSettlementDate) deposits.OWNER.expectedSettlementDate = ownerAgreement.depositExpectedSettlementDate;
   if (tenantAgreement?.depositExpectedSettlementDate && !deposits.TENANT.expectedSettlementDate) deposits.TENANT.expectedSettlementDate = tenantAgreement.depositExpectedSettlementDate;
@@ -697,20 +845,62 @@ const listOffices = async ({ user, today = new Date() }) => {
   for (const office of offices) {
     // eslint-disable-next-line no-await-in-loop
     const s = await summarizeOffice({ companyId: user.companyId, office, bundle, today });
-    rows.push({ ...office, tenantName: s.tenant?.tradeName || s.tenant?.legalName || "", ownerAgreementStatus: s.ownerAgreement?.status || "", tenantAgreementStatus: s.tenantAgreement?.status || "", financial: s.financial, fitOut: s.fitOut, alertCount: s.alerts.length, highAlerts: s.alerts.filter((a) => a.severity === "high").length });
+    const tenantIsCurrent = F.agreementEffective(s.tenantAgreement, today);
+    rows.push({ ...office, tenantId: tenantIsCurrent ? s.tenant?._id || null : null, tenantName: tenantIsCurrent ? (s.tenant?.tradeName || s.tenant?.legalName || "") : "", ownerAgreementStatus: s.ownerAgreement?.status || "", tenantAgreementStatus: tenantIsCurrent ? s.tenantAgreement.status : "", financial: s.financial, fitOut: s.fitOut, alertCount: s.alerts.length, highAlerts: s.alerts.filter((a) => a.severity === "high").length });
   }
   return { offices: rows };
+};
+
+const listAgreements = async ({ companyId }) => {
+  const agreements = await Agreement.find({ companyId }).sort({ createdAt: -1 }).lean();
+  if (!agreements.length) return { agreements: [] };
+  const officeIds = [...new Set(agreements.map((a) => String(a.officeId)))];
+  const tenantIds = [...new Set(agreements.map((a) => String(a.tenantId || "")).filter(Boolean))];
+  const ownerIds = [...new Set(agreements.map((a) => String(a.enterpriseOwnerId || "")).filter(Boolean))];
+  const [offices, tenants, owners] = await Promise.all([
+    Office.find({ companyId, _id: { $in: officeIds } }).select("name officeCode address").lean(),
+    Tenant.find({ companyId, _id: { $in: tenantIds } }).select("legalName tradeName").lean(),
+    EnterpriseOwner.find({ companyId, _id: { $in: ownerIds } }).select("name ownerCode").lean(),
+  ]);
+  const officeById = new Map(offices.map((o) => [String(o._id), o]));
+  const tenantById = new Map(tenants.map((t) => [String(t._id), t]));
+  const ownerById = new Map(owners.map((c) => [String(c._id), c]));
+  return { agreements: agreements.map((agreement) => {
+    const office = officeById.get(String(agreement.officeId));
+    const tenant = tenantById.get(String(agreement.tenantId || ""));
+    const owner = ownerById.get(String(agreement.enterpriseOwnerId || ""));
+    return { ...agreement, officeName: office?.name || "", officeCode: office?.officeCode || "", officeAddress: office?.address || "", partyName: agreement.side === "TENANT" ? (tenant?.tradeName || tenant?.legalName || "") : (owner?.name || ""), enterpriseOwner: owner || null };
+  }) };
+};
+
+const listDocuments = async ({ companyId }) => {
+  const documents = await Doc.find({ companyId }).sort({ updatedAt: -1 }).lean();
+  if (!documents.length) return { documents: [] };
+  const ids = (key) => [...new Set(documents.map((doc) => String(doc[key] || "")).filter(Boolean))];
+  const [offices, tenants, agreements] = await Promise.all([
+    Office.find({ companyId, _id: { $in: ids("officeId") } }).select("name officeCode").lean(),
+    Tenant.find({ companyId, _id: { $in: ids("tenantId") } }).select("legalName tradeName").lean(),
+    Agreement.find({ companyId, _id: { $in: ids("agreementId") } }).select("agreementCode side").lean(),
+  ]);
+  const byId = (rows) => new Map(rows.map((row) => [String(row._id), row]));
+  const officeById = byId(offices); const tenantById = byId(tenants); const agreementById = byId(agreements);
+  return { documents: documents.map((doc) => ({
+    ...doc,
+    office: officeById.get(String(doc.officeId || "")) || null,
+    tenant: tenantById.get(String(doc.tenantId || "")) || null,
+    agreement: agreementById.get(String(doc.agreementId || "")) || null,
+    latestVersion: doc.versions?.at(-1) || null,
+  })) };
 };
 
 const officeDetail = async ({ user, id, today = new Date() }) => {
   const office = (await loadOffice(user.companyId, id)).toObject();
   const bundle = await loadOfficeBundle(user.companyId, [office._id]);
   const s = await summarizeOffice({ companyId: user.companyId, office, bundle, today });
-  const [transactions, documents, landlord, building, inventory, assignedUser, otherContacts] = await Promise.all([
+  const [transactions, documents, landlord, inventory, assignedUser, otherContacts] = await Promise.all([
     Transaction.find({ companyId: user.companyId, officeId: office._id }).sort({ date: -1 }).limit(500).lean(),
     Doc.find({ companyId: user.companyId, $or: [{ officeId: office._id }, ...(s.tenant ? [{ tenantId: s.tenant._id }] : [])] }).sort({ updatedAt: -1 }).lean(),
-    s.ownerAgreement?.landlordContactId ? Contact.findOne({ _id: s.ownerAgreement.landlordContactId, companyId: user.companyId }).select("name phone contactCode company").lean() : null,
-    office.buildingId ? require("../models/Building").findOne({ _id: office.buildingId, companyId: user.companyId }).select("name buildingCode address").lean() : null,
+    s.ownerAgreement?.enterpriseOwnerId ? EnterpriseOwner.findOne({ _id: s.ownerAgreement.enterpriseOwnerId, companyId: user.companyId }).lean() : null,
     office.inventoryId ? require("../models/Inventory").findOne({ _id: office.inventoryId, companyId: user.companyId }).select("propertyId projectName unitNumber").lean() : null,
     office.assignedTo ? require("../models/User").findOne({ _id: office.assignedTo, companyId: user.companyId }).select("name role").lean() : null,
     s.ownerAgreement?.otherContactIds?.length ? Contact.find({ _id: { $in: s.ownerAgreement.otherContactIds }, companyId: user.companyId }).select("name phone kind roles contactCode").lean() : [],
@@ -722,7 +912,6 @@ const officeDetail = async ({ user, id, today = new Date() }) => {
     otherContacts,
     assignedUser,
     reminders: await Reminder.find({ companyId: user.companyId, officeId: office._id, status: "OPEN" }).sort({ dueDate: 1 }).lean(),
-    building,
     inventory,
     agreements,
     tenantHistory: agreements.filter((a) => a.side === "TENANT").map((a) => ({ ...a, tenant: bundle.tenants.find((t) => String(t._id) === String(a.tenantId)) || null })),
@@ -917,6 +1106,8 @@ module.exports = {
   sanitizeTenant,
   createTenant,
   updateTenant,
+  createEnterpriseOwner,
+  updateEnterpriseOwner,
   checklistFor,
   saveChecklist,
   tenantChecklist,
@@ -933,6 +1124,8 @@ module.exports = {
   addLedgerEntry,
   updateExpense,
   listOffices,
+  listAgreements,
+  listDocuments,
   officeDetail,
   dashboard,
   report,

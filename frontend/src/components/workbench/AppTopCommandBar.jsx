@@ -10,7 +10,7 @@ const PAGES_WITH_OWN_TITLE = [
   /^\/inventory\/?$/,
   /^\/database\/?$/,
   /^\/projects\/?$/,
-  /^\/enterprise\/?$/,
+  /^\/enterprise(?:\/|$)/,
   /^\/admin\/notifications\/?$/,
   /^\/coworking\/clients\/?$/,
   /^\/coworking\/booking-board\/?$/,

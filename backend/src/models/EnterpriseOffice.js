@@ -2,17 +2,15 @@ const mongoose = require("mongoose");
 const E = require("../constants/enterprise.constants");
 
 /*
- * An office the company leases long term, fits out and lets onward
- * (Enterprise leasing, 2.1). Linked to the existing Building / Inventory
- * records rather than copying them, and to its owner-side and current
- * tenant-side agreements. Financial summaries are calculated, not stored.
+ * One standalone office the company leases long term and lets onward
+ * (Enterprise leasing, 2.1). Its address and details live on this record;
+ * it does not require a separate Building record. Financial summaries are calculated, not stored.
  */
 const enterpriseOfficeSchema = new mongoose.Schema(
   {
     companyId: { type: mongoose.Schema.Types.ObjectId, ref: "Company", required: true, index: true },
     officeCode: { type: String, required: true, trim: true, maxlength: 20 },
     name: { type: String, required: true, trim: true, maxlength: 200 },
-    buildingId: { type: mongoose.Schema.Types.ObjectId, ref: "Building", default: null },
     inventoryId: { type: mongoose.Schema.Types.ObjectId, ref: "Inventory", default: null },
     address: { type: String, trim: true, maxlength: 500, default: "" },
     floor: { type: String, trim: true, maxlength: 40, default: "" },

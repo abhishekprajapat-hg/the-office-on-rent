@@ -60,7 +60,13 @@ export const ACTIVITY_SECTIONS = [
     id: "finance",
     label: "Finance",
     icon: PieChart,
-    match: ["/finance", "/enterprise"],
+    match: ["/finance"],
+  },
+  {
+    id: "enterprise",
+    label: "Enterprise Offices",
+    icon: Landmark,
+    match: ["/enterprise"],
   },
   {
     id: "reports",
@@ -104,6 +110,7 @@ export const TOP_NAV_SECTION_IDS = [
   "leads",
   "inventory",
   "finance",
+  "enterprise",
   "reports",
   "calendar",
   "chat",
@@ -157,8 +164,21 @@ export const WORKBENCH_MENU = {
       group: "Money",
       items: [
         { label: "Finance", path: "/finance", icon: PieChart, page: "finance", roles: ["ADMIN", "MANAGER", "EXECUTIVE", "FIELD_EXECUTIVE", "CHANNEL_PARTNER"] },
-        // Enterprise leasing (Oct 2026): master leases, tenants, payables and receivables.
-        { label: "Enterprise Leasing", path: "/enterprise", icon: Landmark, page: "enterprise", roles: MANAGEMENT_ROLES },
+      ],
+    },
+  ],
+  enterprise: [
+    {
+      group: "Enterprise Offices",
+      items: [
+        { label: "Dashboard", path: "/enterprise/dashboard", icon: PieChart, page: "enterprise", roles: MANAGEMENT_ROLES },
+        { label: "Offices", path: "/enterprise/offices", icon: Building2, page: "enterprise", roles: MANAGEMENT_ROLES },
+        { label: "Tenants", path: "/enterprise/tenants", icon: Users, page: "enterprise", roles: MANAGEMENT_ROLES },
+        { label: "Owners", path: "/enterprise/owners", icon: Landmark, page: "enterprise", roles: MANAGEMENT_ROLES },
+        { label: "Agreements", path: "/enterprise/agreements", icon: ClipboardList, page: "enterprise", roles: MANAGEMENT_ROLES },
+        { label: "Payments & dues", path: "/enterprise/payments", icon: Wallet, page: "enterprise", roles: MANAGEMENT_ROLES },
+        { label: "Documents", path: "/enterprise/documents", icon: ClipboardCheck, page: "enterprise", roles: MANAGEMENT_ROLES },
+        { label: "Reports", path: "/enterprise/reports", icon: BarChart3, page: "enterprise", roles: MANAGEMENT_ROLES },
       ],
     },
   ],
@@ -279,10 +299,22 @@ export const SIDEBAR_GROUPS = [
     group: "BUSINESS",
     items: [
       navItem("/finance", { label: "Finance" }),
-      navItem("/enterprise", { label: "Enterprise Leasing" }),
       navItem("/reports", { label: "Reports" }),
       navItem("/leaderboard", { label: "Leaderboard" }),
       navItem("/targets", { label: "Targets" }),
+    ],
+  },
+  {
+    group: "ENTERPRISE OFFICES",
+    items: [
+      navItem("/enterprise/dashboard", { label: "Dashboard", icon: PieChart }),
+      navItem("/enterprise/offices", { label: "Offices", icon: Building2 }),
+      navItem("/enterprise/tenants", { label: "Tenants", icon: Users }),
+      navItem("/enterprise/owners", { label: "Owners", icon: Landmark }),
+      navItem("/enterprise/agreements", { label: "Agreements", icon: ClipboardList }),
+      navItem("/enterprise/payments", { label: "Payments & dues", icon: Wallet }),
+      navItem("/enterprise/documents", { label: "Documents", icon: ClipboardCheck }),
+      navItem("/enterprise/reports", { label: "Reports", icon: BarChart3 }),
     ],
   },
   {

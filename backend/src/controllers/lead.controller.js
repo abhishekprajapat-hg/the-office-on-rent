@@ -2292,6 +2292,11 @@ const validateLeadContact = ({ name, phone, email }) => {
   return null;
 };
 
+// Requested / Closed go through the deal approval, so only Admin and Manager may
+// add a lead straight at them - the same rule the status update applies.
+const LEAD_CREATE_MANAGER_ONLY_STATUSES = Object.freeze(["REQUESTED", "CLOSED"]);
+const LEAD_CREATE_NO_DATE_STATUSES = Object.freeze(["CLOSED", "LOST", "INVALID"]);
+
 exports.createLead = async (req, res) => {
   try {
     const {
@@ -2310,11 +2315,34 @@ exports.createLead = async (req, res) => {
       relatedInventoryIds: rawRelatedInventoryIds,
       siteLocation: rawSiteLocation,
       requirements: rawRequirements,
+      status: rawStatus,
+      nextFollowUp: rawNextFollowUp,
     } = req.body;
 
     const companyId = toObjectIdString(req.user?.companyId);
     if (!isValidObjectId(companyId)) {
       return res.status(403).json({ message: "Company context is required" });
+    }
+
+    const requestedCreateStatus = String(rawStatus || "").trim().toUpperCase();
+    if (requestedCreateStatus && !LEAD_STATUS_VALUES.includes(requestedCreateStatus)) {
+      return res.status(400).json({ message: `Status must be one of: ${LEAD_STATUS_VALUES.join(", ")}` });
+    }
+    const createStatus = requestedCreateStatus || "NEW";
+    const canCreateAtClosingStatus = [USER_ROLES.ADMIN, USER_ROLES.MANAGER].includes(req.user.role);
+    if (LEAD_CREATE_MANAGER_ONLY_STATUSES.includes(createStatus) && !canCreateAtClosingStatus) {
+      return res.status(403).json({ message: "Only Admin or Manager can add a lead as Requested or Closed" });
+    }
+    const nextFollowUpText = String(rawNextFollowUp ?? "").trim();
+    let createNextFollowUp = null;
+    if (nextFollowUpText && !LEAD_CREATE_NO_DATE_STATUSES.includes(createStatus)) {
+      createNextFollowUp = parseZonedDateInput(nextFollowUpText);
+      if (!createNextFollowUp || Number.isNaN(new Date(createNextFollowUp).getTime())) {
+        return res.status(400).json({ message: "Next follow-up must be a valid date and time" });
+      }
+    }
+    if (createStatus === "SITE_VISIT_SCHEDULED" && !createNextFollowUp) {
+      return res.status(400).json({ message: "Give the site visit date and time" });
     }
 
     const contactError = validateLeadContact({ name, phone, email });
@@ -2430,6 +2458,8 @@ exports.createLead = async (req, res) => {
         : "",
       hotClient: String(rawTemperature || "").toUpperCase() === "HOT",
       followUpPurpose: String(rawFollowUpPurpose || "").trim().slice(0, 200),
+      // Starting status and next follow-up / visit date from the Add Lead form.
+      status: createStatus,
       createdBy: req.user._id,
       ...(await buildCreatorLeadAssignment(req.user)),
     };
@@ -2469,10 +2499,23 @@ exports.createLead = async (req, res) => {
       }
     }
 
+    if (createNextFollowUp) createPayload.nextFollowUp = createNextFollowUp;
+    if (createStatus !== "NEW") createPayload.lastContactedAt = new Date();
+    if (createStatus === "QUALIFIED_LEAD") {
+      createPayload.qualifiedBy = req.user._id;
+      createPayload.qualifiedAt = new Date();
+    }
+    if (createStatus === "CLOSED") {
+      createPayload.brokerageClosedAt = new Date();
+      createPayload.brokerageClosedBy = req.user._id;
+    }
+
     const lead = await Lead.create(createPayload);
     await LeadActivity.create({
       lead: lead._id,
-      action: "Lead created and assigned to creator",
+      action: lead.status && lead.status !== "NEW"
+        ? `Lead created with status ${lead.status} and assigned to creator`
+        : "Lead created and assigned to creator",
       performedBy: req.user._id,
     });
 

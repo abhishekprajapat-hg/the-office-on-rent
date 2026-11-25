@@ -44,6 +44,9 @@ import {
   FURNISHING_OPTIONS,
   INVENTORY_TYPE_OPTIONS,
   LEAD_SOURCE_CHANNELS,
+  LEAD_MANAGER_ONLY_STATUSES,
+  LEAD_NO_DATE_STATUSES,
+  LEAD_START_STATUSES,
   PLOT_LOCATION_OPTIONS,
   PLOT_OCCUPANCY_OPTIONS,
   PLOT_PURPOSE_OPTIONS,
@@ -1438,6 +1441,8 @@ export const AddLeadModal = ({
   savingLead,
   saveError = "",
   availableInventoryTypes = INVENTORY_TYPE_OPTIONS,
+  showLeadStatus = false,
+  canSetClosingStatus = false,
 }) => {
   const [customNumberFields, setCustomNumberFields] = React.useState({});
   const [isManualBudgetRange, setIsManualBudgetRange] = React.useState(false);
@@ -1860,6 +1865,34 @@ export const AddLeadModal = ({
               onChange={(value) => updateField("sourceChannel", value)}
             />
           </div>
+          {showLeadStatus ? (
+            <div className="flex flex-col gap-2">
+              <FormLabel>Lead status</FormLabel>
+              <PickChips
+                round
+                options={LEAD_START_STATUSES.filter((o) => canSetClosingStatus || !LEAD_MANAGER_ONLY_STATUSES.includes(o.value))}
+                value={formData.leadStatus || "NEW"}
+                onChange={(value) => {
+                  const next = value || "NEW";
+                  setFormData((prev) => ({ ...prev, leadStatus: next, ...(LEAD_NO_DATE_STATUSES.includes(next) ? { leadStatusDate: "" } : {}) }));
+                }}
+              />
+            </div>
+          ) : null}
+          {showLeadStatus && !LEAD_NO_DATE_STATUSES.includes(formData.leadStatus || "NEW") ? (
+            <FormField
+              label={formData.leadStatus === "SITE_VISIT_SCHEDULED" ? "Site visit date & time" : "Next follow-up date & time"}
+              required={formData.leadStatus === "SITE_VISIT_SCHEDULED"}
+              hint={formData.leadStatus === "SITE_VISIT_SCHEDULED" ? "When the client will visit" : "Optional - when to contact this lead next"}
+            >
+              <FormInput
+                icon={CalendarClock}
+                type="datetime-local"
+                value={formData.leadStatusDate || ""}
+                onChange={(event) => updateField("leadStatusDate", event.target.value)}
+              />
+            </FormField>
+          ) : null}
           {formData.sourceChannel === "BROKER" ? (
             <FormField label="Referred by broker">
               <ContactPicker kind="BROKER" value={formData.referredBroker || null} onPick={(broker) => updateField("referredBroker", broker)} placeholder="Search the Broker Database" />
@@ -2068,6 +2101,8 @@ export const AddLeadModal = ({
               ["Work profile", formData.clientProfession],
               ...(requirementInventoryType === "COWORKING" ? [["Company", formData.company]] : []),
               ["Lead source", labelOf(LEAD_SOURCE_CHANNELS, formData.sourceChannel || "", "")],
+              ...(showLeadStatus ? [["Lead status", labelOf(LEAD_START_STATUSES, formData.leadStatus || "NEW", "New")]] : []),
+              ...(showLeadStatus && formData.leadStatusDate ? [[formData.leadStatus === "SITE_VISIT_SCHEDULED" ? "Site visit" : "Next follow-up", new Date(formData.leadStatusDate).toLocaleString("en-IN", { dateStyle: "medium", timeStyle: "short" })]] : []),
               ...(formData.sourceChannel === "BROKER" ? [["Referred by", formData.referredBroker?.name || ""]] : []),
             ]}
           />

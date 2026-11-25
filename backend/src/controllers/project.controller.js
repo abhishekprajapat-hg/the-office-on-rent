@@ -164,12 +164,15 @@ const linkedInventory = async (req, project) => {
     return { counts, units: cabins.map((c) => ({ _id: c._id, propertyId: c.cabinCode || c.name, unitNumber: c.name, status: c.status, isCabin: true })), properties };
   }
   const rows = await Inventory.find({ companyId: req.user.companyId, $or: [{ projectId: project._id }, { projectName: project.projectName }] })
-    .select("propertyId projectId projectName towerName unitNumber status type price rent totalArea carpetArea builtUpArea superBuiltUpArea length width areaUnit floorNumber inventoryType category sourceType ownershipType appliedPlcs residentialDetails.subtypeData sourceLinks.contactId")
+    .select("propertyId projectId projectName towerName unitNumber status type price rent totalArea carpetArea builtUpArea superBuiltUpArea length width areaUnit floorNumber inventoryType category furnishingStatus images sourceType ownershipType appliedPlcs residentialDetails.subtypeData sourceLinks.contactId")
     .populate("sourceLinks.contactId", "name phone")
     .sort({ status: 1, unitNumber: 1 }).limit(2000).lean();
   const counts = rows.reduce((acc, r) => ({ ...acc, [r.status]: (acc[r.status] || 0) + 1 }), {});
+  // 14 Nov 2026: the project overview previews these units with a thumbnail, so
+  // only the first photo of each unit travels - the rest would bloat the list.
+  const units = rows.map((row) => ({ ...row, images: Array.isArray(row.images) && row.images.length ? [row.images[0]] : [] }));
   // 3 Nov 2026 (4.2 / 5): size-wise availability, live from these records.
-  return { counts, units: rows, availability: buildAvailability(project, rows) };
+  return { counts, units, availability: buildAvailability(project, rows) };
 };
 
 /*

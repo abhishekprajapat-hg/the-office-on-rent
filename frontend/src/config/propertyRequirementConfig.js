@@ -16,6 +16,37 @@ export const COWORKING_CABIN_COUNTS = [1, 2, 3, 4, 5, 6, 7, 8];
 export const COWORKING_CABIN_SEAT_OPTIONS = [4, 6, 8, 9, 10];
 export const COWORKING_TERM_MONTHS = [1, 2, 3, 6, 9];
 
+/*
+ * Every status a lead can be added at. Requested and Closed go through the deal
+ * approval, so only Admin and Manager may add a lead straight at them (the
+ * backend enforces the same rule). Closed, Lost and Invalid end the lead, so
+ * they carry no follow-up date.
+ */
+export const LEAD_START_STATUSES = [
+  { value: "NEW", label: "New" },
+  { value: "CONTACTED", label: "Contacted" },
+  { value: "FOLLOW_UP_1", label: "Follow-Up 1" },
+  { value: "FOLLOW_UP_2", label: "Follow-Up 2" },
+  { value: "FOLLOW_UP_3", label: "Follow-Up 3" },
+  { value: "QUALIFIED_LEAD", label: "Qualified Lead" },
+  { value: "INTERESTED", label: "Interested" },
+  { value: "SITE_VISIT_SCHEDULED", label: "Visit Scheduled" },
+  { value: "SITE_VISIT", label: "Site Visit" },
+  { value: "SITE_VISIT_OVERDUE", label: "Visit Overdue" },
+  { value: "MISSING_IN_ACTION", label: "Missing In Action" },
+  { value: "NPC_1", label: "NPC 1" },
+  { value: "NPC_2", label: "NPC 2" },
+  { value: "NPC_3", label: "NPC 3" },
+  { value: "OWNER", label: "Owner" },
+  { value: "BROKER", label: "Broker" },
+  { value: "REQUESTED", label: "Requested" },
+  { value: "CLOSED", label: "Closed" },
+  { value: "LOST", label: "Lost" },
+  { value: "INVALID", label: "Invalid" },
+];
+export const LEAD_MANAGER_ONLY_STATUSES = ["REQUESTED", "CLOSED"];
+export const LEAD_NO_DATE_STATUSES = ["CLOSED", "LOST", "INVALID"];
+
 export const LEAD_SOURCE_CHANNELS = [
   { value: "", label: "Lead source (not set)" },
   { value: "META", label: "Meta" },

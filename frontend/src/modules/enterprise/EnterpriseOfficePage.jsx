@@ -10,11 +10,14 @@ import {
   getOffice, recoverFromTenant, reviewEnterpriseDocument, updateLedgerEntry, updateOffice, uploadEnterpriseDocument,
 } from "../../services/enterpriseService";
 import { FNT, MUT, field } from "../inventory/components/contactGlassTokens";
-import { Btn, ErrorLine, Input, Modal, Panel, Select, Stat, Table, Tag, TextArea } from "../database/dbUi";
+import { Btn, ErrorLine, Input, Panel, Select, Stat, Table, Tag } from "../database/dbUi";
 import {
-  AgreementDialog, ChargeDialog, LedgerDialog, ObligationActionDialog, PaymentDialog, StaffSelect, TenantDialog, TenantPicker,
+  AgreementDialog, ChargeDialog, LedgerDialog, ObligationActionDialog, OwnerContactChips, PaymentDialog, StaffSelect, TenantDialog, TenantPicker,
+  WizardInput, WizardSelect, WizardTextArea,
 } from "./enterpriseForms";
 import { Attachments, FilePickButton, ReminderList } from "./enterpriseWidgets";
+import FormWizard from "../../components/ui/FormWizard";
+import { FormGroup, ReviewGroup } from "../../components/ui/formKit";
 import { SEVERITY_TONE, STATUS_TONE, useEnterpriseMeta } from "./enterpriseHelpers";
 import { fmtDate, isoDate, money, options, titleCase, useLoader } from "../database/dbHelpers";
 
@@ -35,14 +38,14 @@ const EnterpriseOfficePage = () => {
   const { data: d, error, setError, reload: load } = useLoader(() => getOffice(officeId), [officeId]);
   const [dialog, setDialog] = useState(null);
   if (!d) return <div className="p-5"><ErrorLine message={error} /></div>;
-  const { office, ownerAgreement, tenantAgreement, tenant, obligations, deposits, fitOut, checklist, alerts, metrics, financial, landlord, building, transactions, ledger, tenantHistory, escalations, assignedUser, otherContacts = [], reminders = [] } = d;
+  const { office, ownerAgreement, tenantAgreement, tenant, obligations, deposits, fitOut, checklist, alerts, metrics, financial, landlord, transactions, ledger, tenantHistory, escalations, assignedUser, otherContacts = [], reminders = [] } = d;
   const canDownload = Boolean(canDownloadClientDocuments) || String(role || "").toUpperCase() === "ADMIN";
   const close = () => setDialog(null);
   const done = () => { setDialog(null); load(); };
 
   return (
-    <div className="mx-auto flex w-full max-w-[1250px] flex-col gap-4 p-3 sm:p-5" style={{ color: "var(--g-ink)" }}>
-      <Link to="/enterprise" className="inline-flex items-center gap-1.5 text-[13px]" style={MUT}><ArrowLeft size={15} /> Enterprise Leasing</Link>
+    <div className="flex w-full min-w-0 flex-col gap-4 p-3 sm:p-5" style={{ color: "var(--g-ink)" }}>
+      <Link to="/enterprise/offices" className="inline-flex items-center gap-1.5 text-[13px]" style={MUT}><ArrowLeft size={15} /> Enterprise Offices</Link>
       <div className="flex flex-wrap items-start gap-3">
         <div className="min-w-0 flex-1">
           <h1 className="text-[22px] font-semibold">{office.name}</h1>
@@ -50,11 +53,11 @@ const EnterpriseOfficePage = () => {
             <span>{office.officeCode}</span>
             <Tag tone={STATUS_TONE[office.operationalStatus] || "mute"}>{titleCase(office.operationalStatus)}</Tag>
             <Tag tone="mute">Fit-out: {titleCase(office.fitOutStatus)}</Tag>
-            {building ? <Link to={`/database/buildings/${building._id}`} style={{ color: "var(--g-b)" }}>{building.name}</Link> : null}
             {office.floor ? <span>· floor {office.floor}</span> : null}{office.unit ? <span>· {office.unit}</span> : null}
             {office.area ? <span>· {office.area} {office.areaBasis}</span> : null}
             <span>· {assignedUser ? `Handled by ${assignedUser.name}` : "No one assigned"}</span>
           </div>
+          {office.address ? <div className="mt-1 text-[13px]" style={MUT}>{office.address}</div> : null}
         </div>
         <Btn onClick={() => setDialog({ kind: "office" })}>Edit office</Btn>
       </div>
@@ -102,7 +105,7 @@ const EnterpriseOfficePage = () => {
       ) : null}
 
       {tab === "owner" ? (
-        <AgreementPanel side="OWNER" agreement={ownerAgreement} party={landlord ? <Link to={`/inventory/owners/${landlord._id}`} style={{ color: "var(--g-b)" }}>{landlord.name}</Link> : <span style={{ color: "var(--g-warn)" }}>Landlord not set</span>}
+        <AgreementPanel side="OWNER" agreement={ownerAgreement} party={landlord ? <span className="flex flex-col gap-1.5"><Link to="/enterprise/owners" style={{ color: "var(--g-b)" }}>{landlord.name}</Link><OwnerContactChips owner={landlord} /></span> : <span style={{ color: "var(--g-warn)" }}>Enterprise Owner not set</span>}
           escalations={escalations.OWNER} onEdit={() => setDialog({ kind: "agreement", side: "OWNER", agreement: ownerAgreement ? { ...ownerAgreement, landlord, otherContacts } : null })} />
       ) : null}
 
@@ -147,7 +150,7 @@ const EnterpriseOfficePage = () => {
           {["OWNER", "TENANT"].map((side) => {
             const x = deposits[side];
             return (
-              <Panel key={side} title={side === "OWNER" ? "Deposit with landlord" : "Deposit from tenant"} icon={PiggyBank} action={<Btn onClick={() => setDialog({ kind: "ledger", ledgerKind: "DEPOSIT", side })}><Plus size={14} /> Entry</Btn>}>
+              <Panel key={side} title={side === "OWNER" ? "Deposit with landlord" : "Deposit from tenant"} icon={PiggyBank} action={<Btn disabled={!(side === "OWNER" ? ownerAgreement : tenantAgreement)} title="Add the agreement before recording its deposit" onClick={() => setDialog({ kind: "ledger", ledgerKind: "DEPOSIT", side })}><Plus size={14} /> Entry</Btn>}>
                 <div className="mb-2 grid grid-cols-2 gap-2">
                   <Stat label="Required" value={money(x.required)} />
                   <Stat label={side === "OWNER" ? "Paid" : "Collected"} value={money(x.paidOrCollected)} tone={x.shortfall ? "warn" : "ok"} note={x.shortfall ? `Short by ${money(x.shortfall)}` : undefined} />
@@ -203,7 +206,7 @@ const EnterpriseOfficePage = () => {
       {dialog?.kind === "payment" ? <PaymentDialog officeId={office._id} direction={dialog.direction} obligations={obligations} transaction={dialog.transaction} onClose={close} onSaved={done} /> : null}
       {dialog?.kind === "action" ? <ObligationActionDialog obligation={dialog.obligation} action={dialog.action} onClose={close} onSaved={done} /> : null}
       {dialog?.kind === "charge" ? <ChargeDialog officeId={office._id} direction={dialog.direction} agreementId={dialog.agreementId} onClose={close} onSaved={done} /> : null}
-      {dialog?.kind === "ledger" ? <LedgerDialog officeId={office._id} kind={dialog.ledgerKind} side={dialog.side} onClose={close} onSaved={done} /> : null}
+      {dialog?.kind === "ledger" ? <LedgerDialog officeId={office._id} kind={dialog.ledgerKind} side={dialog.side} agreementId={dialog.side === "OWNER" ? ownerAgreement?._id : tenantAgreement?._id} onClose={close} onSaved={done} /> : null}
     </div>
   );
 };
@@ -334,6 +337,7 @@ const DocumentsTab = ({ tenant, officeId, agreementId, checklist, documents, can
     <Panel title={`Checklist · ${titleCase(tenant.entityType)} · ${checklist.verified}/${checklist.required} verified`} icon={FileText}>
       <input ref={fileRef} type="file" className="hidden" onChange={onFile} accept="image/*,application/pdf" />
       <p className="mb-2 text-[12.5px]" style={FNT}>Files are kept in a protected folder: only the Admin or a user allowed to download client documents can open them, and each download is logged. An upload is not proof; a manager marks it verified.</p>
+      {checklist.sourceNeedsConfirmation ? <p className="mb-2 rounded-xl px-3 py-2 text-[12.5px]" style={{ color: "var(--g-warn)", background: "var(--g-warn-bg, #fff7ed)" }}>This checklist is based on existing onboarding records. Confirm the current company approved version in Enterprise → Document checklists.</p> : null}
       {checklist.rows.length ? checklist.rows.map((r) => {
         const doc = r.document;
         const status = doc?.status || "PENDING";
@@ -417,32 +421,57 @@ const OfficeDocuments = ({ officeId, ownerAgreement, tenantAgreement, documents 
 
 const OfficeEdit = ({ office, meta, onClose, onSaved }) => {
   const [form, setForm] = useState({ name: office.name, operationalStatus: office.operationalStatus, fitOutStatus: office.fitOutStatus, floor: office.floor, unit: office.unit, area: office.area ?? "", areaBasis: office.areaBasis, fitOutBudget: office.fitOutBudget ?? "", fitOutStartDate: isoDate(office.fitOutStartDate), fitOutExpectedEndDate: isoDate(office.fitOutExpectedEndDate), fitOutActualEndDate: isoDate(office.fitOutActualEndDate), ownerConsentRef: office.ownerConsentRef, address: office.address, notes: office.notes, assignedTo: office.assignedTo ? String(office.assignedTo._id || office.assignedTo) : "" });
+  const [step, setStep] = useState(0);
+  const [dir, setDir] = useState(1);
   const [error, setError] = useState("");
+  const [saving, setSaving] = useState(false);
   const set = (k) => (e) => setForm((f) => ({ ...f, [k]: e.target.value }));
   const save = async () => {
+    setError(""); setSaving(true);
     try { await updateOffice(office._id, { ...form, area: form.area === "" ? null : Number(form.area), fitOutBudget: form.fitOutBudget === "" ? null : Number(form.fitOutBudget) }); onSaved(); } catch (e) { setError(toErrorMessage(e, "Could not save")); }
+    finally { setSaving(false); }
+  };
+  const steps = [{ key: "office", label: "Office", hint: "Space & location" }, { key: "fitout", label: "Fit-out", hint: "Dates & budget" }, { key: "review", label: "Review", hint: "Check & save" }];
+  const goToStep = (index) => { setError(""); setDir(index < step ? -1 : 1); setStep(index); };
+  const next = () => {
+    setError("");
+    if (step === 0 && (!form.name.trim() || !form.address.trim())) return setError("Enter an office name and address to continue.");
+    if (step < steps.length - 1) goToStep(step + 1); else save();
   };
   return (
-    <Modal width={760} title="Edit office" onClose={onClose} footer={<><Btn onClick={onClose}>Cancel</Btn><Btn tone="primary" onClick={save}>Save</Btn></>}>
-      <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
-        <Input label="Name" className="sm:col-span-2" value={form.name} onChange={set("name")} />
-        <Select label="Status" value={form.operationalStatus} onChange={set("operationalStatus")} options={options(meta?.operationalStatuses || [])} />
-        <Input label="Address" className="sm:col-span-3" value={form.address} onChange={set("address")} />
-        <Input label="Floor" value={form.floor} onChange={set("floor")} />
-        <Input label="Unit" value={form.unit} onChange={set("unit")} />
-        <Input label="Area" type="number" value={form.area} onChange={set("area")} />
-        <Input label="Area basis" value={form.areaBasis} onChange={set("areaBasis")} />
-        <Select label="Fit-out status" value={form.fitOutStatus} onChange={set("fitOutStatus")} options={options(meta?.fitOutStatuses || [])} />
-        <Input label="Fit-out budget (₹)" type="number" value={form.fitOutBudget} onChange={set("fitOutBudget")} />
-        <Input label="Fit-out start" type="date" value={form.fitOutStartDate} onChange={set("fitOutStartDate")} />
-        <Input label="Expected completion" type="date" value={form.fitOutExpectedEndDate} onChange={set("fitOutExpectedEndDate")} />
-        <Input label="Actual completion" type="date" value={form.fitOutActualEndDate} onChange={set("fitOutActualEndDate")} />
-        <Input label="Owner consent / approval ref." className="sm:col-span-2" value={form.ownerConsentRef} onChange={set("ownerConsentRef")} />
-        <StaffSelect value={form.assignedTo} onChange={(v) => setForm((f) => ({ ...f, assignedTo: v }))} />
-        <TextArea label="Notes" className="sm:col-span-3" value={form.notes} onChange={set("notes")} />
-      </div>
-      <div className="mt-3"><ErrorLine message={error} /></div>
-    </Modal>
+    <FormWizard icon={Building2} title="Edit office" steps={steps} step={step} dir={dir}
+      stepState={(index) => index < step ? "done" : "todo"} canOpenStep={(index) => index < step}
+      onStep={goToStep} onClose={onClose} onBack={() => goToStep(step - 1)} onNext={next}
+      primaryLabel={step === 2 ? "Save changes" : `Next: ${steps[step + 1].label}`}
+      primaryIcon={step === 2 ? "save" : "next"} busy={saving} error={error}>
+      {step === 0 ? <>
+        <WizardInput label="Office name" required value={form.name || ""} onChange={set("name")} />
+        <div className="grid grid-cols-1 gap-3.5 sm:grid-cols-2">
+          <WizardInput label="Office address" required wide value={form.address || ""} onChange={set("address")} />
+          <WizardSelect label="Status" value={form.operationalStatus || ""} onChange={set("operationalStatus")} options={options(meta?.operationalStatuses || [])} />
+          <StaffSelect wizard value={form.assignedTo} onChange={(value) => setForm((current) => ({ ...current, assignedTo: value }))} />
+          <WizardInput label="Floor" value={form.floor || ""} onChange={set("floor")} />
+          <WizardInput label="Unit / suite" value={form.unit || ""} onChange={set("unit")} />
+          <WizardInput label="Area" type="number" min="0" value={form.area} onChange={set("area")} />
+          <WizardInput label="Area basis" value={form.areaBasis || ""} onChange={set("areaBasis")} />
+        </div>
+      </> : null}
+      {step === 1 ? <>
+        <FormGroup icon={Hammer} title="Fit-out details"><div className="grid grid-cols-1 gap-3.5 sm:grid-cols-2">
+          <WizardSelect label="Fit-out status" value={form.fitOutStatus || ""} onChange={set("fitOutStatus")} options={options(meta?.fitOutStatuses || [])} />
+          <WizardInput label="Fit-out budget (₹)" type="number" min="0" value={form.fitOutBudget} onChange={set("fitOutBudget")} />
+          <WizardInput label="Fit-out start" type="date" value={form.fitOutStartDate} onChange={set("fitOutStartDate")} />
+          <WizardInput label="Expected completion" type="date" value={form.fitOutExpectedEndDate} onChange={set("fitOutExpectedEndDate")} />
+          <WizardInput label="Actual completion" type="date" value={form.fitOutActualEndDate} onChange={set("fitOutActualEndDate")} />
+          <WizardInput label="Owner consent / approval ref." value={form.ownerConsentRef || ""} onChange={set("ownerConsentRef")} />
+          <WizardTextArea label="Notes" wide value={form.notes || ""} onChange={set("notes")} />
+        </div></FormGroup>
+      </> : null}
+      {step === 2 ? <>
+        <ReviewGroup title="Office details" onEdit={() => goToStep(0)} rows={[["Office", form.name], ["Address", form.address], ["Status", titleCase(form.operationalStatus)], ["Floor / unit", [form.floor, form.unit].filter(Boolean).join(" / ")], ["Area", form.area ? `${form.area} ${form.areaBasis || ""}` : ""]]} />
+        <ReviewGroup title="Fit-out" onEdit={() => goToStep(1)} rows={[["Status", titleCase(form.fitOutStatus)], ["Budget", form.fitOutBudget === "" ? "" : money(form.fitOutBudget)], ["Start", form.fitOutStartDate], ["Expected completion", form.fitOutExpectedEndDate], ["Actual completion", form.fitOutActualEndDate], ["Owner consent", form.ownerConsentRef]]} />
+      </> : null}
+    </FormWizard>
   );
 };
 

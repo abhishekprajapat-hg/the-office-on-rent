@@ -1,29 +1,42 @@
 import React, { useEffect, useMemo, useState } from "react";
-import { Plus, Trash2 } from "lucide-react";
+import { Building2, FileText, KeyRound, Plus, Trash2, UserRound, Users } from "lucide-react";
 import { toErrorMessage } from "../../utils/errorMessage";
 import {
   addAdjustment, addFollowUp, addLedgerEntry, addPromise, allocatePayment, createAgreement, createObligation, createOffice, createTenant,
-  listTenants, recordPayment, setDispute, updateAgreement, updateTenant,
+  listTenants, listEnterpriseOwners, createEnterpriseOwner, updateEnterpriseOwner, recordPayment, setDispute, updateAgreement, updateTenant,
 } from "../../services/enterpriseService";
 import { FNT, MUT, field } from "../inventory/components/contactGlassTokens";
 import { Btn, Check, ErrorLine, Input, Label, Modal, Select, TextArea } from "../database/dbUi";
-import { BuildingPicker, ContactPicker } from "../database/dbDialogs";
 import { useEnterpriseMeta } from "./enterpriseHelpers";
-import { isoDate, money, options, roleLabel, titleCase } from "../database/dbHelpers";
+import { isoDate, money, options, titleCase } from "../database/dbHelpers";
 import { getUsers } from "../../services/userService";
 import { FilePickButton } from "./enterpriseWidgets";
+import FormWizard from "../../components/ui/FormWizard";
+import { ChoiceCards, FormField, FormGroup, FormInput, ReviewGroup } from "../../components/ui/formKit";
 
 /* Forms for Enterprise Leasing (Oct 2026 update 02). */
 
 const num = (v) => (v === "" || v === null || v === undefined ? null : Number(v));
 
+export const WizardInput = ({ label, required, wide, hint, ...rest }) => <FormField label={label} required={required} wide={wide} hint={hint}><FormInput {...rest} /></FormField>;
+export const WizardSelect = ({ label, required, wide, options: rows = [], placeholder, ...rest }) => <FormField label={label} required={required} wide={wide}>
+  <select className="gl-field h-[46px] w-full px-3.5 text-[14px] outline-none" style={{ color: "var(--g-ink)" }} {...rest}>
+    {placeholder !== undefined ? <option value="">{placeholder}</option> : null}
+    {rows.map((row) => <option key={row.value} value={row.value}>{row.label}</option>)}
+  </select>
+</FormField>;
+export const WizardTextArea = ({ label, wide, ...rest }) => <FormField label={label} wide={wide}>
+  <textarea className="gl-field min-h-[86px] w-full px-3.5 py-3 text-[14px] outline-none" style={{ color: "var(--g-ink)" }} {...rest} />
+</FormField>;
+
 /* The employee responsible for the office (operations, renewals, collections). */
-export const StaffSelect = ({ value, onChange, label = "Assigned employee" }) => {
+export const StaffSelect = ({ value, onChange, label = "Assigned employee", wizard = false }) => {
   const [users, setUsers] = useState([]);
   useEffect(() => {
     getUsers({ limit: 500 }).then((d) => setUsers((d.users || d || []).filter((u) => u.isActive !== false && u.role !== "CHANNEL_PARTNER"))).catch(() => {});
   }, []);
-  return <Select label={label} value={value || ""} onChange={(e) => onChange(e.target.value)} placeholder="Not assigned" options={users.map((u) => ({ value: u._id, label: `${u.name} (${titleCase(u.role)})` }))} />;
+  const Picker = wizard ? WizardSelect : Select;
+  return <Picker label={label} value={value || ""} onChange={(e) => onChange(e.target.value)} placeholder="Not assigned" options={users.map((u) => ({ value: u._id, label: `${u.name} (${titleCase(u.role)})` }))} />;
 };
 
 /* Files picked in a form before the record is saved. */
@@ -43,48 +56,161 @@ const PendingFiles = ({ files, setFiles, onError, label = "Receipt / proof" }) =
   </div>
 );
 
+const OFFICE_STEPS = [
+  { key: "office", label: "Office", hint: "Space & location" },
+  { key: "owner", label: "Owner", hint: "Landlord & lease" },
+  { key: "tenant", label: "Tenant", hint: "If already rented" },
+  { key: "review", label: "Review", hint: "Check & save" },
+];
+
 export const OfficeDialog = ({ onClose, onSaved }) => {
   const meta = useEnterpriseMeta();
   const [form, setForm] = useState({ name: "", address: "", floor: "", unit: "", area: "", areaBasis: "", fitOutBudget: "", operationalStatus: "", assignedTo: "", notes: "" });
-  const [building, setBuilding] = useState(null);
+  const [step, setStep] = useState(0);
+  const [dir, setDir] = useState(1);
+  const [owners, setOwners] = useState([]);
+  const [ownerMode, setOwnerMode] = useState("new");
+  const [ownerId, setOwnerId] = useState("");
+  const [owner, setOwner] = useState({ name: "", entityName: "", phone: "", email: "", address: "", pan: "", contacts: [] });
+  const [ownerLease, setOwnerLease] = useState({ agreementType: "Lease deed", baseRent: "", commencementDate: "", endDate: "", rentDueDay: "" });
+  const [hasTenant, setHasTenant] = useState(false);
+  const [tenant, setTenant] = useState({ legalName: "", tradeName: "", entityType: "COMPANY", phone: "", email: "" });
+  const [tenantLease, setTenantLease] = useState({ agreementType: "Lease", baseRent: "", commencementDate: "", endDate: "", rentDueDay: "" });
   const [error, setError] = useState("");
+  const [saving, setSaving] = useState(false);
+  useEffect(() => { listEnterpriseOwners().then((d) => setOwners(d.owners || [])).catch(() => {}); }, []);
   const set = (k) => (e) => setForm((f) => ({ ...f, [k]: e.target.value }));
   const save = async () => {
+    setSaving(true); setError("");
     try {
-      const out = await createOffice({ ...form, assignedTo: form.assignedTo || null, buildingId: building?._id || null, address: form.address || [building?.address, building?.locality, building?.city].filter(Boolean).join(", "), area: num(form.area), fitOutBudget: num(form.fitOutBudget) });
+      const out = await createOffice({ ...form, assignedTo: form.assignedTo || null, area: num(form.area), fitOutBudget: num(form.fitOutBudget) });
+      const selectedOwner = ownerMode === "existing" ? owners.find((o) => String(o._id) === ownerId) : (await createEnterpriseOwner(owner)).owner;
+      await createAgreement(out.office._id, { ...ownerLease, side: "OWNER", status: ownerLease.commencementDate ? "ACTIVE" : "DRAFT", enterpriseOwnerId: selectedOwner._id, baseRent: num(ownerLease.baseRent) ?? 0, rentDueDay: num(ownerLease.rentDueDay) });
+      if (hasTenant) {
+        const tenantOut = await createTenant({ legalName: tenant.legalName, tradeName: tenant.tradeName, entityType: tenant.entityType, contacts: [{ role: "PRIMARY", name: tenant.contactName || tenant.legalName, phone: tenant.phone, email: tenant.email }] });
+        await createAgreement(out.office._id, { ...tenantLease, side: "TENANT", tenantId: tenantOut.tenant._id, status: tenantLease.commencementDate ? "ACTIVE" : "DRAFT", baseRent: num(tenantLease.baseRent) ?? 0, rentDueDay: num(tenantLease.rentDueDay) });
+      }
       onSaved(out.office); onClose();
-    } catch (e) { setError(toErrorMessage(e, "Could not save the office")); }
+    } catch (e) { setError(toErrorMessage(e, "Could not finish office setup. Any records already saved are available in Enterprise Offices for you to continue.")); }
+    finally { setSaving(false); }
+  };
+  const ownerSet = (key) => (e) => setOwner((x) => ({ ...x, [key]: e.target.value }));
+  const ownerLeaseSet = (key) => (e) => setOwnerLease((x) => ({ ...x, [key]: e.target.value }));
+  const tenantSet = (key) => (e) => setTenant((x) => ({ ...x, [key]: e.target.value }));
+  const tenantLeaseSet = (key) => (e) => setTenantLease((x) => ({ ...x, [key]: e.target.value }));
+  const goToStep = (index) => { setError(""); setDir(index < step ? -1 : 1); setStep(index); };
+  const next = () => {
+    setError("");
+    if (step === 0 && (!form.name.trim() || !form.address.trim())) return setError("Enter an office name and address to continue.");
+    if (step === 1 && (ownerMode === "existing" ? !ownerId : !owner.name.trim())) return setError("Choose an Enterprise Owner or enter the owner's name.");
+    if (step === 2 && hasTenant && !tenant.legalName.trim()) return setError("Enter the tenant's legal name to continue.");
+    if (step < OFFICE_STEPS.length - 1) goToStep(step + 1); else save();
   };
   return (
-    <Modal title="Add Enterprise office" onClose={onClose} footer={<><Btn onClick={onClose}>Cancel</Btn><Btn tone="primary" onClick={save}>Save office</Btn></>}>
-      <div className="flex flex-col gap-3">
-        <Input label="Office name" value={form.name} onChange={set("name")} placeholder="e.g. Galaxy Park 5th floor" />
-        <BuildingPicker value={building} onChange={setBuilding} label="Building (from the Database)" />
-        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-          <Input label="Address" className="sm:col-span-2" value={form.address} onChange={set("address")} hint="(blank = building address)" />
-          <Input label="Floor" value={form.floor} onChange={set("floor")} />
-          <Input label="Unit" value={form.unit} onChange={set("unit")} />
-          <Input label="Area" type="number" value={form.area} onChange={set("area")} />
-          <Input label="Area basis" value={form.areaBasis} onChange={set("areaBasis")} placeholder="Carpet / built-up / super built-up" />
-          <Input label="Fit-out budget (₹)" type="number" value={form.fitOutBudget} onChange={set("fitOutBudget")} />
-          <Select label="Status" value={form.operationalStatus} onChange={set("operationalStatus")} placeholder="Negotiation" options={options(meta?.operationalStatuses || [])} />
-          <StaffSelect value={form.assignedTo} onChange={(v) => setForm((f) => ({ ...f, assignedTo: v }))} />
+    <FormWizard icon={Building2} title="Add Enterprise office" steps={OFFICE_STEPS} step={step} dir={dir}
+      stepState={(index) => index < step ? "done" : "todo"} canOpenStep={(index) => index < step}
+      onStep={goToStep} onClose={onClose} onBack={() => goToStep(step - 1)} onNext={next}
+      primaryLabel={step === 3 ? "Save office" : `Next: ${OFFICE_STEPS[step + 1].label}`}
+      primaryIcon={step === 3 ? "save" : "next"} busy={saving} error={error}>
+      {step === 0 ? <>
+        <WizardInput label="Office name" required value={form.name} onChange={set("name")} placeholder="e.g. Galaxy Park, Suite 503" />
+        <div className="grid grid-cols-1 gap-3.5 sm:grid-cols-2">
+          <WizardInput label="Office address" required wide value={form.address} onChange={set("address")} placeholder="Street, area, city, state, PIN code" />
+          <WizardInput label="Floor" value={form.floor} onChange={set("floor")} placeholder="e.g. 5" />
+          <WizardInput label="Unit / suite" value={form.unit} onChange={set("unit")} placeholder="e.g. 503" />
+          <WizardInput label="Area" type="number" min="0" value={form.area} onChange={set("area")} placeholder="e.g. 2,000" />
+          <WizardInput label="Area basis" value={form.areaBasis} onChange={set("areaBasis")} placeholder="Carpet / built-up" />
+          <WizardInput label="Fit-out budget (₹)" type="number" min="0" value={form.fitOutBudget} onChange={set("fitOutBudget")} />
+          <WizardSelect label="Status" value={form.operationalStatus} onChange={set("operationalStatus")} placeholder="Negotiation" options={options(meta?.operationalStatuses || [])} />
+          <StaffSelect wizard value={form.assignedTo} onChange={(v) => setForm((f) => ({ ...f, assignedTo: v }))} />
+          <WizardTextArea label="Notes" wide value={form.notes} onChange={set("notes")} />
         </div>
-        <TextArea label="Notes" value={form.notes} onChange={set("notes")} />
-        <ErrorLine message={error} />
-      </div>
-    </Modal>
+      </> : null}
+      {step === 1 ? <>
+        <FormField label="Enterprise Owner" required><ChoiceCards value={ownerMode} onChange={(value) => { setOwnerMode(value); setError(""); }} options={[{ value: "new", label: "Add new owner", sub: "Create an Enterprise Owner", icon: UserRound }, { value: "existing", label: "Existing owner", sub: "Choose from Enterprise Owners", icon: Users }]} /></FormField>
+        {ownerMode === "existing" ? <WizardSelect label="Choose Enterprise Owner" required value={ownerId} onChange={(e) => setOwnerId(e.target.value)} placeholder="Select an owner" options={owners.map((o) => ({ value: o._id, label: `${o.name}${o.ownerCode ? ` · ${o.ownerCode}` : ""}` }))} />
+          : <div className="grid grid-cols-1 gap-3.5 sm:grid-cols-2"><WizardInput label="Owner name" required value={owner.name} onChange={ownerSet("name")} /><WizardInput label="Company / entity" value={owner.entityName} onChange={ownerSet("entityName")} /><WizardInput label="Phone" type="tel" value={owner.phone} onChange={ownerSet("phone")} /><WizardInput label="Email" type="email" value={owner.email} onChange={ownerSet("email")} /><WizardInput label="Owner address" wide value={owner.address} onChange={ownerSet("address")} /><WizardInput label="PAN" value={owner.pan} onChange={ownerSet("pan")} /></div>}
+        {ownerMode === "new" ? <FormGroup icon={Users} title="Owner contacts (optional)"><OwnerContactsEditor contacts={owner.contacts} onChange={(contacts) => setOwner((x) => ({ ...x, contacts }))} /></FormGroup>
+          : ownerId ? <FormGroup icon={Users} title="Owner contacts"><OwnerContactChips owner={owners.find((o) => String(o._id) === ownerId)} /></FormGroup> : null}
+        <FormGroup icon={FileText} title="Owner lease details"><div className="grid grid-cols-1 gap-3.5 sm:grid-cols-2"><WizardInput label="Agreement type" value={ownerLease.agreementType} onChange={ownerLeaseSet("agreementType")} /><WizardInput label="Monthly rent paid to owner (₹)" type="number" min="0" value={ownerLease.baseRent} onChange={ownerLeaseSet("baseRent")} /><WizardInput label="Lease commencement" type="date" value={ownerLease.commencementDate} onChange={ownerLeaseSet("commencementDate")} /><WizardInput label="Lease end" type="date" value={ownerLease.endDate} onChange={ownerLeaseSet("endDate")} /><WizardInput label="Rent due day (1–31)" type="number" min="1" max="31" value={ownerLease.rentDueDay} onChange={ownerLeaseSet("rentDueDay")} /></div></FormGroup>
+      </> : null}
+      {step === 2 ? <>
+        <FormField label="Is this office rented to a tenant?"><ChoiceCards value={hasTenant ? "yes" : "no"} onChange={(value) => setHasTenant(value === "yes")} options={[{ value: "no", label: "No tenant yet", sub: "List this office as vacant", icon: KeyRound }, { value: "yes", label: "Tenant available", sub: "Add tenant and rent details", icon: Users }]} /></FormField>
+        {hasTenant ? <>
+          <div className="grid grid-cols-1 gap-3.5 sm:grid-cols-2"><WizardInput label="Tenant legal name" required value={tenant.legalName} onChange={tenantSet("legalName")} /><WizardInput label="Trade / brand name" value={tenant.tradeName} onChange={tenantSet("tradeName")} /><WizardSelect label="Entity type" value={tenant.entityType} onChange={tenantSet("entityType")} options={options(meta?.entityTypes || ["COMPANY"])} /><WizardInput label="Primary contact name" value={tenant.contactName || ""} onChange={tenantSet("contactName")} /><WizardInput label="Phone" type="tel" value={tenant.phone} onChange={tenantSet("phone")} /><WizardInput label="Email" type="email" value={tenant.email} onChange={tenantSet("email")} /></div>
+          <FormGroup icon={FileText} title="Tenant agreement"><div className="grid grid-cols-1 gap-3.5 sm:grid-cols-2"><WizardInput label="Agreement type" value={tenantLease.agreementType} onChange={tenantLeaseSet("agreementType")} /><WizardInput label="Monthly rent collected (₹)" type="number" min="0" value={tenantLease.baseRent} onChange={tenantLeaseSet("baseRent")} /><WizardInput label="Lease commencement" type="date" value={tenantLease.commencementDate} onChange={tenantLeaseSet("commencementDate")} /><WizardInput label="Lease end" type="date" value={tenantLease.endDate} onChange={tenantLeaseSet("endDate")} /><WizardInput label="Rent due day (1–31)" type="number" min="1" max="31" value={tenantLease.rentDueDay} onChange={tenantLeaseSet("rentDueDay")} /></div></FormGroup>
+        </> : <p className="text-[13px]" style={FNT}>You can add a tenant agreement when this office is rented.</p>}
+      </> : null}
+      {step === 3 ? <>
+        <ReviewGroup title="Office details" onEdit={() => goToStep(0)} rows={[["Office", form.name], ["Address", form.address], ["Floor / unit", [form.floor, form.unit].filter(Boolean).join(" / ")], ["Area", form.area ? `${form.area} ${form.areaBasis}` : ""]]} />
+        <ReviewGroup title="Owner and master lease" onEdit={() => goToStep(1)} rows={[["Enterprise Owner", ownerMode === "existing" ? owners.find((o) => String(o._id) === ownerId)?.name : owner.name], ["Monthly owner rent", ownerLease.baseRent ? money(ownerLease.baseRent) : ""], ["Lease term", [ownerLease.commencementDate, ownerLease.endDate].filter(Boolean).join(" – ")]]} />
+        <ReviewGroup title="Tenant and agreement" onEdit={() => goToStep(2)} rows={hasTenant ? [["Tenant", tenant.legalName], ["Monthly tenant rent", tenantLease.baseRent ? money(tenantLease.baseRent) : ""], ["Agreement term", [tenantLease.commencementDate, tenantLease.endDate].filter(Boolean).join(" – ")]] : [["Tenant", "No tenant yet · vacant"]]} />
+      </> : null}
+    </FormWizard>
   );
 };
 
+/* Landlord-side contacts kept on the Enterprise Owner itself (2.2) - never CRM contacts. */
+const OWNER_ROLE_FALLBACK = ["PRIMARY", "PA", "PROPERTY_MANAGER", "ACCOUNTS", "LEGAL", "NOTICE", "OTHER"];
+export const OwnerContactsEditor = ({ contacts, onChange }) => {
+  const meta = useEnterpriseMeta();
+  const roles = meta?.ownerContactRoles || OWNER_ROLE_FALLBACK;
+  const upd = (i, k, v) => onChange(contacts.map((c, j) => (j === i ? { ...c, [k]: v } : c)));
+  return <div className="flex flex-col gap-2">
+    {contacts.map((c, i) => (
+      <div key={c._id || i} className="grid grid-cols-1 items-end gap-2 sm:grid-cols-[1.1fr_1.4fr_1fr_1.1fr_1.3fr_auto]" style={{ ...field, borderRadius: 12, padding: 8 }}>
+        <Select label="Role" value={c.role || "PRIMARY"} onChange={(e) => upd(i, "role", e.target.value)} options={roles.map((r) => ({ value: r, label: titleCase(r) }))} />
+        <Input label="Name" value={c.name || ""} onChange={(e) => upd(i, "name", e.target.value)} />
+        <Input label="Designation" value={c.designation || ""} onChange={(e) => upd(i, "designation", e.target.value)} />
+        <Input label="Phone" type="tel" value={c.phone || ""} onChange={(e) => upd(i, "phone", e.target.value)} />
+        <Input label="Email" type="email" value={c.email || ""} onChange={(e) => upd(i, "email", e.target.value)} />
+        <Btn aria-label={`Remove ${c.name || "contact"}`} onClick={() => onChange(contacts.filter((_, j) => j !== i))}><Trash2 size={14} /></Btn>
+      </div>
+    ))}
+    <div><Btn onClick={() => onChange([...contacts, { role: contacts.length ? "PA" : "PRIMARY", name: "", designation: "", phone: "", email: "" }])}><Plus size={14} /> Add contact</Btn></div>
+    <p className="text-[11.5px]" style={FNT}>The landlord's PA, property manager, accountant, legal or notice contact. Kept only on this Enterprise Owner, not in the CRM.</p>
+  </div>;
+};
+
+/* Read-only list of an owner's contacts, e.g. on the master lease. */
+export const OwnerContactChips = ({ owner }) => {
+  const list = (owner?.contacts || []).filter((c) => c.active !== false);
+  if (!list.length) return <span className="text-[12.5px]" style={FNT}>No contacts saved for this owner yet. Add them on the Owners page.</span>;
+  return <div className="flex flex-wrap gap-1.5">{list.map((c, i) => (
+    <span key={c._id || i} className="inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-[12.5px]" style={{ background: "var(--g-bs)", color: "var(--g-b)" }} title={[c.designation, c.phone, c.email].filter(Boolean).join(" · ")}>
+      {c.name} · {titleCase(c.role || "OTHER")}{c.phone ? <span style={{ opacity: 0.75 }}> · {c.phone}</span> : null}
+    </span>
+  ))}</div>;
+};
+
+export const EnterpriseOwnerDialog = ({ owner, onClose, onSaved }) => {
+  const [form, setForm] = useState({ name: "", entityName: "", phone: "", email: "", address: "", pan: "", gstin: "", notes: "", contacts: [], ...(owner || {}) });
+  const [error, setError] = useState("");
+  const set = (key) => (e) => setForm((x) => ({ ...x, [key]: e.target.value }));
+  const save = async () => {
+    try {
+      const body = { ...form };
+      ["_id", "companyId", "ownerCode", "createdBy", "createdAt", "updatedAt", "__v"].forEach((key) => delete body[key]);
+      const out = owner?._id ? await updateEnterpriseOwner(owner._id, body) : await createEnterpriseOwner(body);
+      onSaved(out.owner); onClose();
+    } catch (e) { setError(toErrorMessage(e, "Could not save the Enterprise Owner")); }
+  };
+  return <Modal width={860} title={owner?._id ? "Edit Enterprise Owner" : "Add Enterprise Owner"} onClose={onClose} footer={<><Btn onClick={onClose}>Cancel</Btn><Btn tone="primary" onClick={save}>Save owner</Btn></>}>
+    <div className="grid grid-cols-1 gap-3 sm:grid-cols-2"><Input label="Owner name" value={form.name} onChange={set("name")} /><Input label="Company / entity" value={form.entityName} onChange={set("entityName")} /><Input label="Phone" value={form.phone} onChange={set("phone")} /><Input label="Email" value={form.email} onChange={set("email")} /><Input label="Address" className="sm:col-span-2" value={form.address} onChange={set("address")} /><Input label="PAN" value={form.pan} onChange={set("pan")} /><Input label="GSTIN" value={form.gstin} onChange={set("gstin")} /><TextArea label="Notes" className="sm:col-span-2" value={form.notes} onChange={set("notes")} />
+      <div className="sm:col-span-2"><Label>Other contacts</Label><OwnerContactsEditor contacts={form.contacts || []} onChange={(contacts) => setForm((x) => ({ ...x, contacts }))} /></div>
+      <ErrorLine message={error} /></div>
+  </Modal>;
+};
+
 const EMPTY_AGREEMENT = {
-  agreementType: "", status: "ACTIVE", signingDate: "", possessionDate: "", commencementDate: "", rentCommencementDate: "", endDate: "",
+  agreementType: "", status: "ACTIVE", signingDate: "", possessionDate: "", commencementDate: "", rentCommencementDate: "", endDate: "", billingEndDate: "", noticeDeadlineDate: "", renewalDecisionDate: "",
   lockInMonths: "", lockInEndDate: "", noticePeriodMonths: "", baseRent: "", rentDueDay: "", gstPercent: "", tdsPercent: "", depositRequired: "",
-  depositExpectedSettlementDate: "", renewalTerms: "", terminationTerms: "", notes: "", escalations: [], otherCharges: [],
+  depositExpectedSettlementDate: "", depositConditions: "", renewalTerms: "", terminationTerms: "", notes: "", escalations: [], otherCharges: [], rentFreePeriods: [],
+  proration: "DAILY", escalationTiming: "EFFECTIVE_DATE", recoverableChargeTypes: [], taxConfirmed: false, taxApprovalRef: "",
   maintenance: { method: "INCLUDED", amount: "", note: "", passThroughAllowed: false },
   noticeReceivedDate: "", noticeExpiryDate: "", vacatingDate: "", closeOutNotes: "",
 };
-const DATE_KEYS = ["signingDate", "possessionDate", "commencementDate", "rentCommencementDate", "endDate", "lockInEndDate", "depositExpectedSettlementDate", "noticeReceivedDate", "noticeExpiryDate", "vacatingDate"];
+const DATE_KEYS = ["signingDate", "possessionDate", "commencementDate", "rentCommencementDate", "endDate", "billingEndDate", "noticeDeadlineDate", "renewalDecisionDate", "lockInEndDate", "depositExpectedSettlementDate", "noticeReceivedDate", "noticeExpiryDate", "vacatingDate"];
 
 const fromAgreement = (a) => {
   if (!a) return EMPTY_AGREEMENT;
@@ -94,6 +220,7 @@ const fromAgreement = (a) => {
   out.maintenance = { ...EMPTY_AGREEMENT.maintenance, ...(a.maintenance || {}), amount: a.maintenance?.amount ?? "" };
   out.escalations = (a.escalations || []).map((e) => ({ ...e, effectiveDate: isoDate(e.effectiveDate) }));
   out.otherCharges = (a.otherCharges || []).map((c) => ({ ...c, dueDate: isoDate(c.dueDate) }));
+  out.rentFreePeriods = (a.rentFreePeriods || []).map((r) => ({ ...r, startDate: isoDate(r.startDate), endDate: isoDate(r.endDate) }));
   return out;
 };
 
@@ -105,10 +232,11 @@ const fromAgreement = (a) => {
 export const AgreementDialog = ({ side, officeId, agreement, tenantId, onClose, onSaved }) => {
   const meta = useEnterpriseMeta();
   const [form, setForm] = useState(() => fromAgreement(agreement));
-  const [landlord, setLandlord] = useState(agreement?.landlord || null);
-  // Owner side: other relevant contacts - the landlord's PA, manager, accountant (2.2).
+  const [landlord, setLandlord] = useState(agreement?.enterpriseOwner || agreement?.landlord || null);
+  const [enterpriseOwners, setEnterpriseOwners] = useState([]);
+  useEffect(() => { if (side === "OWNER") listEnterpriseOwners().then((d) => setEnterpriseOwners(d.owners || [])).catch(() => {}); }, [side]);
+  // Owner contacts now live on the Enterprise Owner. Older leases may still carry Database contacts; they can only be unlinked.
   const [others, setOthers] = useState(agreement?.otherContacts || []);
-  const [addingOther, setAddingOther] = useState(false);
   const [amendmentNote, setAmendmentNote] = useState("");
   const [error, setError] = useState("");
   const [saving, setSaving] = useState(false);
@@ -122,6 +250,7 @@ export const AgreementDialog = ({ side, officeId, agreement, tenantId, onClose, 
       ...form,
       lockInMonths: num(form.lockInMonths), noticePeriodMonths: num(form.noticePeriodMonths), baseRent: num(form.baseRent) ?? 0, rentDueDay: num(form.rentDueDay),
       gstPercent: num(form.gstPercent), tdsPercent: num(form.tdsPercent), depositRequired: num(form.depositRequired),
+      rentFreePeriods: (form.rentFreePeriods || []).map((r) => ({ ...r })),
       maintenance: { ...form.maintenance, amount: num(form.maintenance.amount) },
       escalations: form.escalations.map((e) => ({ ...e, value: num(e.value) })),
       otherCharges: form.otherCharges.map((c) => ({ ...c, amount: num(c.amount) })),
@@ -129,7 +258,7 @@ export const AgreementDialog = ({ side, officeId, agreement, tenantId, onClose, 
     };
     ["_id", "companyId", "agreementCode", "side", "officeId", "amendments", "createdBy", "createdAt", "updatedAt", "__v", "landlord", "tenant"].forEach((k) => delete body[k]);
     if (side === "OWNER") {
-      body.landlordContactId = landlord?._id || agreement?.landlordContactId || null;
+      body.enterpriseOwnerId = landlord?._id || agreement?.enterpriseOwnerId || null;
       body.otherContactIds = others.map((c) => c._id);
     }
     delete body.otherContacts;
@@ -143,24 +272,26 @@ export const AgreementDialog = ({ side, officeId, agreement, tenantId, onClose, 
 
   const dates = [
     ["signingDate", "Signing / execution"], ["possessionDate", "Possession / handover"], ["commencementDate", "Commencement / licence start"],
-    ["rentCommencementDate", "Rent commencement"], ["endDate", "End / expiry"], ["lockInEndDate", "Lock-in ends", "(or give months)"],
+    ["rentCommencementDate", "Rent commencement"], ["endDate", "Agreement end / expiry"], ["billingEndDate", "Last billable date", "(if different from expiry)"],
+    ["lockInEndDate", "Lock-in ends", "(or give months)"], ["noticeDeadlineDate", "Notice decision deadline"], ["renewalDecisionDate", "Renewal decision date"],
   ];
   return (
     <Modal width={860} title={`${editing ? "Edit" : "Add"} ${side === "OWNER" ? "owner master lease" : "tenant agreement"}`} onClose={onClose} footer={<><Btn onClick={onClose}>Cancel</Btn><Btn tone="primary" disabled={saving} onClick={save}>{saving ? "Saving…" : "Save"}</Btn></>}>
       <div className="flex flex-col gap-4">
-        {side === "OWNER" ? <ContactPicker kind="OWNER" label="Landlord (from the Owner Database)" value={landlord} onChange={setLandlord} /> : null}
+        {side === "OWNER" ? <Select label="Enterprise Owner" value={landlord?._id || ""} onChange={(e) => setLandlord(enterpriseOwners.find((o) => String(o._id) === e.target.value) || null)} placeholder="Choose an Enterprise Owner" options={enterpriseOwners.map((o) => ({ value: o._id, label: `${o.name}${o.ownerCode ? ` · ${o.ownerCode}` : ""}` }))} /> : null}
         {side === "OWNER" ? (
           <div className="rounded-2xl p-3" style={field}>
-            <div className="mb-2 flex items-center gap-2"><Label>Other contacts for this lease</Label><Btn className="ml-auto" onClick={() => setAddingOther(true)}><Plus size={14} /> Add</Btn></div>
-            <div className="flex flex-wrap gap-1.5">
-              {others.length ? others.map((c) => (
-                <span key={c._id} className="inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-[12.5px]" style={{ background: "var(--g-bs)", color: "var(--g-b)" }}>
-                  {c.name}{(c.roles || []).length ? ` · ${(c.roles || []).map(roleLabel).join(", ")}` : ""}
-                  <button type="button" aria-label={`Remove ${c.name}`} onClick={() => setOthers((xs) => xs.filter((x) => x._id !== c._id))}><Trash2 size={12} /></button>
+            <div className="mb-2"><Label>Owner contacts for this lease</Label></div>
+            {landlord ? <OwnerContactChips owner={enterpriseOwners.find((o) => String(o._id) === String(landlord._id)) || landlord} /> : <span className="text-[12.5px]" style={FNT}>Choose the Enterprise Owner to see their contacts.</span>}
+            {others.length ? <div className="mt-2 flex flex-wrap items-center gap-1.5">
+              <span className="text-[11.5px]" style={FNT}>Older contacts linked from the Database:</span>
+              {others.map((c) => (
+                <span key={c._id} className="inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-[12px]" style={field}>
+                  {c.name}
+                  <button type="button" aria-label={`Unlink ${c.name}`} onClick={() => setOthers((xs) => xs.filter((x) => x._id !== c._id))}><Trash2 size={12} /></button>
                 </span>
-              )) : <span className="text-[12.5px]" style={FNT}>PA, property manager, accountant… from the Database</span>}
-            </div>
-            {addingOther ? <div className="mt-2"><ContactPicker label="Find contact" value={null} onChange={(c) => { if (c && !others.some((x) => x._id === c._id)) setOthers((xs) => [...xs, c]); setAddingOther(false); }} /></div> : null}
+              ))}
+            </div> : null}
           </div>
         ) : null}
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
@@ -170,22 +301,40 @@ export const AgreementDialog = ({ side, officeId, agreement, tenantId, onClose, 
           {dates.map(([k, l, h]) => <Input key={k} label={l} hint={h} type="date" value={form[k]} onChange={set(k)} />)}
           <Input label="Lock-in (months)" type="number" value={form.lockInMonths} onChange={set("lockInMonths")} />
           <Input label="Notice period (months)" type="number" value={form.noticePeriodMonths} onChange={set("noticePeriodMonths")} />
-          <Input label="Rent due day" hint="(1-28)" type="number" min="1" max="28" value={form.rentDueDay} onChange={set("rentDueDay")} />
+          <Input label="Rent due day" hint="(1-31; short months use month end)" type="number" min="1" max="31" value={form.rentDueDay} onChange={set("rentDueDay")} />
+          <Select label="Partial month billing" value={form.proration} onChange={set("proration")} options={[{ value: "DAILY", label: "Prorate by day" }, { value: "FULL_PERIOD", label: "Charge full period" }]} />
+          <Select label="Escalation timing" value={form.escalationTiming} onChange={set("escalationTiming")} options={[{ value: "EFFECTIVE_DATE", label: "Apply on effective date" }, { value: "PERIOD_START", label: "Apply from next period" }]} />
           <Input label="GST %" hint="(blank = none)" type="number" value={form.gstPercent} onChange={set("gstPercent")} />
           <Input label="TDS % expected" hint="(blank = none)" type="number" value={form.tdsPercent} onChange={set("tdsPercent")} />
           <Input label="Security deposit (₹)" type="number" value={form.depositRequired} onChange={set("depositRequired")} />
           <Input label="Deposit settlement due" type="date" value={form.depositExpectedSettlementDate} onChange={set("depositExpectedSettlementDate")} />
         </div>
         <p className="text-[12px]" style={FNT}>Tax and TDS rates are not assumed. Enter them only as the executed agreement and the accountant say.</p>
+        {(form.gstPercent || form.tdsPercent) ? <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+          <Check label="Accountant confirmed this tax treatment" checked={form.taxConfirmed} onChange={(v) => setForm((f) => ({ ...f, taxConfirmed: v }))} />
+          <Input label="Accountant / approval reference" value={form.taxApprovalRef} onChange={set("taxApprovalRef")} />
+        </div> : null}
+        <TextArea label="Deposit settlement conditions" value={form.depositConditions || ""} onChange={set("depositConditions")} />
+
+        <div className="rounded-2xl p-3" style={field}>
+          <div className="mb-2 flex items-center gap-2"><Label>Rent-free periods (if the agreement provides them)</Label><Btn className="ml-auto" onClick={() => setForm((f) => ({ ...f, rentFreePeriods: [...(f.rentFreePeriods || []), { startDate: "", endDate: "", note: "" }] }))}><Plus size={14} /> Add</Btn></div>
+          {(form.rentFreePeriods || []).map((period, i) => <div key={i} className="mb-2 grid grid-cols-1 gap-2 sm:grid-cols-[1fr_1fr_2fr_auto]">
+            <Input label="From" type="date" value={period.startDate} onChange={(e) => setForm((f) => ({ ...f, rentFreePeriods: f.rentFreePeriods.map((r, j) => j === i ? { ...r, startDate: e.target.value } : r) }))} />
+            <Input label="Through" type="date" value={period.endDate} onChange={(e) => setForm((f) => ({ ...f, rentFreePeriods: f.rentFreePeriods.map((r, j) => j === i ? { ...r, endDate: e.target.value } : r) }))} />
+            <Input label="Contract note" value={period.note || ""} onChange={(e) => setForm((f) => ({ ...f, rentFreePeriods: f.rentFreePeriods.map((r, j) => j === i ? { ...r, note: e.target.value } : r) }))} />
+            <Btn aria-label="Remove rent-free period" onClick={() => setForm((f) => ({ ...f, rentFreePeriods: f.rentFreePeriods.filter((_, j) => j !== i) }))}><Trash2 size={14} /></Btn>
+          </div>)}
+        </div>
 
         <div className="rounded-2xl p-3" style={field}>
           <div className="mb-2 flex items-center gap-2"><Label>Escalations (as in this contract)</Label>
             <Btn className="ml-auto" onClick={() => setForm((f) => ({ ...f, escalations: [...f.escalations, { effectiveDate: "", method: "PERCENT", value: "", note: "" }] }))}><Plus size={14} /> Add</Btn>
           </div>
           {form.escalations.length ? form.escalations.map((e, i) => (
-            <div key={i} className="mb-2 grid grid-cols-2 gap-2 sm:grid-cols-[1fr_1fr_1fr_2fr_auto]">
+            <div key={i} className="mb-2 grid grid-cols-2 gap-2 sm:grid-cols-[1fr_1fr_1fr_1fr_2fr_auto]">
               <Input type="date" value={e.effectiveDate} onChange={(ev) => setForm((f) => ({ ...f, escalations: f.escalations.map((x, j) => (j === i ? { ...x, effectiveDate: ev.target.value } : x)) }))} />
               <Select value={e.method} onChange={(ev) => setForm((f) => ({ ...f, escalations: f.escalations.map((x, j) => (j === i ? { ...x, method: ev.target.value } : x)) }))} options={[{ value: "PERCENT", label: "% increase" }, { value: "AMOUNT", label: "₹ increase" }, { value: "NEW_RENT", label: "New rent" }]} />
+              <Select value={e.base || "CURRENT_RENT"} onChange={(ev) => setForm((f) => ({ ...f, escalations: f.escalations.map((x, j) => (j === i ? { ...x, base: ev.target.value } : x)) }))} options={[{ value: "CURRENT_RENT", label: "Current rent" }, { value: "BASE_RENT", label: "Original base rent" }]} />
               <Input type="number" placeholder="Value" value={e.value} onChange={(ev) => setForm((f) => ({ ...f, escalations: f.escalations.map((x, j) => (j === i ? { ...x, value: ev.target.value } : x)) }))} />
               <Input placeholder="Note" value={e.note || ""} onChange={(ev) => setForm((f) => ({ ...f, escalations: f.escalations.map((x, j) => (j === i ? { ...x, note: ev.target.value } : x)) }))} />
               <Btn aria-label="Remove" onClick={() => setForm((f) => ({ ...f, escalations: f.escalations.filter((_, j) => j !== i) }))}><Trash2 size={14} /></Btn>
@@ -202,7 +351,10 @@ export const AgreementDialog = ({ side, officeId, agreement, tenantId, onClose, 
             <Input placeholder="Note" value={form.maintenance.note} onChange={setM("note")} />
           </div>
           {side === "TENANT" ? (
-            <div className="mt-2"><Check label="This agreement allows passing landlord / building cost increases on to the tenant" checked={form.maintenance.passThroughAllowed} onChange={(v) => setM("passThroughAllowed")(v)} /></div>
+            <div className="mt-2 flex flex-col gap-2">
+              <Check label="This agreement allows passing landlord maintenance cost increases on to the tenant" checked={form.maintenance.passThroughAllowed} onChange={(v) => setM("passThroughAllowed")(v)} />
+              <div className="flex flex-wrap gap-3 text-[12.5px]">{["PARKING", "UTILITIES", "REPAIRS", "OTHER"].map((type) => <Check key={type} label={`Recover ${titleCase(type).toLowerCase()}`} checked={(form.recoverableChargeTypes || []).includes(type)} onChange={(checked) => setForm((f) => ({ ...f, recoverableChargeTypes: checked ? [...new Set([...(f.recoverableChargeTypes || []), type])] : (f.recoverableChargeTypes || []).filter((x) => x !== type) }))} />)}</div>
+            </div>
           ) : null}
           <p className="mt-1 text-[12px]" style={FNT}>A landlord's maintenance increase is never passed to the tenant automatically.</p>
         </div>
@@ -454,7 +606,7 @@ export const ChargeDialog = ({ officeId, direction, agreementId, onClose, onSave
 };
 
 /* Deposit entry (2.8) or fit-out expense (2.9). */
-export const LedgerDialog = ({ officeId, kind, side, onClose, onSaved }) => {
+export const LedgerDialog = ({ officeId, kind, side, agreementId, onClose, onSaved }) => {
   const meta = useEnterpriseMeta();
   const [form, setForm] = useState({ entryType: side === "OWNER" ? "PAID" : "COLLECTED", date: isoDate(new Date()), amount: "", amountPaid: "", category: "CIVIL", vendor: "", reference: "", reason: "", expectedSettlementDate: "", warrantyUntil: "", notes: "" });
   const [error, setError] = useState("");
@@ -462,7 +614,7 @@ export const LedgerDialog = ({ officeId, kind, side, onClose, onSaved }) => {
   const set = (k) => (e) => setForm((f) => ({ ...f, [k]: e.target.value }));
   const types = (meta?.depositEntryTypes || []).filter((t) => (side === "OWNER" ? t !== "COLLECTED" : t !== "PAID"));
   const save = async () => {
-    try { await addLedgerEntry(officeId, { ...form, kind, side, amount: num(form.amount), amountPaid: num(form.amountPaid), attachments: files }); onSaved(); onClose(); }
+    try { await addLedgerEntry(officeId, { ...form, kind, side, agreementId, amount: num(form.amount), amountPaid: num(form.amountPaid), attachments: files }); onSaved(); onClose(); }
     catch (e) { setError(toErrorMessage(e, "Could not save")); }
   };
   return (

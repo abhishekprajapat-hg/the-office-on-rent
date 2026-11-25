@@ -73,8 +73,9 @@ const OwnerDatabase = lazy(() => import("./modules/inventory/OwnerDatabase"));
 const DatabasePage = lazy(() => import("./modules/database/DatabasePage"));
 const BuildingProfilePage = lazy(() => import("./modules/database/BuildingProfilePage"));
 const DbContactPage = lazy(() => import("./modules/database/DbContactPage"));
-const EnterpriseDashboard = lazy(() => import("./modules/enterprise/EnterpriseDashboard"));
+const EnterpriseWorkspacePage = lazy(() => import("./modules/enterprise/EnterpriseWorkspacePage"));
 const EnterpriseOfficePage = lazy(() => import("./modules/enterprise/EnterpriseOfficePage"));
+const EnterpriseDashboard = lazy(() => import("./modules/enterprise/EnterpriseDashboard"));
 const BrokerDatabase = lazy(() => import("./modules/inventory/BrokerDatabase"));
 const AssetVault = lazy(() => import("./modules/inventory/AssetVault"));
 const InventoryDetails = lazy(() => import("./modules/inventory/InventoryDetails"));
@@ -161,7 +162,7 @@ const DASHBOARD_DESTINATIONS = [
   ["tasks", "/tasks", "Tasks"], ["attendance", "/attendance", "Attendance"],
   ["chat", "/chat", "Team Chat"], ["coworking_booking", "/coworking/booking-board", "Booking Board"],
   ["coworking_clients", "/coworking/clients", "Clients"],
-  ["database", "/database", "Database"], ["enterprise", "/enterprise", "Enterprise Leasing"],
+  ["database", "/database", "Database"], ["enterprise", "/enterprise", "Enterprise Offices"],
 ];
 
 const GrantedDashboard = () => {
@@ -830,8 +831,16 @@ export default function App() {
       <Route path="/database" element={withPageAccess(["database", "inventory"], <DatabasePage />, ["ADMIN", ...MANAGEMENT_ROLES, "EXECUTIVE", "INSIDE_EXECUTIVE", "FIELD_EXECUTIVE"])} />
       <Route path="/database/buildings/:buildingId" element={withPageAccess(["database", "inventory"], <BuildingProfilePage />, ["ADMIN", ...MANAGEMENT_ROLES, "EXECUTIVE", "INSIDE_EXECUTIVE", "FIELD_EXECUTIVE"])} />
       <Route path="/database/contacts/:contactId" element={withPageAccess(["database", "inventory"], <DbContactPage />, ["ADMIN", ...MANAGEMENT_ROLES, "EXECUTIVE", "INSIDE_EXECUTIVE", "FIELD_EXECUTIVE"])} />
-      {/* Enterprise leasing (Oct 2026 update 02). */}
-      <Route path="/enterprise" element={withPageAccess("enterprise", <EnterpriseDashboard />, ["ADMIN", "MANAGER"])} />
+      {/* Enterprise Offices: office register, tenants, agreements and money tracking. */}
+      <Route path="/enterprise" element={withPageAccess("enterprise", <Navigate to="/enterprise/offices" replace />, ["ADMIN", "MANAGER"])} />
+      <Route path="/enterprise/dashboard" element={withPageAccess("enterprise", <EnterpriseDashboard />, ["ADMIN", "MANAGER"])} />
+      <Route path="/enterprise/offices" element={withPageAccess("enterprise", <EnterpriseWorkspacePage />, ["ADMIN", "MANAGER"])} />
+      <Route path="/enterprise/tenants" element={withPageAccess("enterprise", <EnterpriseWorkspacePage />, ["ADMIN", "MANAGER"])} />
+      <Route path="/enterprise/owners" element={withPageAccess("enterprise", <EnterpriseWorkspacePage />, ["ADMIN", "MANAGER"])} />
+      <Route path="/enterprise/agreements" element={withPageAccess("enterprise", <EnterpriseWorkspacePage />, ["ADMIN", "MANAGER"])} />
+      <Route path="/enterprise/payments" element={withPageAccess("enterprise", <EnterpriseWorkspacePage />, ["ADMIN", "MANAGER"])} />
+      <Route path="/enterprise/documents" element={withPageAccess("enterprise", <EnterpriseWorkspacePage />, ["ADMIN", "MANAGER"])} />
+      <Route path="/enterprise/reports" element={withPageAccess("enterprise", <EnterpriseWorkspacePage />, ["ADMIN", "MANAGER"])} />
       <Route path="/enterprise/offices/:officeId" element={withPageAccess("enterprise", <EnterpriseOfficePage />, ["ADMIN", "MANAGER"])} />
       {/* Replaced by the two pages above; existing links still resolve. */}
       <Route path="/inventory/contacts" element={<Navigate to="/inventory/owners" replace />} />

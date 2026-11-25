@@ -22,6 +22,7 @@ const enterpriseObligationSchema = new mongoose.Schema(
     // Stable key for schedule rows (type:label:period), so regenerating never duplicates.
     scheduleKey: { type: String, trim: true, maxlength: 200, default: "" },
     generated: { type: Boolean, default: false },
+    sourceObligationId: { type: mongoose.Schema.Types.ObjectId, ref: "EnterpriseObligation", default: null },
     periodStart: { type: Date, default: null },
     periodEnd: { type: Date, default: null },
     dueDate: { type: Date, required: true },

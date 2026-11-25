@@ -332,7 +332,7 @@ const BookingBoard = () => {
 
   return (
     <div className="custom-scrollbar h-full min-h-0 w-full min-w-0 flex-1 overflow-y-auto bg-slate-50 dark:bg-slate-950">
-      <div className="mx-auto max-w-[1560px] px-4 py-5 sm:px-6">
+      <div className="w-full min-w-0 px-4 py-5 sm:px-6">
         <BirthdayReminders clients={[...new Map(board.cabins.filter(cabin => cabin.client).map(cabin => [cabin.client.id, cabin.client])).values()]} />
         {/* Title, then the two controls that scope the whole screen, then the
             one action the screen exists for. */}

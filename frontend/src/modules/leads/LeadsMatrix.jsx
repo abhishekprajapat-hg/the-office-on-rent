@@ -211,6 +211,8 @@ const defaultFormData = {
   siteLng: "",
   company: "",
   sourceChannel: "",
+  leadStatus: "NEW",
+  leadStatusDate: "",
   referredBroker: null,
   requirementsInventoryType: "",
   requirementsCoworking: {},
@@ -3466,6 +3468,9 @@ const LeadsMatrix = () => {
       }
 
       applyCoworkingLeadFields(payload, formData);
+      // Starting status chosen in the Add Lead form; the backend checks it.
+      payload.status = String(formData.leadStatus || "NEW").toUpperCase();
+      if (formData.leadStatusDate) payload.nextFollowUp = formData.leadStatusDate;
 
       const created = await createLead(payload);
 
@@ -4409,6 +4414,8 @@ const LeadsMatrix = () => {
             onSave={handleSaveLead}
             savingLead={savingLead}
             saveError={error}
+            showLeadStatus
+            canSetClosingStatus={canConfigureSiteLocation}
           />
         )}
       </AnimatePresence>

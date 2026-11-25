@@ -52,6 +52,35 @@ test("a part month at the end is pro-rated", () => {
   assert.equal(last.gross, 50000);
 });
 
+test("contract billing end controls rent; due days clamp in short months", () => {
+  const rows = F.buildSchedule(lease({
+    endDate: new Date("2026-12-31"), billingEndDate: new Date("2026-04-15"),
+    vacatingDate: new Date("2026-03-10"), rentDueDay: 31,
+    maintenance: { method: "INCLUDED" }, escalations: [], gstPercent: null, tdsPercent: null,
+  }));
+  const rent = rows.filter((r) => r.chargeType === "RENT");
+  assert.equal(rent.length, 3);
+  assert.equal(rent.at(-1).periodEnd.toISOString().slice(0, 10), "2026-04-15");
+  assert.equal(rent[0].dueDate.toISOString().slice(0, 10), "2026-02-28");
+});
+
+test("rent-free days, daily proration, and escalation timing follow the contract", () => {
+  const common = {
+    endDate: new Date("2026-03-31"), commencementDate: new Date("2026-01-01"),
+    rentCommencementDate: new Date("2026-02-01"), rentDueDay: 1, baseRent: 31000,
+    escalations: [{ effectiveDate: new Date("2026-03-16"), method: "AMOUNT", value: 3100 }],
+    rentFreePeriods: [{ startDate: new Date("2026-02-20"), endDate: new Date("2026-02-28") }],
+    maintenance: { method: "INCLUDED" }, gstPercent: null, tdsPercent: null,
+  };
+  const daily = F.buildSchedule(lease({ ...common, proration: "DAILY", escalationTiming: "EFFECTIVE_DATE" })).filter((r) => r.chargeType === "RENT");
+  assert.equal(daily[0].gross, 21035.71); // 19 payable days out of 28
+  assert.equal(daily[1].gross, 32600); // escalation applies from its effective day
+  const periodStart = F.buildSchedule(lease({ ...common, proration: "DAILY", escalationTiming: "PERIOD_START" })).filter((r) => r.chargeType === "RENT");
+  assert.equal(periodStart[1].gross, 31000);
+  const fullPeriod = F.buildSchedule(lease({ ...common, proration: "FULL_PERIOD", escalationTiming: "PERIOD_START" })).filter((r) => r.chargeType === "RENT");
+  assert.equal(fullPeriod[0].gross, 21035.71);
+});
+
 test("regeneration never rewrites a row that is paid, promised, disputed or already due", () => {
   const today = new Date("2026-05-10");
   const gen = F.buildSchedule(lease(), { today });
@@ -115,6 +144,17 @@ test("deposits: separate ledgers per side, partial refunds and deductions", () =
   assert.equal(tenant.deducted, 50000);
 });
 
+test("deposit balances are isolated by agreement", () => {
+  const entries = [
+    { agreementId: "old", side: "TENANT", entryType: "COLLECTED", amount: 500000, date: new Date("2025-01-01") },
+    { agreementId: "new", side: "TENANT", entryType: "COLLECTED", amount: 800000, date: new Date("2026-01-01") },
+    { agreementId: "old", side: "TENANT", entryType: "REFUND", amount: 500000, date: new Date("2026-02-01") },
+  ];
+  assert.equal(F.depositLedger(entries, "TENANT", 800000, "new").outstanding, 800000);
+  assert.equal(F.depositLedger(entries, "TENANT", 800000, "new").shortfall, 0);
+  assert.equal(F.depositLedger(entries, "TENANT", 900000, "missing").paidOrCollected, 0);
+});
+
 test("fit-out budget vs actual, contribution and payback are estimates", () => {
   const fit = F.fitOutSummary({ fitOutBudget: 2000000 }, [{ kind: "EXPENSE", category: "CIVIL", amount: 1500000, amountPaid: 1500000 }, { kind: "EXPENSE", category: "ELECTRICAL", amount: 700000, amountPaid: 200000 }]);
   assert.equal(fit.overBudget, true);
@@ -137,6 +177,20 @@ test("alerts: vacant exposure, tenant expiry before the master lease, notice dea
   assert.ok(late.some((a) => a.type === "NOTICE_DEADLINE" && /Tenant/.test(a.message)));
   assert.ok(!late.some((a) => a.type === "LEASE_EXPIRY" && /Owner/.test(a.message)));
   assert.ok(!late.some((a) => a.type === "VACANT_EXPOSURE"));
+  const renewal = F.officeAlerts({ office, ownerAgreement: null, tenantAgreement: lease({
+    side: "TENANT", endDate: new Date("2027-12-31"), renewalDecisionDate: new Date("2026-05-20"),
+  }), today: new Date("2026-05-01") });
+  assert.ok(renewal.some((a) => a.type === "RENEWAL_DECISION"));
+});
+
+test("management metrics ignore future, ended, and rent-free agreements", () => {
+  const today = new Date("2026-05-01");
+  const future = lease({ commencementDate: new Date("2026-06-01"), rentCommencementDate: new Date("2026-06-01"), escalations: [] });
+  const ended = lease({ endDate: new Date("2026-04-30"), escalations: [] });
+  const free = lease({ rentFreePeriods: [{ startDate: new Date("2026-04-01"), endDate: new Date("2026-05-15") }], escalations: [] });
+  assert.equal(F.officeMetrics({ ownerAgreement: future, today }).ownerRentMonthly, 0);
+  assert.equal(F.officeMetrics({ ownerAgreement: ended, today }).ownerRentMonthly, 0);
+  assert.equal(F.officeMetrics({ ownerAgreement: free, today }).ownerRentMonthly, 0);
 });
 
 test("checklists come from the company handout; partnership is left for the Admin", () => {
@@ -170,6 +224,46 @@ test("permissions and protected files are enforced on the server", () => {
   const pages = require("../src/constants/page.constants");
   const list = pages.PAGES || pages.PAGE_CATALOG || pages.PAGE_DEFINITIONS || Object.values(pages).find(Array.isArray);
   assert.ok(list.some((p) => p.key === "enterprise") && list.some((p) => p.key === "database"));
+});
+
+test("Enterprise uploads accept only local protected-file URLs", () => {
+  const files = require("../src/services/enterpriseFile.service");
+  assert.equal(files.validUrl("/api/uploads/files/enterprise-documents/1730000000000-a1b2c3.pdf"), true);
+  for (const url of [
+    "https://example.com/enterprise-documents/file.pdf",
+    "/api/uploads/files/chat/file.pdf",
+    "/api/uploads/files/enterprise-documents/../private.pdf",
+    "/api/uploads/files/enterprise-documents/%2e%2e%2fprivate.pdf",
+  ]) assert.equal(files.validUrl(url), false, url);
+  assert.match(src("middleware/fileAccess.middleware.js"), /enterpriseFile\.service.*ownsFile/s);
+});
+
+test("Enterprise offices stand alone with their own address and rented-tenant display", () => {
+  const ent = require("../src/services/enterprise.service");
+  assert.throws(() => ent.sanitizeOffice({ name: "Downtown Suite" }), /office address/i);
+  const office = ent.sanitizeOffice({ name: "Downtown Suite", address: "12 Main Road, Pune", buildingId: "507f1f77bcf86cd799439011" });
+  assert.equal(office.address, "12 Main Road, Pune");
+  assert.equal(Object.hasOwn(office, "buildingId"), false);
+  const form = src("../../frontend/src/modules/enterprise/enterpriseForms.jsx");
+  assert.doesNotMatch(form, /BuildingPicker|buildingId/);
+  const officesPage = src("../../frontend/src/modules/enterprise/EnterpriseWorkspacePage.jsx");
+  assert.match(officesPage, /o\.address/);
+  assert.match(officesPage, /o\.tenantName/);
+  for (const page of ["offices", "owners", "tenants", "agreements", "payments", "documents", "reports"]) {
+    assert.match(src("../../frontend/src/App.jsx"), new RegExp(`path=\"/enterprise/${page}\"`), `${page} route is mounted`);
+  }
+  const sidebar = src("../../frontend/src/components/workbench/workbenchNavigation.js");
+  assert.match(sidebar, /label: "Enterprise Offices"/);
+  assert.doesNotMatch(sidebar, /label: "Overview", path: "\/enterprise"/);
+  assert.match(src("../../frontend/src/App.jsx"), /path="\/enterprise" element=\{withPageAccess\("enterprise", <Navigate to="\/enterprise\/offices" replace \/>/);
+  for (const page of ["Offices", "Owners", "Tenants", "Agreements", "Payments & dues", "Documents", "Reports"]) {
+    assert.match(sidebar, new RegExp(`label: "${page.replace(/[&]/g, "\\&")}"`), `${page} is in the Enterprise Offices menu`);
+  }
+  assert.match(src("services/enterprise.service.js"), /tenantIsCurrent = F\.agreementEffective\(s\.tenantAgreement, today\)/);
+  const ownerModel = require("../src/models/EnterpriseOwner");
+  assert.equal(ownerModel.schema.path("companyId").options.ref, "Company");
+  assert.equal(require("../src/models/EnterpriseAgreement").schema.path("enterpriseOwnerId").options.ref, "EnterpriseOwner");
+  assert.equal(require("../src/models/EnterpriseAgreement").schema.path("landlordContactId"), undefined, "Enterprise leases do not reference CRM owners");
 });
 
 test("routes are mounted", () => {

@@ -107,10 +107,10 @@ const CRM_PAGES = Object.freeze([
     actions: [PAGE_ACTIONS.VIEW, PAGE_ACTIONS.CREATE, PAGE_ACTIONS.EDIT, PAGE_ACTIONS.EXPORT],
   },
   {
-    // Enterprise leasing (Oct 2026 update 02): offices taken on master lease
-    // and given to an enterprise tenant. Admin and Manager by default.
+    // Enterprise Offices: offices leased from owners and rented to tenants.
+    // Admin and Manager by default.
     key: "enterprise",
-    label: "Enterprise Leasing",
+    label: "Enterprise Offices",
     group: "Business",
     path: "/enterprise",
     actions: [PAGE_ACTIONS.VIEW, PAGE_ACTIONS.CREATE, PAGE_ACTIONS.EDIT, PAGE_ACTIONS.DELETE, PAGE_ACTIONS.EXPORT],

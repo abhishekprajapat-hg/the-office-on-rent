@@ -36,7 +36,7 @@ const today = (req) => (req.query.asOf && !Number.isNaN(new Date(req.query.asOf)
 
 router.get("/meta", (req, res) => res.json({
   operationalStatuses: E.OPERATIONAL_STATUSES, fitOutStatuses: E.FIT_OUT_STATUSES, agreementStatuses: E.AGREEMENT_STATUSES,
-  entityTypes: E.ENTITY_TYPES, tenantContactRoles: E.TENANT_CONTACT_ROLES, maintenanceMethods: E.MAINTENANCE_METHODS,
+  entityTypes: E.ENTITY_TYPES, tenantContactRoles: E.TENANT_CONTACT_ROLES, ownerContactRoles: E.OWNER_CONTACT_ROLES, maintenanceMethods: E.MAINTENANCE_METHODS,
   chargeTypes: E.CHARGE_TYPES, chargeFrequencies: E.CHARGE_FREQUENCIES, escalationMethods: E.ESCALATION_METHODS,
   paymentModes: E.PAYMENT_MODES, depositEntryTypes: E.DEPOSIT_ENTRY_TYPES, expenseCategories: E.EXPENSE_CATEGORIES,
   documentStatuses: E.DOCUMENT_STATUSES, documentCategories: E.DOCUMENT_CATEGORIES, alertWindows: E.ALERT_WINDOWS,
@@ -53,6 +53,7 @@ router.get("/report", send(async (req) => {
 
 /* ---- offices ---- */
 router.get("/offices", send((req) => ent.listOffices({ user: req.user, today: today(req) })));
+router.get("/agreements", send((req) => ent.listAgreements({ companyId: req.user.companyId })));
 router.post("/offices", writeLimiter, send(async (req) => {
   const office = await ent.createOffice({ user: req.user, body: req.body || {} });
   await audit(req, "ENTERPRISE_OFFICE_CREATED", "EnterpriseOffice", office._id, { officeCode: office.officeCode, name: office.name });
@@ -64,6 +65,15 @@ router.patch("/offices/:id", writeLimiter, send(async (req) => {
   await audit(req, "ENTERPRISE_OFFICE_UPDATED", "EnterpriseOffice", office._id, { fields: Object.keys(req.body || {}) });
   return { office };
 }));
+
+/* ---- Enterprise owner directory (independent from CRM Owner Database) ---- */
+router.get("/owners", send(async (req) => ({ owners: await require("../models/EnterpriseOwner").find({ companyId: req.user.companyId }).sort({ name: 1 }).lean() })));
+router.post("/owners", writeLimiter, send(async (req) => {
+  const owner = await ent.createEnterpriseOwner({ user: req.user, body: req.body || {} });
+  await audit(req, "ENTERPRISE_OWNER_CREATED", "EnterpriseOwner", owner._id, { ownerCode: owner.ownerCode, name: owner.name });
+  return { owner };
+}, 201));
+router.patch("/owners/:id", writeLimiter, send(async (req) => ({ owner: await ent.updateEnterpriseOwner({ user: req.user, id: req.params.id, body: req.body || {} }) })));
 
 /* ---- agreements ---- */
 router.post("/offices/:id/agreements", writeLimiter, send(async (req) => {
@@ -100,6 +110,7 @@ router.put("/checklists/:entityType", writeLimiter, send(async (req) => {
 }));
 
 /* ---- documents ---- */
+router.get("/documents", send((req) => ent.listDocuments({ companyId: req.user.companyId })));
 router.post("/documents", writeLimiter, send(async (req) => {
   const doc = await ent.uploadDocument({ user: req.user, body: req.body || {} });
   await audit(req, "ENTERPRISE_DOCUMENT_UPLOADED", "EnterpriseDocument", doc._id, { label: doc.label, version: doc.versions.length });

@@ -61,7 +61,10 @@ const cookieUserId = (token) => {
 
 exports.requireFileAccess = async (req, res, next) => {
   // req.path here is relative to the mount, e.g. "/chat/1699-abc.png".
-  const requestedPath = String(req.path || "").replace(/^\/+/, "");
+  let requestedPath;
+  try { requestedPath = decodeURIComponent(String(req.path || "")).replace(/^\/+/, ""); }
+  catch { return res.status(400).json({ message: "Invalid file path" }); }
+  if (requestedPath.includes("\\") || requestedPath.split("/").some((part) => part === "." || part === "..")) return res.status(400).json({ message: "Invalid file path" });
   const cookies = parseCookies(req.headers.cookie);
   const docs = require("../services/documentAccess.service");
 
@@ -89,6 +92,10 @@ exports.requireFileAccess = async (req, res, next) => {
       if (!user) return res.status(401).json({ message: "Not authorized to access this file" });
       if (!docs.canDownloadClientDocuments(user)) {
         return res.status(403).json({ message: "Only the Admin or an authorised manager can download client documents" });
+      }
+      if (requestedPath.toLowerCase().startsWith("enterprise-documents/")
+        && !(await require("../services/enterpriseFile.service").ownsFile(user.companyId, `/api/uploads/files/${requestedPath}`))) {
+        return res.status(403).json({ message: "This document does not belong to your company" });
       }
       await docs.logDownload({ user, path: requestedPath, req });
       return next();

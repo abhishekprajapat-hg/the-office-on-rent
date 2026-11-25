@@ -40,7 +40,7 @@ const rentOn = (agreement, date) => {
     .sort((a, b) => new Date(a.effectiveDate) - new Date(b.effectiveDate))
     .forEach((e) => {
       const v = Number(e.value) || 0;
-      if (e.method === "PERCENT") rent *= 1 + v / 100;
+      if (e.method === "PERCENT") rent += (e.base === "BASE_RENT" ? Number(agreement.baseRent) || 0 : rent) * v / 100;
       else if (e.method === "AMOUNT") rent += v;
       else if (e.method === "NEW_RENT") rent = v;
     });
@@ -56,7 +56,8 @@ const escalationSchedule = (agreement) => [...(agreement.escalations || [])]
 /* --------------------------------------------------------- schedule -- */
 
 const scheduleEnd = (agreement, today) => {
-  const ends = [agreement.endDate, agreement.vacatingDate].filter(Boolean).map(startOfDay);
+  // Physical handover does not determine the contractual billing stop date.
+  const ends = [agreement.endDate, agreement.billingEndDate].filter(Boolean).map(startOfDay);
   if (ends.length) return new Date(Math.min(...ends.map((d) => d.getTime())));
   const anchor = agreement.rentCommencementDate || agreement.commencementDate || today;
   return addDays(addMonths(new Date(Math.max(startOfDay(anchor).getTime(), startOfDay(today).getTime())), E.OPEN_ENDED_SCHEDULE_MONTHS), -1);
@@ -65,8 +66,13 @@ const scheduleEnd = (agreement, today) => {
 const dueDateFor = (periodStart, rentDueDay) => {
   if (!rentDueDay) return startOfDay(periodStart);
   const ps = startOfDay(periodStart);
-  let due = new Date(Date.UTC(ps.getUTCFullYear(), ps.getUTCMonth(), Math.min(rentDueDay, 28)));
-  if (due < ps) due = new Date(Date.UTC(ps.getUTCFullYear(), ps.getUTCMonth() + 1, Math.min(rentDueDay, 28)));
+  const inMonth = (offset) => {
+    const month = new Date(Date.UTC(ps.getUTCFullYear(), ps.getUTCMonth() + offset, 1));
+    const last = new Date(Date.UTC(month.getUTCFullYear(), month.getUTCMonth() + 1, 0)).getUTCDate();
+    return new Date(Date.UTC(month.getUTCFullYear(), month.getUTCMonth(), Math.min(rentDueDay, last)));
+  };
+  let due = inMonth(0);
+  if (due < ps) due = inMonth(1);
   return due;
 };
 
@@ -116,7 +122,17 @@ const buildSchedule = (agreement, { today = new Date() } = {}) => {
   };
   const rentStart = agreement.rentCommencementDate || agreement.commencementDate;
   if (rentStart && Number(agreement.baseRent) > 0) {
-    monthlyPeriods(rentStart, end).forEach((p) => push("RENT", "Rent", p, rentOn(agreement, p.periodStart) * p.fraction));
+    monthlyPeriods(rentStart, end).forEach((p) => {
+      const days = daysBetween(p.periodStart, p.periodEnd) + 1;
+      const divisor = agreement.proration === "FULL_PERIOD" ? days : days / p.fraction;
+      let gross = 0;
+      for (let offset = 0; offset < days; offset += 1) {
+        const date = addDays(p.periodStart, offset);
+        if ((agreement.rentFreePeriods || []).some((r) => date >= startOfDay(r.startDate) && date <= startOfDay(r.endDate))) continue;
+        gross += rentOn(agreement, agreement.escalationTiming === "PERIOD_START" ? p.periodStart : date) / divisor;
+      }
+      push("RENT", "Rent", p, gross);
+    });
   }
   const chargeStart = agreement.commencementDate || agreement.rentCommencementDate;
   if (chargeStart && agreement.maintenance?.method === "FIXED" && Number(agreement.maintenance.amount) > 0) {
@@ -140,8 +156,8 @@ const buildSchedule = (agreement, { today = new Date() } = {}) => {
  * amendment, so earlier periods are never silently rewritten (2.5).
  */
 const isLocked = (ob, today = new Date()) => Boolean(
-  (ob.settlements || []).length || (ob.adjustments || []).length || ob.disputed || (ob.promises || []).length
-  || startOfDay(ob.dueDate) < startOfDay(today) || !ob.generated,
+  (ob.settlements || []).length || (ob.adjustments || []).length || ob.disputed || (ob.promises || []).length || (ob.followUps || []).length
+  || startOfDay(ob.dueDate) <= startOfDay(today) || !ob.generated,
 );
 
 const planRegeneration = (existing = [], generated = [], { today = new Date() } = {}) => {
@@ -155,7 +171,7 @@ const planRegeneration = (existing = [], generated = [], { today = new Date() } 
     if (!ob) { create.push(g); return; }
     byKey.delete(g.scheduleKey);
     if (isLocked(ob, today)) { keep.push(ob); return; }
-    if (round2(ob.gross) !== g.gross || round2(ob.taxAmount) !== g.taxAmount || round2(ob.tdsExpected) !== g.tdsExpected || iso(ob.dueDate) !== iso(g.dueDate)) update.push({ _id: ob._id, ...g });
+    if (round2(ob.gross) !== g.gross || round2(ob.taxAmount) !== g.taxAmount || round2(ob.tdsExpected) !== g.tdsExpected || iso(ob.dueDate) !== iso(g.dueDate) || iso(ob.periodEnd) !== iso(g.periodEnd)) update.push({ _id: ob._id, ...g });
     else keep.push(ob);
   });
   // Rows the new terms no longer produce: removed only if untouched and in the future.
@@ -243,8 +259,8 @@ const transactionView = (tx) => {
  * has returned. Deductions and adjustments are their own entries. A deposit
  * stays outstanding until it is refunded, adjusted or settled by an entry.
  */
-const depositLedger = (entries = [], side, required = null) => {
-  const rows = entries.filter((e) => e.side === side).sort((a, b) => new Date(a.date) - new Date(b.date));
+const depositLedger = (entries = [], side, required = null, agreementId = undefined) => {
+  const rows = entries.filter((e) => e.side === side && (agreementId === undefined || String(e.agreementId || "") === String(agreementId || ""))).sort((a, b) => new Date(a.date) - new Date(b.date));
   const sum = (type) => round2(rows.filter((e) => e.entryType === type).reduce((a, e) => a + (Number(e.amount) || 0), 0));
   const requiredEntry = [...rows].reverse().find((e) => e.entryType === "REQUIRED");
   const requiredAmount = round2(requiredEntry ? requiredEntry.amount : (required || 0));
@@ -296,10 +312,17 @@ const fitOutSummary = (office = {}, expenses = []) => {
  * Maintenance and other pass-through items are left out, as are deposits.
  * Payback = actual fit-out / monthly contribution, when that is positive.
  */
+const agreementEffective = (a, today = new Date()) => Boolean(a && ["ACTIVE", "NOTICE"].includes(a.status)
+  && (!a.commencementDate || startOfDay(a.commencementDate) <= startOfDay(today))
+  && (!a.endDate || startOfDay(a.endDate) >= startOfDay(today))
+  && (!a.billingEndDate || startOfDay(a.billingEndDate) >= startOfDay(today)));
+const currentRent = (a, today) => agreementEffective(a, today)
+  && (!a.rentCommencementDate || startOfDay(a.rentCommencementDate) <= startOfDay(today))
+  && !(a.rentFreePeriods || []).some((r) => startOfDay(today) >= startOfDay(r.startDate) && startOfDay(today) <= startOfDay(r.endDate)) ? rentOn(a, today) : 0;
+
 const officeMetrics = ({ ownerAgreement = null, tenantAgreement = null, fitOut = null, today = new Date() } = {}) => {
-  const active = (a) => a && ["ACTIVE", "NOTICE"].includes(a.status);
-  const ownerRent = active(ownerAgreement) ? rentOn(ownerAgreement, today) : 0;
-  const tenantRent = active(tenantAgreement) ? rentOn(tenantAgreement, today) : 0;
+  const ownerRent = currentRent(ownerAgreement, today);
+  const tenantRent = currentRent(tenantAgreement, today);
   const contribution = round2(tenantRent - ownerRent);
   const actualFitOut = fitOut?.actual || 0;
   return {
@@ -339,9 +362,10 @@ const officeAlerts = ({ office, ownerAgreement, tenantAgreement, obligations = [
     const lockIn = a.lockInEndDate || (a.lockInMonths && (a.commencementDate || a.rentCommencementDate) ? addMonths(a.commencementDate || a.rentCommencementDate, a.lockInMonths) : null);
     if (within(lockIn, t, E.ALERT_WINDOWS.lockIn)) add("LOCK_IN_END", "medium", `${name}: lock-in ends`, lockIn);
     // The last day to give notice so the agreement ends on its end date.
-    const noticeBy = a.endDate && a.noticePeriodMonths ? addMonths(a.endDate, -a.noticePeriodMonths) : null;
+    const noticeBy = a.noticeDeadlineDate || (a.endDate && a.noticePeriodMonths ? addMonths(a.endDate, -a.noticePeriodMonths) : null);
     if (within(noticeBy, t, E.ALERT_WINDOWS.noticeDeadline)) add("NOTICE_DEADLINE", "high", `${name}: last day to give notice / decide on renewal`, noticeBy);
     if (a.noticeExpiryDate && daysBetween(t, a.noticeExpiryDate) >= 0) add("NOTICE_RUNNING", "high", `${name}: notice period ends`, a.noticeExpiryDate);
+    if (within(a.renewalDecisionDate, t, E.ALERT_WINDOWS.noticeDeadline)) add("RENEWAL_DECISION", "high", `${name}: renewal decision due`, a.renewalDecisionDate);
   });
   if (missingDocuments > 0) add("MISSING_DOCUMENTS", "medium", `${missingDocuments} tenant document(s) pending or rejected`);
   ["OWNER", "TENANT"].forEach((side) => {
@@ -350,16 +374,17 @@ const officeAlerts = ({ office, ownerAgreement, tenantAgreement, obligations = [
     if (d.shortfall > 0) add("DEPOSIT_SHORTFALL", "medium", side === "OWNER" ? "Deposit to landlord not fully paid" : "Tenant deposit not fully collected", null, d.shortfall);
     if (d.outstanding > 0 && d.expectedSettlementDate && startOfDay(d.expectedSettlementDate) <= t) add("DEPOSIT_SETTLEMENT", "high", side === "OWNER" ? "Landlord deposit refund is due" : "Tenant deposit refund is due", d.expectedSettlementDate, d.outstanding);
   });
-  const tenantActive = tenantAgreement && ["ACTIVE", "NOTICE"].includes(tenantAgreement.status);
-  const ownerActive = ownerAgreement && ["ACTIVE", "NOTICE"].includes(ownerAgreement.status);
-  if (ownerActive && (!tenantActive || E.VACANT_STATUSES.includes(office?.operationalStatus)) && office?.operationalStatus !== "OCCUPIED") {
-    add("VACANT_EXPOSURE", "high", "Office without a paying tenant while owner rent runs", null, rentOn(ownerAgreement, today));
+  const tenantActive = agreementEffective(tenantAgreement, today);
+  const ownerRent = currentRent(ownerAgreement, today);
+  if (ownerRent > 0 && (!tenantActive || E.VACANT_STATUSES.includes(office?.operationalStatus))) {
+    add("VACANT_EXPOSURE", "high", "Office without an effective tenant agreement or marked vacant while owner rent runs", null, ownerRent);
   }
   const order = { high: 0, medium: 1, low: 2 };
   return out.sort((a, b) => order[a.severity] - order[b.severity] || (a.date ? new Date(a.date) : Infinity) - (b.date ? new Date(b.date) : Infinity));
 };
 
 module.exports = {
+  agreementEffective,
   round2,
   startOfDay,
   addMonths,

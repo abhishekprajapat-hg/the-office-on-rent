@@ -26,6 +26,9 @@ const enterpriseLedgerEntrySchema = new mongoose.Schema(
     amountPaid: { type: Number, min: 0, default: 0 },
     paymentStatus: { type: String, enum: [...E.EXPENSE_PAYMENT_STATUSES, ""], default: "" },
     warrantyUntil: { type: Date, default: null },
+    equipmentDetails: { type: String, maxlength: 1000, default: "" },
+    maintenanceUntil: { type: Date, default: null },
+    history: { type: [{ at: { type: Date, default: Date.now }, by: { type: mongoose.Schema.Types.ObjectId, ref: "User" }, byName: String, before: mongoose.Schema.Types.Mixed, after: mongoose.Schema.Types.Mixed, _id: false }], default: [] },
     // Both
     reference: { type: String, trim: true, maxlength: 200, default: "" },
     proofUrl: { type: String, trim: true, maxlength: 1000, default: "" },

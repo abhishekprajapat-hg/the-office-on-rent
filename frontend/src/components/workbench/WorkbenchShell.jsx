@@ -82,7 +82,7 @@ const WorkbenchShell = ({
         onMobileClose={handleCloseMobileMenu}
       />
 
-      <main className="workspace-main relative min-w-0 flex flex-1 flex-col">
+      <main className="workspace-main relative min-h-0 min-w-0 flex flex-1 flex-col">
           <AppTopCommandBar
             key={pageHeader?.title || (isChatPage ? "chat" : "workspace")}
             user={userForNav}
